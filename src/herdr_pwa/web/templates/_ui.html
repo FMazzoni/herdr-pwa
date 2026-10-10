@@ -31,11 +31,12 @@
     </form>
 {%- endmacro %}
 
-{# The inside of an option row: the numeral in its own column, a box if the screen draws one,
-   and the label, cut at a few lines; the Pane holds the whole of it. #}
+{# The inside of an option row: the numeral in its own column, or the box where the screen draws
+   one (a box row is never tapped, so its number says nothing), and the label, cut at a few lines;
+   the Pane holds the whole of it. #}
 {% macro option_body(row) -%}
-<span class="option__n" aria-hidden="true">{{ row.number }}</span>
-      {%- if row.checked is not none %}<span class="option__box{% if row.checked %} option__box--on{% endif %}" aria-hidden="true"></span>{% endif -%}
+{% if row.checked is none %}<span class="option__n" aria-hidden="true">{{ row.number }}</span>
+      {%- else %}<span class="option__box{% if row.checked %} option__box--on{% endif %}" aria-hidden="true"></span>{% endif -%}
       <span class="option__label">{% if row.checked is not none %}<span class="option__quiet">{{ "ticked: " if row.checked else "not ticked: " }}</span>{% endif %}{{ row.label }}</span>
       <span class="option__sending" aria-hidden="true">Sending&hellip;</span>
 {%- endmacro %}

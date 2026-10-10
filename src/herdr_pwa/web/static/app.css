@@ -473,6 +473,14 @@ textarea { resize: vertical; min-height: 4.5em; }
 /* A way to the Pane gets its own 44px line, never a gap torn into the sentence above it. */
 .answer__go, .banner__go { display: flex; width: fit-content; align-items: center; min-height: var(--tap); font-weight: 600; }
 .answer__go::after, .banner__go::after { content: "\00A0" var(--chevron); }
+/* One sentence with the Pane link inline at its end: the link keeps a 44px box, and negative
+   margins stop that box from stretching the line it sits on. */
+.answer__note--line .answer__go { display: inline-flex; vertical-align: middle; margin-block: calc((var(--tap) - 1.45em) / -2); margin-left: var(--space-2); }
+/* Rows that are not buttons are answered from one row of keys right under them, Enter wider. */
+.keys--compact { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.6fr) minmax(0, 1fr); gap: var(--space-3); }
+.keys--compact .button, .keys--extra .button { width: 100%; padding-inline: var(--space-2); }
+.keys--compact .button { font-size: var(--text-6); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.keys--extra { display: flex; flex-wrap: wrap; gap: var(--space-3); }
 .banner__next { flex-basis: 100%; color: var(--ink); }
 /* The link's 44px row eats the banner's bottom padding rather than adding to it. */
 .banner__go { flex-basis: 100%; margin-bottom: calc(-1 * var(--space-5)); }
@@ -485,7 +493,7 @@ textarea { resize: vertical; min-height: 4.5em; }
 .options { display: grid; gap: var(--space-3); }
 .options form { margin: 0; }
 .option { display: grid; grid-template-columns: var(--option-n) minmax(0, 1fr); align-items: center; gap: var(--space-2) var(--space-5); width: 100%; margin: 0; text-align: left; line-height: 1.35; }
-.option--boxed { grid-template-columns: var(--option-n) var(--check) minmax(0, 1fr); }
+.option--boxed { grid-template-columns: var(--check) minmax(0, 1fr); }
 .button.option { padding: var(--space-4) var(--space-5); }
 .option__n { display: grid; place-content: center; width: var(--option-n); height: var(--option-n); border-radius: var(--radius-1); background: var(--ground); border: var(--line-1) solid var(--rule); color: var(--ink-2); font-variant-numeric: tabular-nums; }
 .option__label { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--option-lines); line-clamp: var(--option-lines); overflow: hidden; overflow-wrap: anywhere; }

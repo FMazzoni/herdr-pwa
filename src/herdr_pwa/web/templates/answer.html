@@ -4,6 +4,10 @@
 {% set pane_link = base ~ "?tab=pane#agent-view" %}
 {% set asked = decision and (decision.question or decision.options) %}
 {% set blocked = agent.status.value == "blocked" %}
+{% set live = decision.options|selectattr("digit", "in", digits)|list if decision else [] %}
+{# Rows that are not buttons: answered by a cursor, from the keys drawn right under them. #}
+{% set still = asked and decision.options and not live %}
+{% set multi = decision and decision.shape.value == "multi-select" %}
 {# An outcome keeps the region above the view, so what a tap did is never only below the fold. #}
 {% set waiting = asked or blocked or sent is defined or refused is defined %}
 <section id="answer" class="answer{% if not waiting %} answer--quiet{% endif %}" data-hp-poll="{{ base }}/answer" hx-get="{{ base }}/answer" hx-target="this" hx-swap="outerHTML"
@@ -30,26 +34,35 @@
   <p class="answer__note">One of {{ decision.steps.total }} questions: a tap picks a row, and the next question follows.</p>
   {% endif %}
   <p class="answer__question">{{ decision.question }}</p>
-  {% set live = decision.options|selectattr("digit", "in", digits)|list %}
-  {% if decision.options and not live %}
-  <p class="answer__note">
-    {%- if decision.shape.value == "multi-select" -%}
-    A tap here would only tick a box, so the rows are not buttons. Enter ticks the row the cursor is on; to finish, move down to Submit and press Enter.
-    {%- else -%}
-    The rows are not buttons: a label ran off the edge of the terminal, so a digit could pick the wrong one. Move with Up and Down, then Enter.
-    {%- endif %}
-    <a class="answer__go" href="{{ pane_link }}" {{ replace() }}>Watch the cursor in the Pane</a>
-  </p>
+  {% if still %}
+  <p class="answer__note answer__note--line">Rows aren't buttons here. Use the keys below{% if multi %}; Submit is the last row{% endif %}. <a class="answer__go" href="{{ pane_link }}" {{ replace() }}>Pane</a></p>
   {% endif %}
   <div class="options">
     {% for row in decision.options %}
     {{ ui.option(base, agent.target, row, screen=fingerprint, tappable=row.digit and row.digit in digits) }}
     {% endfor %}
   </div>
+  {% if still %}
+  {# The rows are answered by moving a cursor, so the keys that move it sit right under them. #}
+  <div class="keys keys--compact">
+    {% for key, label in [("up", "Up"), ("down", "Down"), ("enter", "Tick / Enter" if multi else "Enter"), ("esc", "Esc")] %}
+    {{ ui.key_form(base, agent.target, key, label, screen=fingerprint) }}
+    {% endfor %}
+  </div>
+  {% set extra = hints|rejectattr("key", "in", ["up", "down", "enter", "esc"])|list %}
+  {% if extra %}
+  <div class="keys keys--extra">
+    {% for hint in extra %}
+    {{ ui.key_form(base, agent.target, hint.key, hint.label, screen=fingerprint) }}
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% endif %}
   {% elif blocked and sent is not defined and refused is not defined %}
   {% call ui.banner("held", "It is waiting, and its question could not be read here.", "The keys below still reach it; look at the screen before you press one.", role="alert") %}<a class="banner__go" href="{{ pane_link }}" {{ replace() }}>Look at the Pane</a>{% endcall %}
   {% endif %}
   <div class="answer__keys">
+    {% if not still %}
     {% if hints %}
     {{ ui.section_head("What this screen says") }}
     <div class="keys keys--hints">
@@ -65,6 +78,7 @@
       {{ ui.key_form(base, agent.target, key, key|capitalize, screen=fingerprint) }}
       {% endfor %}
     </div>
+    {% endif %}
     {# Last, full width, under a rule: away from Enter, so a stray thumb on the pad never lands here. #}
     {% if not arming %}
     <div class="keys__stop">

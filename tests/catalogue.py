@@ -588,14 +588,14 @@ AGENT_PAGE: Final = (
     State(
         "agent-options-refused",
         f"{AGENT}?tab=pane",
-        "#answer .keys--pad",
+        "#answer .keys--compact",
         _blocked_on(MENU_WRAPPED),
         title="Agent page: the options wrapped, so none are offered as digits",
     ),
     State(
         "agent-options-refused-permission",
         f"{AGENT}?tab=pane",
-        "#answer .keys--pad",
+        "#answer .keys--compact",
         _blocked_on(PERMISSION_WRAPPED),
         title="Agent page: a permission prompt whose host ran off the edge",
     ),
