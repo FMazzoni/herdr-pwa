@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from shots import IPHONE, missing_browser, shoot, shoot_files  # noqa: E402
+from shots import DEVICES, IPHONE, Device, missing_browser, shoot, shoot_files  # noqa: E402
 
 from tests.catalogue import LEGACY_KEYS, NOT_YET, STATES, V2_ONLY, pick  # noqa: E402
 
@@ -31,6 +31,7 @@ class Side:
     label: str
     shots: Path
     missing: dict[str, str]
+    device: Device = IPHONE
 
 
 def render_legacy(keys: list[str], into: Path) -> dict[str, Path]:
@@ -66,10 +67,12 @@ def _image(path: Path, *, embed: bool, page: Path) -> str:
 
 
 def _cell(side: Side, key: str, *, embed: bool, page: Path) -> str:
-    shot = side.shots / IPHONE.name / f"{key}.png"
+    shot = side.shots / side.device.name / f"{key}.png"
     head = f"<figcaption>{html.escape(side.label)}</figcaption>"
     if not shot.is_file():
-        why = side.missing.get(key, "no screen")
+        # A before folder shot before this device existed has no picture at its width.
+        folder = side.shots / side.device.name
+        why = side.missing.get(key, "no screen" if folder.is_dir() else "no shot at this width")
         return f'<figure class="none">{head}<p>{html.escape(why)}</p></figure>'
     src = _image(shot, embed=embed, page=page)
     full = shot.with_suffix(".full.png")
@@ -116,12 +119,13 @@ def write_sheet(keys: list[str], left: Side, right: Side, page: Path, *, embed: 
         for key in keys
     ]
     stamp = time.strftime("%Y-%m-%d %H:%M")
+    size = f"{right.device.width}x{right.device.height}"
     body = (
         "<!doctype html><html lang=en><head><meta charset=utf-8>"
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
         f"<title>Phone contact sheet</title><style>{STYLE}</style></head><body>"
         f"<h1>{html.escape(left.label)} | {html.escape(right.label)}</h1>"
-        f'<p class="meta">{len(keys)} states, WebKit as an iPhone (390x844), {stamp}. '
+        f'<p class="meta">{len(keys)} states, WebKit as an iPhone ({size}), {stamp}. '
         "Tap a screen for the whole page.</p>" + "".join(sections) + "</body></html>"
     )
     page.parent.mkdir(parents=True, exist_ok=True)
@@ -129,13 +133,13 @@ def write_sheet(keys: list[str], left: Side, right: Side, page: Path, *, embed: 
     return page
 
 
-def _left(args: argparse.Namespace, keys: list[str], work: Path) -> Side:
+def _left(args: argparse.Namespace, keys: list[str], work: Path, device: Device) -> Side:
     if args.left is not None:
-        return Side(args.left_label, args.left, {})
+        return Side(args.left_label, args.left, {}, device)
     pages = render_legacy(keys, work / "legacy-html")
-    shoot_files(pages, work / "legacy", css_pixels=args.embed)
+    shoot_files(pages, work / "legacy", device, css_pixels=args.embed)
     missing = dict.fromkeys(V2_ONLY, "the old app had no screen of this name")
-    return Side(f"legacy ({LEGACY.name})", work / "legacy", missing)
+    return Side(f"legacy ({LEGACY.name})", work / "legacy", missing, device)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -147,6 +151,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--left", type=Path, help="a saved shots folder instead of the old app")
     parser.add_argument("--left-label", default="before", help="the heading for --left")
     parser.add_argument("--right-label", default="v2", help="the heading for this tree")
+    parser.add_argument(
+        "--device",
+        choices=[d.name for d in DEVICES],
+        default=IPHONE.name,
+        help="which phone both columns show (default: iphone, 390x844)",
+    )
     args = parser.parse_args(argv)
     why = missing_browser()
     if why:
@@ -157,9 +167,10 @@ def main(argv: list[str] | None = None) -> int:
     states = pick(shown) if shown or not args.keys else []
     keys = list(args.keys) or [s.name for s in states]
     work = SHEETS / time.strftime("%Y%m%d-%H%M%S")
-    left = _left(args, keys, work)
-    failed = shoot(states, work / "v2", (IPHONE,), css_pixels=args.embed)
-    right = Side(args.right_label, work / "v2", NOT_YET)
+    device = next(d for d in DEVICES if d.name == args.device)
+    left = _left(args, keys, work, device)
+    failed = shoot(states, work / "v2", (device,), css_pixels=args.embed)
+    right = Side(args.right_label, work / "v2", NOT_YET, device)
     page = write_sheet(keys, left, right, args.out or work / "index.html", embed=args.embed)
     for line in failed:
         print(f"  FAIL {line}")

@@ -24,8 +24,9 @@ from tests.catalogue import STATES, State, build, pick  # noqa: E402
 
 # The --only name for the back-navigation walks.
 HISTORY = "history"
-# 390 is the phone this app is designed on; 320 is the narrowest one still sold (iPhone SE 1st gen).
-WIDTHS = (390, 320)
+# 390 is the phone this app is designed on; 430 is the largest (a Pro Max size, run as a
+# Home Screen app); 320 is the narrowest one still sold (iPhone SE 1st gen).
+WIDTHS = (390, 430, 320)
 HEIGHT = 844
 # Apple's HIG minimum and WCAG 2.5.5: 44 CSS px in both directions.
 TAP_FLOOR = 44
