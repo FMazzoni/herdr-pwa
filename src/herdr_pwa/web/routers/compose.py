@@ -1,6 +1,7 @@
 """Writes to one agent: a prompt, a tapped key, an end; and the by-address door of a starting one."""
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Annotated, Final
 
 from fastapi import APIRouter, Depends, Request
@@ -30,6 +31,7 @@ from herdr_pwa.web.writing import (
 from herdr_pwa.writes.answer import KeyAsk, KeySent, send_key, send_starting_key
 from herdr_pwa.writes.keys import PAD_KEYS, allowed_keys, answer_digits, control_token
 from herdr_pwa.writes.lifecycle import EndAsk, end_agent
+from herdr_pwa.writes.outcome import Evidence, Outcome
 from herdr_pwa.writes.prompt import PromptAsk, PromptSent, send_first_prompt, send_prompt
 from herdr_pwa.writes.refusal import Refused
 from herdr_pwa.writes.resolve import Writer
@@ -75,6 +77,57 @@ def answer_context(agent: Agent, prompt: BlockedPrompt | None) -> dict[str, obje
     }
 
 
+@dataclass(frozen=True, slots=True)
+class Said:
+    """The banner a sent key earns: its colour, the claim, the reason, and whether to go look."""
+
+    kind: str
+    what: str
+    why: str
+    unsure: bool = False
+
+
+_LOOK: Final = "Look at the Pane before tapping again; nothing is sent twice."
+
+# What watching the pane established, in words; {key} is the key as the user saw it.
+_SAID: Final[dict[tuple[Outcome, Evidence], Said]] = {
+    (Outcome.CONFIRMED, Evidence.GONE): Said(
+        "sent", "Answered.", "You sent {key} and the question went away."
+    ),
+    (Outcome.CONFIRMED, Evidence.MOVED): Said(
+        "sent", "Sent {key}.", "The screen moved on; what it shows now is below."
+    ),
+    (Outcome.UNCONFIRMED, Evidence.MOVED): Said(
+        "unsure",
+        "Sent {key}, and a different question is up.",
+        "Read it before you answer it.",
+        True,
+    ),
+    (Outcome.UNCONFIRMED, Evidence.UNMOVED): Said(
+        "unsure", "Sent {key}, but the question is still showing.", _LOOK, True
+    ),
+    (Outcome.ACCEPTED, Evidence.UNMOVED): Said("sent", "Sent {key}.", "The question is still up."),
+    (Outcome.ACCEPTED, Evidence.DELIVERED): Said(
+        "sent", "Sent {key}.", "Nothing was waiting to watch."
+    ),
+}
+_UNCERTAIN: Final = Said("unsure", "Sent {key}, unconfirmed.", _LOOK, True)
+
+
+def key_name(key: str) -> str:
+    """A key as the screen's own hints name it: Enter, Esc, Ctrl+C; a digit is its option."""
+    if key.isdigit():
+        return f"option {key}"
+    return "+".join(part.capitalize() for part in key.split("-"))
+
+
+def said(sent: KeySent) -> Said:
+    """The words for what a sent key is known to have done, never more than was seen."""
+    shape = _SAID.get((sent.outcome, sent.evidence), _UNCERTAIN)
+    name = key_name(sent.key)
+    return Said(shape.kind, shape.what.format(key=name), shape.why.format(key=name), shape.unsure)
+
+
 def _key(web: WebState, writer: Writer, session: SessionId, values: dict[str, str]) -> HTMLResponse:
     ask = KeyAsk(
         session,
@@ -94,7 +147,7 @@ def _key(web: WebState, writer: Writer, session: SessionId, values: dict[str, st
 
 def _answered(web: WebState, agent: Agent, result: KeySent) -> HTMLResponse:
     # Controls come back drawn from the screen the key made, never the one it was aimed at.
-    context = {**answer_context(agent, result.prompt), "sent": result}
+    context = {**answer_context(agent, result.prompt), "sent": result, "said": said(result)}
     return web.pages.fragment("answer.html", context, headers={"HX-Trigger": "hp:poke"})
 
 

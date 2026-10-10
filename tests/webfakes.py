@@ -2,7 +2,7 @@
 
 import copy
 import json
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -16,6 +16,7 @@ from herdr_pwa.engine.generated import request as wire_request
 from herdr_pwa.jsontypes import JsonObject, as_object, loads
 from herdr_pwa.settings import Settings
 from herdr_pwa.web.app import create_app
+from herdr_pwa.writes.outcome import Pacing
 
 FIXTURES = Path(__file__).parent / "fixtures"
 SNAPSHOT_FIXTURE = FIXTURES / "snapshot.example.json"
@@ -24,6 +25,8 @@ IDENTITY = {"Tailscale-User-Login": LOGIN}
 
 SNAPSHOT = engine_client.method_of(wire_request.SessionSnapshotRequest)
 READ = engine_client.method_of(wire_request.AgentReadRequest)
+AGENT_GET = engine_client.method_of(wire_request.AgentGetRequest)
+SEND_KEYS = engine_client.method_of(wire_request.AgentSendKeysRequest)
 
 # The fixture's working agent, and the first idle one.
 WORKING_SESSION = "6ae1e031-ddb4-4684-ab07-68073f7fec47"
@@ -83,6 +86,10 @@ class FakeWire:
 
     replies: dict[str, Reply] = field(default_factory=dict[str, Reply])
     calls: list[str] = field(default_factory=list[str])
+    # Run once a method has answered, to model what the terminal did with a write.
+    after: dict[str, Callable[["FakeWire"], None]] = field(
+        default_factory=dict[str, Callable[["FakeWire"], None]]
+    )
 
     def call(
         self,
@@ -101,6 +108,9 @@ class FakeWire:
             raise AssertionError(f"the test gave no reply for {method}")
         if isinstance(reply, Exception):
             raise reply
+        hook = self.after.get(method)
+        if hook is not None:
+            hook(self)
         return copy.deepcopy(reply)
 
     def close(self) -> None:
@@ -115,6 +125,10 @@ class Clock:
 
     def __call__(self) -> float:
         return self.now
+
+    def sleep(self, seconds: float) -> None:
+        """Wait by moving the clock, so a watched write settles without real time passing."""
+        self.now += seconds
 
 
 @dataclass
@@ -132,6 +146,7 @@ def build_rig(
     replies: Mapping[str, Reply] | None = None,
     *,
     headers: dict[str, str] | None = None,
+    paced: bool = False,
     **overrides: object,
 ) -> Rig:
     """An app whose every destination is under ``tmp_path`` and whose runner is fake."""
@@ -151,7 +166,9 @@ def build_rig(
     def factory(engine: EngineSettings) -> HerdrClient:
         return HerdrClient(engine, transport=wire, clock=clock)
 
-    app = create_app(settings, factory, clock=clock)
+    # Paced, a write's watch waits on the rig's clock instead of the wall's.
+    pacing = Pacing(sleep=clock.sleep, clock=clock) if paced else None
+    app = create_app(settings, factory, clock=clock, pacing=pacing)
     http = TestClient(app, headers=IDENTITY if headers is None else headers)
     return Rig(wire, clock, http, settings)
 

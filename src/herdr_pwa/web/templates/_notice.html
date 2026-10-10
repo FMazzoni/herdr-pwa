@@ -1,9 +1,17 @@
-{# The one way a write's result is said: the failure table's sentence, then any confirm reason. #}
+{# The one way a write's result is said: the failure table's sentence, then any confirm reason,
+   then what to do about it where the sentence alone leaves the user stuck. #}
 {% import "_ui.html" as ui %}
 {% if refused is defined %}
+{% set next = {
+  "protocol_drift": "Answer it in the terminal for now; herdr-pwa doctor on the box says what drifted.",
+  "unreachable": "Try again in a moment.",
+  "runner_refused": "Look at the screen before trying again.",
+  "not_ready": "Wait for it to settle, then try again.",
+} %}
 {# The reason reads after the sentence here, so the parts come in by hand rather than as what/why. #}
 {% call ui.banner("held" if refused.held else "failure", role="alert") %}
   <span class="banner__why">{{ says }}</span>
   {% if refused.reason %}<span class="banner__what">{{ refused.reason }}</span>{% endif %}
+  {% if refused.refusal.value in next %}<span class="banner__next">{{ next[refused.refusal.value] }}</span>{% endif %}
 {% endcall %}
 {% endif %}

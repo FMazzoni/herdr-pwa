@@ -8,7 +8,7 @@ from herdr_pwa.cli import doctor
 from herdr_pwa.decisions import AgentRow
 from herdr_pwa.engine.client import HerdrClient
 from herdr_pwa.engine.config import EngineSettings
-from herdr_pwa.engine.model import AgentStatus, PaneId, SessionId
+from herdr_pwa.engine.model import AgentStatus, PaneId, SessionId, as_pane_id
 from herdr_pwa.engine.transport import EngineUnavailable
 from herdr_pwa.jsontypes import JsonObject
 from herdr_pwa.protocol import EXPECTED_PROTOCOL
@@ -18,6 +18,9 @@ from herdr_pwa.web.chat import is_long
 from herdr_pwa.web.failures import FAILURES, failure_for
 from herdr_pwa.web.markdown import TAGS, MdNode, render_tree
 from herdr_pwa.web.naming import card_title, display_title, page_title
+from herdr_pwa.web.routers.compose import key_name, said
+from herdr_pwa.writes.answer import KeySent
+from herdr_pwa.writes.outcome import Evidence, Outcome
 from tests.webfakes import SNAPSHOT, FakeWire, agents_of, snapshot_frame
 
 
@@ -183,3 +186,17 @@ def test_a_turn_is_long_past_eight_lines_or_about_eight_lines_of_characters() ->
     assert is_long("x" * 321)
     assert is_long("line\n" * 8)
     assert not is_long("line\n" * 7)
+
+
+def test_a_sent_key_is_said_in_the_screens_own_words() -> None:
+
+    assert [key_name(k) for k in ("1", "enter", "ctrl-c")] == ["option 1", "Enter", "Ctrl+C"]
+    pane = as_pane_id("w1:p3")
+    gone = said(KeySent(pane, "2", Outcome.CONFIRMED, Evidence.GONE, True, None))
+    assert (gone.kind, gone.what, gone.unsure) == ("sent", "Answered.", False)
+    flicker = said(KeySent(pane, "enter", Outcome.ACCEPTED, Evidence.FLICKER, True, None))
+    assert (flicker.kind, flicker.what, flicker.unsure) == (
+        "unsure",
+        "Sent Enter, unconfirmed.",
+        True,
+    )

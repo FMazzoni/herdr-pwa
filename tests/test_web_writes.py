@@ -323,3 +323,54 @@ def test_every_form_that_navigates_is_a_sheet(tmp_path: Path) -> None:
     ):
         body = w.http.get(path).text
         assert body.count("<form") == body.count("data-hp-sheet") > 0, path
+
+
+def _blocked_on(tmp_path: Path, screen: str) -> Web:
+    herd = FakeHerd()
+    herd.put(P3, S1, status="blocked")
+    herd.screens[P3] = [screen]
+    return web(tmp_path, herd)
+
+
+def test_an_option_row_is_a_numbered_tap_target_that_guards_the_whole_region(
+    tmp_path: Path,
+) -> None:
+    text = blocked(tmp_path).http.get(f"/agent/{S1}/answer").text
+    assert '<span class="option__n" aria-hidden="true">1</span>' in text
+    # One tap disables every control in the region, and outranks a poll already in flight.
+    assert 'hx-disabled-elt="#answer button"' in text
+    assert 'hx-sync="closest .answer:replace"' in text
+    assert "option--still" not in text
+
+
+def test_a_checklist_says_why_its_rows_are_not_buttons_and_links_the_pane(
+    tmp_path: Path,
+) -> None:
+    w = _blocked_on(tmp_path, capture("capture-blocked-multiselect-checklist"))
+    text = w.http.get(f"/agent/{S1}/answer").text
+    assert "option--still" in text
+    assert "option__box--on" in text, "the ticked box is drawn ticked"
+    assert "move down to Submit" in text
+    assert f'href="/agent/{S1}?tab=pane#agent-view"' in text
+    assert 'name="key" value="1"' not in text
+
+
+def test_a_question_that_cannot_be_read_says_so_with_a_way_to_the_pane(tmp_path: Path) -> None:
+    w = _blocked_on(tmp_path, "")
+    text = w.http.get(f"/agent/{S1}/answer").text
+    assert "its question could not be read here" in text
+    assert f'href="/agent/{S1}?tab=pane#agent-view"' in text
+
+
+def test_a_key_that_left_the_question_up_says_so_and_does_not_claim_an_answer(
+    tmp_path: Path,
+) -> None:
+    w = blocked(tmp_path)
+    response = w.http.post(
+        f"/agent/{S1}/keys", data={"key": "1", "screen": FINGERPRINT}, headers=ORIGIN
+    )
+    assert response.status_code == 200
+    assert "banner--unsure" in response.text
+    assert "Sent option 1, but the question is still showing." in response.text
+    assert "Answered." not in response.text
+    assert len(w.herd.writes("agent.send_keys")) == 1, "an unconfirmed key is never re-sent"
