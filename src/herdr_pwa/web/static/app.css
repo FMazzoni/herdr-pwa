@@ -51,17 +51,19 @@
   --space-10: 24px;
   --space-11: 32px;
 
-  /* Type sizes, smallest first; 14px is the body. */
-  --text-1: 10.5px;
-  --text-2: 11px;
-  --text-3: 11.5px;
-  --text-4: 12px;
-  --text-5: 12.5px;
-  --text-6: 13px;
-  --text-7: 14px;
-  --text-8: 15px;
+  /* Type sizes, in rem so the whole scale follows the root, which follows iPhone Text Size.
+     At the default setting the root is 17px: these are 13.6, 14.9, 17 and 19.1px. */
+  --text-small: 0.8rem;
+  --text-meta: 0.875rem;
+  --text-body: 1rem;
+  --text-head: 1.125rem;
+  /* The top bar's words stop growing here, as iOS's own bars do at the accessibility sizes. */
+  --text-bar: min(1rem, 20px);
+  --text-bar-link: min(0.875rem, 18px);
   /* A field: iOS zooms the page into any field under 16px when it takes focus. */
-  --text-input: 16px;
+  --text-input: max(16px, 1rem);
+  /* The root when the system font cannot be asked: 17px against a 16px browser default. */
+  --text-root: 106.25%;
 
   --radius-1: 6px;
   --radius-2: 8px;
@@ -102,11 +104,15 @@
   --dock-h: 88px;
   --kb: 0px;
   --composer-grow: 5.5em;
+  /* The narrowest the prompt field gets before the Send button moves under it. */
+  --composer-min: 8em;
   /* How many lines of a long chat turn show before "Show all"; a count, not a length. */
   --fold-lines: 8;
   /* An option row's numeral column, and how many lines its label runs before it is cut. */
-  --option-n: 28px;
+  --option-n: 1.65rem;
   --option-lines: 3;
+  /* A flex share so large that an item gives up its width before its neighbours give any. */
+  --shrink-first: 1000;
 }
 
 * { box-sizing: border-box; }
@@ -115,11 +121,21 @@ html, body {
   margin: 0;
   background: var(--ground);
   color: var(--ink);
-  font: var(--text-7)/1.45 var(--sans);
+  font: var(--text-body)/1.45 var(--sans);
   -webkit-text-size-adjust: 100%;
+}
+html { font-size: var(--text-root); }
+/* iOS only (the callout property is the tell): the root takes the system body size, which is
+   what Settings > Display & Brightness > Text Size moves, so every rem token moves with it.
+   WebKit's guidance for Dynamic Type on the web; macOS Safari would get its 13px body. */
+@supports (font: -apple-system-body) and (-webkit-touch-callout: none) {
+  html { font: -apple-system-body; font-family: var(--sans); line-height: 1.45; }
 }
 
 a { color: var(--accent); }
+/* A path or an id in a sentence breaks where it must: at the largest Text Size one word can
+   outrun the screen. Titles and meta lines ellipsize instead, by their own rules. */
+main p { overflow-wrap: anywhere; }
 
 /* Touch: no grey flash from WebKit on a tap and no link preview on a long press of a control;
    each one answers a press with its own :active state instead. */
@@ -136,18 +152,19 @@ html { -webkit-tap-highlight-color: transparent; }
   padding: env(safe-area-inset-top) var(--gutter-right) 0 var(--gutter-left);
   background: var(--surface);
   border-bottom: var(--line-1) solid var(--rule);
+  font-size: var(--text-bar);
 }
 .brand { color: var(--ink); font-weight: 700; text-decoration: none; letter-spacing: 0.02em; }
 /* 44px is Apple's minimum tap target; the bar's height comes from its links, not padding. */
 .brand, .topbar__link { display: inline-flex; align-items: center; min-height: var(--tap); min-width: var(--tap); }
-.topbar__link { margin-left: auto; color: var(--ink-2); font-size: var(--text-5); }
+.topbar__link { margin-left: auto; color: var(--ink-2); font-size: var(--text-bar-link); }
 .topbar__title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); }
 /* Flush with the gutter: the bar's own padding is the only indent. */
-.topbar__back { justify-content: flex-start; flex: none; text-decoration: none; font-size: var(--text-7); }
-.topbar__title--agent { flex: 1; color: var(--ink); font-weight: 600; }
+.topbar__back { justify-content: flex-start; flex: none; text-decoration: none; }
+.topbar__title--agent { flex: 1; margin: 0; color: var(--ink); font-size: inherit; font-weight: 600; }
 
 .feed-host, .agent { padding: var(--space-6) var(--gutter-right) calc(env(safe-area-inset-bottom) + var(--space-10)) var(--gutter-left); max-width: var(--page-max); margin: 0 auto; }
-.boot, .empty { color: var(--ink-3); font-size: var(--text-6); text-align: center; padding: var(--space-10) var(--space-4); }
+.boot, .empty { color: var(--ink-3); font-size: var(--text-meta); text-align: center; padding: var(--space-10) var(--space-4); }
 
 /* Freshness: everything but live dims the claim the cards make. */
 .feed.is-stale .cards { opacity: 0.55; }
@@ -161,7 +178,7 @@ html { -webkit-tap-highlight-color: transparent; }
   border-radius: var(--radius-2);
   background: var(--surface-2);
   border-left: var(--line-3) solid var(--unknown);
-  font-size: var(--text-5);
+  font-size: var(--text-meta);
 }
 .banner__what { font-weight: 600; }
 .banner__why { color: var(--ink-2); }
@@ -170,7 +187,7 @@ html { -webkit-tap-highlight-color: transparent; }
 .banner--stale { border-left-color: var(--ink-3); }
 
 /* Counts wrap among themselves; the age holds the top-right corner and never wraps. */
-.summary { display: flex; align-items: baseline; gap: var(--space-6); margin: 0 0 var(--space-4); font-size: var(--text-5); color: var(--ink-2); }
+.summary { display: flex; align-items: baseline; gap: var(--space-6); margin: 0 0 var(--space-4); font-size: var(--text-meta); color: var(--ink-2); }
 .summary__counts { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-7); margin: 0; }
 .summary__need { color: var(--blocked); font-weight: 600; }
 .summary__done { color: var(--done); }
@@ -208,7 +225,7 @@ html { -webkit-tap-highlight-color: transparent; }
   min-width: var(--tap);
   scroll-snap-align: start;
   color: var(--ink-2);
-  font-size: var(--text-5);
+  font-size: var(--text-meta);
   text-decoration: none;
 }
 .chip__pill {
@@ -232,7 +249,7 @@ html { -webkit-tap-highlight-color: transparent; }
   gap: var(--space-4);
   align-items: baseline;
   margin: 0 0 var(--space-4);
-  font-size: var(--text-1);
+  font-size: var(--text-small);
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -240,7 +257,7 @@ html { -webkit-tap-highlight-color: transparent; }
 }
 .group--blocked .group__head { color: var(--blocked); }
 .group__note { color: var(--ink-3); font-weight: 400; letter-spacing: 0; text-transform: none; }
-.group__none { margin: 0; color: var(--ink-3); font-size: var(--text-5); }
+.group__none { margin: 0; color: var(--ink-3); font-size: var(--text-meta); }
 
 /* minmax(0, 1fr): a grid track otherwise grows to its widest unbreakable child. */
 .cards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
@@ -252,20 +269,21 @@ html { -webkit-tap-highlight-color: transparent; }
 .card__link--go > * { grid-column: 1; }
 .card__link--go { border-radius: inherit; }
 .card__link--go:active { background: var(--surface-2); }
-.card__link--go > .card__chevron { grid-column: 2; grid-row: 1; align-self: center; color: var(--ink-3); font-size: var(--text-8); line-height: 1; }
+.card__link--go > .card__chevron { grid-column: 2; grid-row: 1; align-self: center; color: var(--ink-3); font-size: var(--text-head); line-height: 1; }
 .card__chevron::before { content: var(--chevron); }
 .card__top { display: flex; align-items: center; gap: var(--space-4); min-width: 0; }
 .card__title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
-.card__status { font-size: var(--text-3); color: var(--ink-3); }
-.card__meta { display: flex; gap: var(--space-5); min-width: 0; font-size: var(--text-3); color: var(--ink-3); }
-/* One line: the workspace ellipsizes rather than wraps; the harness and the short pane id never shrink. */
+.card__status { font-size: var(--text-small); color: var(--ink-3); }
+.card__meta { display: flex; gap: var(--space-5); min-width: 0; font-size: var(--text-small); color: var(--ink-3); }
+/* One line: the workspace ellipsizes rather than wraps; the harness and the short pane id give
+   way only once it is gone, which takes the largest Text Size. */
 .card__meta > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.card__harness, .card__pane { flex: none; }
+.card__ws { flex-shrink: var(--shrink-first); }
 .agent__meta > * { min-width: 0; }
 .card__pane { font-family: var(--mono); }
-.card__question { color: var(--ink); font-size: var(--text-6); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; line-clamp: 4; overflow: hidden; }
+.card__question { color: var(--ink); font-size: var(--text-meta); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; line-clamp: 4; overflow: hidden; }
 .card__question--unread { color: var(--ink-2); font-style: italic; }
-.card__options { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-1); font-size: var(--text-5); color: var(--ink-2); }
+.card__options { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-1); font-size: var(--text-meta); color: var(--ink-2); }
 /* The card is the overview; the whole question and every option are a tap away. */
 .card__option { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -276,7 +294,7 @@ html { -webkit-tap-highlight-color: transparent; }
 .dot--done { background: var(--done); }
 
 /* Drill-in. */
-.agent__meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-5); margin: 0 0 var(--space-5); font-size: var(--text-4); color: var(--ink-3); overflow-wrap: anywhere; }
+.agent__meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-5); margin: 0 0 var(--space-5); font-size: var(--text-small); color: var(--ink-3); overflow-wrap: anywhere; }
 .agent__status { color: var(--ink); }
 
 /* The agent page is one column. The composer is docked to the bottom, so the page reserves
@@ -299,7 +317,7 @@ html { -webkit-tap-highlight-color: transparent; }
 /* A quiet switch on the pane's top edge: muted text, no frame, the 44px row is the target. */
 .agent__columns { display: flex; justify-content: flex-end; margin-bottom: calc(-1 * var(--space-5)); }
 .agent__columns[hidden] { display: none; }
-.button.button--toggle { padding-inline: var(--space-2); font-weight: 500; font-size: var(--text-4); color: var(--ink-3); background: transparent; border-color: transparent; }
+.button.button--toggle { padding-inline: var(--space-2); font-weight: 500; font-size: var(--text-small); color: var(--ink-3); background: transparent; border-color: transparent; }
 .button--toggle::before { content: "\25A1\00A0"; }
 .button.button--toggle[aria-pressed=true] { color: var(--ink-2); }
 .button--toggle[aria-pressed=true]::before { content: "\25A0\00A0"; }
@@ -307,25 +325,25 @@ html { -webkit-tap-highlight-color: transparent; }
 .chat { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-5); }
 .turn { padding: var(--space-5) var(--space-6); border-radius: var(--radius-3); background: var(--surface); overflow-wrap: anywhere; }
 .turn--human { background: var(--surface-2); border-left: var(--line-3) solid var(--accent); }
-.turn--tool { background: transparent; border: var(--line-1) solid var(--rule); font-size: var(--text-5); }
-.turn--system { background: transparent; color: var(--ink-3); font-size: var(--text-4); }
+.turn--tool { background: transparent; border: var(--line-1) solid var(--rule); font-size: var(--text-meta); }
+.turn--system { background: transparent; color: var(--ink-3); font-size: var(--text-small); }
 .turn--failed { border-color: var(--blocked); }
 .turn__text { margin: 0; white-space: pre-wrap; }
 .turn__tool { margin: 0; color: var(--ink-2); font-family: var(--mono); }
 .turn__name { color: var(--ink); font-weight: 600; }
-.turn__result pre, .prose pre { overflow-x: auto; padding: var(--space-4); background: var(--ground); border-radius: var(--radius-1); font: var(--text-4)/1.4 var(--mono); }
+.turn__result pre, .prose pre { overflow-x: auto; padding: var(--space-4); background: var(--ground); border-radius: var(--radius-1); font: var(--text-small)/1.4 var(--mono); }
 .turn__result summary { min-height: var(--tap); line-height: var(--tap); }
-.turn__clip { margin: var(--space-2) 0 0; color: var(--ink-3); font-size: var(--text-2); }
+.turn__clip { margin: var(--space-2) 0 0; color: var(--ink-3); font-size: var(--text-small); }
 /* A long turn folds to a few lines; the open details below it unfolds it, with or without script. */
 .turn__fold { max-height: calc(var(--fold-lines) * 1.45em); overflow: hidden; }
 .turn:has(> .turn__more[open]) > .turn__fold { max-height: none; }
-.turn__more summary { display: flex; align-items: center; min-height: var(--tap); color: var(--accent); font-size: var(--text-5); list-style: none; cursor: pointer; }
+.turn__more summary { display: flex; align-items: center; min-height: var(--tap); color: var(--accent); font-size: var(--text-meta); list-style: none; cursor: pointer; }
 .turn__more summary::-webkit-details-marker { display: none; }
 .turn__more[open] .turn__all, .turn__more:not([open]) .turn__less { display: none; }
 .prose > :first-child { margin-top: 0; }
 .prose > :last-child { margin-bottom: 0; }
-.prose h1, .prose h2, .prose h3, .prose h4, .prose h5, .prose h6 { font-size: var(--text-8); margin: var(--space-6) 0 var(--space-3); }
-.prose code { font: var(--text-5) var(--mono); }
+.prose h1, .prose h2, .prose h3, .prose h4, .prose h5, .prose h6 { font-size: var(--text-head); margin: var(--space-6) 0 var(--space-3); }
+.prose code { font: var(--text-meta) var(--mono); }
 .prose p { white-space: pre-wrap; }
 .prose blockquote { margin: var(--space-3) 0; padding-left: var(--space-5); border-left: var(--line-2) solid var(--rule); color: var(--ink-2); }
 .prose table { border-collapse: collapse; display: block; overflow-x: auto; }
@@ -338,7 +356,7 @@ html { -webkit-tap-highlight-color: transparent; }
   overflow-x: auto;
   background: var(--pane-ground);
   border-radius: var(--radius-2);
-  font: var(--text-4)/1.35 var(--mono);
+  font: var(--text-small)/1.35 var(--mono);
   color: var(--ansi-white);
 }
 .pane--status { color: var(--ink-3); }
@@ -393,9 +411,9 @@ html { -webkit-tap-highlight-color: transparent; }
 /* The alerts sheet. */
 .sheet { padding: var(--space-6) var(--gutter-right) var(--space-11) var(--gutter-left); max-width: var(--sheet-max); margin: 0 auto; }
 .sheet__group { margin: 0 0 var(--space-10); }
-.sheet__heading { font-size: var(--text-6); color: var(--ink-2); text-transform: uppercase; letter-spacing: 0.04em; margin: 0 0 var(--space-4); }
+.sheet__heading { font-size: var(--text-meta); color: var(--ink-2); text-transform: uppercase; letter-spacing: 0.04em; margin: 0 0 var(--space-4); }
 .sheet__state { margin: 0 0 var(--space-5); }
-.sheet__note { color: var(--ink-3); font-size: var(--text-5); margin: var(--space-4) 0; }
+.sheet__note { color: var(--ink-3); font-size: var(--text-meta); margin: var(--space-4) 0; }
 .sheet__note--warn { color: var(--unknown); }
 .sheet__row { display: flex; align-items: center; gap: var(--space-5); flex-wrap: wrap; margin: var(--space-4) 0; min-height: var(--tap); }
 .sheet__button {
@@ -409,15 +427,15 @@ html { -webkit-tap-highlight-color: transparent; }
 }
 .sheet__button[hidden] { display: none; }
 
-.actions { display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-7); font-size: var(--text-5); }
+.actions { display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-7); font-size: var(--text-meta); }
 /* A destructive action keeps to the far edge, away from the safe ones, in the danger colour. */
 .actions__danger { margin-left: auto; color: var(--blocked); }
 .agent__end { margin-left: auto; color: var(--blocked); }
-.form, .answer { display: grid; gap: var(--space-5); margin: var(--space-6) 0; }
-.field { display: grid; gap: var(--space-2); }
+.form, .answer { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-5); margin: var(--space-6) 0; }
+.field { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
 .field--check { display: flex; align-items: center; gap: var(--space-4); min-height: var(--tap); }
-.field__label { font-size: var(--text-4); color: var(--ink-3); }
-.field__note { margin: 0; font-size: var(--text-4); color: var(--ink-3); }
+.field__label { font-size: var(--text-small); color: var(--ink-3); }
+.field__note { margin: 0; font-size: var(--text-small); color: var(--ink-3); }
 input, select, textarea {
   font: var(--text-input)/1.4 var(--sans);
   color: var(--ink);
@@ -474,7 +492,7 @@ input[type=checkbox]:checked::after {
 input[type=checkbox]:focus-visible { outline: var(--line-2) solid var(--accent); outline-offset: var(--line-2); }
 textarea { resize: vertical; min-height: 4.5em; }
 .button {
-  font: 600 var(--text-7)/1 var(--sans);
+  font: 600 var(--text-body)/1 var(--sans);
   color: var(--ink);
   background: var(--surface-2);
   border: var(--line-1) solid var(--rule);
@@ -487,8 +505,8 @@ textarea { resize: vertical; min-height: 4.5em; }
 .button--danger { border-color: var(--blocked); color: var(--blocked); }
 .keys { display: grid; gap: var(--space-3); }
 .keys--pad { display: flex; flex-wrap: wrap; gap: var(--space-3); }
-.answer__question { margin: 0; font-weight: 600; white-space: pre-wrap; }
-.answer__note { margin: 0; font-size: var(--text-5); color: var(--ink-2); }
+.answer__question { margin: 0; font-size: inherit; font-weight: 600; white-space: pre-wrap; }
+.answer__note { margin: 0; font-size: var(--text-meta); color: var(--ink-2); }
 /* A way to the Pane gets its own 44px line, never a gap torn into the sentence above it. */
 .answer__go, .banner__go { display: flex; width: fit-content; align-items: center; min-height: var(--tap); font-weight: 600; }
 .answer__go::after, .banner__go::after { content: "\00A0" var(--chevron); }
@@ -498,7 +516,7 @@ textarea { resize: vertical; min-height: 4.5em; }
 /* Rows that are not buttons are answered from one row of keys right under them, Enter wider. */
 .keys--compact { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.6fr) minmax(0, 1fr); gap: var(--space-3); }
 .keys--compact .button, .keys--extra .button { width: 100%; padding-inline: var(--space-2); }
-.keys--compact .button { font-size: var(--text-6); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.keys--compact .button { font-size: var(--text-meta); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .keys--extra { display: flex; flex-wrap: wrap; gap: var(--space-3); }
 .banner__next { flex-basis: 100%; color: var(--ink); }
 /* The link's 44px row eats the banner's bottom padding rather than adding to it. */
@@ -516,19 +534,21 @@ textarea { resize: vertical; min-height: 4.5em; }
 .button.option { padding: var(--space-4) var(--space-5); }
 .option__n { display: grid; place-content: center; width: var(--option-n); height: var(--option-n); border-radius: var(--radius-1); background: var(--ground); border: var(--line-1) solid var(--rule); color: var(--ink-2); font-variant-numeric: tabular-nums; }
 .option__label { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--option-lines); line-clamp: var(--option-lines); overflow: hidden; overflow-wrap: anywhere; }
-.option__quiet { position: absolute; width: var(--line-1); height: var(--line-1); overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.option__quiet, .sr-only { position: absolute; width: var(--line-1); height: var(--line-1); overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 /* A row with no digit is text, not a control: no fill, no frame, its numeral hollow. */
 .option--still { padding: var(--space-2) var(--space-5); color: var(--ink-2); }
 .option--still .option__n { background: transparent; border-style: dashed; color: var(--ink-3); }
 .option__box { display: grid; place-content: center; width: var(--check); height: var(--check); border: var(--line-1) solid var(--ink-3); border-radius: var(--radius-1); }
 .option__box--on { background: var(--accent); border-color: var(--accent); }
 .option__box--on::after { content: ""; width: var(--tick-w); height: var(--tick-h); margin-top: calc(var(--tick-w) * -0.5); border: solid var(--ground); border-width: 0 var(--line-2) var(--line-2) 0; transform: rotate(45deg); }
-.option__sending { display: none; grid-column: 2 / -1; font-size: var(--text-4); font-weight: 500; color: var(--accent); }
+.option__sending { display: none; grid-column: 2 / -1; font-size: var(--text-small); font-weight: 500; color: var(--accent); }
 /* The tapped control stays lit while the rest of the region waits for its answer. */
 .htmx-request > .button[disabled] { opacity: 1; border-color: var(--accent); color: var(--accent); }
 .htmx-request > .button .option__n { border-color: var(--accent); color: var(--accent); }
 .htmx-request .option__sending { display: block; }
 .answer__keys { display: grid; gap: var(--space-4); }
+/* A row of keys is one line only while four of them fit at the current Text Size. */
+.answer { container-type: inline-size; }
 .answer__keys .group__head { margin: 0; }
 .keys--hints { display: flex; flex-wrap: wrap; gap: var(--space-3); }
 /* The generic keys stay on one line even at 320px: equal columns, however many there are. */
@@ -539,6 +559,11 @@ textarea { resize: vertical; min-height: 4.5em; }
 .keys__stop--armed { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); margin-top: 0; padding-top: 0; border-top: 0; }
 .keys__cancel { width: 100%; }
 .keys__stop .button--danger { width: 100%; background: transparent; border-style: dashed; }
+/* In em, so the break moves with Text Size; a query cannot read a custom property. */
+@container (width < 14em) {
+  .answer__keys .keys--pad, .keys--compact { grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .keys__stop--armed { grid-template-columns: minmax(0, 1fr); }
+}
 
 /* The composer, docked above the home indicator, and above the keyboard when it is open. */
 .composer {
@@ -559,9 +584,10 @@ textarea { resize: vertical; min-height: 4.5em; }
 }
 .is-keyboard .composer { padding-bottom: var(--space-4); }
 .composer .banner { margin: 0; }
-.composer__row { display: flex; align-items: end; gap: var(--space-4); }
+/* The button drops under the field once both no longer fit, which only the largest Text Size does. */
+.composer__row { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: end; gap: var(--space-4); }
 .composer__row .field, .composer__row .button { margin: 0; }
-.composer__row .field { flex: 1; min-width: 0; }
+.composer__row .field { flex: 1 1 var(--composer-min); min-width: 0; }
 .composer textarea { display: block; width: 100%; min-height: var(--tap); resize: none; background: var(--ground); }
 .composer textarea:focus, .composer textarea:not(:placeholder-shown) { min-height: var(--composer-grow); }
 .field__label--quiet { position: absolute; width: var(--line-1); height: var(--line-1); overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
@@ -571,3 +597,9 @@ textarea { resize: vertical; min-height: 4.5em; }
 .is-sending .leave { pointer-events: none; opacity: 0.4; }
 /* Text links that act are thumb targets too. */
 .actions a, a.leave, main > p > a:only-child { display: inline-flex; align-items: center; min-height: var(--tap); min-width: var(--tap); }
+
+/* Asked for in Settings > Accessibility > Motion: nothing slides or fades, nothing scrolls smoothly. */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

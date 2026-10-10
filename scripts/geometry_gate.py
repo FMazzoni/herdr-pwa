@@ -36,6 +36,7 @@ GUARDED = (
     "scripts/backnav.py",
     "scripts/chatend.py",
     "scripts/feedhold.py",
+    "scripts/voiceover.py",
     "tests/_fake_herd.py",
     "scripts/geometry_gate.py",
 )

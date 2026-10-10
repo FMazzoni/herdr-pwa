@@ -7,9 +7,11 @@
 {% macro section_head(label, n=none, note=none) %}<h2 class="group__head"><span class="group__label">{{ label }}</span>{% if n is not none %}<span class="group__n">{{ n }}</span>{% endif %}{% if note %}<span class="group__note">{{ note }}</span>{% endif %}</h2>{% endmacro %}
 
 {# A coloured-edge notice. `what` is the bold claim, `why` the reason; a call block adds free text.
-   `outcome` carries a write's audit token, for a test or a reader to check against the words. #}
-{% macro banner(kind, what=none, why=none, role="status", sent=false, outcome=none) -%}
-<p class="banner banner--{{ kind }}" role="{{ role }}"{% if sent %} data-hp-sent{% endif %}{% if outcome %} data-hp-outcome="{{ outcome }}"{% endif %}>
+   `outcome` carries a write's audit token, for a test or a reader to check against the words.
+   No live role by default: most banners sit in a region a poll redraws, and app.js says a
+   write's outcome once through the page's own live region. A refusal passes role="alert". #}
+{% macro banner(kind, what=none, why=none, role=none, sent=false, outcome=none) -%}
+<p class="banner banner--{{ kind }}"{% if role %} role="{{ role }}"{% endif %}{% if sent %} data-hp-sent{% endif %}{% if outcome %} data-hp-outcome="{{ outcome }}"{% endif %}>
   {%- if what is not none %}<span class="banner__what">{{ what }}</span>{% endif %}
   {%- if why is not none %}<span class="banner__why">{{ why }}</span>{% endif %}
   {%- if caller is defined %}{{ caller() }}{% endif -%}

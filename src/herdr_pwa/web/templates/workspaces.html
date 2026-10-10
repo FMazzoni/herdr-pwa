@@ -4,7 +4,7 @@
 {% block title %}Workspaces &mdash; herdr{% endblock %}
 {# The back arrow is the way home here, as on an agent's page. #}
 {% block brand %}{% endblock %}
-{% block topbar %}<a class="leave topbar__back" href="/" {{ replace() }}>&lsaquo; Herd</a><span class="topbar__title">workspaces</span>{% endblock %}
+{% block topbar %}<a class="leave topbar__back" href="/" aria-label="Back to herd" {{ replace() }}>&lsaquo; Herd</a><span class="topbar__title">workspaces</span>{% endblock %}
 {% block body %}
 <main class="feed-host">
   {{ ui.section_head("Workspaces", workspaces|length) }}

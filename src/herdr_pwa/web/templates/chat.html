@@ -1,9 +1,13 @@
 {% from "md.html" import md %}
+{% set speakers = {"human": "You", "agent": "Agent", "tool": "Tool", "system": "Note"} %}
 {% set url = "/agent/" ~ (agent.session|urlencode) ~ "/chat" %}
 <section id="agent-view" class="chat" data-hp-poll="{{ url }}" hx-get="{{ url }}" hx-target="this" hx-swap="outerHTML" hx-trigger="every {{ cadence }}s, hp:poke from:body">
+  <h2 class="sr-only">Chat</h2>
   {% if chat.note %}<p class="empty">{{ chat.note }}</p>{% endif %}
   {% for turn in chat.turns %}
   <article class="turn turn--{{ turn.speaker }}{% if turn.failed %} turn--failed{% endif %}">
+    {#- Who spoke is drawn as a colour and an edge; VoiceOver is told in words. #}
+    <span class="sr-only">{{ speakers.get(turn.speaker, turn.speaker) }}:</span>
     {% if turn.speaker == "agent" %}
     <div class="prose{% if turn.long %} turn__fold{% endif %}">{{ md(turn.prose) }}</div>
     {% elif turn.speaker == "tool" %}

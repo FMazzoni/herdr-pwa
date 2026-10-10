@@ -31,6 +31,9 @@
 <div class="updatebar" id="hp-update" hidden>
   <button type="button" class="updatebar__button" id="hp-update-button">New build &mdash; tap to update</button>
 </div>
+{# The one place VoiceOver hears news: a write's outcome and a new message. A poll redraws the
+   regions around it, and a live role inside them would be read out again on every redraw. #}
+<p class="sr-only" id="hp-live" aria-live="polite"></p>
 {% block body %}{% endblock %}
 </body>
 </html>

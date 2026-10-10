@@ -4,7 +4,7 @@
 {% block title %}{{ heading }} &mdash; herdr{% endblock %}
 {# The back arrow is the way home here, so the brand gives its room to the title. #}
 {% block brand %}{% endblock %}
-{% block topbar %}<a class="leave topbar__back" href="/" {{ replace() }}>&lsaquo; Herd</a>{{ ui.dot(agent.status.value) }}<span class="topbar__title topbar__title--agent">{{ heading }}</span>{% endblock %}
+{% block topbar %}<a class="leave topbar__back" href="/" aria-label="Back to herd" {{ replace() }}>&lsaquo; Herd</a>{{ ui.dot(agent.status.value) }}<h1 class="topbar__title topbar__title--agent">{{ heading }}</h1>{% endblock %}
 {% block body %}
 {% set base = "/agent/" ~ (agent.session|urlencode) %}
 <main class="agent agent--docked" data-hp-seen="{{ agent.session }}">

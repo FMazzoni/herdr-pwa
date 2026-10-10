@@ -218,12 +218,22 @@
   var docking = false;
   var dockedKb = -1;
   var dockedH = -1;
+  var watched = null;
+  // The dock grows with iPhone Text Size and with any banner in it; nothing else says so.
+  var sizes = typeof window.ResizeObserver === "function" ? new window.ResizeObserver(redock) : null;
 
   function dock() {
     docking = false;
     var bar = document.getElementById("composer");
     if (!bar) {
       return;
+    }
+    if (sizes && watched !== bar) {
+      if (watched) {
+        sizes.unobserve(watched);
+      }
+      sizes.observe(bar);
+      watched = bar;
     }
     var view = window.visualViewport;
     var covered = view ? Math.max(0, Math.round(window.innerHeight - view.height - view.offsetTop)) : 0;
@@ -505,6 +515,125 @@
       }
     });
   }
+
+  /* ---- VoiceOver: a poll never speaks, moves focus or leaves a half-drawn region ----
+   * A region is redrawn whole every few seconds. While it is swapped its host says it is busy,
+   * the control that had focus gets it back in the new drawing, and the only things said
+   * aloud go through the page's one live region: what a write did, and a new message. */
+  var busyHosts = [];
+  var refocus = null;
+  var writeTarget = "";
+  var newestSaid = null;
+
+  function say(text) {
+    var live = document.getElementById("hp-live");
+    if (!live || !text) {
+      return;
+    }
+    // Emptied first, so the same words twice are still news.
+    live.textContent = "";
+    window.setTimeout(function () {
+      live.textContent = text;
+    }, 50);
+  }
+
+  // As laid out, so the parts of a banner or a turn are said as separate words.
+  function words(node) {
+    return String(node.innerText || node.textContent).replace(/\s+/g, " ").trim();
+  }
+
+  // What a focused control is, so its twin can be found in the region's next drawing.
+  function focusMark(target) {
+    var active = document.activeElement;
+    if (!active || active === document.body || !target.contains(active)) {
+      return null;
+    }
+    var form = active.form || null;
+    return {
+      region: target.id,
+      tag: active.tagName,
+      text: words(active),
+      action: form ? form.getAttribute("action") : "",
+      key: form && form.elements.key ? form.elements.key.value : "",
+      index: Array.prototype.indexOf.call(target.querySelectorAll(active.tagName), active),
+    };
+  }
+
+  function refocusIn(mark) {
+    var region = document.getElementById(mark.region);
+    if (!region || (document.activeElement && region.contains(document.activeElement))) {
+      return;
+    }
+    var all = region.querySelectorAll(mark.tag);
+    var best = null;
+    for (var i = 0; i < all.length; i++) {
+      var form = all[i].form || null;
+      var same = words(all[i]) === mark.text
+        && (form ? form.getAttribute("action") : "") === mark.action
+        && (form && form.elements.key ? form.elements.key.value : "") === mark.key;
+      if (same && (!best || Math.abs(i - mark.index) < Math.abs(best.at - mark.index))) {
+        best = { node: all[i], at: i };
+      }
+    }
+    if (best) {
+      best.node.focus({ preventScroll: true });
+    }
+  }
+
+  document.addEventListener("htmx:beforeSwap", function (event) {
+    var target = event.detail.target;
+    var xhr = event.detail.xhr;
+    // A hidden page's stopped poll swaps nothing, and nothing would settle to clear the mark.
+    if (!target || !event.detail.shouldSwap || (xhr && xhr.getResponseHeader("HX-Reswap") === "none")) {
+      return;
+    }
+    var host = target.parentElement;
+    if (host) {
+      host.setAttribute("aria-busy", "true");
+      busyHosts.push(host);
+    }
+    refocus = focusMark(target);
+    writeTarget = isRead(event.detail) ? "" : target.id;
+  });
+
+  // The newest message in the chat, if the newest thing in it is the agent speaking.
+  function newestMessage() {
+    var units = document.querySelectorAll("#agent-view.chat .turn");
+    var last = units[units.length - 1];
+    return last && last.classList.contains("turn--agent") ? last : null;
+  }
+
+  document.addEventListener("htmx:afterSwap", function (event) {
+    if (refocus) {
+      refocusIn(refocus);
+      refocus = null;
+    }
+    if (writeTarget) {
+      var region = document.getElementById(writeTarget);
+      var outcome = region ? region.querySelector(".banner[data-hp-sent]") : null;
+      if (outcome) {
+        say(words(outcome));
+      }
+      writeTarget = "";
+      return;
+    }
+    if (!isRead(event.detail) || !document.querySelector("#agent-view.chat")) {
+      return;
+    }
+    var newest = newestMessage();
+    var key = newest ? unitKey(newest) : "";
+    // The first drawing is the page opening, not news.
+    if (newestSaid !== null && newest && key !== newestSaid) {
+      say("New message: " + words(newest).replace(/^Agent:\s*/, "").slice(0, 140));
+    }
+    newestSaid = key;
+  });
+
+  document.addEventListener("htmx:afterSettle", function () {
+    while (busyHosts.length) {
+      busyHosts.pop().removeAttribute("aria-busy");
+    }
+  });
 
   /* ---- Service worker and the "new build" offer ---- */
 
