@@ -1,13 +1,14 @@
 {% extends "base.html" %}
 {% from "_nav.html" import replace, sheet %}
+{% import "_ui.html" as ui %}
 {% block title %}New workspace &mdash; herdr{% endblock %}
 {% block body %}
 <main class="agent">
-  <h2 class="group__head"><span class="group__label">New workspace</span></h2>
+  {{ ui.section_head("New workspace") }}
   {% include "_notice.html" %}
   <form class="form" {{ sheet("/workspaces/new") }}>
-    <label class="field"><span class="field__label">Name</span><input name="label" value="{{ label }}" maxlength="40"></label>
-    <button class="button" type="submit">Make it</button>
+    {% call ui.field("Name") %}<input name="label" value="{{ label }}" maxlength="40">{% endcall %}
+    {{ ui.button("Make it") }}
   </form>
 </main>
 {% endblock %}

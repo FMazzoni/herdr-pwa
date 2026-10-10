@@ -8,6 +8,7 @@ check:
     uv run basedpyright
     uv run complexipy --quiet src
     uv run pytest -q
+    uv run python scripts/css_tokens.py
     uv run python scripts/geometry_gate.py
 
 # Headless Firefox over the real templates at 390px and 320px: no sideways scroll, 44px tap

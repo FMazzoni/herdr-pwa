@@ -1,0 +1,47 @@
+{# The repeated pieces of every screen. A look changes here, or in app.css's tokens, once. #}
+
+{# A status dot; the colour comes from its status class. #}
+{% macro dot(status) %}<span class="dot dot--{{ status }}" aria-hidden="true"></span>{% endmacro %}
+
+{# The small-caps header over a group or a page, with an optional count beside it. #}
+{% macro section_head(label, n=none) %}<h2 class="group__head"><span class="group__label">{{ label }}</span>{% if n is not none %}<span class="group__n">{{ n }}</span>{% endif %}</h2>{% endmacro %}
+
+{# A coloured-edge notice. `what` is the bold claim, `why` the reason; a call block adds free text. #}
+{% macro banner(kind, what=none, why=none, role="status", sent=false) -%}
+<p class="banner banner--{{ kind }}" role="{{ role }}"{% if sent %} data-hp-sent{% endif %}>
+  {%- if what is not none %}<span class="banner__what">{{ what }}</span>{% endif %}
+  {%- if why is not none %}<span class="banner__why">{{ why }}</span>{% endif %}
+  {%- if caller is defined %}{{ caller() }}{% endif -%}
+</p>
+{%- endmacro %}
+
+{# A 44px button. `kind` is option or danger; `extra` adds classes such as leave. #}
+{% macro button(label, kind=none, extra=none, type="submit") %}<button class="button{% if kind %} button--{{ kind }}{% endif %}{% if extra %} {{ extra }}{% endif %}" type="{{ type }}">{{ label }}</button>{% endmacro %}
+
+{# One key sent to a pane from the answer panel; `screen` pins the screen it was drawn against. #}
+{% macro key_form(base, target, key, label, screen=none, kind=none, confirm=false) -%}
+<form method="post" action="{{ base }}/keys" hx-post="{{ base }}/keys" hx-target="#answer" hx-swap="outerHTML" hx-disabled-elt="find button">
+      <input type="hidden" name="key" value="{{ key }}">{% if screen is not none %}<input type="hidden" name="screen" value="{{ screen }}">{% endif %}<input type="hidden" name="target" value="{{ target }}">
+      {% if confirm %}<input type="hidden" name="confirm" value="1">
+      {% endif %}{{ button(label, kind) }}
+    </form>
+{%- endmacro %}
+
+{# A card in a list. `href` makes the whole card the link; `inner` is the tag otherwise. #}
+{% macro card(status, href=none, id=none, inner="div") -%}
+<li class="card card--{{ status }}"{% if id %} id="{{ id }}"{% endif %}>
+  {%- if href %}<a class="card__link" href="{{ href }}">{% else %}<{{ inner }} class="card__link">{% endif %}{{ caller() }}{% if href %}</a>{% else %}</{{ inner }}>{% endif -%}
+</li>
+{%- endmacro %}
+
+{# The first line of a card: status dot, a title that ellipsizes, and the status word. #}
+{% macro card_top(status, title) -%}
+<span class="card__top">
+      {{ dot(status) }}
+      <span class="card__title">{{ title }}</span>
+      <span class="card__status">{{ status }}</span>
+    </span>
+{%- endmacro %}
+
+{# A labelled form field; the call block is the control. #}
+{% macro field(label) %}<label class="field"><span class="field__label">{{ label }}</span>{{ caller() }}</label>{% endmacro %}

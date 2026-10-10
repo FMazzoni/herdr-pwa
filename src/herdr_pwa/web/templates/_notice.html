@@ -1,7 +1,9 @@
 {# The one way a write's result is said: the failure table's sentence, then any confirm reason. #}
+{% import "_ui.html" as ui %}
 {% if refused is defined %}
-<p class="banner {{ 'banner--held' if refused.held else 'banner--failure' }}" role="alert">
+{# The reason reads after the sentence here, so the parts come in by hand rather than as what/why. #}
+{% call ui.banner("held" if refused.held else "failure", role="alert") %}
   <span class="banner__why">{{ says }}</span>
   {% if refused.reason %}<span class="banner__what">{{ refused.reason }}</span>{% endif %}
-</p>
+{% endcall %}
 {% endif %}

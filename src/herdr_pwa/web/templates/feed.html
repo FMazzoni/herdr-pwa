@@ -1,3 +1,4 @@
+{% import "_ui.html" as ui %}
 {% set f = herd.freshness %}
 <div id="feed-list"
      class="feed feed--{{ f.condition.value }}{% if f.stale %} is-stale{% endif %}"
@@ -7,11 +8,11 @@
      hx-swap="outerHTML"
      hx-trigger="every {{ herd.cadence }}s, hp:poke from:body">
   {% if f.condition.value == "offline" %}
-  <p class="banner banner--offline" role="status"><span class="banner__what">runner offline</span><span class="banner__why">no contact for over a minute &middot; last seen {{ f.age_label }}</span></p>
+  {% call ui.banner("offline", what="runner offline") %}<span class="banner__why">no contact for over a minute &middot; last seen {{ f.age_label }}</span>{% endcall %}
   {% elif f.condition.value == "degraded" %}
-  <p class="banner banner--degraded" role="status"><span class="banner__what">runner is not answering</span><span class="banner__why">retrying every {{ herd.cadence }}s{% if f.age_label %} &middot; last read {{ f.age_label }}{% endif %}</span></p>
+  {% call ui.banner("degraded", what="runner is not answering") %}<span class="banner__why">retrying every {{ herd.cadence }}s{% if f.age_label %} &middot; last read {{ f.age_label }}{% endif %}</span>{% endcall %}
   {% elif f.condition.value == "stale" %}
-  <p class="banner banner--stale" role="status"><span class="banner__what">stale</span><span class="banner__why">snapshot {{ f.age_label }}</span></p>
+  {{ ui.banner("stale", what="stale", why="snapshot " ~ f.age_label) }}
   {% endif %}
 
   <p class="summary">
@@ -25,7 +26,7 @@
   {% if herd.rows %}
   {% for section in herd.sections %}
   <section class="group group--{{ section.key.value }}">
-    <h2 class="group__head"><span class="group__label">{{ section.label }}</span><span class="group__n">{{ section.count }}</span></h2>
+    {{ ui.section_head(section.label, section.count) }}
     {% if section.rows %}
     <ul class="cards">
       {% for row in section.rows %}{% include "card.html" %}{% endfor %}

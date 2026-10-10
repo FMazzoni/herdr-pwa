@@ -1,14 +1,15 @@
 {% extends "base.html" %}
 {% from "_nav.html" import replace, sheet %}
+{% import "_ui.html" as ui %}
 {% block title %}Rename workspace &mdash; herdr{% endblock %}
 {% block body %}
 <main class="agent">
-  <h2 class="group__head"><span class="group__label">Rename {{ workspace.label if workspace else "workspace" }}</span></h2>
+  {{ ui.section_head("Rename " ~ (workspace.label if workspace else "workspace")) }}
   {% include "_notice.html" %}
   {% if workspace %}
   <form class="form" {{ sheet("/workspaces/" ~ (workspace.workspace_id|urlencode) ~ "/rename") }}>
-    <label class="field"><span class="field__label">Name</span><input name="label" value="{{ label }}" maxlength="40" required></label>
-    <button class="button" type="submit">Rename</button>
+    {% call ui.field("Name") %}<input name="label" value="{{ label }}" maxlength="40" required>{% endcall %}
+    {{ ui.button("Rename") }}
   </form>
   {% endif %}
   <p class="actions"><a href="/workspaces" {{ replace() }}>Back</a></p>

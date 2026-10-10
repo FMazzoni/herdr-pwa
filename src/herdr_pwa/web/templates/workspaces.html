@@ -1,19 +1,15 @@
 {% extends "base.html" %}
 {% from "_nav.html" import replace, sheet %}
+{% import "_ui.html" as ui %}
 {% block title %}Workspaces &mdash; herdr{% endblock %}
 {% block body %}
 <main class="feed-host">
-  <h2 class="group__head"><span class="group__label">Workspaces</span><span class="group__n">{{ workspaces|length }}</span></h2>
+  {{ ui.section_head("Workspaces", workspaces|length) }}
   <p class="actions"><a href="/workspaces/new" {{ replace() }}>New workspace</a> <a href="/new" {{ replace() }}>New agent</a></p>
   <ul class="cards">
     {% for ws in workspaces %}
-    <li class="card card--{{ ws.status.value }}" id="{{ ws.workspace_id }}">
-      <div class="card__link">
-        <span class="card__top">
-          <span class="dot dot--{{ ws.status.value }}" aria-hidden="true"></span>
-          <span class="card__title">{{ ws.label or ws.workspace_id }}</span>
-          <span class="card__status">{{ ws.status.value }}</span>
-        </span>
+    {% call ui.card(ws.status.value, id=ws.workspace_id) %}
+        {{ ui.card_top(ws.status.value, ws.label or ws.workspace_id) }}
         <span class="card__meta">
           <span>{{ counts.get(ws.workspace_id, 0) }} agent{{ "" if counts.get(ws.workspace_id, 0) == 1 else "s" }}</span>
           <span>{{ ws.tab_count }} tab{{ "" if ws.tab_count == 1 else "s" }}</span>
@@ -23,8 +19,7 @@
           <a href="/workspaces/{{ ws.workspace_id|urlencode }}/rename" {{ replace() }}>Rename</a>
           <a href="/workspaces/{{ ws.workspace_id|urlencode }}/close" {{ replace() }}>Close</a>
         </span>
-      </div>
-    </li>
+    {% endcall %}
     {% else %}
     <li class="empty">No workspaces.</li>
     {% endfor %}

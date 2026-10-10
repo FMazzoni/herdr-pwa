@@ -1,27 +1,28 @@
 {% extends "base.html" %}
 {% from "_nav.html" import replace, sheet %}
+{% import "_ui.html" as ui %}
 {% block title %}Starting &mdash; herdr{% endblock %}
 {% block body %}
 {% set base = "/starting/" ~ (pane|urlencode) %}
 <main class="agent">
-  <h2 class="group__head"><span class="group__label">{{ agent.title if agent else "Starting" }} at {{ pane }}</span></h2>
+  {{ ui.section_head((agent.title if agent else "Starting") ~ " at " ~ pane) }}
   {% include "_notice.html" %}
-  {% if sent is defined %}<p class="banner banner--sent" role="status">Delivered to {{ pane }}.</p>{% endif %}
+  {% if sent is defined %}{% call ui.banner("sent") %}Delivered to {{ pane }}.{% endcall %}{% endif %}
   {% if agent %}
-  <p class="agent__meta"><span class="dot dot--{{ agent.status.value }}" aria-hidden="true"></span><span>{{ agent.status.value }}</span><span>{{ agent.agent }}</span></p>
+  <p class="agent__meta">{{ ui.dot(agent.status.value) }}<span>{{ agent.status.value }}</span><span>{{ agent.agent }}</span></p>
   {% else %}
   <p class="empty">Nothing is running at {{ pane }} now.</p>
   {% endif %}
   <p>This agent has no session yet. claude names itself as it starts; opencode and hermes only once they are first prompted, so a prompt here is what makes it appear.</p>
   <form class="form" {{ sheet(base ~ "/prompt") }}>
     {% if refused is defined and refused.held %}<input type="hidden" name="confirm" value="1">{% endif %}
-    <label class="field"><span class="field__label">First prompt</span><textarea name="text" rows="3" maxlength="4000">{{ text if text is defined else "" }}</textarea></label>
-    <button class="button" type="submit">Send</button>
+    {% call ui.field("First prompt") %}<textarea name="text" rows="3" maxlength="4000">{{ text if text is defined else "" }}</textarea>{% endcall %}
+    {{ ui.button("Send") }}
   </form>
   {% if agent and agent.status.value == "blocked" %}
   <div class="keys keys--pad">
     {% for key in pad %}
-    <form {{ sheet(base ~ "/keys") }}><input type="hidden" name="key" value="{{ key }}"><button class="button" type="submit">{{ key|capitalize }}</button></form>
+    <form {{ sheet(base ~ "/keys") }}><input type="hidden" name="key" value="{{ key }}">{{ ui.button(key|capitalize) }}</form>
     {% endfor %}
   </div>
   {% endif %}

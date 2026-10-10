@@ -1,10 +1,11 @@
 {% extends "base.html" %}
 {% from "_nav.html" import replace, sheet %}
+{% import "_ui.html" as ui %}
 {% block title %}End agent &mdash; herdr{% endblock %}
 {% block body %}
 {% set base = "/agent/" ~ (agent.session|urlencode) %}
 <main class="agent">
-  <h2 class="group__head"><span class="group__label">End {{ agent.title or agent.agent or agent.target }}</span></h2>
+  {{ ui.section_head("End " ~ (agent.title or agent.agent or agent.target)) }}
   {% include "_notice.html" %}
   <p>This closes pane {{ agent.target }} and the agent in it. Nothing brings it back.</p>
   <form class="form" {{ sheet(base ~ "/close") }}>
@@ -13,7 +14,7 @@
     {% if agent.status.value == "working" %}
     <label class="field field--check"><input type="checkbox" name="acknowledge" value="1"> It is working right now; end it anyway.</label>
     {% endif %}
-    <button class="button button--danger leave" type="submit">End agent</button>
+    {{ ui.button("End agent", "danger", extra="leave") }}
     <a class="leave" href="{{ base }}" {{ replace() }}>Keep it</a>
   </form>
 </main>

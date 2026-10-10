@@ -1,10 +1,8 @@
+{% import "_ui.html" as ui %}
 {# Served live with a real status: the app is up and the thing it reads is not. #}
 <div class="failure"
      {% if poll_url %}data-hp-poll="{{ poll_url }}" hx-get="{{ poll_url }}" hx-target="this" hx-swap="outerHTML" hx-trigger="every {{ cadence }}s"{% endif %}>
-  <p class="banner banner--failure" role="status">
-    <span class="banner__what">{{ failure.headline }}</span>
-    <span class="banner__why">{{ detail }}</span>
-  </p>
+  {{ ui.banner("failure", what=failure.headline, why=detail) }}
   {% if poll_url %}
   <p class="empty">Nothing is shown rather than nothing being there.<br>Retrying every {{ cadence }}s.</p>
   {% endif %}

@@ -1,0 +1,3 @@
+# Literal colours or px values app.css may keep outside :root, checked by css_tokens.py.
+# One per line: the declaration exactly as app.css writes it, two spaces, `# `, then the reason.
+# An entry that matches nothing fails the check, so this list cannot outlive its exceptions.
