@@ -6,7 +6,7 @@ import sys
 import tempfile
 import threading
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -19,22 +19,7 @@ sys.path.insert(0, str(ROOT))
 
 from firefox import BrowserError, Marionette, browser, free_port, phone_window  # noqa: E402
 
-from herdr_pwa.engine.transport import EngineUnavailable  # noqa: E402
-from herdr_pwa.jsontypes import JsonObject, as_object  # noqa: E402
-from tests.webfakes import (  # noqa: E402
-    FIXTURES,
-    READ,
-    SNAPSHOT,
-    WORKING_SESSION,
-    Reply,
-    agents_of,
-    assistant_says,
-    build_rig,
-    human_says,
-    read_frame,
-    snapshot_frame,
-    write_transcript,
-)
+from tests.catalogue import STATES, State, build, pick  # noqa: E402
 
 # 390 is the phone this app is designed on; 320 is the narrowest one still sold (iPhone SE 1st gen).
 WIDTHS = (390, 320)
@@ -42,7 +27,6 @@ HEIGHT = 844
 # Apple's HIG minimum and WCAG 2.5.5: 44 CSS px in both directions.
 TAP_FLOOR = 44
 READY_SECONDS = 15.0
-LOGIN = "geometry@example.com"
 
 SCROLL_ALLOWED: dict[str, str] = {
     ".prose pre": (
@@ -56,6 +40,10 @@ SCROLL_ALLOWED: dict[str, str] = {
 }
 
 TAP_ALLOWED: dict[str, str] = {
+    "label input[type=checkbox]": (
+        "a checkbox inside its own label: tapping anywhere on the label toggles it, and the "
+        "label row is held to 44px, so the drawn box can stay the size iOS draws one"
+    ),
     ".prose a": (
         "a link inside a sentence the agent wrote; padding it to 44px would tear the line it "
         "sits in apart, and WCAG 2.5.5 exempts targets inline in a block of text"
@@ -63,28 +51,6 @@ TAP_ALLOWED: dict[str, str] = {
 }
 
 TAPPABLE = "a[href], button, summary, input, select, textarea, [role=button], [role=link]"
-
-LONG_TITLE = (
-    "Reconcile the quarterly infrastructure migration plan across every regional cluster "
-    "and write the rollback runbook before the freeze"
-)
-# No hyphen or slash in it, since either is a place a browser may break the line.
-UNBROKEN = "refactorTheEntireNotificationPipelineSoThatEveryRetryIsIdempotent"
-UNBROKEN_TITLE = "renameEveryLegacyIdentifierAcrossTheMonorepoWithoutTouchingTests"
-LONG_URL = "https://example.com/" + "a1b2c3d4" * 24 + "?query=" + "x" * 80
-LONG_QUESTION = (
-    "Should I force-push the rewritten history of "
-    f"/home/owner/projects/{UNBROKEN}/src/very/deep/module/path.py to main, which "
-    "overwrites three commits that other people may already have pulled?"
-)
-WIDE_ROW = "│ " + " ".join(f"col{i:03d}" for i in range(40)) + " │"
-WIDE_UNBROKEN = "x" * 260
-WIDE_RULE = "─" * 220
-CODE = (
-    "def migrate(cluster: str) -> None:\n"
-    f"    run(['kubectl', '--context', cluster, 'apply', '-f', '{UNBROKEN}.yaml', "
-    "'--server-side', '--force-conflicts', '--field-manager=migration'])\n"
-)
 
 PROBE_LOADED = r"""
 const ready = arguments[0];
@@ -155,130 +121,6 @@ return { page: page, scrollers: scrollers, spills: spills, taps: taps, measured:
 """
 
 
-@dataclass(frozen=True)
-class State:
-    """One screen of the real app, the fake runner behind it, and the element proving it drew."""
-
-    name: str
-    path: str
-    ready: str
-    replies: Callable[[], dict[str, Reply]]
-    transcript: list[JsonObject] = field(default_factory=list[JsonObject])
-
-
-def _snapshot(frame: JsonObject) -> JsonObject:
-    result = as_object(frame["result"])
-    snapshot = as_object(result["snapshot"]) if result is not None else None
-    if snapshot is None:
-        raise RuntimeError("the snapshot fixture changed shape")
-    return snapshot
-
-
-def _herd() -> JsonObject:
-    """The recorded snapshot, edited to hold every status and the longest names a card can get."""
-    frame = snapshot_frame()
-    agents = agents_of(frame)
-    edits = (
-        ("blocked", "Waiting on a decision"),
-        ("done", "Review the open notes"),
-        ("idle", LONG_TITLE),
-        ("idle", UNBROKEN_TITLE),
-    )
-    for agent, (status, title) in zip(agents, edits, strict=False):
-        agent["agent_status"] = status
-        agent["terminal_title"] = title
-        agent["terminal_title_stripped"] = title
-    workspaces = _snapshot(frame)["workspaces"]
-    for workspace in workspaces if isinstance(workspaces, list) else []:
-        if isinstance(workspace, dict) and workspace.get("workspace_id") == "w1":
-            workspace["label"] = UNBROKEN
-    return frame
-
-
-def _empty() -> JsonObject:
-    frame = snapshot_frame()
-    _snapshot(frame)["agents"] = []
-    return frame
-
-
-def _question() -> str:
-    """The captured AskUserQuestion screen with a question and an option no card was sized for."""
-    screen = (FIXTURES / "capture-blocked-askuserquestion-menu" / "detection.txt").read_text()
-    screen = screen.replace("Should I force-push to main?", LONG_QUESTION)
-    return screen.replace("Open a PR instead", f"Open a PR from {UNBROKEN} instead")
-
-
-def _pane() -> str:
-    """A terminal wider than any phone: a table row, an unbroken token and a rule."""
-    rows = (
-        "\x1b[32m$\x1b[0m make test",
-        WIDE_ROW,
-        WIDE_UNBROKEN,
-        WIDE_RULE,
-        f"\x1b[31merror:\x1b[0m {LONG_URL}",
-    )
-    return "\n".join(rows) + "\n"
-
-
-def _chat() -> list[JsonObject]:
-    tool_call: JsonObject = {
-        "type": "assistant",
-        "uuid": "call",
-        "timestamp": "2026-10-10T10:00:01.000Z",
-        "message": {
-            "role": "assistant",
-            "content": [
-                {"type": "tool_use", "id": "tu1", "name": "Bash", "input": {"command": CODE}}
-            ],
-        },
-    }
-    tool_result: JsonObject = {
-        "type": "user",
-        "uuid": "res",
-        "timestamp": "2026-10-10T10:00:02.000Z",
-        "message": {
-            "role": "user",
-            "content": [{"type": "tool_result", "tool_use_id": "tu1", "content": WIDE_ROW}],
-        },
-    }
-    prose = (
-        f"Done. The plan is below.\n\n```python\n{CODE}```\n\n"
-        f"Raw link: {LONG_URL}\n\nAnd [the runbook]({LONG_URL}) as a link."
-    )
-    return [
-        human_says(f"please look at {LONG_URL} and {UNBROKEN}"),
-        tool_call,
-        tool_result,
-        assistant_says(prose, uuid="a2"),
-    ]
-
-
-def _with_read(text: str) -> Callable[[], dict[str, Reply]]:
-    return lambda: {SNAPSHOT: _herd(), READ: read_frame(text)}
-
-
-def _unreachable() -> dict[str, Reply]:
-    return {SNAPSHOT: EngineUnavailable("geometry: no runner")}
-
-
-STATES = (
-    State("feed-empty", "/", "#feed-list .summary", lambda: {SNAPSHOT: _empty()}),
-    State("feed-herd", "/", "#feed-list .cards", _with_read(_question())),
-    State(
-        "agent-chat",
-        f"/agent/{WORKING_SESSION}?tab=chat",
-        ".chat .turn--agent",
-        _with_read(""),
-        _chat(),
-    ),
-    State("agent-pane", f"/agent/{WORKING_SESSION}?tab=pane", ".mirror .pane", _with_read(_pane())),
-    # A failure fragment only swaps in because app.js overrides htmx 2's no-swap on 5xx.
-    State("feed-unreachable", "/", "main > .failure .banner--failure", _unreachable),
-    State("agent-unreachable", f"/agent/{WORKING_SESSION}", "main .failure", _unreachable),
-    State("workspaces", "/workspaces", ".cards .card", lambda: {SNAPSHOT: _herd()}),
-)
-
-
 class Switch:
     """An ASGI app that forwards to whichever state's app is current."""
 
@@ -316,26 +158,33 @@ def install(switch: Switch, state: State, scratch: Path) -> None:
     """Build a fresh app for ``state`` over its own fake runner and make it current."""
     home = scratch / state.name
     home.mkdir(parents=True)
-    if state.transcript:
-        write_transcript(home / "transcripts", WORKING_SESSION, state.transcript)
-    rig = build_rig(home, state.replies(), headers={}, assume_login=LOGIN)
-    switch.app = rig.http.app
+    switch.app = build(state, home).http.app
 
 
-def _loaded(driver: Marionette, state: State, base: str) -> list[str]:
-    """Wait for the state's proof element, then say what is wrong with the page that loaded."""
+def _wait(driver: Marionette, selector: str, base: str) -> dict[str, object]:
     deadline = time.monotonic() + READY_SECONDS
     seen: dict[str, object] = {}
     while time.monotonic() < deadline:
-        found = driver.script(PROBE_LOADED, state.ready, base)
+        found = driver.script(PROBE_LOADED, selector, base)
         seen = found if isinstance(found, dict) else {}
         if seen.get("ready") or seen.get("errorPage"):
             break
         time.sleep(0.2)
-    return _load_problems(seen, state)
+    return seen
 
 
-def _load_problems(seen: dict[str, object], state: State) -> list[str]:
+def _loaded(driver: Marionette, state: State, base: str) -> list[str]:
+    """Wait for the state's proof element, tapping first if it needs one, then judge the page."""
+    if state.act:
+        seen = _wait(driver, state.armed, base)
+        if not seen.get("ready"):
+            return _load_problems(seen, state.armed, scripted=True)
+        driver.script(state.act)
+    seen = _wait(driver, state.ready, base)
+    return _load_problems(seen, state.ready, scripted=state.scripted)
+
+
+def _load_problems(seen: dict[str, object], ready: str, *, scripted: bool) -> list[str]:
     problems: list[str] = []
     if seen.get("errorPage"):
         problems.append(f"this is not the app (Firefox error page?): {seen.get('url')}")
@@ -345,17 +194,18 @@ def _load_problems(seen: dict[str, object], state: State) -> list[str]:
         problems.append("--ground is unset: app.css did not apply (CSP, MIME or 404)")
     statics = seen.get("statics")
     fetched = {str(s) for s in statics} if isinstance(statics, list) else set()
+    wanted = ("/static/app.css", "/static/app.js", "/static/htmx.min.js")
     problems += [
         f"{name} was never fetched: blocked before it loaded"
-        for name in ("/static/app.css", "/static/app.js", "/static/htmx.min.js")
+        for name in wanted[: 3 if scripted else 1]
         if name not in fetched
     ]
-    if seen.get("htmx") != "object":
+    if scripted and seen.get("htmx") != "object":
         problems.append("window.htmx is missing: htmx.min.js did not run")
     if seen.get("hidden"):
         problems.append("document.hidden: every poll would stop on HTTP 286")
     if not seen.get("ready"):
-        problems.append(f"{state.ready} never appeared within {READY_SECONDS:.0f}s")
+        problems.append(f"{ready} never appeared within {READY_SECONDS:.0f}s")
     return problems
 
 
@@ -438,7 +288,7 @@ def stale(tally: Tally) -> list[str]:
     ]
 
 
-def report(tally: Tally, *, whole: bool) -> int:
+def report(tally: Tally, *, runs: int, whole: bool) -> int:
     """Print the exceptions with their reasons and every problem; non-zero on any problem."""
     for kind, table in (("scroller", SCROLL_ALLOWED), ("tap", TAP_ALLOWED)):
         for selector, why in table.items():
@@ -446,7 +296,6 @@ def report(tally: Tally, *, whole: bool) -> int:
     problems = tally.problems + (stale(tally) if whole else [])
     for problem in problems:
         print(f"  FAIL {problem}")
-    runs = len(STATES) * len(WIDTHS)
     verdict = "red" if problems else "green"
     print(
         f"geometry: {runs} runs, {tally.taps} tap targets measured, {len(problems)} problems: {verdict}"
@@ -461,7 +310,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     # The unreachable states log a warning per request by design; the report is the output.
     logging.getLogger("herdr_pwa").setLevel(logging.ERROR)
-    chosen = [s for s in STATES if not args.only or s.name in args.only]
+    chosen = pick(args.only)
     tally = Tally()
     switch = Switch()
     with tempfile.TemporaryDirectory(prefix="hp-geometry-") as scratch, serve(switch) as base:
@@ -477,7 +326,7 @@ def main(argv: list[str] | None = None) -> int:
         except BrowserError as exc:
             print(f"geometry: the browser failed: {exc}", file=sys.stderr)
             return 1
-    return report(tally, whole=len(chosen) == len(STATES))
+    return report(tally, runs=len(chosen) * len(WIDTHS), whole=len(chosen) == len(STATES))
 
 
 if __name__ == "__main__":

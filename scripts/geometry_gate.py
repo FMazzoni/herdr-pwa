@@ -13,6 +13,10 @@ from typing import IO
 from firefox import available, version
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from tests.catalogue import CAPTURES  # noqa: E402
+
 # Gitignored and per worktree: a cache of a result, never a record anyone reviews.
 RECEIPTS = ROOT / "evidence" / "geometry"
 # Per user rather than per worktree, so parallel agents queue for one Firefox instead of five.
@@ -23,8 +27,10 @@ GUARDED = (
     "src/herdr_pwa/web",
     "src/herdr_pwa/panetext.py",
     "tests/webfakes.py",
+    "tests/catalogue.py",
     "tests/fixtures/snapshot.example.json",
-    "tests/fixtures/capture-blocked-askuserquestion-menu/detection.txt",
+    # Every captured screen a catalogue state draws.
+    *(f"tests/fixtures/{name}/detection.txt" for name in CAPTURES),
     "scripts/firefox.py",
     "scripts/geometry.py",
     "scripts/geometry_gate.py",

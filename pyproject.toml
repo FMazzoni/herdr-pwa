@@ -24,7 +24,15 @@ build-backend = "hatchling.build"
 packages = ["src/herdr_pwa"]
 
 [dependency-groups]
-dev = ["basedpyright", "pytest", "ruff", "complexipy", "httpx2", "datamodel-code-generator"]
+dev = [
+    "basedpyright",
+    "pytest",
+    "ruff",
+    "complexipy",
+    "httpx2",
+    "datamodel-code-generator",
+    "playwright>=1.63.0",
+]
 
 [tool.complexipy]
 max-complexity-allowed = 10

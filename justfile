@@ -19,6 +19,20 @@ geometry:
 geometry-force:
     uv run python scripts/geometry_gate.py --force
 
+# WebKit as an iPhone (390x844 at 3x, touch, Safari's UA) and at 320px: a first-viewport and a
+# full-page PNG per catalogue state under .agents/shots/. For eyes, not a gate; skips without WebKit.
+shots *KEYS:
+    uv run python scripts/shots.py {{KEYS}}
+
+# The old app | this one, per state key, as an HTML contact sheet under .agents/sheets/.
+# --embed --out PATH writes one self-contained file; --left DIR compares against saved shots.
+sheet *ARGS:
+    uv run python scripts/sheet.py {{ARGS}}
+
+# The browser the shots use; a dev tool, fetched into ~/.cache/ms-playwright, never committed.
+webkit:
+    uv run playwright install webkit
+
 # Serve on the build port against the throwaway hp-test session, never the default one.
 live-serve: live-session
     HP_SOCKET_PATH="$HOME/.config/herdr/sessions/hp-test/herdr.sock" uv run herdr-pwa serve
