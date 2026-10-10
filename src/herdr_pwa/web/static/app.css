@@ -82,6 +82,13 @@
   --select-chevron: 5px;
   --select-chevron-inset: 16px;
   --page-max: 760px;
+  /* The longest a filter chip's name may run before it ellipsizes. */
+  --chip-label-max: 14ch;
+  /* How wide the fade at a sideways strip's right edge is. */
+  --fade: 32px;
+  --radius-pill: 999px;
+  /* The glyph that says a card opens something. */
+  --chevron: "\203A";
   --sheet-max: 640px;
 }
 
@@ -137,10 +144,61 @@ a { color: var(--accent); }
 .banner--degraded { border-left-color: var(--unknown); }
 .banner--stale { border-left-color: var(--ink-3); }
 
-.summary { display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-7); margin: 0 0 var(--space-6); font-size: var(--text-5); color: var(--ink-2); }
+/* Counts wrap among themselves; the age holds the top-right corner and never wraps. */
+.summary { display: flex; align-items: baseline; gap: var(--space-6); margin: 0 0 var(--space-4); font-size: var(--text-5); color: var(--ink-2); }
+.summary__counts { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-7); margin: 0; }
 .summary__need { color: var(--blocked); font-weight: 600; }
 .summary__done { color: var(--done); }
 .summary__work { color: var(--working); }
+.summary__in { color: var(--ink-3); margin-right: calc(-1 * var(--space-4)); }
+.summary__age { flex: none; white-space: nowrap; color: var(--ink-3); }
+
+/* One row of pills. It scrolls sideways, so it starts inside the 16px gutter the back swipe owns. */
+.chipbar { position: relative; margin: 0 0 var(--space-4); }
+.chipbar::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: var(--fade);
+  background: linear-gradient(to right, transparent, var(--ground));
+  pointer-events: none;
+}
+.chips {
+  display: flex;
+  gap: var(--space-3);
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+  padding-right: var(--fade);
+}
+.chips::-webkit-scrollbar { display: none; }
+/* The link is the 44px target; the pill drawn inside it is smaller. */
+.chip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap);
+  min-width: var(--tap);
+  scroll-snap-align: start;
+  color: var(--ink-2);
+  font-size: var(--text-5);
+  text-decoration: none;
+}
+.chip__pill {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-5);
+  background: var(--surface);
+  border: var(--line-1) solid var(--rule);
+  border-radius: var(--radius-pill);
+}
+.chip--on { color: var(--accent); }
+.chip--on .chip__pill { background: var(--surface-2); border-color: var(--accent); }
+.chip__label { max-width: var(--chip-label-max); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip__n { color: var(--ink-3); }
 
 .group { margin-bottom: var(--space-9); }
 .group__head {
@@ -155,6 +213,7 @@ a { color: var(--accent); }
   color: var(--ink-3);
 }
 .group--blocked .group__head { color: var(--blocked); }
+.group__note { color: var(--ink-3); font-weight: 400; letter-spacing: 0; text-transform: none; }
 .group__none { margin: 0; color: var(--ink-3); font-size: var(--text-5); }
 
 /* minmax(0, 1fr): a grid track otherwise grows to its widest unbreakable child. */
@@ -162,14 +221,24 @@ a { color: var(--accent); }
 .card { background: var(--surface); border: var(--line-1) solid var(--rule); border-radius: var(--radius-3); }
 .card--blocked { border-color: var(--blocked); }
 .card__link { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); padding: var(--space-6); color: inherit; text-decoration: none; overflow-wrap: anywhere; }
+/* A card that opens something carries a chevron in a column of its own, beside the first line. */
+.card__link--go { grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--space-4); }
+.card__link--go > * { grid-column: 1; }
+.card__link--go > .card__chevron { grid-column: 2; grid-row: 1; align-self: center; color: var(--ink-3); font-size: var(--text-8); line-height: 1; }
+.card__chevron::before { content: var(--chevron); }
 .card__top { display: flex; align-items: center; gap: var(--space-4); min-width: 0; }
 .card__title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
 .card__status { font-size: var(--text-3); color: var(--ink-3); }
-.card__meta { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-5); font-size: var(--text-3); color: var(--ink-3); }
-.card__meta > *, .agent__meta > * { min-width: 0; }
+.card__meta { display: flex; gap: var(--space-5); min-width: 0; font-size: var(--text-3); color: var(--ink-3); }
+/* One line: the workspace ellipsizes rather than wraps; the harness and the short pane id never shrink. */
+.card__meta > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card__harness, .card__pane { flex: none; }
+.agent__meta > * { min-width: 0; }
 .card__pane { font-family: var(--mono); }
-.card__question { color: var(--ink); font-size: var(--text-6); }
-.card__options { display: grid; gap: var(--space-1); font-size: var(--text-5); color: var(--ink-2); }
+.card__question { color: var(--ink); font-size: var(--text-6); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; line-clamp: 4; overflow: hidden; }
+.card__options { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-1); font-size: var(--text-5); color: var(--ink-2); }
+/* The card is the overview; the whole question and every option are a tap away. */
+.card__option { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .dot { width: var(--dot); height: var(--dot); border-radius: var(--radius-round); flex: none; background: var(--unknown); }
 .dot--blocked { background: var(--blocked); }
