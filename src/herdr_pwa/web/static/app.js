@@ -155,6 +155,43 @@
     document.body.classList.remove("is-sending");
   });
 
+  /* ---- A tap on the answer region always says what became of it ----
+   * The outcome banner is scrolled into view if the thumb left the region's top off screen,
+   * and a tap that got no reply at all (a dropped link) shows the region's own notice. */
+  function showOutcome(banner) {
+    var top = banner.getBoundingClientRect().top;
+    var bar = document.querySelector(".topbar");
+    var above = bar ? bar.getBoundingClientRect().bottom : 0;
+    if (top < above || top > window.innerHeight * 0.6) {
+      banner.scrollIntoView({ block: "start" });
+    }
+  }
+
+  document.addEventListener("htmx:afterSwap", function (event) {
+    var config = event.detail.requestConfig;
+    var region = document.getElementById("answer");
+    if (!region || !config || config.verb === "get") {
+      return;
+    }
+    var banner = region.querySelector(".answer > .banner:not([hidden])");
+    if (banner) {
+      showOutcome(banner);
+    }
+  });
+
+  function lost(event) {
+    var elt = event.detail && event.detail.elt;
+    var region = elt && elt.closest ? elt.closest("#answer") : null;
+    var notice = region ? region.querySelector("[data-hp-lost]") : null;
+    if (notice) {
+      notice.hidden = false;
+      showOutcome(notice);
+    }
+  }
+  document.addEventListener("htmx:sendError", lost);
+  document.addEventListener("htmx:timeout", lost);
+  document.addEventListener("htmx:responseError", lost);
+
   document.addEventListener("visibilitychange", rearm);
   /* bfcache restore and iOS standalone resume skip visibilitychange. The restored
    * DOM is whatever was on screen when the page was left, so it says so until the

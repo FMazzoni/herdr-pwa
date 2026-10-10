@@ -98,6 +98,9 @@
   --composer-grow: 5.5em;
   /* How many lines of a long chat turn show before "Show all"; a count, not a length. */
   --fold-lines: 8;
+  /* An option row's numeral column, and how many lines its label runs before it is cut. */
+  --option-n: 28px;
+  --option-lines: 3;
 }
 
 * { box-sizing: border-box; }
@@ -462,12 +465,50 @@ textarea { resize: vertical; min-height: 4.5em; }
   min-height: var(--tap);
 }
 .button[disabled] { opacity: 0.5; }
-.button--option { width: 100%; text-align: left; line-height: 1.35; }
 .button--danger { border-color: var(--blocked); color: var(--blocked); }
 .keys { display: grid; gap: var(--space-3); }
 .keys--pad { display: flex; flex-wrap: wrap; gap: var(--space-3); }
 .answer__question { margin: 0; font-weight: 600; white-space: pre-wrap; }
-.answer__row { margin: 0; color: var(--ink-2); }
+.answer__note { margin: 0; font-size: var(--text-5); color: var(--ink-2); }
+/* A way to the Pane gets its own 44px line, never a gap torn into the sentence above it. */
+.answer__go, .banner__go { display: flex; width: fit-content; align-items: center; min-height: var(--tap); font-weight: 600; }
+.answer__go::after, .banner__go::after { content: "\00A0" var(--chevron); }
+/* One sentence with the Pane link inline at its end: the link keeps a 44px box, and negative
+   margins stop that box from stretching the line it sits on. */
+.answer__note--line .answer__go { display: inline-flex; vertical-align: middle; margin-block: calc((var(--tap) - 1.45em) / -2); margin-left: var(--space-2); }
+/* Rows that are not buttons are answered from one row of keys right under them, Enter wider. */
+.keys--compact { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.6fr) minmax(0, 1fr); gap: var(--space-3); }
+.keys--compact .button, .keys--extra .button { width: 100%; padding-inline: var(--space-2); }
+.keys--compact .button { font-size: var(--text-6); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.keys--extra { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+.banner__next { flex-basis: 100%; color: var(--ink); }
+/* The link's 44px row eats the banner's bottom padding rather than adding to it. */
+.banner__go { flex-basis: 100%; margin-bottom: calc(-1 * var(--space-5)); }
+.banner[hidden] { display: none; }
+/* The outcome banner is scrolled to after a tap; the sticky bar must not cover it. */
+.answer > .banner { margin: 0; scroll-margin-top: calc(env(safe-area-inset-top) + var(--tap) + var(--space-6)); }
+.banner--unsure { border-left-color: var(--unknown); }
+
+/* An option: the numeral in a fixed column, the label beside it, cut after a few lines. */
+.options { display: grid; gap: var(--space-3); }
+.options form { margin: 0; }
+.option { display: grid; grid-template-columns: var(--option-n) minmax(0, 1fr); align-items: center; gap: var(--space-2) var(--space-5); width: 100%; margin: 0; text-align: left; line-height: 1.35; }
+.option--boxed { grid-template-columns: var(--check) minmax(0, 1fr); }
+.button.option { padding: var(--space-4) var(--space-5); }
+.option__n { display: grid; place-content: center; width: var(--option-n); height: var(--option-n); border-radius: var(--radius-1); background: var(--ground); border: var(--line-1) solid var(--rule); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.option__label { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--option-lines); line-clamp: var(--option-lines); overflow: hidden; overflow-wrap: anywhere; }
+.option__quiet { position: absolute; width: var(--line-1); height: var(--line-1); overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+/* A row with no digit is text, not a control: no fill, no frame, its numeral hollow. */
+.option--still { padding: var(--space-2) var(--space-5); color: var(--ink-2); }
+.option--still .option__n { background: transparent; border-style: dashed; color: var(--ink-3); }
+.option__box { display: grid; place-content: center; width: var(--check); height: var(--check); border: var(--line-1) solid var(--ink-3); border-radius: var(--radius-1); }
+.option__box--on { background: var(--accent); border-color: var(--accent); }
+.option__box--on::after { content: ""; width: var(--tick-w); height: var(--tick-h); margin-top: calc(var(--tick-w) * -0.5); border: solid var(--ground); border-width: 0 var(--line-2) var(--line-2) 0; transform: rotate(45deg); }
+.option__sending { display: none; grid-column: 2 / -1; font-size: var(--text-4); font-weight: 500; color: var(--accent); }
+/* The tapped control stays lit while the rest of the region waits for its answer. */
+.htmx-request > .button[disabled] { opacity: 1; border-color: var(--accent); color: var(--accent); }
+.htmx-request > .button .option__n { border-color: var(--accent); color: var(--accent); }
+.htmx-request .option__sending { display: block; }
 .answer__keys { display: grid; gap: var(--space-4); }
 .answer__keys .group__head { margin: 0; }
 .keys--hints { display: flex; flex-wrap: wrap; gap: var(--space-3); }

@@ -6,9 +6,10 @@
 {# The small-caps header over a group or a page, with an optional count beside it. #}
 {% macro section_head(label, n=none, note=none) %}<h2 class="group__head"><span class="group__label">{{ label }}</span>{% if n is not none %}<span class="group__n">{{ n }}</span>{% endif %}{% if note %}<span class="group__note">{{ note }}</span>{% endif %}</h2>{% endmacro %}
 
-{# A coloured-edge notice. `what` is the bold claim, `why` the reason; a call block adds free text. #}
-{% macro banner(kind, what=none, why=none, role="status", sent=false) -%}
-<p class="banner banner--{{ kind }}" role="{{ role }}"{% if sent %} data-hp-sent{% endif %}>
+{# A coloured-edge notice. `what` is the bold claim, `why` the reason; a call block adds free text.
+   `outcome` carries a write's audit token, for a test or a reader to check against the words. #}
+{% macro banner(kind, what=none, why=none, role="status", sent=false, outcome=none) -%}
+<p class="banner banner--{{ kind }}" role="{{ role }}"{% if sent %} data-hp-sent{% endif %}{% if outcome %} data-hp-outcome="{{ outcome }}"{% endif %}>
   {%- if what is not none %}<span class="banner__what">{{ what }}</span>{% endif %}
   {%- if why is not none %}<span class="banner__why">{{ why }}</span>{% endif %}
   {%- if caller is defined %}{{ caller() }}{% endif -%}
@@ -18,13 +19,32 @@
 {# A 44px button. `kind` is option or danger; `extra` adds classes such as leave. #}
 {% macro button(label, kind=none, extra=none, type="submit") %}<button class="button{% if kind %} button--{{ kind }}{% endif %}{% if extra %} {{ extra }}{% endif %}" type="{{ type }}">{{ label }}</button>{% endmacro %}
 
-{# One key sent to a pane from the answer panel; `screen` pins the screen it was drawn against. #}
-{% macro key_form(base, target, key, label, screen=none, kind=none, confirm=false) -%}
-<form method="post" action="{{ base }}/keys" hx-post="{{ base }}/keys" hx-target="#answer" hx-swap="outerHTML" hx-disabled-elt="find button">
+{# One key sent to a pane from the answer panel; `screen` pins the screen it was drawn against.
+   A tap disables every control in the region until the answer lands, and replaces a poll in
+   flight, which would otherwise swap the region away and drop this answer on the floor.
+   A call block draws the button's inside instead of `label`. #}
+{% macro key_form(base, target, key, label, screen=none, kind=none, confirm=false, extra=none) -%}
+<form method="post" action="{{ base }}/keys" hx-post="{{ base }}/keys" hx-target="#answer" hx-swap="outerHTML" hx-disabled-elt="#answer button" hx-sync="closest .answer:replace">
       <input type="hidden" name="key" value="{{ key }}">{% if screen is not none %}<input type="hidden" name="screen" value="{{ screen }}">{% endif %}<input type="hidden" name="target" value="{{ target }}">
       {% if confirm %}<input type="hidden" name="confirm" value="1">
-      {% endif %}{{ button(label, kind) }}
+      {% endif %}{% if caller is defined %}<button class="button{% if kind %} button--{{ kind }}{% endif %}{% if extra %} {{ extra }}{% endif %}" type="submit">{{ caller() }}</button>{% else %}{{ button(label, kind, extra) }}{% endif %}
     </form>
+{%- endmacro %}
+
+{# The inside of an option row: the numeral in its own column, or the box where the screen draws
+   one (a box row is never tapped, so its number says nothing), and the label, cut at a few lines;
+   the Pane holds the whole of it. #}
+{% macro option_body(row) -%}
+{% if row.checked is none %}<span class="option__n" aria-hidden="true">{{ row.number }}</span>
+      {%- else %}<span class="option__box{% if row.checked %} option__box--on{% endif %}" aria-hidden="true"></span>{% endif -%}
+      <span class="option__label">{% if row.checked is not none %}<span class="option__quiet">{{ "ticked: " if row.checked else "not ticked: " }}</span>{% endif %}{{ row.label }}</span>
+      <span class="option__sending" aria-hidden="true">Sending&hellip;</span>
+{%- endmacro %}
+
+{# One numbered option. With a digit it is a 44px tap row; without one it is a line of text. #}
+{% macro option(base, target, row, screen=none, tappable=true) -%}
+{% if tappable %}{% call key_form(base, target, row.digit, row.label, screen=screen, kind="option", extra="option" ~ (" option--boxed" if row.checked is not none else "")) %}{{ option_body(row) }}{% endcall %}
+{%- else %}<p class="option option--still{% if row.checked is not none %} option--boxed{% endif %}">{{ option_body(row) }}</p>{% endif %}
 {%- endmacro %}
 
 {# A card in a list. `href` makes the whole card the link, with a chevron on its first line; `inner` is the tag otherwise. #}

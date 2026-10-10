@@ -8,11 +8,14 @@ from typing import Final
 from herdr_pwa.engine.transport import EngineUnavailable
 from herdr_pwa.jsontypes import JsonObject, as_object
 from tests.webfakes import (
+    AGENT_GET,
     FIXTURES,
     READ,
+    SEND_KEYS,
     SNAPSHOT,
     WORKING_PANE,
     WORKING_SESSION,
+    FakeWire,
     Reply,
     Rig,
     agents_of,
@@ -62,6 +65,24 @@ STATUS_TAIL: Final = (
     "\x1b[38;2;153;153;153mctx: \x1b[0m\x1b[38;5;2m16%\x1b[0m"
     "\x1b[2m\x1b[38;2;153;153;153m | 5h: \x1b[0m\x1b[38;5;3m22%\x1b[0m\n"
     "  \x1b[0m\x1b[38;2;153;153;153m⏸ auto mode on · ← 1 agent\x1b[0m"
+)
+
+
+# The old catalogue's synthetic wizard step: one question of three, its rows tappable, none final.
+WIZARD_STEP: Final = (
+    "\u2190  \u2612 Focus area  \u2610 Scope  \u2610 Workflow  \u2714 Submit  \u2192\n"
+    "\n"
+    "How should I approach the work?\n"
+    "\n"
+    "\u276f 1. Plan first\n"
+    "     I draft a plan and get your approval before writing any code.\n"
+    "  2. Just build it\n"
+    "     I go straight to implementation and show you the diff when done.\n"
+    "  3. Build + verify\n"
+    "     I implement, then drive the app end-to-end before handing back.\n"
+    "  4. Type something.\n"
+    "\n"
+    "Enter to select \u00b7 Tab/Arrow keys to navigate \u00b7 Esc to cancel\n"
 )
 
 
@@ -309,6 +330,41 @@ def _untick(screen: str) -> str:
     return screen.replace("[✔] autumn", "[ ] autumn")
 
 
+def _agent_info(frame: JsonObject) -> JsonObject:
+    agent = next(a for a in agents_of(frame) if a.get("pane_id") == WORKING_PANE)
+    return {"id": "x", "result": {"type": "agent_info", "agent": agent}}
+
+
+def _keyed(screen: str) -> Replies:
+    """The working pane blocked on ``screen``, with a runner that takes a key."""
+
+    def replies() -> dict[str, Reply]:
+        frame = herd(**BLOCKED)
+        return {
+            SNAPSHOT: frame,
+            READ: read_frame(screen),
+            AGENT_GET: _agent_info(frame),
+            SEND_KEYS: {"id": "x", "result": {"type": "ok"}},
+        }
+
+    return replies
+
+
+def _lands(status: str, screen: str) -> Prime:
+    """Once a key is taken, the herd says ``status`` and the pane shows ``screen``."""
+
+    def prime(rig: Rig) -> None:
+        def landed(wire: FakeWire) -> None:
+            frame = herd(p4=status)
+            wire.replies.update(
+                {SNAPSHOT: frame, AGENT_GET: _agent_info(frame), READ: read_frame(screen)}
+            )
+
+        rig.wire.after[SEND_KEYS] = landed
+
+    return prime
+
+
 AGENT: Final = f"/agent/{WORKING_SESSION}"
 BLOCKED: Final = {"p4": "blocked"}
 DOOR: Final = f"/starting/{WORKING_PANE}"
@@ -523,16 +579,23 @@ AGENT_PAGE: Final = (
         title="Agent page: a checklist with one box already ticked",
     ),
     State(
+        "agent-answer-wizard-step",
+        f"{AGENT}?tab=pane",
+        "#answer .button--option",
+        runner(lambda: herd(**BLOCKED), WIZARD_STEP),
+        title="Agent page: one step of a three-question wizard",
+    ),
+    State(
         "agent-options-refused",
         f"{AGENT}?tab=pane",
-        "#answer .keys--pad",
+        "#answer .keys--compact",
         _blocked_on(MENU_WRAPPED),
         title="Agent page: the options wrapped, so none are offered as digits",
     ),
     State(
         "agent-options-refused-permission",
         f"{AGENT}?tab=pane",
-        "#answer .keys--pad",
+        "#answer .keys--compact",
         _blocked_on(PERMISSION_WRAPPED),
         title="Agent page: a permission prompt whose host ran off the edge",
     ),
@@ -600,6 +663,50 @@ TAPPED: Final = (
         title="Agent page: the screen moved underneath a tapped option",
         armed="#answer .button--option",
         act=_tamper("screen", "0000000000000000", "#answer .button--option"),
+    ),
+)
+
+_TAP_OPTION: Final = _click("#answer .button--option")
+
+ANSWERED: Final = (
+    State(
+        "agent-answer-confirmed",
+        f"{AGENT}?tab=pane",
+        "#answer .banner--sent",
+        _keyed(capture(PERMISSION)),
+        title="Agent page: a tapped option, and the question went away",
+        armed="#answer .button--option",
+        act=_TAP_OPTION,
+        prime=_lands("working", capture(WORKING)),
+    ),
+    State(
+        "agent-answer-confirmed-moved",
+        f"{AGENT}?tab=pane",
+        "#answer .banner--sent",
+        _keyed(WIZARD_STEP),
+        title="Agent page: a wizard row tapped, and the next question is up",
+        armed="#answer .button--option",
+        act=_TAP_OPTION,
+        prime=_lands("blocked", capture(MENU)),
+    ),
+    State(
+        "agent-answer-unconfirmed",
+        f"{AGENT}?tab=pane",
+        "#answer .banner--unsure",
+        _keyed(capture(PERMISSION)),
+        title="Agent page: a tapped option, and the question is still showing",
+        armed="#answer .button--option",
+        act=_TAP_OPTION,
+    ),
+    State(
+        "agent-answer-unconfirmed-moved",
+        f"{AGENT}?tab=pane",
+        "#answer .banner--unsure",
+        _keyed(capture(PERMISSION)),
+        title="Agent page: a tapped option, and a different question is up",
+        armed="#answer .button--option",
+        act=_TAP_OPTION,
+        prime=_lands("blocked", capture(MENU)),
     ),
 )
 
@@ -709,7 +816,7 @@ LIFECYCLE: Final = (
     ),
 )
 
-STATES: Final = (*FEED, *AGENT_PAGE, *TAPPED, *LIFECYCLE)
+STATES: Final = (*FEED, *AGENT_PAGE, *TAPPED, *ANSWERED, *LIFECYCLE)
 
 # The screens the geometry gate has always held, which every other entry is in addition to.
 GEOMETRY_CORE: Final = (
@@ -731,7 +838,7 @@ V2_ONLY: Final = (
     "agent-chat-composing",
 )
 
-_RIG: Final = "the rig answers no write, so the screen after a delivered one cannot be reached yet"
+_RIG: Final = "the rig can answer a key, but no state stages the runner into this outcome yet"
 _SCREEN: Final = "needs the old catalogue's synthetic screen ported in as a fixture"
 
 # Every old state with no screen here yet, in ONE place, with why.
@@ -747,15 +854,10 @@ NOT_YET: Final[dict[str, str]] = {
     "chat-older": "no v2 feature yet: chat has no older-history paging",
     "chat-may-have-moved": "no v2 feature yet: chat has no moved-transcript note",
     "agent-answer-waiting": "no v2 feature yet: the answer region does not collapse",
-    "agent-answer-wizard-step": _SCREEN,
     "agent-answer-unearned": _SCREEN,
     "agent-answer-readout": _SCREEN,
     "agent-unknown-shape": _SCREEN,
     "agent-answer-as-question": _SCREEN,
-    "agent-answer-confirmed": _RIG,
-    "agent-answer-confirmed-moved": _RIG,
-    "agent-answer-unconfirmed": _RIG,
-    "agent-answer-unconfirmed-moved": _RIG,
     "agent-answer-accepted": _RIG,
     "agent-answer-unread": _RIG,
     "agent-answer-partially-applied": _RIG,
@@ -897,7 +999,7 @@ def build(state: State, home: Path) -> Rig:
     if state.transcript:
         write_transcript(home / "transcripts", WORKING_SESSION, state.transcript)
     login: dict[str, object] = {"assume_login": LOGIN} if state.login else {}
-    rig = build_rig(home, state.replies(), headers={}, **login, **state.settings)
+    rig = build_rig(home, state.replies(), headers={}, paced=True, **login, **state.settings)
     # An assumed login is honoured only on a loopback name, which is what the browser uses.
     rig.http.base_url = "http://127.0.0.1"
     if state.prime is not None:
