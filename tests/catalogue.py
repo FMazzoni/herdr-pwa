@@ -453,6 +453,13 @@ FEED: Final = (
     State("feed-empty", "/", "#feed-list .summary", lambda: {SNAPSHOT: _empty()}),
     State("feed-herd", "/", "#feed-list .cards", runner(_stressed, _long_question())),
     State(
+        "feed-build-scrollback",
+        "/",
+        "#feed-list .card--blocked .card__question--unread",
+        runner(_stressed, long_pane()),
+        title="Feed: a blocked agent whose screen is coloured build output, not a question",
+    ),
+    State(
         "feed-blocked",
         "/",
         "#feed-list .card--blocked",
@@ -920,6 +927,7 @@ GEOMETRY_CORE: Final = (
 # Screens this app draws that the old app had no name for.
 V2_ONLY: Final = (
     "feed-herd",
+    "feed-build-scrollback",
     "workspaces",
     "alerts",
     "agent-unreachable",

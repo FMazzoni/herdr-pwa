@@ -4,7 +4,9 @@ import re
 import unicodedata
 from typing import Final
 
-from herdr_pwa.decisions import AgentRow
+from herdr_pwa.decisions import AgentRow, ScreenDecision
+from herdr_pwa.engine.dialog import MenuShape
+from herdr_pwa.panetext import plain
 
 # Spinner and status glyphs a harness prefixes its terminal title with.
 _GLYPH_CATEGORIES: Final = frozenset({"So", "Sk"})
@@ -15,6 +17,12 @@ _MAX_GLYPHS: Final = 4
 _UNNAMED: Final = re.compile(r"^new session\s*-\s*\S+$", re.IGNORECASE)
 # A shell's `user@host:~/dir` prompt title names a place, not the work.
 _LOCATOR: Final = re.compile(r"^[^\s@:]+@[^\s@:]+(?::\S*)?$")
+# How a terminal prompt opens when it asks without a question mark.
+_PROMPT_OPENING: Final = re.compile(
+    r"^\W*(do you|would you|should i|shall i|allow|approve|proceed|continue|confirm|"
+    r"are you sure|press|enter|type|select|choose)\b",
+    re.IGNORECASE | re.MULTILINE,
+)
 
 
 def _is_glyph(character: str) -> bool:
@@ -42,16 +50,30 @@ def page_title(title: str, harness: str, target: str) -> str:
 
 def card_title(row: AgentRow) -> str:
     """The title a feed card prints, or ``""`` when there is none worth printing."""
-    text = display_title(row.title)
+    text = display_title(plain(row.title))
     if not text or _glyphs_only(text) or _UNNAMED.match(text) or _LOCATOR.match(text):
         return ""
     rejects = {row.harness.strip().casefold(), row.workspace.strip().casefold()} - {""}
     return "" if text.casefold() in rejects else text
 
 
+def _reads_as_asking(answer: ScreenDecision, question: str) -> bool:
+    if answer.asked or answer.options or answer.drew_rows or answer.shape is not MenuShape.NONE:
+        return True
+    return "?" in question or _PROMPT_OPENING.search(question) is not None
+
+
 def card_question(row: AgentRow) -> str:
     """The question a feed card prints, or ``""`` when the screen gave nothing readable."""
-    question = row.answer.question if row.answer else ""
+    if row.answer is None:
+        return ""
+    question = plain(row.answer.question).strip()
     # A prompt glyph such as a lone "\u276f" is what an unread screen leaves; it says nothing.
     readable = any(unicodedata.category(c)[0] in "LN" for c in question)
-    return question if readable else ""
+    # With nothing asked, the parser's fallback is the screen's last paragraph: scrollback, not a question.
+    return question if readable and _reads_as_asking(row.answer, question) else ""
+
+
+def card_text(text: str) -> str:
+    """Terminal text a card prints, with its escape sequences and control bytes dropped."""
+    return plain(text)

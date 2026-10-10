@@ -521,6 +521,11 @@ def plain_text(runs: list[Run]) -> str:
     return "".join(run.text for run in runs)
 
 
+def plain(text: str) -> str:
+    """``text`` with every escape sequence and control byte dropped, its lines kept."""
+    return "\n".join(plain_text(line) for line in _tokenise(text))
+
+
 # Was this label printed whole, or is it the top half of a wrapped row?
 
 
