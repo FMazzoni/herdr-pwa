@@ -37,6 +37,10 @@ class Settings(BaseSettings):
     tailscaled_socket: Path = Path("/var/run/tailscale/tailscaled.sock")
 
     push_enabled: bool = True
+    # Off leaves the routes up but never polls; tests run without the background loop.
+    push_notifier: bool = True
+    # How often the notifier reads the herd; an event only ever costs latency, never a buzz.
+    push_interval: float = Field(default=2.0, gt=0)
     # No default: Apple answers 403 BadJwtToken to a placeholder contact and drops every push.
     push_subject: str = ""
     # A push is a claim about live state, so a late delivery is a confident lie.

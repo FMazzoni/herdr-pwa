@@ -1,7 +1,8 @@
 """The app factory: middleware, static files, the failure table and every router."""
 
 import time
-from collections.abc import Callable
+from collections.abc import AsyncGenerator, Callable
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from typing import Final
 
 from fastapi import FastAPI
@@ -10,12 +11,14 @@ from starlette.middleware.gzip import GZipMiddleware
 
 from herdr_pwa.engine.cache import SnapshotCache
 from herdr_pwa.engine.client import HerdrClient
+from herdr_pwa.push import Deliver
 from herdr_pwa.settings import Settings
 from herdr_pwa.web import failures
 from herdr_pwa.web.assets import Assets
 from herdr_pwa.web.deps import ClientFactory, WebState
+from herdr_pwa.web.notifier import PushState, open_push
 from herdr_pwa.web.render import Pages
-from herdr_pwa.web.routers import agent, compose, feed, push, workspace
+from herdr_pwa.web.routers import agent, compose, feed, push, shell, workspace
 from herdr_pwa.web.security import SecurityHeaders
 
 IMMUTABLE: Final = "public, max-age=31536000, immutable"
@@ -34,13 +37,30 @@ def _static_route(app: FastAPI, assets: Assets) -> None:
         return Response(asset.body, media_type=asset.media_type, headers={"Cache-Control": cache})
 
 
+def _lifespan(state: PushState | None) -> Callable[[FastAPI], AbstractAsyncContextManager[None]]:
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
+        notifier = state.notifier if state is not None else None
+        if notifier is not None:
+            notifier.start()
+        try:
+            yield
+        finally:
+            if notifier is not None:
+                await notifier.stop()
+
+    return lifespan
+
+
 def create_app(
     settings: Settings,
     client_factory: ClientFactory = HerdrClient,
     *,
     clock: Callable[[], float] = time.monotonic,
+    deliver: Deliver | None = None,
+    wall_clock: Callable[[], float] = time.time,
 ) -> FastAPI:
-    """Build the web application around one runner client and one snapshot cache."""
+    """Build the web application around one runner client, one snapshot cache and push."""
     assets = Assets.load()
     pages = Pages(assets)
     web = WebState(
@@ -50,7 +70,10 @@ def create_app(
         pages=pages,
         clock=clock,
     )
-    app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+    pushing = open_push(
+        settings, reader=web.client, cache=web.cache, deliver=deliver, clock=wall_clock
+    )
+    app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=_lifespan(pushing))
     failures.install(app, pages)
 
     @app.get("/healthz", include_in_schema=False)
@@ -58,8 +81,10 @@ def create_app(
         return {"status": "ok"}
 
     _static_route(app, assets)
-    for build in (feed.build, agent.build, workspace.build, compose.build, push.build):
+    for build in (feed.build, agent.build, workspace.build, compose.build):
         app.include_router(build(web))
+    app.include_router(push.build(web, pushing))
+    app.include_router(shell.build(web, assets))
     app.add_middleware(GZipMiddleware, minimum_size=GZIP_MIN_BYTES)
     # Added last, so it is outermost and stamps refusals and crashes too.
     app.add_middleware(SecurityHeaders, build=assets.build)

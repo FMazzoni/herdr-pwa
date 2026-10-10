@@ -1,4 +1,4 @@
-"""Command-line entry point: ``serve`` the web app, or ask ``doctor`` whether it can."""
+"""Command-line entry point: ``serve`` the web app, ``pair`` a phone, or ask ``doctor``."""
 
 import argparse
 import logging
@@ -7,7 +7,7 @@ from collections.abc import Callable
 
 import uvicorn
 
-from herdr_pwa import auth, tailscale
+from herdr_pwa import auth, pairing, tailscale
 from herdr_pwa.engine.client import HerdrClient
 from herdr_pwa.engine.transport import EngineError
 from herdr_pwa.protocol import EXPECTED_PROTOCOL
@@ -50,6 +50,36 @@ def doctor(
     return 0 if healthy else 1
 
 
+def pair(
+    settings: Settings,
+    *,
+    api: tailscale.LocalApi | None = None,
+    write: Callable[[str], object] = sys.stdout.write,
+    publish: bool = True,
+) -> int:
+    """Publish this app behind ``tailscale serve`` and print the URL as a QR; never Funnel."""
+    local = api or tailscale.LocalApi(settings.tailscaled_socket)
+    try:
+        result = pairing.pair(local, port=settings.port, bind_host=settings.host, write=publish)
+    except pairing.PairingError as exc:
+        write(f"pair: {exc}\n")
+        return 1
+    lines = [result.note]
+    if result.served:
+        # No URL that resolves, no QR: a code for an unserved name is a dead end on the phone.
+        lines += [pairing.qr_text(result.url), result.url, pairing.TAILNET_IS_THE_BOUNDARY]
+    if not settings.tailnet_login:
+        lines.append(
+            "warning: HP_TAILNET_LOGIN is empty, so any tailnet user may drive every agent."
+        )
+    lines.append(
+        "On the phone: open the URL, add it to the Home Screen, open it from there, "
+        "then turn alerts on under 'alerts'."
+    )
+    write("\n".join(lines) + "\n")
+    return 0 if result.served else 1
+
+
 def serve(settings: Settings, port: int | None) -> None:
     """Refuse an unsafe assumed login, then serve the app."""
     access = auth.Access(tailnet_login=settings.tailnet_login, assume_login=settings.assume_login)
@@ -67,11 +97,18 @@ def main(argv: list[str] | None = None) -> int:
     serve_cmd = sub.add_parser("serve")
     serve_cmd.add_argument("--port", type=int)
     sub.add_parser("doctor")
+    pair_cmd = sub.add_parser("pair", help="publish over tailscale serve and print a QR")
+    pair_cmd.add_argument(
+        "--check", action="store_true", help="report what serve has, change nothing"
+    )
     args = parser.parse_args(argv)
     settings = Settings()
     command: str = args.command  # pyright: ignore[reportAny]
     if command == "doctor":
         return doctor(settings)
+    if command == "pair":
+        check: bool = args.check  # pyright: ignore[reportAny]
+        return pair(settings, publish=not check)
     port: int | None = args.port  # pyright: ignore[reportAny]
     serve(settings, port)
     return 0

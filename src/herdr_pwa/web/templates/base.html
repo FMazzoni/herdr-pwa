@@ -9,7 +9,11 @@
 {# Eval off and no injected indicator <style>, so htmx lives inside the CSP. #}
 <meta name="htmx-config" content='{"includeIndicatorStyles":false,"allowEval":false,"allowScriptTags":false}'>
 <title>{% block title %}herdr{% endblock %}</title>
+<meta name="theme-color" content="#0F1620">
 <link rel="icon" href="{{ asset('icon.svg') }}" type="image/svg+xml">
+{# Root-scoped and unstamped: the manifest and touch icon are fetched by fixed names. #}
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="stylesheet" href="{{ asset('app.css') }}">
 <script src="{{ asset('htmx.min.js') }}" defer></script>
 <script src="{{ asset('app.js') }}" defer></script>
@@ -20,6 +24,10 @@
   <a class="brand" href="/">herdr</a>
   {% block topbar %}{% endblock %}
 </header>
+{# Outside every polled region, so a tick can never replace it under a thumb. #}
+<div class="updatebar" id="hp-update" hidden>
+  <button type="button" class="updatebar__button" id="hp-update-button">New build &mdash; tap to update</button>
+</div>
 {% block body %}{% endblock %}
 </body>
 </html>

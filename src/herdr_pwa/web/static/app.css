@@ -189,3 +189,43 @@ a { color: var(--accent); }
 .ansi-d { opacity: 0.7; }
 .ansi-i { font-style: italic; }
 .ansi-u { text-decoration: underline; }
+
+.topbar__link + .topbar__link { margin-left: 0; }
+
+/* The "new build" offer: hidden by the attribute until app.js sees the stamp move. */
+.updatebar {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  padding: 8px 16px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--rule);
+}
+.updatebar[hidden] { display: none; }
+.updatebar__button {
+  width: 100%;
+  padding: 10px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  font: inherit;
+}
+
+/* The alerts sheet. */
+.sheet { padding: 12px 16px 32px; max-width: 640px; margin: 0 auto; }
+.sheet__group { margin: 0 0 24px; }
+.sheet__heading { font-size: 13px; color: var(--ink-2); text-transform: uppercase; letter-spacing: 0.04em; margin: 0 0 8px; }
+.sheet__state { margin: 0 0 10px; }
+.sheet__note { color: var(--ink-3); font-size: 12.5px; margin: 8px 0; }
+.sheet__note--warn { color: var(--unknown); }
+.sheet__row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 8px 0; }
+.sheet__button {
+  padding: 10px 14px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  font: inherit;
+}
+.sheet__button[hidden] { display: none; }

@@ -42,4 +42,252 @@
       rearm();
     }
   });
+
+  /* ---- Service worker and the "new build" offer ---- */
+
+  var worker = "serviceWorker" in navigator ? navigator.serviceWorker : null;
+  var buildMeta = document.querySelector('meta[name="hp-build"]');
+  var baseline = buildMeta ? buildMeta.getAttribute("content") : null;
+  var swapping = false;
+
+  if (worker) {
+    worker.register("/sw.js", { scope: "/" }).catch(function () {
+      /* No worker means no offline shell and no push; the page itself still works. */
+    });
+    /* Reload only after the user's tap asked for the swap, never on a first install. */
+    worker.addEventListener("controllerchange", function () {
+      if (swapping) {
+        window.location.reload();
+      }
+    });
+  }
+
+  /* A missing header says nothing; only a second, different stamp means the build moved. */
+  function noteBuild(stamp) {
+    if (!stamp) {
+      return;
+    }
+    if (baseline === null) {
+      baseline = stamp;
+      return;
+    }
+    if (stamp !== baseline) {
+      var bar = document.getElementById("hp-update");
+      if (bar) {
+        bar.hidden = false;
+      }
+    }
+  }
+
+  document.addEventListener("htmx:afterRequest", function (event) {
+    var xhr = event.detail.xhr;
+    if (xhr) {
+      noteBuild(xhr.getResponseHeader("HP-Build"));
+    }
+  });
+
+  function update() {
+    if (!worker) {
+      window.location.reload();
+      return;
+    }
+    worker.getRegistration().then(function (registration) {
+      if (registration && registration.waiting) {
+        swapping = true;
+        registration.waiting.postMessage({ type: "hp-skip-waiting" });
+        return;
+      }
+      /* No new worker waiting: navigations are network-first, so a reload is the new build. */
+      window.location.reload();
+    });
+  }
+
+  var updateButton = document.getElementById("hp-update-button");
+  if (updateButton) {
+    updateButton.addEventListener("click", update);
+  }
+
+  /* ---- Web Push ---- */
+
+  function postJson(url, body) {
+    return fetch(url, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }).then(function (response) {
+      return response.json().then(function (data) {
+        return response.ok ? data : Promise.reject(data.error || response.status);
+      });
+    });
+  }
+
+  /* applicationServerKey takes bytes everywhere and a string only in some browsers. */
+  function keyBytes(base64url) {
+    var padded = String(base64url).replace(/-/g, "+").replace(/_/g, "/");
+    var raw = atob(padded + "=".repeat((4 - (padded.length % 4)) % 4));
+    var bytes = new Uint8Array(raw.length);
+    for (var i = 0; i < raw.length; i += 1) {
+      bytes[i] = raw.charCodeAt(i);
+    }
+    return bytes;
+  }
+
+  function pushManager() {
+    if (!worker || !("PushManager" in window)) {
+      return Promise.reject("this browser has no Web Push here (on iPhone, open the Home Screen app)");
+    }
+    return worker.ready.then(function (registration) {
+      return registration.pushManager;
+    });
+  }
+
+  function currentSubscription() {
+    return pushManager().then(function (manager) {
+      return manager.getSubscription();
+    });
+  }
+
+  /* The server confirms by echoing the endpoint; nothing else counts as "on". */
+  function register(subscription) {
+    return postJson("/push/subscribe", subscription.toJSON()).then(function (answer) {
+      return answer.endpoint === subscription.endpoint ? answer : Promise.reject("not confirmed");
+    });
+  }
+
+  /* Re-post on every load, so a store that lost this device learns it again. */
+  if (worker && "Notification" in window && Notification.permission === "granted") {
+    currentSubscription().then(function (subscription) {
+      return subscription ? register(subscription) : null;
+    }).catch(function () {});
+  }
+
+  function setText(id, text) {
+    var node = document.getElementById(id);
+    if (node) {
+      node.textContent = text;
+    }
+  }
+
+  function showButtons(on) {
+    var enable = document.getElementById("push-on");
+    var disable = document.getElementById("push-off");
+    if (enable) {
+      enable.hidden = on;
+    }
+    if (disable) {
+      disable.hidden = !on;
+    }
+  }
+
+  function refreshDevice() {
+    return currentSubscription().then(function (subscription) {
+      if (!subscription) {
+        setText("push-state", "Alerts are off on this device.");
+        showButtons(false);
+        return null;
+      }
+      return register(subscription).then(function (answer) {
+        setText("push-state", answer.armed ? "Alerts are on for this device." : "This device is subscribed, but the box is not sending yet.");
+        showButtons(true);
+      });
+    }).catch(function (reason) {
+      setText("push-state", "Alerts are unavailable: " + String(reason));
+      showButtons(false);
+    });
+  }
+
+  function enableDevice() {
+    Notification.requestPermission().then(function (permission) {
+      if (permission !== "granted") {
+        return Promise.reject("permission was not granted");
+      }
+      return fetch("/push/key", { credentials: "same-origin" }).then(function (response) {
+        return response.ok ? response.json() : Promise.reject(response.status);
+      });
+    }).then(function (body) {
+      return pushManager().then(function (manager) {
+        return manager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(body.publicKey) });
+      });
+    }).then(register).then(refreshDevice).catch(function (reason) {
+      setText("push-state", "Could not turn alerts on: " + String(reason));
+    });
+  }
+
+  function disableDevice() {
+    currentSubscription().then(function (subscription) {
+      if (!subscription) {
+        return null;
+      }
+      return postJson("/push/unsubscribe", { endpoint: subscription.endpoint }).then(function () {
+        return subscription.unsubscribe();
+      });
+    }).then(refreshDevice).catch(function (reason) {
+      setText("push-state", "Could not turn alerts off: " + String(reason));
+    });
+  }
+
+  function showPolicy(policy) {
+    var blocked = document.getElementById("pref-blocked");
+    var done = document.getElementById("pref-done");
+    if (blocked) {
+      blocked.checked = policy.blocked === true;
+    }
+    if (done) {
+      done.checked = policy.done === true;
+    }
+    setText("snooze-state", policy.snoozed ? "Finishes are quiet for now." : "Not snoozed.");
+  }
+
+  function wirePreference(id, key) {
+    var box = document.getElementById(id);
+    if (!box) {
+      return;
+    }
+    box.addEventListener("change", function () {
+      var body = {};
+      body[key] = box.checked;
+      /* The box shows what the server kept, not what was clicked. */
+      postJson("/push/prefs", body).then(showPolicy).catch(function () {
+        box.checked = !box.checked;
+      });
+    });
+  }
+
+  var panel = document.querySelector("[data-hp-push]");
+  if (panel) {
+    refreshDevice();
+    var enable = document.getElementById("push-on");
+    var disable = document.getElementById("push-off");
+    if (enable) {
+      enable.addEventListener("click", enableDevice);
+    }
+    if (disable) {
+      disable.addEventListener("click", disableDevice);
+    }
+    wirePreference("pref-blocked", "blocked");
+    wirePreference("pref-done", "done");
+    var snoozes = document.querySelectorAll("[data-hp-snooze]");
+    for (var s = 0; s < snoozes.length; s++) {
+      snoozes[s].addEventListener("click", function (event) {
+        var seconds = Number(event.currentTarget.getAttribute("data-hp-snooze"));
+        postJson("/push/snooze", { seconds: seconds }).then(showPolicy).catch(function () {});
+      });
+    }
+  }
+
+  /* ---- Seen: a finish the phone has shown is not news ---- */
+
+  var seenHost = document.querySelector("[data-hp-seen]");
+  function markSeen() {
+    var session = seenHost ? seenHost.getAttribute("data-hp-seen") : "";
+    if (session && !document.hidden) {
+      fetch("/push/seen/" + encodeURIComponent(session), {
+        method: "POST",
+        credentials: "same-origin",
+      }).catch(function () {});
+    }
+  }
+  markSeen();
+  document.addEventListener("visibilitychange", markSeen);
 })();
