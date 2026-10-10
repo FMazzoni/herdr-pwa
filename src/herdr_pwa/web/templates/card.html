@@ -1,18 +1,22 @@
 {% import "_ui.html" as ui %}
 {% set title = card_title(row) %}
-{% call ui.card(row.effective_status.value, href=("/agent/" ~ (row.session|urlencode)) if row.session else none) %}
+{% call ui.card(row.effective_status.value, href=("/agent/" ~ (row.session|urlencode)) if row.session else none, key=row.target) %}
     {{ ui.card_top(row.effective_status.value, title or row.harness or row.target) }}
     <span class="card__meta">
       {% if title and row.harness %}<span class="card__harness">{{ row.harness }}</span>{% endif %}
       {% if row.workspace %}<span class="card__ws">{{ row.workspace }}</span>{% endif %}
       <span class="card__pane">{{ row.target }}</span>
     </span>
-    {% if row.answer and row.answer.question %}
-    <span class="card__question">{{ row.answer.question }}</span>
-    {% if row.answer.options %}
+    {% set question = card_question(row) %}
+    {% if question %}
+    <span class="card__question">{{ question }}</span>
+    {% elif row.effective_status.value == "blocked" %}
+    {# The screen could not be read into words: say where the question is, never print its glyphs. #}
+    <span class="card__question card__question--unread">Open to see what it&rsquo;s asking</span>
+    {% endif %}
+    {% if row.answer and row.answer.options %}
     <span class="card__options">
       {% for option in row.answer.options %}<span class="card__option">{{ option.number }}. {{ option.label }}</span>{% endfor %}
     </span>
-    {% endif %}
     {% endif %}
 {% endcall %}

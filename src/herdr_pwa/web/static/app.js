@@ -22,6 +22,9 @@
     sheetAnswer(event.detail);
   });
 
+  /* iOS Safari applies :active only under a touch listener; the press states in app.css need one. */
+  document.addEventListener("touchstart", function () {}, { passive: true });
+
   /* ---- Back belongs to the herd ----
    * The feed is the root: only its own links push. Every other move replaces the
    * entry it leaves, so a swipe back from anywhere lands on the feed, never on a
@@ -292,12 +295,15 @@
     armTimers(document);
   });
 
-  /* ---- A folded chat turn the user opened stays open across the Chat tab's polls ---- */
+  /* ---- A details the reader opened stays open across the polls that redraw it ----
+   * A fold, a tool's result or any other disclosure in the view: each is keyed by the turn it
+   * sits in and its place inside that turn, and reopened before the reader's place is held. */
   var unfolded = [];
 
-  function foldKey(more) {
-    var text = more.previousElementSibling;
-    return text ? String(text.textContent).slice(0, 160) : "";
+  function detailsKey(details) {
+    var unit = details.closest(".turn");
+    var inside = unit ? unit.querySelectorAll("details") : [];
+    return (unit ? unitKey(unit) : "") + "#" + Array.prototype.indexOf.call(inside, details);
   }
 
   document.addEventListener("htmx:beforeSwap", function (event) {
@@ -306,9 +312,9 @@
       return;
     }
     unfolded = [];
-    var open = target.querySelectorAll(".turn__more[open]");
+    var open = target.querySelectorAll("details[open]");
     for (var i = 0; i < open.length; i++) {
-      unfolded.push(foldKey(open[i]));
+      unfolded.push(detailsKey(open[i]));
     }
   });
 
@@ -316,10 +322,10 @@
     if (!unfolded.length) {
       return;
     }
-    var folds = document.querySelectorAll("#agent-view .turn__more");
-    for (var i = 0; i < folds.length; i++) {
-      if (unfolded.indexOf(foldKey(folds[i])) !== -1) {
-        folds[i].open = true;
+    var all = document.querySelectorAll("#agent-view details");
+    for (var i = 0; i < all.length; i++) {
+      if (unfolded.indexOf(detailsKey(all[i])) !== -1) {
+        all[i].open = true;
       }
     }
   });
@@ -337,6 +343,8 @@
 
   // A chat turn, or a line of the terminal mirror (its status strip is not scrollback).
   var READ_UNITS = "#agent-view .turn, #agent-view > .pane:not(.pane--status) > .pane__line";
+  // What a poll may not move under the reader: those, and the feed's cards, which re-sort.
+  var ANCHORS = READ_UNITS + ", #feed-list .card";
 
   function readUnits() {
     return document.querySelectorAll(READ_UNITS);
@@ -364,35 +372,49 @@
     }
   }
 
-  function turnKey(turn) {
-    return String(turn.textContent).slice(0, 160);
+  // A card names its agent; a turn or a line is known by its text.
+  function unitKey(unit) {
+    return unit.getAttribute("data-hp-key") || String(unit.textContent).slice(0, 160);
   }
 
-  /* The first turn or line still on screen, to hold in place across a swap. */
+  function barBottom() {
+    var bar = document.querySelector(".topbar");
+    return bar ? bar.getBoundingClientRect().bottom : 0;
+  }
+
+  /* What to hold in place across a swap: the first unit wholly in view under the top bar,
+   * else the first still on screen at all, as when one turn is taller than the screen. */
   function mark() {
-    var turns = readUnits();
-    for (var i = 0; i < turns.length; i++) {
-      var box = turns[i].getBoundingClientRect();
-      if (box.bottom > 0) {
-        return { key: turnKey(turns[i]), index: i, top: box.top };
+    var units = document.querySelectorAll(ANCHORS);
+    var under = barBottom();
+    var partly = null;
+    for (var i = 0; i < units.length; i++) {
+      var box = units[i].getBoundingClientRect();
+      if (box.bottom <= 0) {
+        continue;
       }
+      var held = { key: unitKey(units[i]), index: i, top: box.top };
+      if (box.top >= under && box.top < window.innerHeight) {
+        return held;
+      }
+      partly = partly || held;
     }
-    return null;
+    return partly;
   }
 
-  /* The same turn or line after the swap: same text, nearest its old place, since both
-   * windows drop their oldest as new ones arrive. */
+  /* The same unit after the swap: same key, nearest its old place, since both windows drop
+   * their oldest as new ones arrive and the feed re-sorts its cards. */
   function hold(held) {
-    var turns = readUnits();
+    var units = document.querySelectorAll(ANCHORS);
     var best = -1;
-    for (var i = 0; i < turns.length; i++) {
+    for (var i = 0; i < units.length; i++) {
       var nearer = best === -1 || Math.abs(i - held.index) < Math.abs(best - held.index);
-      if (nearer && turnKey(turns[i]) === held.key) {
+      if (nearer && unitKey(units[i]) === held.key) {
         best = i;
       }
     }
     if (best !== -1) {
-      window.scrollBy(0, turns[best].getBoundingClientRect().top - held.top);
+      window.scrollBy(0, units[best].getBoundingClientRect().top - held.top);
     }
   }
 
@@ -404,7 +426,8 @@
     if (!isRead(event.detail)) {
       return;
     }
-    swapEnd = atEnd();
+    // Only the agent view follows its end; the feed is read from the top.
+    swapEnd = !!document.getElementById("agent-view") && atEnd();
     swapMark = swapEnd ? null : mark();
   });
 

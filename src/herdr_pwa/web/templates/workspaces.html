@@ -2,6 +2,9 @@
 {% from "_nav.html" import replace, sheet %}
 {% import "_ui.html" as ui %}
 {% block title %}Workspaces &mdash; herdr{% endblock %}
+{# The back arrow is the way home here, as on an agent's page. #}
+{% block brand %}{% endblock %}
+{% block topbar %}<a class="leave topbar__back" href="/" {{ replace() }}>&lsaquo; Herd</a><span class="topbar__title">workspaces</span>{% endblock %}
 {% block body %}
 <main class="feed-host">
   {{ ui.section_head("Workspaces", workspaces|length) }}
@@ -17,7 +20,8 @@
         </span>
         <span class="actions">
           <a href="/workspaces/{{ ws.workspace_id|urlencode }}/rename" {{ replace() }}>Rename</a>
-          <a href="/workspaces/{{ ws.workspace_id|urlencode }}/close" {{ replace() }}>Close</a>
+          {# Destructive: drawn in the danger colour, at the far edge from Rename. #}
+          <a class="actions__danger" href="/workspaces/{{ ws.workspace_id|urlencode }}/close" {{ replace() }}>Close</a>
         </span>
     {% endcall %}
     {% else %}

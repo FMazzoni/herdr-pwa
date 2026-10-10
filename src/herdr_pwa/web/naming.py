@@ -47,3 +47,11 @@ def card_title(row: AgentRow) -> str:
         return ""
     rejects = {row.harness.strip().casefold(), row.workspace.strip().casefold()} - {""}
     return "" if text.casefold() in rejects else text
+
+
+def card_question(row: AgentRow) -> str:
+    """The question a feed card prints, or ``""`` when the screen gave nothing readable."""
+    question = row.answer.question if row.answer else ""
+    # A prompt glyph such as a lone "\u276f" is what an unread screen leaves; it says nothing.
+    readable = any(unicodedata.category(c)[0] in "LN" for c in question)
+    return question if readable else ""

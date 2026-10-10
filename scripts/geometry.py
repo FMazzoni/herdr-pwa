@@ -19,6 +19,7 @@ sys.path.insert(0, str(ROOT))
 
 import backnav  # noqa: E402
 import chatend  # noqa: E402
+import feedhold  # noqa: E402
 from firefox import BrowserError, Marionette, browser, free_port, phone_window  # noqa: E402
 
 from tests.catalogue import STATES, State, build, pick  # noqa: E402
@@ -27,12 +28,17 @@ from tests.catalogue import STATES, State, build, pick  # noqa: E402
 HISTORY = "history"
 # The --only name for the Chat tab's scroll walk.
 CHAT_END = "chat-end"
+# The --only name for the feed's hold-under-the-thumb walk.
+FEED_HOLD = "feed-hold"
 # 390 is the phone this app is designed on; 430 is the largest (a Pro Max size, run as a
 # Home Screen app); 320 is the narrowest one still sold (iPhone SE 1st gen).
 WIDTHS = (390, 430, 320)
 HEIGHT = 844
 # Apple's HIG minimum and WCAG 2.5.5: 44 CSS px in both directions.
 TAP_FLOOR = 44
+# iOS Safari zooms the page into a focused field whose text is under 16px, and does not zoom back.
+FIELD_FONT_FLOOR = 16
+FIELDS = "input:not([type=hidden]), textarea, select"
 # The page gutter. iOS starts its back swipe at the left edge; how wide that strip is can only
 # be measured on the device, so a sideways scroller must at least start inside the gutter.
 EDGE_INSET = 16
@@ -109,7 +115,7 @@ return {
 
 # One synchronous script, so no htmx poll can swap the DOM halfway through a measurement.
 PROBE_GEOMETRY = r"""
-const [scrollAllowed, tapAllowed, tappable, floor, edge] = arguments;
+const [scrollAllowed, tapAllowed, tappable, floor, edge, fields, fontFloor] = arguments;
 for (const d of document.querySelectorAll("details")) d.open = true;
 const describe = (el) => {
   const cls = (el.getAttribute("class") || "").trim().split(/\s+/).filter(Boolean);
@@ -175,8 +181,13 @@ for (const el of document.querySelectorAll(tappable)) {
   taps.push({ what: describe(el), width: r.width, height: r.height,
     allowed: tapAllowed.find((s) => el.matches(s)) || null });
 }
+const zooms = [];
+for (const el of document.querySelectorAll(fields)) {
+  const size = parseFloat(getComputedStyle(el).fontSize);
+  if (size < fontFloor - 0.01) zooms.push({ what: describe(el), size: size });
+}
 return { page: page, scrollers: scrollers, spills: spills, taps: taps, edges: edges,
-  buried: buried, measured: measured };
+  buried: buried, measured: measured, zooms: zooms };
 """
 
 
@@ -329,6 +340,11 @@ def judge(found: dict[str, object], where: str, tally: Tally) -> None:
                 f"{where}: tap target {row['what']} is "
                 f"{row['width']:.1f}x{row['height']:.1f}px, under {TAP_FLOOR}px"
             )
+    for row in _rows(found, "zooms"):
+        tally.problems.append(
+            f"{where}: field {row['what']} is set in {row['size']}px type; under "
+            f"{FIELD_FONT_FLOOR}px iOS zooms the page in when it takes focus"
+        )
     measured = found.get("measured")
     tally.taps += measured if isinstance(measured, int) else 0
 
@@ -347,7 +363,14 @@ def run_state(driver: Marionette, state: State, base: str, width: int, tally: Ta
         tally.problems += [f"{where}: NOT LOADED: {p}" for p in problems]
         return
     found = driver.script(
-        PROBE_GEOMETRY, list(SCROLL_ALLOWED), list(TAP_ALLOWED), TAPPABLE, TAP_FLOOR, EDGE_INSET
+        PROBE_GEOMETRY,
+        list(SCROLL_ALLOWED),
+        list(TAP_ALLOWED),
+        TAPPABLE,
+        TAP_FLOOR,
+        EDGE_INSET,
+        FIELDS,
+        FIELD_FONT_FLOOR,
     )
     judge(found if isinstance(found, dict) else {}, where, tally)
     # One window serves every state, so a remembered choice must not leak into the next.
@@ -387,7 +410,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     # The unreachable states log a warning per request by design; the report is the output.
     logging.getLogger("herdr_pwa").setLevel(logging.ERROR)
-    names = [n for n in args.only if n not in (HISTORY, CHAT_END)]
+    names = [n for n in args.only if n not in (HISTORY, CHAT_END, FEED_HOLD)]
     chosen = pick(names) if names or not args.only else []
     widths = WIDTHS if chosen else ()
     tally = Tally()
@@ -407,6 +430,8 @@ def main(argv: list[str] | None = None) -> int:
                     tally.problems += backnav.run(driver, base, switch.mount, Path(scratch))
                 if not args.only or CHAT_END in args.only:
                     tally.problems += chatend.run(driver, base, switch.mount, Path(scratch))
+                if not args.only or FEED_HOLD in args.only:
+                    tally.problems += feedhold.run(driver, base, switch.mount, Path(scratch))
         except BrowserError as exc:
             print(f"geometry: the browser failed: {exc}", file=sys.stderr)
             return 1
