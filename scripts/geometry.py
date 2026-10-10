@@ -60,6 +60,14 @@ SCROLL_ALLOWED: dict[str, str] = {
         "the terminal mirror with Keep the columns on: the toggle asks for the terminal's own "
         "line breaks, so the pane scrolls inside its box, which starts inside the gutter"
     ),
+    ".prose .table-scroll": (
+        "a table in agent prose wider than the turn: its cells wrap only between words, so a "
+        "table of many columns scrolls inside its own box, which starts inside the turn"
+    ),
+    ".prose .math-block": (
+        "a display formula wider than the turn: a formula cannot wrap, so it scrolls inside "
+        "its own box like a code block"
+    ),
     ".tool__result": (
         "a tool's output, which is terminal text with the same column meaning as code; it "
         "scrolls in its own box and the page around it does not move"
@@ -209,8 +217,27 @@ for (const el of document.querySelectorAll(fields)) {
   const size = parseFloat(getComputedStyle(el).fontSize);
   if (size < fontFloor - 0.01) zooms.push({ what: describe(el), size: size });
 }
+// A table cell narrower than its widest word has broken that word across lines.
+const cells = [];
+for (const cell of document.querySelectorAll(".prose th, .prose td")) {
+  const style = getComputedStyle(cell);
+  const inner = cell.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+  const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+  let widest = 0, word = "";
+  for (let t = walker.nextNode(); t; t = walker.nextNode()) {
+    for (const m of t.data.matchAll(/\S+/g)) {
+      const range = document.createRange();
+      range.setStart(t, m.index);
+      range.setEnd(t, m.index + m[0].length);
+      let width = 0;
+      for (const r of range.getClientRects()) width += r.width;
+      if (width > widest) { widest = width; word = m[0]; }
+    }
+  }
+  if (widest > inner + 0.5) cells.push({ what: describe(cell), word: word, widest: widest, inner: inner });
+}
 return { page: page, scrollers: scrollers, spills: spills, taps: taps, edges: edges,
-  buried: buried, measured: measured, zooms: zooms };
+  buried: buried, measured: measured, zooms: zooms, cells: cells };
 """
 
 
@@ -367,6 +394,11 @@ def judge(found: dict[str, object], where: str, tally: Tally) -> None:
         tally.problems.append(
             f"{where}: field {row['what']} is set in {row['size']}px type; under "
             f"{FIELD_FONT_FLOOR}px iOS zooms the page in when it takes focus"
+        )
+    for row in _rows(found, "cells"):
+        tally.problems.append(
+            f"{where}: table cell {row['what']} is {row['inner']:.1f}px wide, narrower than its "
+            f"widest word {row['word']!r} ({row['widest']:.1f}px), so the word breaks"
         )
     measured = found.get("measured")
     tally.taps += measured if isinstance(measured, int) else 0

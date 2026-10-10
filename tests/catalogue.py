@@ -253,6 +253,46 @@ def _chat() -> list[JsonObject]:
     ]
 
 
+# Everything chat prose renders beyond plain text: tables narrow and wide, math, code, ticks.
+RICH_PROSE: Final = r"""Filed your three picks:
+
+| Ticket | Change |
+|---|---|
+| `a11y` | **Accessibility.** All sizes follow your iPhone's Text Size setting, and nothing is smaller than 13px. |
+| `toggle` | **Chat/Pane toggle in the top bar** beside "Herd", so it never scrolls away. |
+
+| Closeness | What | Covers |
+|:--|:-:|--:|
+| Close | Safari's engine (WebKit) set up as your phone | Layout, scrolling, focus |
+| Can't reproduce | iOS fonts, the keyboard animation | Nothing |
+
+| Service | Region | Replicas | p99 latency | Last deploy |
+|---|---|---|---|---|
+| `checkout-api` | eu-west-1 | 12 | 184ms | 2026-10-09 14:02 UTC |
+| `notifications` | ap-southeast-1 | 3 | 96ms | 2026-10-10 07:15 UTC |
+
+The mean is $\bar{x} = \frac{1}{n}\sum_{i=1}^{n} x_i$, and a failed one shows $\frac{a}{$.
+
+$$
+f(x) = a_0 + a_1 x + a_2 x^2 + a_3 x^3 + a_4 x^4 + a_5 x^5 + a_6 x^6 + a_7 x^7 + a_8 x^8
+$$
+
+```sh
+uv sync && systemctl --user restart herdr-pwa.service && herdr-pwa doctor --verbose
+```
+
+- [x] Rebase onto main
+- [ ] Restart the bridge
+
+The runbook is at https://example.com/runbook#restart.
+"""
+
+
+def rich_chat() -> list[JsonObject]:
+    """One agent turn using every kind of prose the Chat tab renders."""
+    return [human_says("what changed?", uuid="u0"), assistant_says(RICH_PROSE, uuid="a1")]
+
+
 def long_chat(turns: int = 24) -> list[JsonObject]:
     """A back-and-forth several screens tall, numbered so the newest turn is easy to find."""
     records: list[JsonObject] = []
@@ -538,6 +578,14 @@ AGENT_PAGE: Final = (
         runner(_stressed),
         long_chat(),
         title="Chat: a transcript several screens tall, opened on its newest turn",
+    ),
+    State(
+        "chat-markdown",
+        f"{AGENT}?tab=chat",
+        ".chat .turn--agent .table-scroll",
+        runner(_stressed),
+        rich_chat(),
+        title="Chat: tables, math, highlighted code, a task list and a bare link",
     ),
     State(
         "chat-blocked",
@@ -877,6 +925,7 @@ V2_ONLY: Final = (
     "agent-unreachable",
     "agent-chat-composing",
     "chat-long",
+    "chat-markdown",
     "chat-blocked",
     "pane-long",
 )

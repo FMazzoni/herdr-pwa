@@ -874,6 +874,49 @@
     }
   }
 
+  /* ---- Copy a code block ----
+   * The clipboard write happens inside the tap, which is what iOS requires of it. Without the
+   * clipboard API (an http origin, an old WebKit) the code is selected so the system menu can
+   * copy it. */
+
+  function selectText(node) {
+    var range = document.createRange();
+    range.selectNodeContents(node);
+    var selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }
+
+  function copied(button, label) {
+    button.textContent = label;
+    window.setTimeout(function () {
+      button.textContent = "Copy";
+    }, 1500);
+  }
+
+  document.addEventListener("click", function (event) {
+    var button = event.target && event.target.closest ? event.target.closest("[data-hp-copy]") : null;
+    var block = button ? button.closest(".code") : null;
+    var code = block ? block.querySelector("pre code") : null;
+    if (!code) {
+      return;
+    }
+    if (!navigator.clipboard || !window.isSecureContext) {
+      selectText(code);
+      copied(button, "Selected");
+      return;
+    }
+    navigator.clipboard.writeText(code.textContent).then(
+      function () {
+        copied(button, "Copied");
+      },
+      function () {
+        selectText(code);
+        copied(button, "Selected");
+      }
+    );
+  });
+
   /* ---- Seen: a finish the phone has shown is not news ---- */
 
   var seenHost = document.querySelector("[data-hp-seen]");

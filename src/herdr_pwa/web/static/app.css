@@ -113,6 +113,23 @@
   --option-lines: 3;
   /* A flex share so large that an item gives up its width before its neighbours give any. */
   --shrink-first: 1000;
+
+  /* Code in chat prose: one colour per kind of token, drawn from the terminal palette. */
+  --code-keyword: var(--ansi-magenta);
+  --code-string: var(--ansi-green);
+  --code-comment: var(--ink-3);
+  --code-number: var(--ansi-yellow);
+  --code-function: var(--ansi-blue);
+  --code-type: var(--ansi-cyan);
+  --code-builtin: var(--ansi-bright-cyan);
+  --code-constant: var(--ansi-red);
+  --code-variable: var(--ansi-bright-yellow);
+  --code-inserted: var(--working);
+  --code-deleted: var(--blocked);
+  /* A table cell is never narrower than this, so a short cell reads as a column, not a sliver. */
+  --cell-min: 3em;
+  /* A task list's box, drawn at the size of the text beside it. */
+  --task-box: 0.95em;
 }
 
 * { box-sizing: border-box; }
@@ -363,8 +380,44 @@ html { -webkit-tap-highlight-color: transparent; }
 .prose code { font: var(--text-meta) var(--mono); }
 .prose p { white-space: pre-wrap; }
 .prose blockquote { margin: var(--space-3) 0; padding-left: var(--space-5); border-left: var(--line-2) solid var(--rule); color: var(--ink-2); }
-.prose table { border-collapse: collapse; display: block; overflow-x: auto; }
-.prose th, .prose td { border: var(--line-1) solid var(--rule); padding: var(--space-2) var(--space-4); }
+/* A table scrolls inside its own box, which starts inside the turn, clear of the back swipe. Cells
+   wrap only between words: the turn's break-anywhere would shrink a column to one glyph. */
+.prose .table-scroll { overflow-x: auto; margin: var(--space-6) 0; }
+.prose table { border-collapse: collapse; }
+.prose th, .prose td { min-width: var(--cell-min); padding: var(--space-3) var(--space-4); border: var(--line-1) solid var(--rule); text-align: left; vertical-align: top; overflow-wrap: normal; word-break: normal; }
+.prose th { background: var(--surface-2); font-weight: 600; }
+.prose th code, .prose td code { white-space: nowrap; }
+.prose th.cell-whole, .prose td.cell-whole { white-space: nowrap; }
+.prose th.align-center, .prose td.align-center { text-align: center; }
+.prose th.align-right, .prose td.align-right { text-align: right; font-variant-numeric: tabular-nums; }
+/* A code block: the language and a copy button above, the code scrolling sideways below. */
+.prose .code { margin: var(--space-6) 0; background: var(--ground); border-radius: var(--radius-1); }
+.prose .code pre { margin: 0; border-radius: 0 0 var(--radius-1) var(--radius-1); }
+.prose .code__bar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); padding-left: var(--space-4); border-bottom: var(--line-1) solid var(--rule); }
+.prose .code__lang { min-width: 0; overflow: hidden; color: var(--ink-3); font: var(--text-small) var(--mono); white-space: nowrap; text-overflow: ellipsis; }
+.prose .code__copy { flex: none; min-width: var(--tap); min-height: var(--tap); padding: 0 var(--space-6); border: 0; background: transparent; color: var(--accent); font: var(--text-meta) var(--sans); cursor: pointer; -webkit-touch-callout: none; }
+.prose .code__copy:active { color: var(--ink); }
+.prose .tok-keyword { color: var(--code-keyword); }
+.prose .tok-string { color: var(--code-string); }
+.prose .tok-comment { color: var(--code-comment); font-style: italic; }
+.prose .tok-number { color: var(--code-number); }
+.prose .tok-function { color: var(--code-function); }
+.prose .tok-type { color: var(--code-type); }
+.prose .tok-builtin { color: var(--code-builtin); }
+.prose .tok-constant { color: var(--code-constant); }
+.prose .tok-variable { color: var(--code-variable); }
+.prose .tok-inserted { color: var(--code-inserted); }
+.prose .tok-deleted { color: var(--code-deleted); }
+/* Display math is centred and scrolls sideways inside its own box when it is wider than the turn. */
+.prose .math-block { overflow-x: auto; overflow-y: hidden; margin: var(--space-6) 0; padding: var(--space-2) 0; }
+.prose math { font-size: 1.1em; }
+/* A task list's ticks say done or not; they are not controls. */
+.prose ul:has(> .task) { padding-left: var(--space-2); }
+.prose li.task { list-style: none; }
+.prose .task-open, .prose .task-done { display: inline-block; position: relative; width: var(--task-box); height: var(--task-box); margin-right: var(--space-3); vertical-align: -0.12em; border: var(--line-1) solid var(--ink-3); border-radius: var(--line-3); }
+.prose .task-done { background: var(--accent); border-color: var(--accent); }
+.prose .task-done::after { content: ""; position: absolute; left: 30%; top: 8%; width: 28%; height: 55%; border: solid var(--ground); border-width: 0 var(--line-2) var(--line-2) 0; transform: rotate(45deg); }
+.prose li.task:has(> .task-done) { color: var(--ink-2); }
 
 .mirror { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
 .pane {
