@@ -19,6 +19,10 @@ geometry:
 geometry-force:
     uv run python scripts/geometry_gate.py --force
 
+# Print the latest phone device report from the state dir (HP_STATE_DIR, default ~/.config/herdr-pwa-v2).
+device-report *args:
+    uv run herdr-pwa device-report {{args}}
+
 # Serve on the build port against the throwaway hp-test session, never the default one.
 live-serve: live-session
     HP_SOCKET_PATH="$HOME/.config/herdr/sessions/hp-test/herdr.sock" uv run herdr-pwa serve
