@@ -234,3 +234,26 @@ def test_task_lists_tick_without_a_control() -> None:
 def test_only_bare_http_urls_become_links(text: str, href: str) -> None:
     links = [n.href for n in _walk(render_tree(text)) if n.tag == "a"]
     assert links == ([href] if href else [])
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "cd $HOME/$USER now",
+        "echo $PATH",
+        "run $1 then",
+        "cost $5\u2013$10",
+        "the $foo$ flag",
+        "set $HOME and $PATH",
+    ],
+)
+def test_shell_variables_stay_text(text: str) -> None:
+    (paragraph,) = render_tree(text)
+    assert "math" not in {n.tag for n in _walk(paragraph.children)}
+    assert _html(text) == f"<p>{text}</p>"
+
+
+@pytest.mark.parametrize("source", ["$x^2$", "$x$", "$n$", "$a=b$"])
+def test_single_dollar_math_that_reads_as_math_renders(source: str) -> None:
+    (paragraph,) = render_tree(f"so {source} holds")
+    assert "math" in {n.tag for n in _walk(paragraph.children)}

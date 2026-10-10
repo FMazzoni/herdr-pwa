@@ -1,5 +1,6 @@
 """Model prose as a tree of plain nodes from a closed tag set, for Jinja to escape."""
 
+import re
 from collections.abc import Callable, Iterable
 from functools import lru_cache
 from typing import Final
@@ -51,6 +52,9 @@ CLASSES: Final = frozenset(
         *TOKEN_CLASSES,
     }
 )
+_MATH_MARKS: Final = frozenset("\\^_{}=+<>")
+# A lone letter or number, as in "$x$" or "$n$".
+_LONE_TERM: Final = re.compile(r"[A-Za-z]|\d+(?:\.\d+)?")
 _LINK_SCHEMES: Final = ("http://", "https://")
 _LEAF_TEXT: Final = frozenset({"text", "html_block"})
 WIDE_TABLE: Final = 4
@@ -72,7 +76,14 @@ def _task_box(node: SyntaxTreeNode) -> MdNode:
     return MdNode("span", cls="task-done" if "checked" in node.content else "task-open")
 
 
+def _looks_like_math(tex: str) -> bool:
+    return any(c in _MATH_MARKS for c in tex) or _LONE_TERM.fullmatch(tex.strip()) is not None
+
+
 def _inline_math(node: SyntaxTreeNode) -> MdNode:
+    # Coding agents write $HOME/$USER in prose; one dollar pair is math only if it reads as math.
+    if node.markup == "$" and not _looks_like_math(node.content):
+        return MdNode(text=f"${node.content}$")
     return math_node(node.content, block=False)
 
 
