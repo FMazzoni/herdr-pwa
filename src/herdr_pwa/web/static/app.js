@@ -213,6 +213,8 @@
    * its height there, so the gap under the visual viewport is the keyboard. */
   var root = document.documentElement;
   var docking = false;
+  var dockedKb = -1;
+  var dockedH = -1;
 
   function dock() {
     docking = false;
@@ -222,9 +224,18 @@
     }
     var view = window.visualViewport;
     var covered = view ? Math.max(0, Math.round(window.innerHeight - view.height - view.offsetTop)) : 0;
+    var height = bar.offsetHeight;
+    var moved = covered !== dockedKb || height !== dockedH;
+    // Measured before the dock moves: a reader at the end stays there as the keyboard opens.
+    var wasEnd = moved && atEnd();
+    dockedKb = covered;
+    dockedH = height;
     root.style.setProperty("--kb", covered + "px");
     root.classList.toggle("is-keyboard", covered > 0);
-    root.style.setProperty("--dock-h", bar.offsetHeight + "px");
+    root.style.setProperty("--dock-h", height + "px");
+    if (wasEnd) {
+      toEnd();
+    }
   }
 
   function redock() {
@@ -310,6 +321,100 @@
       if (unfolded.indexOf(foldKey(folds[i])) !== -1) {
         folds[i].open = true;
       }
+    }
+  });
+
+  /* ---- The chat opens on its newest turn and follows it only while the reader is there ----
+   * Turns read oldest first, so the end of the page is the newest turn, just above the dock.
+   * Whether to follow is decided before each swap, from where the reader is then; a reader
+   * who scrolled up keeps the turn they are reading where it was. */
+  // How far under the dock's top edge the newest turn may end and still count as the end.
+  var END_SLACK = 120;
+  var swapEnd = false;
+  var swapMark = null;
+
+  function chatTurns() {
+    return document.querySelectorAll("#agent-view .turn");
+  }
+
+  function dockTop() {
+    var bar = document.getElementById("composer");
+    return bar ? bar.getBoundingClientRect().top : window.innerHeight;
+  }
+
+  function atEnd() {
+    var turns = chatTurns();
+    var last = turns[turns.length - 1];
+    return !last || last.getBoundingClientRect().bottom <= dockTop() + END_SLACK;
+  }
+
+  function toEnd() {
+    if (chatTurns().length) {
+      window.scrollTo(0, root.scrollHeight);
+    }
+  }
+
+  function turnKey(turn) {
+    return String(turn.textContent).slice(0, 160);
+  }
+
+  /* The first turn still on screen, to hold in place across a swap. */
+  function mark() {
+    var turns = chatTurns();
+    for (var i = 0; i < turns.length; i++) {
+      var box = turns[i].getBoundingClientRect();
+      if (box.bottom > 0) {
+        return { key: turnKey(turns[i]), index: i, top: box.top };
+      }
+    }
+    return null;
+  }
+
+  /* The same turn after the swap: same text, nearest its old place, since the window of
+   * turns drops the oldest as new ones arrive. */
+  function hold(held) {
+    var turns = chatTurns();
+    var best = -1;
+    for (var i = 0; i < turns.length; i++) {
+      var nearer = best === -1 || Math.abs(i - held.index) < Math.abs(best - held.index);
+      if (nearer && turnKey(turns[i]) === held.key) {
+        best = i;
+      }
+    }
+    if (best !== -1) {
+      window.scrollBy(0, turns[best].getBoundingClientRect().top - held.top);
+    }
+  }
+
+  function isRead(detail) {
+    return !!(detail.requestConfig && detail.requestConfig.verb === "get");
+  }
+
+  document.addEventListener("htmx:beforeSwap", function (event) {
+    if (!isRead(event.detail)) {
+      return;
+    }
+    swapEnd = atEnd();
+    swapMark = swapEnd ? null : mark();
+  });
+
+  document.addEventListener("htmx:afterSwap", function (event) {
+    if (!isRead(event.detail)) {
+      return;
+    }
+    if (swapEnd) {
+      toEnd();
+    } else if (swapMark) {
+      hold(swapMark);
+    }
+    swapMark = null;
+  });
+
+  /* Sending is reading the end: the reply lands there. */
+  document.addEventListener("htmx:beforeRequest", function (event) {
+    var elt = event.detail.elt;
+    if (elt && elt.id === "composer") {
+      toEnd();
     }
   });
 

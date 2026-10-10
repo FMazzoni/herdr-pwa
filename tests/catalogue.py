@@ -253,6 +253,18 @@ def _chat() -> list[JsonObject]:
     ]
 
 
+def long_chat(turns: int = 24) -> list[JsonObject]:
+    """A back-and-forth several screens tall, numbered so the newest turn is easy to find."""
+    records: list[JsonObject] = []
+    for n in range(turns):
+        if n % 2:
+            text = f"Reply {n}: checked the cluster and the rollback.\n\n" + "- a step\n" * 3
+            records.append(assistant_says(text, uuid=f"a{n}"))
+        else:
+            records.append(human_says(f"Prompt {n}: what does the migration touch?", uuid=f"u{n}"))
+    return records
+
+
 def runner(frame: Callable[[], JsonObject], screen: str = "") -> Replies:
     """A runner whose snapshot is ``frame()`` and whose every pane shows ``screen``."""
     return lambda: {SNAPSHOT: frame(), READ: read_frame(screen)}
@@ -513,6 +525,14 @@ AGENT_PAGE: Final = (
         runner(_stressed),
         _chat(),
         title="Agent page: Chat, the default tab",
+    ),
+    State(
+        "chat-long",
+        f"{AGENT}?tab=chat",
+        ".chat .turn--agent",
+        runner(_stressed),
+        long_chat(),
+        title="Chat: a transcript several screens tall, opened on its newest turn",
     ),
     State(
         "chat-absent",
@@ -836,6 +856,7 @@ V2_ONLY: Final = (
     "alerts",
     "agent-unreachable",
     "agent-chat-composing",
+    "chat-long",
 )
 
 _RIG: Final = "the rig can answer a key, but no state stages the runner into this outcome yet"
