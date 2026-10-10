@@ -19,6 +19,55 @@
       event.detail.shouldSwap = true;
       event.detail.isError = false;
     }
+    sheetAnswer(event.detail);
+  });
+
+  /* ---- Back belongs to the herd ----
+   * The feed is the root: only its own links push. Every other move replaces the
+   * entry it leaves, so a swipe back from anywhere lands on the feed, never on a
+   * tab, a spent form or a door that forwards onward. */
+
+  function isSheet(detail) {
+    var elt = detail.requestConfig && detail.requestConfig.elt;
+    return !!(elt && elt.closest && elt.closest("[data-hp-sheet]"));
+  }
+
+  /* A sheet's refusal is a whole page at a 4xx and is the answer, so it is shown;
+   * a failure fragment has no main to select, so it replaces the main whole. */
+  function sheetAnswer(detail) {
+    var xhr = detail.xhr;
+    if (!xhr || !isSheet(detail) || xhr.status < 400) {
+      return;
+    }
+    detail.shouldSwap = true;
+    detail.isError = false;
+    if (String(xhr.responseText).indexOf("<main") === -1) {
+      detail.selectOverride = "unset";
+    }
+  }
+
+  function plainClick(event) {
+    return event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
+  }
+
+  document.addEventListener("click", function (event) {
+    var link = event.target && event.target.closest ? event.target.closest("a[data-hp-replace]") : null;
+    if (!link || !plainClick(event)) {
+      return;
+    }
+    event.preventDefault();
+    /* Leaving mid-write would hide whether it landed. */
+    if (!document.body.classList.contains("is-sending")) {
+      window.location.replace(link.href);
+    }
+  });
+
+  /* A finished write names its page; htmx's own redirect would push, so the page replaces. */
+  document.addEventListener("hp:opened", function (event) {
+    var where = event.detail && event.detail.where;
+    if (typeof where === "string" && where.charAt(0) === "/" && where.charAt(1) !== "/") {
+      window.location.replace(where);
+    }
   });
 
   /* Re-fetch every polling region once the page is visible again. */
@@ -107,9 +156,16 @@
   });
 
   document.addEventListener("visibilitychange", rearm);
-  /* bfcache restore and iOS standalone resume skip visibilitychange. */
+  /* bfcache restore and iOS standalone resume skip visibilitychange. The restored
+   * DOM is whatever was on screen when the page was left, so it says so until the
+   * re-fetch replaces it. */
   window.addEventListener("pageshow", function (event) {
     if (event.persisted) {
+      var nodes = document.querySelectorAll("[data-hp-poll]");
+      for (var i = 0; i < nodes.length; i++) {
+        nodes[i].classList.add("is-stale");
+      }
+      document.body.classList.remove("is-sending");
       rearm();
     }
   });

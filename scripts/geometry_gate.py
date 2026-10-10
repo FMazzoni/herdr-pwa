@@ -27,6 +27,8 @@ GUARDED = (
     "tests/fixtures/capture-blocked-askuserquestion-menu/detection.txt",
     "scripts/firefox.py",
     "scripts/geometry.py",
+    "scripts/backnav.py",
+    "tests/_fake_herd.py",
     "scripts/geometry_gate.py",
 )
 SKIP = ("__pycache__",)

@@ -22,6 +22,7 @@ from herdr_pwa.web.writing import (
     expected,
     form,
     identity_of,
+    opened,
     raise_if_gone,
     ticked,
     writer_for,
@@ -168,13 +169,16 @@ def build(web: WebState) -> APIRouter:
         identity: Annotated[auth.Identity, Depends(guard)],
         body: FormBody = b"",
     ) -> Response:
-        return _close(web, writer_for(web, request, identity), identity_of(session), form(body))
+        writer = writer_for(web, request, identity)
+        return _close(web, request, writer, identity_of(session), form(body))
 
     _starting_routes(router, web, guard)
     return router
 
 
-def _close(web: WebState, writer: Writer, session: SessionId, values: dict[str, str]) -> Response:
+def _close(
+    web: WebState, request: Request, writer: Writer, session: SessionId, values: dict[str, str]
+) -> Response:
     ask = EndAsk(
         session,
         expected_target=expected(values),
@@ -186,7 +190,7 @@ def _close(web: WebState, writer: Writer, session: SessionId, values: dict[str, 
         raise_if_gone(result)
         context = {"agent": find_agent(web, session)}
         return refused(web.pages, "close.html", context, result, whole=True)
-    return RedirectResponse("/", status_code=303)
+    return opened(request, "/")
 
 
 def _starting_routes(

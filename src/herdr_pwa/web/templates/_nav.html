@@ -1,0 +1,4 @@
+{# Back belongs to the herd: the feed's own links push, every other move replaces its entry. #}
+{% macro replace() %}data-hp-replace{% endmacro %}
+{# A form you pass through: htmx posts it, a refusal redraws this main, success replaces the entry. #}
+{% macro sheet(action) %}method="post" action="{{ action }}" hx-post="{{ action }}" hx-target="closest main" hx-select="main" hx-swap="outerHTML" hx-disabled-elt="find button" data-hp-sheet{% endmacro %}
