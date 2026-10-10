@@ -5,6 +5,9 @@ from pathlib import Path
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from herdr_pwa.engine.config import EngineSettings
+from herdr_pwa.protocol import DEFAULT_SOCKET_PATH
+
 
 def _default_state_dir() -> Path:
     return Path.home() / ".config" / "herdr-pwa-v2"
@@ -20,6 +23,12 @@ class Settings(BaseSettings):
     port: int = 8772
     state_dir: Path = Field(default_factory=_default_state_dir)
     socket_path: Path | None = None
+    command_timeout: float = Field(default=5.0, gt=0)
+    # Every concurrent poll shares one fetch inside this window.
+    snapshot_cache_ttl: float = Field(default=2.0, gt=0)
+    # Empty means each harness's own default location.
+    transcript_roots: tuple[str, ...] = ()
+    chat_turns: int = Field(default=40, gt=0)
 
     # Empty means any tailnet user may drive every agent; startup warns.
     tailnet_login: str = ""
@@ -45,3 +54,8 @@ class Settings(BaseSettings):
     @classmethod
     def _trimmed(cls, value: str) -> str:
         return value.strip()
+
+    def engine(self) -> EngineSettings:
+        """The engine's view of these settings."""
+        socket = self.socket_path or Path(DEFAULT_SOCKET_PATH).expanduser()
+        return EngineSettings(socket_path=socket, command_timeout=self.command_timeout)

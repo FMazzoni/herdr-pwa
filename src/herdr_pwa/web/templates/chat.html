@@ -1,0 +1,18 @@
+{% from "md.html" import md %}
+{% set url = "/agent/" ~ (agent.session|urlencode) ~ "/chat" %}
+<section id="agent-view" class="chat" data-hp-poll="{{ url }}" hx-get="{{ url }}" hx-target="this" hx-swap="outerHTML" hx-trigger="every {{ cadence }}s, hp:poke from:body">
+  {% if chat.note %}<p class="empty">{{ chat.note }}</p>{% endif %}
+  {% for turn in chat.turns %}
+  <article class="turn turn--{{ turn.speaker }}{% if turn.failed %} turn--failed{% endif %}">
+    {% if turn.speaker == "agent" %}
+    <div class="prose">{{ md(turn.prose) }}</div>
+    {% elif turn.speaker == "tool" %}
+    <p class="turn__tool"><span class="turn__name">{{ turn.tool }}</span> {{ turn.text }}</p>
+    {% if turn.result %}<details class="turn__result"><summary>{% if turn.failed %}failed{% else %}result{% endif %}</summary><pre>{{ turn.result }}</pre></details>{% endif %}
+    {% else %}
+    <p class="turn__text">{{ turn.text }}</p>
+    {% endif %}
+    {% if turn.truncated %}<p class="turn__clip">clipped</p>{% endif %}
+  </article>
+  {% endfor %}
+</section>

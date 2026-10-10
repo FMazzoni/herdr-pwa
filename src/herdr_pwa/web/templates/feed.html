@@ -1,0 +1,43 @@
+{% set f = herd.freshness %}
+<div id="feed-list"
+     class="feed feed--{{ f.condition.value }}{% if f.stale %} is-stale{% endif %}"
+     data-hp-poll="/feed"
+     hx-get="/feed"
+     hx-target="this"
+     hx-swap="outerHTML"
+     hx-trigger="every {{ herd.cadence }}s, hp:poke from:body">
+  {% if f.condition.value == "offline" %}
+  <p class="banner banner--offline" role="status"><span class="banner__what">runner offline</span><span class="banner__why">no contact for over a minute &middot; last seen {{ f.age_label }}</span></p>
+  {% elif f.condition.value == "degraded" %}
+  <p class="banner banner--degraded" role="status"><span class="banner__what">runner is not answering</span><span class="banner__why">retrying every {{ herd.cadence }}s{% if f.age_label %} &middot; last read {{ f.age_label }}{% endif %}</span></p>
+  {% elif f.condition.value == "stale" %}
+  <p class="banner banner--stale" role="status"><span class="banner__what">stale</span><span class="banner__why">snapshot {{ f.age_label }}</span></p>
+  {% endif %}
+
+  <p class="summary">
+    {% if herd.counts["blocked"] %}<span class="summary__need">{{ herd.counts["blocked"] }} needs you</span>{% endif %}
+    {% if herd.counts["done"] %}<span class="summary__done">{{ herd.counts["done"] }} unseen</span>{% endif %}
+    {% if herd.counts["working"] %}<span class="summary__work">{{ herd.counts["working"] }} working</span>{% endif %}
+    {% if herd.counts["idle"] %}<span class="summary__idle">{{ herd.counts["idle"] }} idle</span>{% endif %}
+    {% if not herd.rows %}<span class="summary__idle">no agents</span>{% endif %}
+  </p>
+
+  {% if herd.rows %}
+  {% for section in herd.sections %}
+  <section class="group group--{{ section.key.value }}">
+    <h2 class="group__head"><span class="group__label">{{ section.label }}</span><span class="group__n">{{ section.count }}</span></h2>
+    {% if section.rows %}
+    <ul class="cards">
+      {% for row in section.rows %}{% include "card.html" %}{% endfor %}
+    </ul>
+    {% else %}
+    <p class="group__none">nobody is waiting on you</p>
+    {% endif %}
+  </section>
+  {% endfor %}
+  {% elif f.condition.value == "live" %}
+  <p class="empty">No agents in the herd.<br>Start one in a herdr pane and it appears here within {{ herd.cadence }}s.</p>
+  {% else %}
+  <p class="empty">No agents in the herd when it could last be read.<br>That is the last thing known, not what is true now.</p>
+  {% endif %}
+</div>

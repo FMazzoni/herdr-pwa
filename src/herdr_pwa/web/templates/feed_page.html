@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block topbar %}<a class="topbar__link" href="/workspaces">workspaces</a>{% endblock %}
+{% block body %}
+{# The shell never reads the herd; the fragment does, and carries its own clock. #}
+<main class="feed-host">
+  <div id="feed-list" class="feed" data-hp-poll="/feed" hx-get="/feed" hx-trigger="load" hx-target="this" hx-swap="outerHTML">
+    <p class="boot" role="status">Reaching the herd&hellip;</p>
+  </div>
+</main>
+<noscript><p class="boot">This dashboard refreshes with JavaScript; reload to see the herd.</p></noscript>
+{% endblock %}

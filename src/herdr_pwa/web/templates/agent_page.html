@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}{{ agent.title or agent.agent or agent.target }} &mdash; herdr{% endblock %}
+{% block topbar %}<span class="topbar__title">{{ agent.title or agent.agent or agent.target }}</span>{% endblock %}
+{% block body %}
+{% set base = "/agent/" ~ (agent.session|urlencode) %}
+<main class="agent">
+  <p class="agent__meta">
+    <span class="dot dot--{{ agent.status.value }}" aria-hidden="true"></span>
+    <span class="agent__status">{{ agent.status.value }}</span>
+    {% if agent.agent %}<span>{{ agent.agent }}</span>{% endif %}
+    {% if agent.workspace %}<span>{{ agent.workspace }}</span>{% endif %}
+    <span>{{ agent.target }}</span>
+  </p>
+  <nav class="tabs" aria-label="View">
+    {% for name in tabs %}
+    <a class="tab{% if name == tab %} tab--on{% endif %}" href="{{ base }}?tab={{ name }}"{% if name == tab %} aria-current="page"{% endif %}>{{ name|capitalize }}</a>
+    {% endfor %}
+  </nav>
+  <div id="agent-view" data-hp-poll="{{ base }}/{{ tab }}" hx-get="{{ base }}/{{ tab }}" hx-trigger="load" hx-target="this" hx-swap="outerHTML">
+    <p class="boot" role="status">Reading&hellip;</p>
+  </div>
+</main>
+{% endblock %}

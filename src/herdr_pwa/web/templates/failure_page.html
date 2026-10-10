@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block title %}{{ failure.headline }} &mdash; herdr{% endblock %}
+{% block head %}{% if poll_url %}<meta http-equiv="refresh" content="{{ cadence }}">{% endif %}{% endblock %}
+{% block body %}
+<main class="feed-host">{% include "failure.html" %}</main>
+{% endblock %}
