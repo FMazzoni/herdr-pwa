@@ -17,6 +17,9 @@
 <link rel="stylesheet" href="{{ asset('app.css') }}">
 <script src="{{ asset('htmx.min.js') }}" defer></script>
 <script src="{{ asset('app.js') }}" defer></script>
+{% if device_report %}
+<script src="{{ asset('devreport.js') }}" defer></script>
+{% endif %}
 {% block head %}{% endblock %}
 </head>
 <body>
