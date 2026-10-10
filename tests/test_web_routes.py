@@ -99,6 +99,20 @@ def test_a_workspace_filter_narrows_all_but_needs_you(tmp_path: Path) -> None:
     assert "in notes:" in body
 
 
+def test_a_blocked_card_with_no_readable_question_says_where_it_is(tmp_path: Path) -> None:
+    frame = snapshot_frame()
+    for agent in agents_of(frame):
+        if agent.get("pane_id") == "w1:p3":
+            agent["agent_status"] = "blocked"
+    rule = "\u2500" * 40
+    rig = build_rig(tmp_path, {SNAPSHOT: frame, READ: read_frame(f"{rule}\n\u276f \n{rule}\n")})
+    body = rig.http.get("/feed", headers=FRAGMENT).text
+    assert "Open to see what it&rsquo;s asking" in body
+    assert "\u276f" not in body
+    # The feed's cards carry their pane, so a poll that re-sorts them can hold one in place.
+    assert 'data-hp-key="w1:p3"' in body
+
+
 def test_an_unknown_workspace_filter_shows_the_whole_herd(tmp_path: Path) -> None:
     rig = build_rig(tmp_path)
     body = rig.http.get("/feed?ws=gone", headers=FRAGMENT).text

@@ -60,6 +60,8 @@
   --text-6: 13px;
   --text-7: 14px;
   --text-8: 15px;
+  /* A field: iOS zooms the page into any field under 16px when it takes focus. */
+  --text-input: 16px;
 
   --radius-1: 6px;
   --radius-2: 8px;
@@ -82,6 +84,10 @@
   --select-chevron: 5px;
   --select-chevron-inset: 16px;
   --page-max: 760px;
+  /* The side gutters. Landscape on a notched iPhone puts the sensor housing on one side, and
+     viewport-fit=cover lets the page run under it, so a gutter is never narrower than its inset. */
+  --gutter-left: max(var(--space-8), env(safe-area-inset-left));
+  --gutter-right: max(var(--space-8), env(safe-area-inset-right));
   /* The longest a filter chip's name may run before it ellipsizes. */
   --chip-label-max: 14ch;
   /* How wide the fade at a sideways strip's right edge is. */
@@ -115,6 +121,11 @@ html, body {
 
 a { color: var(--accent); }
 
+/* Touch: no grey flash from WebKit on a tap and no link preview on a long press of a control;
+   each one answers a press with its own :active state instead. */
+html { -webkit-tap-highlight-color: transparent; }
+.card__link, .button, .chip, .tab, .topbar__back { -webkit-touch-callout: none; }
+
 .topbar {
   position: sticky;
   top: 0;
@@ -122,7 +133,7 @@ a { color: var(--accent); }
   display: flex;
   align-items: center;
   gap: var(--space-6);
-  padding: env(safe-area-inset-top) var(--space-8) 0;
+  padding: env(safe-area-inset-top) var(--gutter-right) 0 var(--gutter-left);
   background: var(--surface);
   border-bottom: var(--line-1) solid var(--rule);
 }
@@ -135,7 +146,7 @@ a { color: var(--accent); }
 .topbar__back { justify-content: flex-start; flex: none; text-decoration: none; font-size: var(--text-7); }
 .topbar__title--agent { flex: 1; color: var(--ink); font-weight: 600; }
 
-.feed-host, .agent { padding: var(--space-6) var(--space-8) calc(env(safe-area-inset-bottom) + var(--space-10)); max-width: var(--page-max); margin: 0 auto; }
+.feed-host, .agent { padding: var(--space-6) var(--gutter-right) calc(env(safe-area-inset-bottom) + var(--space-10)) var(--gutter-left); max-width: var(--page-max); margin: 0 auto; }
 .boot, .empty { color: var(--ink-3); font-size: var(--text-6); text-align: center; padding: var(--space-10) var(--space-4); }
 
 /* Freshness: everything but live dims the claim the cards make. */
@@ -210,6 +221,7 @@ a { color: var(--accent); }
   border-radius: var(--radius-pill);
 }
 .chip--on { color: var(--accent); }
+.chip:active .chip__pill { border-color: var(--accent); }
 .chip--on .chip__pill { background: var(--surface-2); border-color: var(--accent); }
 .chip__label { max-width: var(--chip-label-max); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chip__n { color: var(--ink-3); }
@@ -238,6 +250,8 @@ a { color: var(--accent); }
 /* A card that opens something carries a chevron in a column of its own, beside the first line. */
 .card__link--go { grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--space-4); }
 .card__link--go > * { grid-column: 1; }
+.card__link--go { border-radius: inherit; }
+.card__link--go:active { background: var(--surface-2); }
 .card__link--go > .card__chevron { grid-column: 2; grid-row: 1; align-self: center; color: var(--ink-3); font-size: var(--text-8); line-height: 1; }
 .card__chevron::before { content: var(--chevron); }
 .card__top { display: flex; align-items: center; gap: var(--space-4); min-width: 0; }
@@ -250,6 +264,7 @@ a { color: var(--accent); }
 .agent__meta > * { min-width: 0; }
 .card__pane { font-family: var(--mono); }
 .card__question { color: var(--ink); font-size: var(--text-6); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; line-clamp: 4; overflow: hidden; }
+.card__question--unread { color: var(--ink-2); font-style: italic; }
 .card__options { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-1); font-size: var(--text-5); color: var(--ink-2); }
 /* The card is the overview; the whole question and every option are a tap away. */
 .card__option { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -279,6 +294,7 @@ a { color: var(--accent); }
 .tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-1); padding: var(--space-1); background: var(--surface); border: var(--line-1) solid var(--rule); border-radius: var(--radius-2); }
 .tab { display: flex; align-items: center; justify-content: center; min-height: var(--tap); color: var(--ink-2); text-decoration: none; border-radius: var(--radius-1); }
 .tab--on { color: var(--ink); background: var(--surface-2); font-weight: 600; }
+.tab:active { background: var(--surface-2); }
 
 /* A quiet switch on the pane's top edge: muted text, no frame, the 44px row is the target. */
 .agent__columns { display: flex; justify-content: flex-end; margin-bottom: calc(-1 * var(--space-5)); }
@@ -359,7 +375,7 @@ a { color: var(--accent); }
   position: sticky;
   top: 0;
   z-index: 3;
-  padding: var(--space-4) var(--space-8);
+  padding: var(--space-4) var(--gutter-right) var(--space-4) var(--gutter-left);
   background: var(--surface-2);
   border-bottom: var(--line-1) solid var(--rule);
 }
@@ -375,7 +391,7 @@ a { color: var(--accent); }
 }
 
 /* The alerts sheet. */
-.sheet { padding: var(--space-6) var(--space-8) var(--space-11); max-width: var(--sheet-max); margin: 0 auto; }
+.sheet { padding: var(--space-6) var(--gutter-right) var(--space-11) var(--gutter-left); max-width: var(--sheet-max); margin: 0 auto; }
 .sheet__group { margin: 0 0 var(--space-10); }
 .sheet__heading { font-size: var(--text-6); color: var(--ink-2); text-transform: uppercase; letter-spacing: 0.04em; margin: 0 0 var(--space-4); }
 .sheet__state { margin: 0 0 var(--space-5); }
@@ -394,6 +410,8 @@ a { color: var(--accent); }
 .sheet__button[hidden] { display: none; }
 
 .actions { display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-7); font-size: var(--text-5); }
+/* A destructive action keeps to the far edge, away from the safe ones, in the danger colour. */
+.actions__danger { margin-left: auto; color: var(--blocked); }
 .agent__end { margin-left: auto; color: var(--blocked); }
 .form, .answer { display: grid; gap: var(--space-5); margin: var(--space-6) 0; }
 .field { display: grid; gap: var(--space-2); }
@@ -401,7 +419,7 @@ a { color: var(--accent); }
 .field__label { font-size: var(--text-4); color: var(--ink-3); }
 .field__note { margin: 0; font-size: var(--text-4); color: var(--ink-3); }
 input, select, textarea {
-  font: var(--text-7)/1.4 var(--sans);
+  font: var(--text-input)/1.4 var(--sans);
   color: var(--ink);
   background: var(--surface);
   border: var(--line-1) solid var(--rule);
@@ -465,6 +483,7 @@ textarea { resize: vertical; min-height: 4.5em; }
   min-height: var(--tap);
 }
 .button[disabled] { opacity: 0.5; }
+.button:active:not([disabled]) { border-color: var(--accent); }
 .button--danger { border-color: var(--blocked); color: var(--blocked); }
 .keys { display: grid; gap: var(--space-3); }
 .keys--pad { display: flex; flex-wrap: wrap; gap: var(--space-3); }
@@ -530,7 +549,11 @@ textarea { resize: vertical; min-height: 4.5em; }
   z-index: 2;
   display: grid;
   gap: var(--space-4);
-  padding: var(--space-4) max(var(--space-8), calc((100% - var(--page-max)) / 2 + var(--space-8))) calc(var(--space-4) + env(safe-area-inset-bottom));
+  padding:
+    var(--space-4)
+    max(var(--gutter-right), calc((100% - var(--page-max)) / 2 + var(--space-8)))
+    calc(var(--space-4) + env(safe-area-inset-bottom))
+    max(var(--gutter-left), calc((100% - var(--page-max)) / 2 + var(--space-8)));
   background: var(--surface);
   border-top: var(--line-1) solid var(--rule);
 }

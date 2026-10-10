@@ -1,13 +1,15 @@
 """The web layer's pure parts: the prose tree, card naming, the failure table, doctor."""
 
+import dataclasses
 from pathlib import Path
 
 import pytest
 
 from herdr_pwa.cli import doctor
-from herdr_pwa.decisions import AgentRow
+from herdr_pwa.decisions import AgentRow, decide_screen
 from herdr_pwa.engine.client import HerdrClient
 from herdr_pwa.engine.config import EngineSettings
+from herdr_pwa.engine.dialog import BlockedPrompt
 from herdr_pwa.engine.model import AgentStatus, PaneId, SessionId, as_pane_id
 from herdr_pwa.engine.transport import EngineUnavailable
 from herdr_pwa.jsontypes import JsonObject
@@ -17,11 +19,11 @@ from herdr_pwa.web.assets import STATIC_DIR, Assets
 from herdr_pwa.web.chat import is_long
 from herdr_pwa.web.failures import FAILURES, failure_for
 from herdr_pwa.web.markdown import TAGS, MdNode, render_tree
-from herdr_pwa.web.naming import card_title, display_title, page_title
+from herdr_pwa.web.naming import card_question, card_title, display_title, page_title
 from herdr_pwa.web.routers.compose import key_name, said
 from herdr_pwa.writes.answer import KeySent
 from herdr_pwa.writes.outcome import Evidence, Outcome
-from tests.webfakes import SNAPSHOT, FakeWire, agents_of, snapshot_frame
+from tests.webfakes import FIXTURES, SNAPSHOT, FakeWire, agents_of, snapshot_frame
 
 
 def _tags(nodes: tuple[MdNode, ...]) -> set[str]:
@@ -87,6 +89,23 @@ def _row(title: str, harness: str = "claude", workspace: str = "proj") -> AgentR
 )
 def test_card_title_shows_only_a_title_that_says_something(title: str, shown: str) -> None:
     assert card_title(_row(title)) == shown
+
+
+def _asking(screen: str) -> AgentRow:
+    answer = decide_screen(BlockedPrompt.parse(screen))
+    return dataclasses.replace(_row("t"), answer=answer)
+
+
+def test_card_question_prints_a_question_the_screen_gave() -> None:
+    screen = (FIXTURES / "capture-blocked-permission-prompt" / "detection.txt").read_text()
+    assert card_question(_asking(screen)) == "Do you want to proceed?"
+
+
+def test_card_question_never_prints_a_bare_prompt_glyph() -> None:
+    # No captured blocked screen reads as this; an unreadable one still must not print it.
+    rule = "\u2500" * 40
+    assert card_question(_asking(f"{rule}\n\u276f \n{rule}\n")) == ""
+    assert card_question(_row("t")) == ""
 
 
 def test_display_title_strips_only_leading_glyphs() -> None:

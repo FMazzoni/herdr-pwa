@@ -47,9 +47,10 @@
 {%- else %}<p class="option option--still{% if row.checked is not none %} option--boxed{% endif %}">{{ option_body(row) }}</p>{% endif %}
 {%- endmacro %}
 
-{# A card in a list. `href` makes the whole card the link, with a chevron on its first line; `inner` is the tag otherwise. #}
-{% macro card(status, href=none, id=none, inner="div") -%}
-<li class="card card--{{ status }}"{% if id %} id="{{ id }}"{% endif %}>
+{# A card in a list. `href` makes the whole card the link, with a chevron on its first line; `inner` is the tag otherwise.
+   `key` names what the card shows, so a poll that re-sorts the list can hold it under the thumb. #}
+{% macro card(status, href=none, id=none, inner="div", key=none) -%}
+<li class="card card--{{ status }}"{% if id %} id="{{ id }}"{% endif %}{% if key %} data-hp-key="{{ key }}"{% endif %}>
   {%- if href %}<a class="card__link card__link--go" href="{{ href }}">{% else %}<{{ inner }} class="card__link">{% endif %}{{ caller() }}{% if href %}<span class="card__chevron" aria-hidden="true"></span></a>{% else %}</{{ inner }}>{% endif -%}
 </li>
 {%- endmacro %}

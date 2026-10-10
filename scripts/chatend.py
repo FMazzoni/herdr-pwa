@@ -1,6 +1,7 @@
 """Drive the Chat and Pane tabs in headless Firefox: each opens on its newest line, follows new
 lines while the reader is at the end, and leaves a reader who scrolled up where they were. An
-agent that is asking opens at the top instead, with its question on the first screen."""
+agent that is asking opens at the top instead, with its question on the first screen. A tool's
+result the reader opened stays open across a poll, and the page does not move under them."""
 
 import time
 from collections.abc import Callable
@@ -10,6 +11,7 @@ from pathlib import Path
 from firefox import Marionette, phone_window
 from starlette.types import ASGIApp
 
+from herdr_pwa.jsontypes import JsonObject
 from tests.catalogue import (
     AGENT,
     BLOCKED,
@@ -65,6 +67,28 @@ return {
 };
 """
 POKE = "htmx.trigger(document.body, 'hp:poke');"
+# Lines in the tool's result: open, it is taller than the screen.
+RESULT_LINES = 120
+# How far under the dock's top edge the newest turn may end and still count as the end (app.js).
+END_SLACK = 120
+
+# Open the last tool result and bring the middle of its output to the middle of the screen.
+OPEN_RESULT = r"""
+const details = [...document.querySelectorAll("#agent-view details.turn__result")].pop();
+if (!details) return false;
+details.querySelector("summary").click();
+const out = details.querySelector("pre").getBoundingClientRect();
+window.scrollBy(0, out.top + out.height / 2 - innerHeight / 2);
+window.__hpSwaps = 0;
+document.addEventListener("htmx:afterSettle", () => { window.__hpSwaps += 1; });
+return true;
+"""
+READ_RESULT = r"""
+const details = [...document.querySelectorAll("#agent-view details.turn__result")].pop();
+const busy = document.querySelector(".htmx-request, .htmx-swapping, .htmx-settling");
+return { open: !!(details && details.open), scrollY: window.scrollY,
+  swaps: window.__hpSwaps || 0, busy: !!busy };
+"""
 
 
 @dataclass(frozen=True)
@@ -164,6 +188,68 @@ def asked(driver: Marionette, base: str, tab: Tab, _rig: Rig, _home: Path) -> li
     return [f"{tab.name}: the question sits at {top:.0f}..{bottom:.0f}px, off the first screen"]
 
 
+def _tool_chat(turns: int) -> list[JsonObject]:
+    """A long chat whose last exchange is a tool call with a long result, then a short reply."""
+    call: JsonObject = {
+        "type": "assistant",
+        "uuid": "call",
+        "timestamp": "2026-10-10T10:00:01.000Z",
+        "message": {
+            "role": "assistant",
+            "content": [
+                {"type": "tool_use", "id": "tu1", "name": "Bash", "input": {"command": "make test"}}
+            ],
+        },
+    }
+    output = "\n".join(f"test {n:03d} passed" for n in range(RESULT_LINES))
+    result: JsonObject = {
+        "type": "user",
+        "uuid": "res",
+        "timestamp": "2026-10-10T10:00:02.000Z",
+        "message": {
+            "role": "user",
+            "content": [{"type": "tool_result", "tool_use_id": "tu1", "content": output}],
+        },
+    }
+    return [
+        *long_chat(turns),
+        call,
+        result,
+        assistant_says("Reply after the tests: all green.", uuid="end"),
+    ]
+
+
+def kept_open(driver: Marionette, base: str, tab: Tab, _rig: Rig, _home: Path) -> list[str]:
+    """Open a tool's result far from the end; a poll leaves it open and the page where it was."""
+    driver.send("WebDriver:Navigate", {"url": base + tab.state.path})
+    if not _wait_for(driver, tab.newest) or not driver.script(OPEN_RESULT):
+        return [f"{tab.name}: never drew its tool result"]
+    time.sleep(SETTLE_SECONDS)
+    seen = _probe(driver)
+    if _num(seen, "bottom") <= _num(seen, "dock") + END_SLACK:
+        return [f"{tab.name}: the reader is at the end, so it proves nothing"]
+    before = driver.script(READ_RESULT)
+    driver.script(POKE)
+    deadline = time.monotonic() + WAIT_SECONDS
+    after: object = None
+    while time.monotonic() < deadline:
+        after = driver.script(READ_RESULT)
+        if isinstance(after, dict) and after.get("swaps") and not after.get("busy"):
+            break
+        time.sleep(0.1)
+    time.sleep(SETTLE_SECONDS)
+    after = driver.script(READ_RESULT)
+    if not isinstance(before, dict) or not isinstance(after, dict) or not after.get("swaps"):
+        return [f"{tab.name}: the poll never redrew the chat"]
+    problems: list[str] = []
+    if not after.get("open"):
+        problems.append(f"{tab.name}: the tool result the reader opened closed on a poll")
+    start, end = _num(before, "scrollY"), _num(after, "scrollY")
+    if abs(end - start) > DRIFT:
+        problems.append(f"{tab.name}: a poll moved the reader from {start:.0f}px to {end:.0f}px")
+    return problems
+
+
 def _tabs() -> tuple[tuple[Tab, Callable[[Marionette, str, Tab, Rig, Path], list[str]]], ...]:
     blocked = runner(lambda: herd(**BLOCKED), long_pane(LINES) + capture(MENU))
     chat = State("chat", f"{AGENT}?tab=chat", "", runner(snapshot_frame), long_chat(TURNS))
@@ -172,7 +258,9 @@ def _tabs() -> tuple[tuple[Tab, Callable[[Marionette, str, Tab, Rig, Path], list
     asking_pane = State("asking pane", pane.path, "", blocked)
     last_reply = f"Reply {TURNS - 1}:"
     last_line = f"step {LINES - 1:03d}"
+    tool = State("tool result", chat.path, "", runner(snapshot_frame), _tool_chat(TURNS))
     return (
+        (Tab("tool result", tool, "Reply after the tests", _say), kept_open),
         (Tab("chat end", chat, last_reply, _say), follow),
         (Tab("pane end", pane, last_line, _print), follow),
         (Tab("chat question", asking_chat, last_reply, _say), asked),

@@ -273,3 +273,14 @@ def test_the_worker_and_app_post_to_the_same_push_routes() -> None:
     for route in ("/push/key", "/push/subscribe", "/push/unsubscribe"):
         assert route in worker
         assert route in app
+
+
+def test_the_status_bar_is_the_top_bars_colour() -> None:
+    # Standalone, iOS paints the status bar in theme-color right above the sticky top bar.
+    surface = re.search(r"--surface: (#[0-9A-Fa-f]{6});", (STATIC_DIR / "app.css").read_text())
+    assert surface is not None
+    base = (STATIC_DIR.parent / "templates" / "base.html").read_text()
+    assert f'<meta name="theme-color" content="{surface.group(1)}">' in base
+    manifest = as_object(loads(MANIFEST.read_text()))
+    assert manifest is not None
+    assert manifest["theme_color"] == surface.group(1)
