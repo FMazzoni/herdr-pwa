@@ -45,3 +45,10 @@ def key_ends_question(prompt: BlockedPrompt | None, key: str) -> bool:
     if prompt.stepper is not None or prompt.shape is not MenuShape.SINGLE_CHOICE:
         return False
     return key == "enter" or key in answer_digits(prompt)
+
+
+def control_token(prompt: BlockedPrompt) -> str:
+    """What a control carries to prove which question it was drawn for."""
+    # The question as posed, not the raw screen: a status line's clock flipped the raw digest
+    # between drawing a control and tapping it, refusing taps on a question that never moved.
+    return prompt.identity or prompt.fingerprint

@@ -9,7 +9,7 @@ from herdr_pwa.engine.client import INTERRUPT_KEY, HerdrClient
 from herdr_pwa.engine.dialog import BlockedPrompt
 from herdr_pwa.engine.model import Agent, AgentStatus, PaneId, SessionId
 from herdr_pwa.engine.transport import EngineError
-from herdr_pwa.writes.keys import PAD_KEYS, allowed_keys, key_ends_question
+from herdr_pwa.writes.keys import PAD_KEYS, allowed_keys, control_token, key_ends_question
 from herdr_pwa.writes.outcome import (
     UNREADABLE,
     Evidence,
@@ -58,11 +58,11 @@ def _check(
 ) -> Refused | None:
     if key not in allowed_keys(prompt):
         return Refused(Refusal.KEY_NOT_OFFERED, _VERB, prompt=prompt)
-    # An interrupt has to work while the screen is moving, so it skips the fingerprint.
+    # An interrupt has to work while the screen is moving, so it skips the token check.
     if key == INTERRUPT_KEY:
         return None if confirmed else Refused(Refusal.CONFIRM, _VERB, prompt=prompt)
-    if prompt is not None and drawn_from != prompt.fingerprint:
-        return Refused(Refusal.SCREEN_CHANGED, _VERB, screen=prompt.fingerprint, prompt=prompt)
+    if prompt is not None and drawn_from != control_token(prompt):
+        return Refused(Refusal.SCREEN_CHANGED, _VERB, screen=control_token(prompt), prompt=prompt)
     return None
 
 
@@ -117,7 +117,7 @@ class KeyAsk:
     session: SessionId
     key: str
     expected_target: PaneId | None = None
-    # The fingerprint of the screen the control was drawn from.
+    # The token of the question the control was drawn for (keys.control_token).
     drawn_from: str = ""
     confirmed: bool = False
 

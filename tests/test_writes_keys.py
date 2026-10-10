@@ -8,14 +8,14 @@ from herdr_pwa.engine.dialog import BlockedPrompt
 from herdr_pwa.engine.transport import EngineUnavailable
 from herdr_pwa.jsontypes import JsonObject
 from herdr_pwa.writes.answer import KeyAsk, KeySent, send_key, send_starting_key
-from herdr_pwa.writes.keys import allowed_keys, answer_digits, key_ends_question
+from herdr_pwa.writes.keys import allowed_keys, answer_digits, control_token, key_ends_question
 from herdr_pwa.writes.outcome import Evidence, Outcome
 from herdr_pwa.writes.refusal import Refusal, Refused
 from tests._fake_herd import P3, P5, S1, S2, SETTLED, FakeHerd, Rig, capture, rig
 
 SEND_KEYS = "agent.send_keys"
 PERMISSION = capture("capture-blocked-permission-prompt")
-FINGERPRINT = BlockedPrompt.parse(PERMISSION).fingerprint
+FINGERPRINT = control_token(BlockedPrompt.parse(PERMISSION))
 
 
 def blocked_rig(tmp_path: Path, screen: str = PERMISSION) -> Rig:
@@ -61,7 +61,7 @@ def test_an_enter_that_was_acked_but_did_nothing_is_unconfirmed_and_not_resent(
     assert (result.outcome, result.evidence) == (Outcome.UNCONFIRMED, Evidence.UNMOVED)
     assert len(r.herd.writes(SEND_KEYS)) == 1
     assert result.prompt is not None
-    assert result.prompt.fingerprint == FINGERPRINT
+    assert control_token(result.prompt) == FINGERPRINT
 
 
 def test_a_key_into_a_recycled_pane_is_refused_on_the_wire(tmp_path: Path) -> None:
@@ -147,7 +147,9 @@ def test_a_navigation_key_redraws_the_controls_from_the_screen_it_made(tmp_path:
     r.herd.screens[P3] = [PERMISSION, moved]
     result = sent(send_key(r.writer, KeyAsk(S1, "down", drawn_from=FINGERPRINT)))
     assert result.prompt is not None
-    assert result.prompt.fingerprint != FINGERPRINT
+    # The cursor moved inside one question, so the redrawn controls still take the next tap.
+    again = send_key(r.writer, KeyAsk(S1, "down", drawn_from=control_token(result.prompt)))
+    assert isinstance(again, KeySent)
 
 
 def test_a_starting_agent_stopped_at_a_trust_dialog_takes_pad_keys_by_address(
@@ -197,3 +199,16 @@ def test_which_keys_end_a_question() -> None:
     assert key_ends_question(prompt, "enter")
     assert not key_ends_question(prompt, "down")
     assert key_ends_question(None, "ctrl-c")
+
+
+def test_a_status_line_ticking_does_not_make_a_still_question_stale(tmp_path: Path) -> None:
+    """The raw screen moved (an animated bullet) and the question did not: the tap goes through."""
+    r = blocked_rig(tmp_path)
+    r.herd.screens[P3] = [PERMISSION.replace("\u25cf I'll run that.", "\u25d0 I'll run that.")]
+    drawn = FINGERPRINT
+    assert (
+        BlockedPrompt.parse(r.herd.screens[P3][0]).fingerprint
+        != BlockedPrompt.parse(PERMISSION).fingerprint
+    )
+    result = send_key(r.writer, KeyAsk(S1, "esc", drawn_from=drawn))
+    assert isinstance(result, KeySent), result

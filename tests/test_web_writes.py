@@ -12,13 +12,14 @@ from herdr_pwa.engine.dialog import BlockedPrompt
 from herdr_pwa.engine.model import screen_digest
 from herdr_pwa.settings import Settings
 from herdr_pwa.web.app import create_app
+from herdr_pwa.writes.keys import control_token
 from herdr_pwa.writes.outcome import Pacing
 from tests._fake_herd import P3, S1, S2, SETTLED, FakeClock, FakeHerd, capture
 from tests.webfakes import IDENTITY
 
 ORIGIN = {"Origin": "http://testserver"}
 PERMISSION = capture("capture-blocked-permission-prompt")
-FINGERPRINT = BlockedPrompt.parse(PERMISSION).fingerprint
+FINGERPRINT = control_token(BlockedPrompt.parse(PERMISSION))
 
 
 @dataclass

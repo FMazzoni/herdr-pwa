@@ -12,6 +12,7 @@ from herdr_pwa.engine.client import HerdrClient
 from herdr_pwa.engine.config import EngineSettings
 from herdr_pwa.engine.model import Agent, AgentStatus, PaneId, SessionId
 from herdr_pwa.writes.answer import KeyAsk, KeySent, send_key, send_starting_key
+from herdr_pwa.writes.keys import control_token
 from herdr_pwa.writes.lifecycle import (
     OPENCODE_ASK,
     AgentEnded,
@@ -129,7 +130,7 @@ def _answer_permission(writer: Writer, session: SessionId, pane: PaneId, probe: 
     say("send_key with a stale fingerprint", repr(stale))
     assert isinstance(stale, Refused)
     assert stale.refusal is Refusal.SCREEN_CHANGED
-    tapped = send_key(writer, KeyAsk(session, "1", drawn_from=question.fingerprint))
+    tapped = send_key(writer, KeyAsk(session, "1", drawn_from=control_token(question)))
     say("send_key 1 (Yes)", repr(tapped))
     assert isinstance(tapped, KeySent)
     assert tapped.outcome is Outcome.CONFIRMED
