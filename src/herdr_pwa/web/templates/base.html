@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<meta name="referrer" content="same-origin">
+<meta name="hp-build" content="{{ build }}">
+{# Eval off and no injected indicator <style>, so htmx lives inside the CSP. #}
+<meta name="htmx-config" content='{"includeIndicatorStyles":false,"allowEval":false,"allowScriptTags":false}'>
+<title>{% block title %}herdr{% endblock %}</title>
+<link rel="icon" href="{{ asset('icon.svg') }}" type="image/svg+xml">
+<link rel="stylesheet" href="{{ asset('app.css') }}">
+<script src="{{ asset('htmx.min.js') }}" defer></script>
+<script src="{{ asset('app.js') }}" defer></script>
+{% block head %}{% endblock %}
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="/">herdr</a>
+  {% block topbar %}{% endblock %}
+</header>
+{% block body %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="herdr control room">
+  <title>herdr control room</title>
+  <!--
+    A PROMPT, WAITING FOR YOU.
+
+    Family resemblance to herdr, deliberately not a copy of it. herdr's own mark
+    is a ram in silhouette with a terminal prompt for its face, charcoal on pale
+    grey. The RAM is their identity and is not ours to take; the PROMPT is the
+    shared vocabulary, and it is what this app is about: the moment an agent
+    stops and waits for a person. So this is the prompt alone, on our own dark
+    ground, which inverts theirs. A companion, plainly related, plainly not the
+    same project.
+
+    THE CURSOR IS THE WHOLE IDEA. It is `blocked` #E8705A, the exact colour a
+    card wears on the feed when an agent needs you, so the icon on the home
+    screen and the row in the app make the same claim in the same colour. A grey
+    cursor would be a terminal; a warm one is a terminal that is WAITING.
+
+    Two earlier attempts are recorded because both were instructive. Three dots
+    beside three bars was the universal to-do-list icon. An even radial scatter
+    around a centred alert read as a network hub with satellites, which is a
+    grid in polar form and the same mistake in a costume; its centred ring also
+    looked like a record button.
+
+    Colours are lifted from static/app.css and not invented here: ground #0F1620
+    is `frame`, the chevron #9BAEC3 is `ink-2`, the cursor #E8705A is `blocked`.
+
+    MASKABLE SAFE ZONE. Android may crop to a circle of r=205 about (256,256),
+    and a mask must never cut into transparency, so the ground is full-bleed.
+    Computed, not eyeballed — the first version of this file asserted numbers
+    nobody had worked out and tests/test_pwa.py caught it: the cursor's far
+    corner was 230 from centre against the 205 a circular mask allows, so a
+    round mask would have clipped the end off the cursor. Now the chevron's
+    farthest point including its round cap reaches 148, and the cursor's far
+    corner 189. Both inside 205.
+
+    The chevron is a stroked polyline with round caps rather than a filled path:
+    a filled chevron needs its inner and outer edges to stay parallel at every
+    raster size, and at 48px they do not.
+  -->
+  <rect width="512" height="512" fill="#0F1620"/>
+
+  <polyline points="196,146 322,256 196,366"
+            fill="none" stroke="#9BAEC3" stroke-width="46"
+            stroke-linecap="round" stroke-linejoin="round"/>
+
+  <rect x="306" y="330" width="104" height="36" rx="18" fill="#E8705A"/>
+</svg>

@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Workspaces &mdash; herdr{% endblock %}
+{% block body %}
+<main class="feed-host">
+  <h2 class="group__head"><span class="group__label">Workspaces</span><span class="group__n">{{ workspaces|length }}</span></h2>
+  <ul class="cards">
+    {% for ws in workspaces %}
+    <li class="card card--{{ ws.status.value }}">
+      <div class="card__link">
+        <span class="card__top">
+          <span class="dot dot--{{ ws.status.value }}" aria-hidden="true"></span>
+          <span class="card__title">{{ ws.label or ws.workspace_id }}</span>
+          <span class="card__status">{{ ws.status.value }}</span>
+        </span>
+        <span class="card__meta">
+          <span>{{ counts.get(ws.workspace_id, 0) }} agent{{ "" if counts.get(ws.workspace_id, 0) == 1 else "s" }}</span>
+          <span>{{ ws.tab_count }} tab{{ "" if ws.tab_count == 1 else "s" }}</span>
+          <span>{{ ws.pane_count }} pane{{ "" if ws.pane_count == 1 else "s" }}</span>
+        </span>
+      </div>
+    </li>
+    {% else %}
+    <li class="empty">No workspaces.</li>
+    {% endfor %}
+  </ul>
+</main>
+{% endblock %}

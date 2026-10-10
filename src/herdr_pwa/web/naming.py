@@ -1,0 +1,42 @@
+"""What a card calls an agent: a title only when it says something the card does not."""
+
+import re
+import unicodedata
+from typing import Final
+
+from herdr_pwa.decisions import AgentRow
+
+# Spinner and status glyphs a harness prefixes its terminal title with.
+_GLYPH_CATEGORIES: Final = frozenset({"So", "Sk"})
+_MAX_GLYPHS: Final = 4
+# A harness's placeholder for a session it has not named yet.
+_UNNAMED: Final = re.compile(r"^new session\s*-\s*\S+$", re.IGNORECASE)
+# A shell's `user@host:~/dir` prompt title names a place, not the work.
+_LOCATOR: Final = re.compile(r"^[^\s@:]+@[^\s@:]+(?::\S*)?$")
+
+
+def _is_glyph(character: str) -> bool:
+    return unicodedata.category(character) in _GLYPH_CATEGORIES
+
+
+def display_title(title: str) -> str:
+    """Strip up to a few leading status glyphs off a terminal title."""
+    text = title.lstrip()
+    removed = 0
+    while text and removed < _MAX_GLYPHS and _is_glyph(text[0]):
+        text = text[1:].lstrip()
+        removed += 1
+    return text.strip() or title.strip()
+
+
+def _glyphs_only(text: str) -> bool:
+    return all(c.isspace() or _is_glyph(c) for c in text)
+
+
+def card_title(row: AgentRow) -> str:
+    """The title a feed card prints, or ``""`` when there is none worth printing."""
+    text = display_title(row.title)
+    if not text or _glyphs_only(text) or _UNNAMED.match(text) or _LOCATOR.match(text):
+        return ""
+    rejects = {row.harness.strip().casefold(), row.workspace.strip().casefold()} - {""}
+    return "" if text.casefold() in rejects else text

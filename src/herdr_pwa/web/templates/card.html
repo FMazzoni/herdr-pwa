@@ -1,0 +1,23 @@
+{% set title = card_title(row) %}
+<li class="card card--{{ row.effective_status.value }}">
+  {% if row.session %}<a class="card__link" href="/agent/{{ row.session|urlencode }}">{% else %}<div class="card__link">{% endif %}
+    <span class="card__top">
+      <span class="dot dot--{{ row.effective_status.value }}" aria-hidden="true"></span>
+      <span class="card__title">{{ title or row.harness or row.target }}</span>
+      <span class="card__status">{{ row.effective_status.value }}</span>
+    </span>
+    <span class="card__meta">
+      {% if title and row.harness %}<span class="card__harness">{{ row.harness }}</span>{% endif %}
+      {% if row.workspace %}<span class="card__ws">{{ row.workspace }}</span>{% endif %}
+      <span class="card__pane">{{ row.target }}</span>
+    </span>
+    {% if row.answer and row.answer.question %}
+    <span class="card__question">{{ row.answer.question }}</span>
+    {% if row.answer.options %}
+    <span class="card__options">
+      {% for option in row.answer.options %}<span class="card__option">{{ option.number }}. {{ option.label }}</span>{% endfor %}
+    </span>
+    {% endif %}
+    {% endif %}
+  {% if row.session %}</a>{% else %}</div>{% endif %}
+</li>
