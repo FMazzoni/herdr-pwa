@@ -19,6 +19,20 @@ geometry:
 geometry-force:
     uv run python scripts/geometry_gate.py --force
 
+# WebKit as an iPhone (390x844 at 3x, touch, Safari's UA) and at 320px: a first-viewport and a
+# full-page PNG per catalogue state under .agents/shots/. For eyes, not a gate; skips without WebKit.
+shots *KEYS:
+    uv run python scripts/shots.py {{KEYS}}
+
+# The old app | this one, per state key, as an HTML contact sheet under .agents/sheets/.
+# --embed --out PATH writes one self-contained file; --left DIR compares against saved shots.
+sheet *ARGS:
+    uv run python scripts/sheet.py {{ARGS}}
+
+# The browser the shots use; a dev tool, fetched into ~/.cache/ms-playwright, never committed.
+webkit:
+    uv run playwright install webkit
+
 # Print the latest phone device report from the state dir (HP_STATE_DIR, default ~/.config/herdr-pwa-v2).
 device-report *args:
     uv run herdr-pwa device-report {{args}}

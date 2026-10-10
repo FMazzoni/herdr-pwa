@@ -219,8 +219,9 @@ a { color: var(--accent); }
 .sheet__state { margin: 0 0 10px; }
 .sheet__note { color: var(--ink-3); font-size: 12.5px; margin: 8px 0; }
 .sheet__note--warn { color: var(--unknown); }
-.sheet__row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 8px 0; }
+.sheet__row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 8px 0; min-height: 44px; }
 .sheet__button {
+  min-height: 44px;
   padding: 10px 14px;
   color: var(--ink);
   background: var(--surface);
@@ -234,7 +235,7 @@ a { color: var(--accent); }
 .agent__end { margin-left: auto; color: var(--blocked); }
 .form, .composer, .answer { display: grid; gap: 10px; margin: 12px 0; }
 .field { display: grid; gap: 4px; }
-.field--check { display: flex; align-items: center; gap: 8px; }
+.field--check { display: flex; align-items: center; gap: 8px; min-height: 44px; }
 .field__label { font-size: 12px; color: var(--ink-3); }
 .field__note { margin: 0; font-size: 12px; color: var(--ink-3); }
 input, select, textarea {
@@ -246,6 +247,9 @@ input, select, textarea {
   padding: 8px 10px;
   max-width: 100%;
 }
+input, select { min-height: 44px; }
+/* A checkbox is drawn small; the label row around it is the 44px target. */
+input[type=checkbox] { min-height: 0; width: 22px; height: 22px; margin: 0; }
 textarea { resize: vertical; min-height: 4.5em; }
 .button {
   font: 600 14px/1 var(--sans);
@@ -268,4 +272,4 @@ textarea { resize: vertical; min-height: 4.5em; }
 /* While a write is in flight, leaving would hide whether it landed. */
 .is-sending .leave { pointer-events: none; opacity: 0.4; }
 /* Text links that act are thumb targets too. */
-.actions a, a.leave { display: inline-flex; align-items: center; min-height: 44px; min-width: 44px; }
+.actions a, a.leave, main > p > a:only-child { display: inline-flex; align-items: center; min-height: 44px; min-width: 44px; }

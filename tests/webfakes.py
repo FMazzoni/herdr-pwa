@@ -52,21 +52,22 @@ def agents_of(frame: JsonObject) -> list[JsonObject]:
     return [_object(a) for a in agents]
 
 
-def read_frame(text: str) -> JsonObject:
-    """An ``agent.read`` reply carrying ``text``."""
+def read_frame(text: str, pane: str = WORKING_PANE) -> JsonObject:
+    """An ``agent.read`` reply carrying ``text``, read from ``pane``."""
+    workspace = pane.split(":", 1)[0]
     return {
         "id": "x",
         "result": {
             "type": "pane_read",
             "read": {
                 "format": "ansi",
-                "pane_id": WORKING_PANE,
+                "pane_id": pane,
                 "revision": 7,
                 "source": "visible",
-                "tab_id": "w1:t1",
+                "tab_id": f"{workspace}:t1",
                 "text": text,
                 "truncated": False,
-                "workspace_id": "w1",
+                "workspace_id": workspace,
             },
         },
     }
@@ -74,7 +75,11 @@ def read_frame(text: str) -> JsonObject:
 
 @dataclass
 class FakeWire:
-    """Answers each socket method with a canned frame or raises the canned failure."""
+    """Answers each socket method with a canned frame or raises the canned failure.
+
+    A key of ``"<method> <target>"`` answers that method for one pane only, ahead of the
+    plain ``"<method>"`` key that answers it for every other pane.
+    """
 
     replies: dict[str, Reply] = field(default_factory=dict[str, Reply])
     calls: list[str] = field(default_factory=list[str])
@@ -87,9 +92,11 @@ class FakeWire:
         timeout: float | None = None,
         idempotent: bool = True,
     ) -> JsonObject:
-        del params, timeout, idempotent
+        del timeout, idempotent
         self.calls.append(method)
-        reply = self.replies.get(method)
+        target = params.get("target")
+        reply = self.replies.get(f"{method} {target}") if isinstance(target, str) else None
+        reply = reply if reply is not None else self.replies.get(method)
         if reply is None:
             raise AssertionError(f"the test gave no reply for {method}")
         if isinstance(reply, Exception):
