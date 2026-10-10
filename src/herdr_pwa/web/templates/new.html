@@ -11,7 +11,7 @@
     {% call ui.field("Kind") %}
       <select name="kind">{% for kind in kinds %}<option value="{{ kind }}"{% if kind == values.get('kind') %} selected{% endif %}>{{ kind }}</option>{% endfor %}</select>
     {% endcall %}
-    <p class="field__note">opencode is started with bash set to ask, so it stops and asks you rather than running every command unasked.</p>
+    <p class="field__note">opencode starts with bash set to ask, so it stops and asks before running a command.</p>
     {% call ui.field("Model (optional)") %}<input name="model" value="{{ values.get('model', '') }}" list="models">{% endcall %}
     <datalist id="models">{% for kind, names in models.items() %}{% for name in names %}<option value="{{ name }}">{{ kind }}</option>{% endfor %}{% endfor %}</datalist>
     <p class="field__note">Only claude offers a model choice here; the others start on their own default.</p>
