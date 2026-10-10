@@ -327,6 +327,8 @@ class FeedView:
     sections: tuple[Section, ...]
     chips: tuple[Chip, ...]
     selected: str
+    label: str
+    counts: Mapping[AgentStatus, int]
 
 
 def _chips(rows: tuple[AgentRow, ...], selected: str) -> tuple[Chip, ...]:
@@ -336,7 +338,9 @@ def _chips(rows: tuple[AgentRow, ...], selected: str) -> tuple[Chip, ...]:
         if row.workspace_id:
             counts[row.workspace_id] = counts.get(row.workspace_id, 0) + 1
             labels.setdefault(row.workspace_id, row.workspace or row.workspace_id)
-    return tuple(Chip(ws, labels[ws], n, ws == selected) for ws, n in counts.items())
+    chips = (Chip(ws, labels[ws], n, ws == selected) for ws, n in counts.items())
+    # The chip that is on leads the strip, so the filter in force is never scrolled out of sight.
+    return tuple(sorted(chips, key=lambda chip: not chip.on))
 
 
 def _narrow(section: Section, selected: str) -> Section:
@@ -348,12 +352,20 @@ def _narrow(section: Section, selected: str) -> Section:
     )
 
 
+def _rest_counts(sections: tuple[Section, ...]) -> dict[AgentStatus, int]:
+    # Needs-you is counted whole-herd on its own; these are the rest, in this workspace.
+    rest = {s.key: s.count for s in sections if s.key is not AgentStatus.BLOCKED}
+    return {**dict.fromkeys(AgentStatus, 0), **rest}
+
+
 def feed_view(herd: HerdDecision, selected: str) -> FeedView:
     """The feed narrowed to one workspace; an unknown or empty ``selected`` shows everyone."""
     chips = _chips(herd.rows, selected)
-    if not any(chip.on for chip in chips):
-        selected = ""
+    on = next((chip for chip in chips if chip.on), None)
+    selected = on.workspace_id if on else ""
     narrowed = (_narrow(s, selected) for s in herd.sections)
     sections = tuple(s for s in narrowed if s.rows or s.key is AgentStatus.BLOCKED)
+    counts = _rest_counts(sections) if on else herd.counts
     # One workspace leaves nothing to choose between.
-    return FeedView(sections, chips if len(chips) > 1 else (), selected)
+    shown = chips if len(chips) > 1 else ()
+    return FeedView(sections, shown, selected, on.label if on else "", counts)

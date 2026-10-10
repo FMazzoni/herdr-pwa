@@ -43,6 +43,11 @@ SCROLL_ALLOWED: dict[str, str] = {
         "a tool's output, which is terminal text with the same column meaning as code; it "
         "scrolls in its own box and the page around it does not move"
     ),
+    ".chips": (
+        "the feed's workspace filter: one row of pills that pans sideways so a long list of "
+        "workspaces costs one line, not several; it starts inside the 16px back-swipe gutter "
+        "and a fade at its right edge says more pills are there"
+    ),
 }
 
 TAP_ALLOWED: dict[str, str] = {

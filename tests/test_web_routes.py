@@ -91,8 +91,12 @@ def test_a_workspace_filter_narrows_all_but_needs_you(tmp_path: Path) -> None:
     assert f'href="/agent/{WORKING_SESSION}"' in body
     assert "w4:p1" in body
     assert "w2:p1" not in body
-    assert 'class="chip chip--on" href="/?ws=w4" aria-current="true" data-hp-replace' in body
-    assert body.index("Needs you") < body.index('class="chips"')
+    chips = body[body.index('class="chips"') :]
+    assert chips.index('href="/?ws=w4" aria-current="true" data-hp-replace') < chips.index(
+        'href="/"'
+    )
+    assert body.index('class="chips"') < body.index("Needs you") < body.index("always shown")
+    assert "in notes:" in body
 
 
 def test_an_unknown_workspace_filter_shows_the_whole_herd(tmp_path: Path) -> None:

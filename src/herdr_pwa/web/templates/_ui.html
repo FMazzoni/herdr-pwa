@@ -4,7 +4,7 @@
 {% macro dot(status) %}<span class="dot dot--{{ status }}" aria-hidden="true"></span>{% endmacro %}
 
 {# The small-caps header over a group or a page, with an optional count beside it. #}
-{% macro section_head(label, n=none) %}<h2 class="group__head"><span class="group__label">{{ label }}</span>{% if n is not none %}<span class="group__n">{{ n }}</span>{% endif %}</h2>{% endmacro %}
+{% macro section_head(label, n=none, note=none) %}<h2 class="group__head"><span class="group__label">{{ label }}</span>{% if n is not none %}<span class="group__n">{{ n }}</span>{% endif %}{% if note %}<span class="group__note">{{ note }}</span>{% endif %}</h2>{% endmacro %}
 
 {# A coloured-edge notice. `what` is the bold claim, `why` the reason; a call block adds free text. #}
 {% macro banner(kind, what=none, why=none, role="status", sent=false) -%}
@@ -34,9 +34,9 @@
 </li>
 {%- endmacro %}
 
-{# A filter chip: a 44px link that narrows a list in place; `attrs` carries its history rule. #}
+{# A filter pill: a 44px link around a smaller drawn pill; `attrs` carries its history rule. #}
 {% macro chip(label, href, count=none, on=false, attrs="") -%}
-<a class="chip{% if on %} chip--on{% endif %}" href="{{ href }}"{% if on %} aria-current="true"{% endif %} {{ attrs }}><span class="chip__label">{{ label }}</span>{% if count is not none %}<span class="chip__n">{{ count }}</span>{% endif %}</a>
+<a class="chip{% if on %} chip--on{% endif %}" href="{{ href }}"{% if on %} aria-current="true"{% endif %} {{ attrs }}><span class="chip__pill"><span class="chip__label">{{ label }}</span>{% if count is not none %}<span class="chip__n">{{ count }}</span>{% endif %}</span></a>
 {%- endmacro %}
 
 {# The first line of a card: status dot, a title that ellipsizes, and the status word. #}
