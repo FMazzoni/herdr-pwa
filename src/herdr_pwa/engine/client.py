@@ -3,7 +3,7 @@
 import logging
 import threading
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from functools import cache
 from typing import Final, NamedTuple, TypeVar, cast, get_args
 
@@ -624,13 +624,18 @@ class HerdrClient:
         workspace_id: str,
         cwd: str,
         label: str,
+        env: Mapping[str, str] | None = None,
         timeout: float | None = None,
     ) -> str:
         """Make a new tab with one shell pane in it, and return its root pane."""
         payload = self._call(
             wire_request.TabCreateRequest,
             wire_request.TabCreateParams(
-                workspace_id=workspace_id, cwd=cwd, label=label, focus=False
+                workspace_id=workspace_id,
+                cwd=cwd,
+                label=label,
+                focus=False,
+                env=dict(env) if env else None,
             ),
             timeout=timeout,
         )
@@ -729,7 +734,7 @@ class HerdrClient:
         """End every agent in a workspace at once -- the largest write this app makes."""
         return self._call(
             wire_request.WorkspaceCloseRequest,
-            wire_request.WorkspaceTarget(workspace_id=workspace_id),
+            wire_request.WorkspaceCloseParams(workspace_id=workspace_id),
             timeout=timeout,
         )
 

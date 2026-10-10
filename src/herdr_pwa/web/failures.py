@@ -1,11 +1,12 @@
 """Every failure the web layer can meet, mapped once to a status and an honest screen."""
 
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Final
 
 from fastapi import FastAPI, Request
-from fastapi.responses import Response
+from fastapi.responses import HTMLResponse, Response
 
 from herdr_pwa.auth import AuthError
 from herdr_pwa.decisions import IDLE_CADENCE
@@ -20,6 +21,7 @@ from herdr_pwa.engine.transport import (
     TargetNotFound,
 )
 from herdr_pwa.web.render import Pages
+from herdr_pwa.writes.refusal import Refused
 
 log = logging.getLogger(__name__)
 
@@ -144,3 +146,18 @@ def install(app: FastAPI, pages: Pages) -> None:
 
     for kind, _ in FAILURES:
         app.add_exception_handler(kind, handle)
+
+
+def refused(
+    pages: Pages,
+    name: str,
+    context: Mapping[str, object],
+    result: Refused,
+    *,
+    whole: bool = False,
+) -> HTMLResponse:
+    """A write the library declined, at the status the write library's one table assigns."""
+    log.info("write refused: %s %s", result.refusal.value, result.detail)
+    shown = {**context, "refused": result, "says": result.says}
+    render = pages.page if whole else pages.fragment
+    return render(name, shown, status=result.status)

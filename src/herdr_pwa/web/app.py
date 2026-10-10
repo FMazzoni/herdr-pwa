@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.responses import Response
 from starlette.middleware.gzip import GZipMiddleware
 
+from herdr_pwa.audit import AuditLog
 from herdr_pwa.engine.cache import SnapshotCache
 from herdr_pwa.engine.client import HerdrClient
 from herdr_pwa.push import Deliver
@@ -18,8 +19,9 @@ from herdr_pwa.web.assets import Assets
 from herdr_pwa.web.deps import ClientFactory, WebState
 from herdr_pwa.web.notifier import PushState, open_push
 from herdr_pwa.web.render import Pages
-from herdr_pwa.web.routers import agent, compose, feed, push, shell, workspace
+from herdr_pwa.web.routers import agent, compose, feed, manage, push, shell, workspace
 from herdr_pwa.web.security import SecurityHeaders
+from herdr_pwa.writes.outcome import Pacing
 
 IMMUTABLE: Final = "public, max-age=31536000, immutable"
 # Below this a gzip frame costs more than it saves.
@@ -58,20 +60,29 @@ def create_app(
     *,
     clock: Callable[[], float] = time.monotonic,
     deliver: Deliver | None = None,
-    wall_clock: Callable[[], float] = time.time,
+    pacing: Pacing | None = None,
 ) -> FastAPI:
     """Build the web application around one runner client, one snapshot cache and push."""
     assets = Assets.load()
     pages = Pages(assets)
+    audit = AuditLog(
+        settings.state_dir,
+        max_bytes=settings.audit_max_bytes,
+        payload_chars=settings.audit_payload_chars,
+    )
+    # A box that cannot record a write does not serve one.
+    audit.preflight()
     web = WebState(
         settings=settings,
         client=client_factory(settings.engine()),
         cache=SnapshotCache(ttl=settings.snapshot_cache_ttl, clock=clock),
         pages=pages,
+        audit=audit,
         clock=clock,
+        pacing=pacing or Pacing(),
     )
     pushing = open_push(
-        settings, reader=web.client, cache=web.cache, deliver=deliver, clock=wall_clock
+        settings, reader=web.client, cache=web.cache, deliver=deliver, clock=time.time
     )
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=_lifespan(pushing))
     failures.install(app, pages)
@@ -81,7 +92,7 @@ def create_app(
         return {"status": "ok"}
 
     _static_route(app, assets)
-    for build in (feed.build, agent.build, workspace.build, compose.build):
+    for build in (feed.build, agent.build, workspace.build, compose.build, manage.build):
         app.include_router(build(web))
     app.include_router(push.build(web, pushing))
     app.include_router(shell.build(web, assets))

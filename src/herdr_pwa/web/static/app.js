@@ -35,6 +35,77 @@
     }
   }
 
+  /* A composer's draft survives navigation: kept per session in this tab only,
+   * restored as a value (never markup), dropped once sent or at a no-echo prompt. */
+  var DRAFT = "hp-draft:";
+
+  function store() {
+    try {
+      return window.sessionStorage;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function keep(box) {
+    var s = store();
+    if (!s) {
+      return;
+    }
+    try {
+      if (box.value) {
+        s.setItem(DRAFT + box.getAttribute("data-hp-draft"), box.value);
+      } else {
+        s.removeItem(DRAFT + box.getAttribute("data-hp-draft"));
+      }
+    } catch (err) {
+      /* storage full or blocked: the draft lives only in the box. */
+    }
+  }
+
+  function settle(root) {
+    var boxes = root.querySelectorAll("textarea[data-hp-draft]");
+    var s = store();
+    for (var i = 0; i < boxes.length; i++) {
+      var box = boxes[i];
+      var key = DRAFT + box.getAttribute("data-hp-draft");
+      var form = box.form;
+      var sent = form && form.querySelector("[data-hp-sent]");
+      try {
+        if (s && (sent || box.hasAttribute("data-hp-forget"))) {
+          s.removeItem(key);
+        } else if (s && !box.value) {
+          box.value = s.getItem(key) || "";
+        }
+      } catch (err) {
+        /* unreadable storage: nothing to restore. */
+      }
+    }
+  }
+
+  document.addEventListener("input", function (event) {
+    var box = event.target;
+    if (box && box.matches && box.matches("textarea[data-hp-draft]")) {
+      keep(box);
+    }
+  });
+  document.addEventListener("htmx:afterSwap", function (event) {
+    settle(event.detail.elt.parentNode || document);
+  });
+  document.addEventListener("DOMContentLoaded", function () {
+    settle(document);
+  });
+
+  /* Back and End are disabled while a write is in flight, or the result is never seen. */
+  document.addEventListener("htmx:beforeRequest", function (event) {
+    if (event.detail.requestConfig && event.detail.requestConfig.verb !== "get") {
+      document.body.classList.add("is-sending");
+    }
+  });
+  document.addEventListener("htmx:afterRequest", function () {
+    document.body.classList.remove("is-sending");
+  });
+
   document.addEventListener("visibilitychange", rearm);
   /* bfcache restore and iOS standalone resume skip visibilitychange. */
   window.addEventListener("pageshow", function (event) {

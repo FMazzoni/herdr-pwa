@@ -36,9 +36,16 @@ class Pages:
         return HTMLResponse(self.render(name, context), status_code=status)
 
     def fragment(
-        self, name: str, context: Mapping[str, object], *, status: int = 200
+        self,
+        name: str,
+        context: Mapping[str, object],
+        *,
+        status: int = 200,
+        headers: Mapping[str, str] | None = None,
     ) -> HTMLResponse:
         """A piece htmx swaps in; marked so the client swaps it even on a failure status."""
         return HTMLResponse(
-            self.render(name, context), status_code=status, headers={FRAGMENT_HEADER: "1"}
+            self.render(name, context),
+            status_code=status,
+            headers={**(headers or {}), FRAGMENT_HEADER: "1"},
         )

@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from fastapi import Request
 
 from herdr_pwa import auth
+from herdr_pwa.audit import AuditLog
 from herdr_pwa.engine.cache import CachedValue, SnapshotCache
 from herdr_pwa.engine.client import HerdrClient
 from herdr_pwa.engine.config import EngineSettings
@@ -14,6 +15,7 @@ from herdr_pwa.engine.model import Snapshot
 from herdr_pwa.settings import Settings
 from herdr_pwa.web.failures import PageHidden
 from herdr_pwa.web.render import Pages
+from herdr_pwa.writes.outcome import Pacing
 
 type ClientFactory = Callable[[EngineSettings], HerdrClient]
 
@@ -28,7 +30,10 @@ class WebState:
     client: HerdrClient
     cache: SnapshotCache
     pages: Pages
+    audit: AuditLog
     clock: Callable[[], float] = field(default=time.monotonic)
+    # What a write's read-back waits run on; injected so route tests never sleep.
+    pacing: Pacing = field(default_factory=Pacing)
 
     def snapshot(self) -> CachedValue[Snapshot]:
         """The shared snapshot, fetched only if nobody else is fetching it."""

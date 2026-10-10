@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Rename workspace &mdash; herdr{% endblock %}
+{% block body %}
+<main class="agent">
+  <h2 class="group__head"><span class="group__label">Rename {{ workspace.label if workspace else "workspace" }}</span></h2>
+  {% include "_notice.html" %}
+  {% if workspace %}
+  <form class="form" method="post" action="/workspaces/{{ workspace.workspace_id|urlencode }}/rename">
+    <label class="field"><span class="field__label">Name</span><input name="label" value="{{ label }}" maxlength="40" required></label>
+    <button class="button" type="submit">Rename</button>
+  </form>
+  {% endif %}
+  <p><a href="/workspaces">Back</a></p>
+</main>
+{% endblock %}
