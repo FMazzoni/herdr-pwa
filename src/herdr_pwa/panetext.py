@@ -1,17 +1,10 @@
 """Terminal pane text -> legible, coloured, phone-sized lines."""
 
-from __future__ import annotations
-
 import re
 import unicodedata
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import Final
-
-
-# --------------------------------------------------------------------------
-# What comes out
-# --------------------------------------------------------------------------
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,26 +62,19 @@ _ITALIC: Final = "ansi-i"
 _UNDERLINE: Final = "ansi-u"
 
 
-# --------------------------------------------------------------------------
-# Escape-sequence grammar. Everything here is a *discard* rule except SGR.
-# --------------------------------------------------------------------------
+# Escape-sequence grammar. Everything here is a discard rule except SGR.
 
 _CSI: Final = re.compile(r"\x1b\[([0-9;:<=>?]*)([ -/]*)([@-~])")
-
+# OSC, DCS, SOS, PM, APC: swallowed whole, so an OSC 8 hyperlink cannot inject a URL.
 _STRING_SEQ: Final = re.compile(r"\x1b[]PX^_](?:[^\x07\x1b]|\x1b(?!\\))*(?:\x07|\x1b\\|\Z)")
-
 _SHORT_ESC: Final = re.compile(r"\x1b[ -/]*[0-~]?")
-
 _MAX_SGR_PARAMS: Final = 64
 
 
-# --------------------------------------------------------------------------
 # Display width.
-# --------------------------------------------------------------------------
-
 
 _WIDE: Final = frozenset({"W", "F"})
-
+# Categories that take no cell of their own: they hang off the glyph before.
 _ZERO: Final = frozenset({"Mn", "Me", "Cf"})
 
 
@@ -102,16 +88,13 @@ def cells(text: str) -> int:
     return total
 
 
-# --------------------------------------------------------------------------
 # Decoration.
-# --------------------------------------------------------------------------
 
-_FRAME_TRIM: Final = "".join(chr(c) for c in range(0x2500, 0x25A0)) + " \t   "
-
+# Box drawing (U+2500-257F) and block elements (U+2580-259F), plus the spaces around them.
+_FRAME_TRIM: Final = "".join(chr(c) for c in range(0x2500, 0x25A0)) + " \t\u00a0\u2000\u2003"
+# herdr's two-column welcome box draws its rules inside a line.
 _INNER_RULE: Final = re.compile("[─-╿]{3,}")
-
 _RULE_LINE_CHARS: Final = frozenset(_FRAME_TRIM + "-_=~·•")
-
 _RULE_MIN: Final = 4
 
 
@@ -126,40 +109,33 @@ _WS: str = " \t\u00a0"
 _LEAD_FRAME: re.Pattern[str] = re.compile(
     f"^[{re.escape(_WS)}]*(?:[{re.escape(_BOX)}][{re.escape(_WS)}]*)+"
 )
-
 _TAIL_FRAME: re.Pattern[str] = re.compile(f"[{re.escape(_WS)}{re.escape(_BOX)}]*$")
-
+# Twelve, not four: four spaces is code indentation behind a diff gutter.
 _PADDING: re.Pattern[str] = re.compile(f"[{re.escape(_WS)}]{{12,}}")
 
 
-# --------------------------------------------------------------------------
-# Two questions that look like one. The clip guardrail.
+# Two questions that look like one: "is this the input box border" and "does this row wrap".
+
+BORDER_GLYPH: Final = "─"
+BORDER_MIN_CELLS: Final = 20
+_PROMPT_GLYPHS: Final = "\u276f>"
 
 
-_BORDER_GLYPH: Final = "─"
-
-_BORDER_MIN_CELLS: Final = 20
-
-_PROMPT_GLYPHS: Final = "❯>"
-
-
-def _is_box_border(text: str) -> bool:
+def is_box_border(text: str) -> bool:
     """Is this row the top or bottom border of the agent's own input box?"""
     body = text.strip()
-    return len(body) >= _BORDER_MIN_CELLS and body.count(_BORDER_GLYPH) == len(body)
+    return len(body) >= BORDER_MIN_CELLS and body.count(BORDER_GLYPH) == len(body)
 
 
 _WIDE_RULE_CHARS: Final = "".join(sorted(c for c in _RULE_LINE_CHARS if not c.isspace()))
-
 _WIDE_RULE_RUN: re.Pattern[str] = re.compile(
-    f"[{re.escape(_WIDE_RULE_CHARS)}]{{{_BORDER_MIN_CELLS},}}"
+    f"[{re.escape(_WIDE_RULE_CHARS)}]{{{BORDER_MIN_CELLS},}}"
 )
-
 _WIDE_RULE_SHARE: Final = 0.75
 
 
 def _is_wide_rule(text: str) -> bool:
-    """Is this row too wide to wrap nicely --'s clip decision, and only that."""
+    """Is this row too wide to wrap nicely: the clip decision, and only that."""
     body = text.strip()
     match = _WIDE_RULE_RUN.search(body)
     if match is None:
@@ -167,21 +143,16 @@ def _is_wide_rule(text: str) -> bool:
     return cells(match.group()) >= cells(body) * _WIDE_RULE_SHARE
 
 
-# --------------------------------------------------------------------------
-# The agent's own input box, and the draft it was hiding.
-# --------------------------------------------------------------------------
+# The agent's own input box, and the draft it can hide.
 
 _STATUS_MAX_ROWS: Final = 8
-
 _INPUT_MAX_ROWS: Final = 12
-
 _INPUT_PLACEHOLDERS: Final = frozenset(
     {
         "Press up to edit queued messages",
         'Try "how does this work?"',
     }
 )
-
 _PASTED_TOKEN: re.Pattern[str] = re.compile(r"\[Pasted text #\d{1,9} \+\d{1,9} lines?\]")
 
 
@@ -197,7 +168,7 @@ def _find_bottom_border(lines: list[list[Run]], end: int) -> int:
     """Index of the box's bottom border, searching up from the last non-blank row."""
     floor = max(-1, end - 1 - _STATUS_MAX_ROWS)
     for index in range(end - 1, floor, -1):
-        if _is_box_border(plain_text(lines[index])):
+        if is_box_border(plain_text(lines[index])):
             return index
     return -1
 
@@ -207,7 +178,7 @@ def _find_prompt(lines: list[list[Run]], bottom: int) -> int:
     floor = max(-1, bottom - 1 - _INPUT_MAX_ROWS)
     for index in range(bottom - 1, floor, -1):
         text = plain_text(lines[index])
-        if _is_box_border(text):
+        if is_box_border(text):
             return -1
         if _prompt_body(text) is not None:
             return index
@@ -225,7 +196,7 @@ def _split_chrome(
     if bottom < 0:
         return None
     prompt = _find_prompt(lines, bottom)
-    if prompt < 1 or not _is_box_border(plain_text(lines[prompt - 1])):
+    if prompt < 1 or not is_box_border(plain_text(lines[prompt - 1])):
         return None
     return lines[: prompt - 1], lines[bottom + 1 : end], lines[prompt:bottom]
 
@@ -238,7 +209,7 @@ def _dedent(row: list[Run], gutter: int) -> list[Run]:
 
 
 def _draft(rows: list[list[Run]]) -> tuple[list[list[Run]], bool]:
-    """The stranded draft, and whether Take over is offered --."""
+    """The stranded draft, and whether Take over is offered."""
     if not rows:
         return [], False
     head = plain_text(rows[0])
@@ -297,9 +268,27 @@ def _collapse_padding(runs: list[Run]) -> list[Run]:
     return out
 
 
-# --------------------------------------------------------------------------
 # SGR -> slot
-# --------------------------------------------------------------------------
+
+_GREY_CHROMA: Final = 30
+_GREY_STEPS: Final = (64, 160, 224)
+_GREY_SLOTS: Final = (0, 8, 7, 15)
+_HUE_SLOTS: Final = (1, 3, 2, 6, 4, 5)
+_BRIGHT_VALUE: Final = 192
+_CUBE: Final = (0, 95, 135, 175, 215, 255)
+_CHANNEL_MAX: Final = 255
+_CUBE_FIRST: Final = 16
+_GREY_RAMP_FIRST: Final = 232
+
+_SGR_RESET: Final = 0
+_SGR_NORMAL_INTENSITY: Final = 22
+_SGR_FG_EXTENDED: Final = 38
+_SGR_FG_DEFAULT: Final = 39
+_SGR_BG_EXTENDED: Final = 48
+_EXTENDED_256: Final = 5
+_EXTENDED_RGB: Final = 2
+_BASIC_FG: Final = range(30, 38)
+_BRIGHT_FG: Final = range(90, 98)
 
 
 def _slot_for_rgb(red: int, green: int, blue: int) -> int:
@@ -308,8 +297,7 @@ def _slot_for_rgb(red: int, green: int, blue: int) -> int:
     low = min(red, green, blue)
     chroma = high - low
     if chroma <= _GREY_CHROMA:
-        # Achromatic: four steps of grey, so ANSI black lands on something a
-        # phone can still see rather than on the background it is printed on.
+        # Four steps of grey, so ANSI black lands on something a phone can still see.
         for index, ceiling in enumerate(_GREY_STEPS):
             if high < ceiling:
                 return _GREY_SLOTS[index]
@@ -324,28 +312,15 @@ def _slot_for_rgb(red: int, green: int, blue: int) -> int:
     return base + 8 if high >= _BRIGHT_VALUE else base
 
 
-_GREY_CHROMA: Final = 30
-
-_GREY_STEPS: Final = (64, 160, 224)
-
-_GREY_SLOTS: Final = (0, 8, 7, 15)
-
-_HUE_SLOTS: Final = (1, 3, 2, 6, 4, 5)
-
-_BRIGHT_VALUE: Final = 192
-
-_CUBE: Final = (0, 95, 135, 175, 215, 255)
-
-
 def _slot_for_256(index: int) -> int | None:
-    if not 0 <= index <= 255:
+    if not 0 <= index <= _CHANNEL_MAX:
         return None
-    if index < 16:
+    if index < _CUBE_FIRST:
         return index
-    if index < 232:
-        offset = index - 16
+    if index < _GREY_RAMP_FIRST:
+        offset = index - _CUBE_FIRST
         return _slot_for_rgb(_CUBE[offset // 36], _CUBE[(offset // 6) % 6], _CUBE[offset % 6])
-    level = 8 + (index - 232) * 10
+    level = 8 + (index - _GREY_RAMP_FIRST) * 10
     return _slot_for_rgb(level, level, level)
 
 
@@ -383,11 +358,11 @@ def _extended_colour(params: list[int], start: int) -> tuple[int | None, int]:
     if start >= len(params):
         return None, 1
     mode = params[start]
-    if mode == 5 and start + 1 < len(params):
+    if mode == _EXTENDED_256 and start + 1 < len(params):
         return _slot_for_256(params[start + 1]), 3
-    if mode == 2 and start + 3 < len(params):
+    if mode == _EXTENDED_RGB and start + 3 < len(params):
         red, green, blue = params[start + 1], params[start + 2], params[start + 3]
-        if all(0 <= c <= 255 for c in (red, green, blue)):
+        if all(0 <= c <= _CHANNEL_MAX for c in (red, green, blue)):
             return _slot_for_rgb(red, green, blue), 5
         return None, 5
     return None, len(params) - start + 1
@@ -405,37 +380,38 @@ _ATTRIBUTE_CODES: Final[dict[int, tuple[str, bool]]] = {
 
 def _basic_slot(code: int) -> int | None:
     """``30-37`` and ``90-97`` are the sixteen slots, spelled two ways."""
-    if 30 <= code <= 37:
-        return code - 30
-    if 90 <= code <= 97:
-        return code - 90 + 8
+    if code in _BASIC_FG:
+        return code - _BASIC_FG.start
+    if code in _BRIGHT_FG:
+        return code - _BRIGHT_FG.start + 8
     return None
+
+
+def _apply_simple(style: _Style, code: int) -> None:
+    """Fold one single-parameter SGR code into ``style``."""
+    attribute = _ATTRIBUTE_CODES.get(code)
+    if attribute is not None:
+        setattr(style, attribute[0], attribute[1])
+    elif code == _SGR_RESET:
+        style.reset()
+    elif code == _SGR_NORMAL_INTENSITY:
+        style.bold = style.dim = False
+    elif code == _SGR_FG_DEFAULT:
+        style.slot = None
+    elif (slot := _basic_slot(code)) is not None:
+        style.slot = slot
 
 
 def _apply_code(style: _Style, params: list[int], index: int) -> int:
     """Fold one SGR parameter into ``style``; return how many it consumed."""
     code = params[index]
-    attribute = _ATTRIBUTE_CODES.get(code)
-    if attribute is not None:
-        setattr(style, attribute[0], attribute[1])
-        return 1
-    if code == 0:
-        style.reset()
-        return 1
-    if code == 22:
-        style.bold = style.dim = False
-        return 1
-    if code == 39:
-        style.slot = None
-        return 1
-    if code == 38:
-        style.slot, step = _extended_colour(params, index + 1)
+    if code in (_SGR_FG_EXTENDED, _SGR_BG_EXTENDED):
+        # A background is consumed and thrown away, or its 2 would re-read as dim.
+        slot, step = _extended_colour(params, index + 1)
+        if code == _SGR_FG_EXTENDED:
+            style.slot = slot
         return step
-    if code == 48:
-        return _extended_colour(params, index + 1)[1]
-    slot = _basic_slot(code)
-    if slot is not None:
-        style.slot = slot
+    _apply_simple(style, code)
     return 1
 
 
@@ -453,9 +429,7 @@ def _apply_sgr(style: _Style, raw: str) -> None:
         index += _apply_code(style, params, index)
 
 
-# --------------------------------------------------------------------------
-# The parse. Before proposing a real terminal emulator here, read this:
-
+# The parse: a scan that keeps SGR and drops everything else, deliberately not a terminal emulator.
 
 _DROP: Final = frozenset(chr(c) for c in range(0x20) if c not in (0x09, 0x0A)) | frozenset("\x7f")
 
@@ -473,29 +447,33 @@ def _skip_escape(text: str, position: int) -> tuple[int, str | None]:
     return (match.end() if match else position + 1), None
 
 
+def _plain_run(text: str, position: int) -> tuple[int, str]:
+    """Consume printable text up to the next escape or newline, dropping control bytes."""
+    end = position
+    while end < len(text) and text[end] not in "\x1b\n":
+        end += 1
+    return end, "".join(char for char in text[position:end] if char not in _DROP)
+
+
+def _next_event(text: str, position: int) -> tuple[int, tuple[str, str] | None]:
+    """Consume one newline, escape or printable stretch, and the event it makes, if any."""
+    char = text[position]
+    if char == "\n":
+        return position + 1, ("newline", "")
+    if char == "\x1b":
+        position, params = _skip_escape(text, position)
+        return position, None if params is None else ("sgr", params)
+    position, chunk = _plain_run(text, position)
+    return position, ("text", chunk) if chunk else None
+
+
 def _scan(text: str) -> Iterator[tuple[str, str]]:
     """Walk the raw read once, yielding ``text`` / ``sgr`` / ``newline`` events."""
     position = 0
-    buffer: list[str] = []
     while position < len(text):
-        char = text[position]
-        if char not in "\x1b\n":
-            if char not in _DROP:
-                buffer.append(char)
-            position += 1
-            continue
-        if buffer:
-            yield "text", "".join(buffer)
-            buffer = []
-        if char == "\n":
-            yield "newline", ""
-            position += 1
-            continue
-        position, params = _skip_escape(text, position)
-        if params is not None:
-            yield "sgr", params
-    if buffer:
-        yield "text", "".join(buffer)
+        position, event = _next_event(text, position)
+        if event is not None:
+            yield event
 
 
 def _append(runs: list[Run], text: str, cls: str) -> None:
@@ -543,9 +521,7 @@ def plain_text(runs: list[Run]) -> str:
     return "".join(run.text for run in runs)
 
 
-# --------------------------------------------------------------------------
 # Was this label printed whole, or is it the top half of a wrapped row?
-# --------------------------------------------------------------------------
 
 
 def _screen_width(rows: list[str]) -> int:
@@ -591,7 +567,7 @@ def is_clean_prose(text: str) -> bool:
 
 
 def _strip_decoration(lines: list[list[Run]]) -> list[list[Run]]:
-    """'s transform: drop the rules, collapse the frames, keep the text."""
+    """Drop the rules, collapse the frames, keep the text."""
     kept: list[list[Run]] = []
     for line in lines:
         if _is_rule_line(plain_text(line)):
@@ -616,7 +592,7 @@ def _trim_blank_edges(lines: list[list[Run]]) -> list[list[Run]]:
 
 
 def pane_view(text: str, *, strip: bool = True) -> PaneView:
-    """Turn one raw pane read into what the Pane tab renders --'s split."""
+    """Turn one raw pane read into the viewport, the statusline and any stranded draft."""
     lines = _tokenise(text)
     split = _split_chrome(lines)
     body, status, prompt = split if split is not None else (lines, [], [])

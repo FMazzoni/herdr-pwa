@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 """Regenerate the committed Pydantic models from herdr's own JSON Schema."""
 
-from __future__ import annotations
-
 import argparse
 import difflib
 import hashlib
@@ -19,6 +17,7 @@ ROOT = Path(__file__).resolve().parent.parent
 SCHEMA_PATH = ROOT / "tests" / "fixtures" / "herdr-api-schema.json"
 OUT_DIR = ROOT / "src" / "herdr_pwa" / "engine" / "generated"
 
+# Sub-schemas to generate, in the order they are written.
 SUB_SCHEMAS = (
     "success_response",
     "event",
@@ -26,11 +25,9 @@ SUB_SCHEMAS = (
     "error_response",
     "request",
 )
-"""Sub-schemas to generate, in the order they are written.
-"""
 
+# Properties that act as a oneOf discriminator, most specific first.
 DISCRIMINATORS = ("type", "method", "event", "kind")
-"""Properties that act as a ``oneOf`` discriminator, most specific first."""
 
 # fmt: off
 CODEGEN_FLAGS = (
@@ -48,13 +45,11 @@ CODEGEN_FLAGS = (
     "--formatters", "ruff-format",
 )
 # fmt: on
-"""The exact invocation.
-"""
 
 
 def capture_schema() -> None:
     """Re-vendor ``herdr api schema --json`` into tests/fixtures/."""
-    raw = subprocess.run(  # noqa: S603
+    raw = subprocess.run(
         ["herdr", "api", "schema", "--json"],  # noqa: S607
         check=True,
         capture_output=True,
@@ -67,9 +62,9 @@ def capture_schema() -> None:
         json.dumps(doc, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
         encoding="utf-8",
     )
-    print(
+    sys.stdout.write(
         f"captured {SCHEMA_PATH.relative_to(ROOT)} "
-        f"(protocol {doc['protocol']}, schema_version {doc['schema_version']})"
+        f"(protocol {doc['protocol']}, schema_version {doc['schema_version']})\n"
     )
 
 
@@ -78,15 +73,8 @@ def _pascal(value: str) -> str:
     return "".join(part.capitalize() for part in re.split(r"[^A-Za-z0-9]+", value) if part)
 
 
-def _name_variants(node: Any, parent: str) -> None:
-    """Give every discriminated ``oneOf``/``anyOf`` member a stable ``title``."""
-    if isinstance(node, list):
-        for item in node:
-            _name_variants(item, parent)
-        return
-    if not isinstance(node, dict):
-        return
-
+def _title_members(node: dict[str, Any], parent: str) -> None:
+    """Title each untitled ``oneOf``/``anyOf`` member after its discriminator."""
     for keyword in ("oneOf", "anyOf"):
         for member in node.get(keyword, []):
             if not isinstance(member, dict) or "title" in member:
@@ -99,6 +87,18 @@ def _name_variants(node: Any, parent: str) -> None:
                 if isinstance(const, str):
                     member["title"] = _pascal(const) + parent
                     break
+
+
+def _name_variants(node: object, parent: str) -> None:
+    """Give every discriminated ``oneOf``/``anyOf`` member a stable ``title``."""
+    if isinstance(node, list):
+        for item in node:
+            _name_variants(item, parent)
+        return
+    if not isinstance(node, dict):
+        return
+
+    _title_members(node, parent)
 
     for key, value in node.items():
         if key == "$defs" and isinstance(value, dict):
@@ -250,9 +250,11 @@ def check() -> int:
                     )
                 )
     if stale:
-        print(f"\nSTALE: {', '.join(stale)} — run: uv run python scripts/generate_models.py")
+        sys.stdout.write(
+            f"\nSTALE: {', '.join(stale)} — run: uv run python scripts/generate_models.py\n"
+        )
         return 1
-    print("generated models are up to date")
+    sys.stdout.write("generated models are up to date\n")
     return 0
 
 
@@ -275,7 +277,7 @@ def main() -> int:
     if args.check:
         return check()
     generate(OUT_DIR)
-    print(f"wrote {OUT_DIR.relative_to(ROOT)}/")
+    sys.stdout.write(f"wrote {OUT_DIR.relative_to(ROOT)}/\n")
     return 0
 
 
