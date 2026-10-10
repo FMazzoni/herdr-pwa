@@ -114,6 +114,7 @@ class AgentRow:
     effective_status: AgentStatus
     feed_key: tuple[int, int, int, str]
     answer: ScreenDecision | None
+    workspace_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -263,6 +264,7 @@ def _row(agent: Agent, status: AgentStatus, prompt: BlockedPrompt | None) -> Age
         effective_status=status,
         feed_key=agent.feed_key(rank(status)),
         answer=None if prompt is None else decide_screen(prompt),
+        workspace_id=agent.workspace_id,
     )
 
 
@@ -306,3 +308,52 @@ def decide_herd(  # noqa: PLR0913 -- every input is a separate fact the feed is 
         cadence=cadence,
         freshness=freshness(None if taken_at is None else now - taken_at, cadence, error),
     )
+
+
+@dataclass(frozen=True, slots=True)
+class Chip:
+    """One workspace the feed can be narrowed to, with how many agents it holds."""
+
+    workspace_id: str
+    label: str
+    count: int
+    on: bool
+
+
+@dataclass(frozen=True, slots=True)
+class FeedView:
+    """The herd as the feed draws it under a workspace filter."""
+
+    sections: tuple[Section, ...]
+    chips: tuple[Chip, ...]
+    selected: str
+
+
+def _chips(rows: tuple[AgentRow, ...], selected: str) -> tuple[Chip, ...]:
+    counts: dict[str, int] = {}
+    labels: dict[str, str] = {}
+    for row in rows:
+        if row.workspace_id:
+            counts[row.workspace_id] = counts.get(row.workspace_id, 0) + 1
+            labels.setdefault(row.workspace_id, row.workspace or row.workspace_id)
+    return tuple(Chip(ws, labels[ws], n, ws == selected) for ws, n in counts.items())
+
+
+def _narrow(section: Section, selected: str) -> Section:
+    # Needs-you is never filtered: a filter must not hide the agent waiting on you.
+    if not selected or section.key is AgentStatus.BLOCKED:
+        return section
+    return Section(
+        section.key, section.label, tuple(r for r in section.rows if r.workspace_id == selected)
+    )
+
+
+def feed_view(herd: HerdDecision, selected: str) -> FeedView:
+    """The feed narrowed to one workspace; an unknown or empty ``selected`` shows everyone."""
+    chips = _chips(herd.rows, selected)
+    if not any(chip.on for chip in chips):
+        selected = ""
+    narrowed = (_narrow(s, selected) for s in herd.sections)
+    sections = tuple(s for s in narrowed if s.rows or s.key is AgentStatus.BLOCKED)
+    # One workspace leaves nothing to choose between.
+    return FeedView(sections, chips if len(chips) > 1 else (), selected)

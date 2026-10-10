@@ -27,11 +27,16 @@
     </form>
 {%- endmacro %}
 
-{# A card in a list. `href` makes the whole card the link; `inner` is the tag otherwise. #}
+{# A card in a list. `href` makes the whole card the link, with a chevron on its first line; `inner` is the tag otherwise. #}
 {% macro card(status, href=none, id=none, inner="div") -%}
 <li class="card card--{{ status }}"{% if id %} id="{{ id }}"{% endif %}>
-  {%- if href %}<a class="card__link" href="{{ href }}">{% else %}<{{ inner }} class="card__link">{% endif %}{{ caller() }}{% if href %}</a>{% else %}</{{ inner }}>{% endif -%}
+  {%- if href %}<a class="card__link card__link--go" href="{{ href }}">{% else %}<{{ inner }} class="card__link">{% endif %}{{ caller() }}{% if href %}<span class="card__chevron" aria-hidden="true"></span></a>{% else %}</{{ inner }}>{% endif -%}
 </li>
+{%- endmacro %}
+
+{# A filter chip: a 44px link that narrows a list in place; `attrs` carries its history rule. #}
+{% macro chip(label, href, count=none, on=false, attrs="") -%}
+<a class="chip{% if on %} chip--on{% endif %}" href="{{ href }}"{% if on %} aria-current="true"{% endif %} {{ attrs }}><span class="chip__label">{{ label }}</span>{% if count is not none %}<span class="chip__n">{{ count }}</span>{% endif %}</a>
 {%- endmacro %}
 
 {# The first line of a card: status dot, a title that ellipsizes, and the status word. #}

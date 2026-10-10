@@ -1,9 +1,17 @@
 {% import "_ui.html" as ui %}
+{% import "_nav.html" as nav %}
 {% set f = herd.freshness %}
+{% macro chips() %}
+  <nav class="chips" aria-label="workspace filter">
+    {{ ui.chip("all", "/", herd.rows|length, on=not view.selected, attrs=nav.replace()) }}
+    {% for c in view.chips %}{{ ui.chip(c.label, "/?ws=" ~ (c.workspace_id|urlencode), c.count, on=c.on, attrs=nav.replace()) }}{% endfor %}
+  </nav>
+{% endmacro %}
+{% set src = "/feed" ~ ("?ws=" ~ (view.selected|urlencode) if view.selected else "") %}
 <div id="feed-list"
      class="feed feed--{{ f.condition.value }}{% if f.stale %} is-stale{% endif %}"
-     data-hp-poll="/feed"
-     hx-get="/feed"
+     data-hp-poll="{{ src }}"
+     hx-get="{{ src }}"
      hx-target="this"
      hx-swap="outerHTML"
      hx-trigger="every {{ herd.cadence }}s, hp:poke from:body">
@@ -21,10 +29,14 @@
     {% if herd.counts["working"] %}<span class="summary__work">{{ herd.counts["working"] }} working</span>{% endif %}
     {% if herd.counts["idle"] %}<span class="summary__idle">{{ herd.counts["idle"] }} idle</span>{% endif %}
     {% if not herd.rows %}<span class="summary__idle">no agents</span>{% endif %}
+    {# Live only: every other condition already says its age in the banner above. #}
+    {% if f.condition.value == "live" and f.age_label %}<span class="summary__age">{{ f.age_label }}</span>{% endif %}
   </p>
 
   {% if herd.rows %}
-  {% for section in herd.sections %}
+  {% for section in view.sections %}
+  {# The filter sits under needs-you, which it never narrows, so a long row of workspaces cannot push a waiting agent down. #}
+  {% if loop.index0 == 1 and view.chips %}{{ chips() }}{% endif %}
   <section class="group group--{{ section.key.value }}">
     {{ ui.section_head(section.label, section.count) }}
     {% if section.rows %}
@@ -36,6 +48,7 @@
     {% endif %}
   </section>
   {% endfor %}
+  {% if view.sections|length == 1 and view.chips %}{{ chips() }}{% endif %}
   {% elif f.condition.value == "live" %}
   <p class="empty">No agents in the herd.<br>Start one in a herdr pane and it appears here within {{ herd.cadence }}s.</p>
   {% else %}
