@@ -43,10 +43,12 @@ class Device:
 
 
 # The iPhone the app is designed on, at its full standalone height rather than Playwright's
-# in-browser 664px, and the narrowest iPhone still in use.
+# in-browser 664px; a Pro Max size run as a Home Screen app; and the
+# narrowest iPhone still in use.
 IPHONE = Device("iphone", 390, 844, 3)
+WIDE = Device("wide", 430, 932, 3)
 NARROW = Device("narrow", 320, 568, 2)
-DEVICES = (IPHONE, NARROW)
+DEVICES = (IPHONE, WIDE, NARROW)
 DESCRIPTOR = "iPhone 13"
 
 

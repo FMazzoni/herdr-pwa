@@ -11,7 +11,7 @@ check:
     uv run python scripts/css_tokens.py
     uv run python scripts/geometry_gate.py
 
-# Headless Firefox over the real templates at 390px and 320px: no sideways scroll, 44px tap
+# Headless Firefox over the real templates at 390px, 430px and 320px: no sideways scroll, 44px tap
 # targets, content inside the viewport. Skips when a receipt for this exact tree exists.
 geometry:
     uv run python scripts/geometry_gate.py
@@ -20,8 +20,9 @@ geometry:
 geometry-force:
     uv run python scripts/geometry_gate.py --force
 
-# WebKit as an iPhone (390x844 at 3x, touch, Safari's UA) and at 320px: a first-viewport and a
-# full-page PNG per catalogue state under .agents/shots/. For eyes, not a gate; skips without WebKit.
+# WebKit as an iPhone (390x844 at 3x, touch, Safari's UA), at 430x932 and at 320px: a first-viewport
+# and a full-page PNG per catalogue state under .agents/shots/. For eyes, not a gate; skips without
+# WebKit.
 shots *KEYS:
     uv run python scripts/shots.py {{KEYS}}
 
