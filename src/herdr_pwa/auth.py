@@ -1,0 +1,265 @@
+"""The identity gate: who is asking, and whether their write came from this origin.
+
+Any local uid can forge the identity header byte for byte, because ``tailscale serve``
+proxies from loopback; this module trusts every local process and says so.
+"""
+
+import hmac
+import json
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
+from http import HTTPStatus
+from http.client import HTTPException
+from typing import ClassVar
+from urllib.parse import SplitResult, urlsplit
+
+from herdr_pwa import jsonio, tailscale
+
+IDENTITY_HEADER = "tailscale-user-login"
+NAME_HEADER = "tailscale-user-name"
+PROFILE_PIC_HEADER = "tailscale-user-profile-pic"
+SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+VIA_TAILSCALE = "tailscale"
+VIA_CONFIG = "config"
+# Names, not addresses: what the caller typed is what DNS rebinding cannot forge.
+LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost", "localhost."})
+
+
+class AuthError(Exception):
+    """Every refusal; ``str(exc)`` goes to the caller, ``log_detail`` only to the operator."""
+
+    status_code: ClassVar[int] = 403
+    reason: ClassVar[str] = "forbidden"
+
+    def __init__(self, message: str, *, log_detail: str = "") -> None:
+        super().__init__(message)
+        self.log_detail: str = log_detail
+
+
+class MissingIdentityError(AuthError):
+    """No identity header: the request did not come through the ingress."""
+
+    status_code: ClassVar[int] = 401
+    reason: ClassVar[str] = "missing_identity"
+
+
+class LoginNotAllowedError(AuthError):
+    """A tailnet user other than the pinned login."""
+
+    reason: ClassVar[str] = "login_not_allowed"
+
+
+class MissingOriginError(AuthError):
+    """A write with no Origin header."""
+
+    reason: ClassVar[str] = "missing_origin"
+
+
+class OriginMismatchError(AuthError):
+    """A write whose Origin is not the Host it was addressed to."""
+
+    reason: ClassVar[str] = "origin_mismatch"
+
+
+class NonLoopbackHostError(AuthError):
+    """An assumed-login request addressed by a name that is not loopback."""
+
+    reason: ClassVar[str] = "non_loopback_host"
+
+
+class AssumedLoginUnsafeError(AuthError):
+    """An assumed login where serve is active, or where that cannot be decided."""
+
+    status_code: ClassVar[int] = 500
+    reason: ClassVar[str] = "assumed_login_unsafe"
+
+
+@dataclass(frozen=True, slots=True)
+class Access:
+    """Who may use the app: the pinned login, and the login assumed when no header came."""
+
+    tailnet_login: str = ""
+    assume_login: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class Identity:
+    """The login a request acts as, and whether the ingress or the config supplied it."""
+
+    login: str
+    display_name: str = ""
+    profile_pic: str = ""
+    via: str = VIA_TAILSCALE
+
+    @property
+    def is_assumed(self) -> bool:
+        """True when nobody proved the login and the config supplied it."""
+        return self.via == VIA_CONFIG
+
+
+def _lower(headers: Mapping[str, str]) -> dict[str, str]:
+    return {key.lower(): value for key, value in headers.items()}
+
+
+def _same_login(expected: str, actual: str) -> bool:
+    return hmac.compare_digest(expected.casefold().encode(), actual.casefold().encode())
+
+
+def identify(headers: Mapping[str, str], access: Access) -> Identity:
+    """Return the identity the ingress asserted, the assumed one, or refuse."""
+    lowered = _lower(headers)
+    login = lowered.get(IDENTITY_HEADER, "").strip()
+    if not login:
+        if access.assume_login:
+            return Identity(login=access.assume_login, via=VIA_CONFIG)
+        raise MissingIdentityError(
+            "No Tailscale identity on this request. Reach the app through its MagicDNS "
+            "name, not the loopback port."
+        )
+    pin = access.tailnet_login
+    if pin and not _same_login(pin, login):
+        raise LoginNotAllowedError(
+            "This tailnet user is not the one this app is configured for.",
+            # tailscale status truncates logins, so a wrong pin looks right at a glance.
+            log_detail=f"login {login!r} is not the pinned HP_TAILNET_LOGIN {pin!r}",
+        )
+    return Identity(
+        login=login,
+        display_name=lowered.get(NAME_HEADER, "").strip(),
+        profile_pic=lowered.get(PROFILE_PIC_HEADER, "").strip(),
+    )
+
+
+def unpinned_warning(access: Access) -> str | None:
+    """A startup warning when no login is pinned, else None."""
+    if access.tailnet_login:
+        return None
+    return (
+        "HP_TAILNET_LOGIN is not set: any user your tailnet lets reach this node can drive "
+        "every agent on this machine. Pin your own login unless that is what you want."
+    )
+
+
+def check_same_origin(headers: Mapping[str, str]) -> None:
+    """Refuse a write whose Origin host is not the Host header (CSRF, not authentication)."""
+    lowered = _lower(headers)
+    origin = lowered.get("origin", "").strip()
+    if not origin:
+        raise MissingOriginError(
+            "This write has no Origin header; a script must send one, e.g. "
+            "-H 'Origin: https://<your-node>.ts.net'."
+        )
+    host = lowered.get("host", "").strip()
+    if not host:
+        raise OriginMismatchError("This write has an Origin but no Host header to compare it with.")
+    parsed = urlsplit(origin)
+    if origin.lower() == "null" or not parsed.hostname:
+        raise OriginMismatchError(f"Refusing a write from opaque or unparseable Origin {origin!r}.")
+    _check_scheme(parsed, lowered.get("x-forwarded-proto", "").strip().lower())
+    if _authority(parsed.scheme, origin) != _authority(parsed.scheme, f"//{host}"):
+        raise OriginMismatchError(
+            f"Refusing a cross-origin write: Origin {origin!r} is not {host!r}."
+        )
+
+
+def _check_scheme(parsed: SplitResult, forwarded_proto: str) -> None:
+    if forwarded_proto and parsed.scheme.lower() != forwarded_proto:
+        raise OriginMismatchError(
+            f"Refusing a write: Origin scheme {parsed.scheme!r} is not {forwarded_proto!r}."
+        )
+
+
+def _authority(scheme: str, url: str) -> str:
+    parsed = urlsplit(url if "//" in url else f"//{url}")
+    host = (parsed.hostname or "").lower()
+    default = {"https": 443, "http": 80}.get(scheme.lower())
+    try:
+        port = parsed.port
+    except ValueError:
+        # A malformed port must never compare equal to a well-formed authority.
+        return url.lower()
+    if port is None or port == default:
+        return host
+    return f"{host}:{port}"
+
+
+def check_loopback_host(headers: Mapping[str, str]) -> None:
+    """Refuse an assumed-login request whose Host is not a literal loopback name."""
+    host = _lower(headers).get("host", "").strip()
+    if not host:
+        raise NonLoopbackHostError(
+            "This request has no Host header, so it is not provably loopback."
+        )
+    if (urlsplit(f"//{host}").hostname or "") not in LOOPBACK_HOSTS:
+        raise NonLoopbackHostError(
+            "Refusing a non-loopback name while a login is assumed; use 127.0.0.1 or localhost.",
+            log_detail=f"Host {host!r} is not loopback; accepting it would allow DNS rebinding",
+        )
+
+
+def authorize(headers: Mapping[str, str], *, access: Access, method: str = "GET") -> Identity:
+    """Authenticate every request, reads included, then origin-check any write."""
+    identity = identify(headers, access)
+    if identity.is_assumed:
+        check_loopback_host(headers)
+    if method.strip().upper() not in SAFE_METHODS:
+        check_same_origin(headers)
+    return identity
+
+
+def _serve_config_body(api: tailscale.LocalApi) -> str:
+    try:
+        reply = api.exchange("GET", tailscale.SERVE_CONFIG_PATH)
+    except (FileNotFoundError, ConnectionRefusedError):
+        raise
+    except (OSError, HTTPException) as exc:
+        raise AssumedLoginUnsafeError(
+            f"Refusing an assumed login: could not ask tailscaled whether serve is active ({exc})."
+        ) from exc
+    if reply.status != HTTPStatus.OK:
+        raise AssumedLoginUnsafeError(
+            f"Refusing an assumed login: tailscaled answered HTTP {reply.status} for its serve "
+            "config, so whether this node is served is unknown."
+        )
+    return reply.body
+
+
+def serve_is_active(api: tailscale.LocalApi) -> bool:
+    """True when anything is served; False only when no tailscaled could be serving."""
+    try:
+        body = _serve_config_body(api).strip()
+    except (FileNotFoundError, ConnectionRefusedError):
+        return False
+    if not body:
+        raise AssumedLoginUnsafeError(
+            "Refusing an assumed login: tailscaled sent an empty serve config."
+        )
+    try:
+        config = jsonio.loads(body)
+    except json.JSONDecodeError as exc:
+        raise AssumedLoginUnsafeError(
+            "Refusing an assumed login: serve config was not JSON."
+        ) from exc
+    if config is None:
+        return False
+    mapping = jsonio.as_dict(config)
+    if mapping is None:
+        raise AssumedLoginUnsafeError("Refusing an assumed login: serve config was not an object.")
+    # Every section counts, known or not: an allow-list of keys once read a serve as none.
+    return any(tailscale.has_content(value) for value in mapping.values())
+
+
+def assert_assumed_login_safe(
+    access: Access,
+    api: tailscale.LocalApi,
+    *,
+    probe: Callable[[tailscale.LocalApi], bool] = serve_is_active,
+) -> None:
+    """At startup: refuse an assumed login while serve is active or undecidable."""
+    if not access.assume_login:
+        return
+    if probe(api):
+        raise AssumedLoginUnsafeError(
+            "Refusing to start: HP_ASSUME_LOGIN is set while 'tailscale serve' is active, which "
+            "would publish an unauthenticated shell to the tailnet. Unset HP_ASSUME_LOGIN."
+        )

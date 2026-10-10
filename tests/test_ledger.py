@@ -1,7 +1,6 @@
 """The golden ledger: every recorded decision of the previous implementation, recomputed here."""
 
 import hashlib
-import os
 import re
 from collections.abc import Iterable, Mapping
 from pathlib import Path
@@ -95,10 +94,10 @@ def _str(value: object) -> str:
 @pytest.fixture(scope="session")
 def foreign_root(request: pytest.FixtureRequest) -> Path:
     option: object = request.config.getoption("--foreign-root")
+    # The option already defaults to $HP_FOREIGN_CAPTURES; see conftest.
     if isinstance(option, str) and option:
         return Path(option)
-    override = os.environ.get("HP_FOREIGN_CAPTURES")
-    return Path(override) if override else REPO / "evidence" / "foreign-captures"
+    return REPO / "evidence" / "foreign-captures"
 
 
 def _foreign_path(root: Path, capture_id: str) -> Path:

@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import cast
 
 import pytest
-from _jsonpath import at, obj
 from pydantic import BaseModel, JsonValue
 
 from herdr_pwa import protocol
@@ -33,6 +32,7 @@ from herdr_pwa.engine.transport import (
     raise_for_error_frame,
 )
 from herdr_pwa.jsontypes import JsonObject, loads
+from tests._jsonpath import at, obj
 
 FIXTURE = Path(__file__).parent / "fixtures" / "snapshot.example.json"
 SNAPSHOT_JSON = FIXTURE.read_text()

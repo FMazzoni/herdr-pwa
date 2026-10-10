@@ -5,12 +5,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
-from _cache_support import FollowerGate
 
 from herdr_pwa.engine.cache import CachedSnapshot, CacheSettings, SnapshotCache
 from herdr_pwa.engine.model import Snapshot
 from herdr_pwa.engine.transport import EngineUnavailable
 from herdr_pwa.jsontypes import get_object, loads
+from tests._cache_support import FollowerGate
 
 FIXTURE = Path(__file__).parent / "fixtures" / "snapshot.example.json"
 _RAW = get_object(get_object(loads(FIXTURE.read_text()), "result"), "snapshot")
