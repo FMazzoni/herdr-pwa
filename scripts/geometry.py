@@ -236,8 +236,17 @@ for (const cell of document.querySelectorAll(".prose th, .prose td")) {
   }
   if (widest > inner + 0.5) cells.push({ what: describe(cell), word: word, widest: widest, inner: inner });
 }
+// A card's kind and pane id never ellipsize; only the workspace gives way. The one excuse is a
+// chip wider than its card's whole line, which only the largest text on the narrowest phone makes.
+const cut = [];
+for (const chip of document.querySelectorAll(".card__harness, .card__pane")) {
+  const line = chip.parentElement.clientWidth;
+  if (chip.scrollWidth > chip.clientWidth + 0.5 && chip.scrollWidth <= line + 0.5) {
+    cut.push({ what: describe(chip), text: chip.textContent, full: chip.scrollWidth, shown: chip.clientWidth });
+  }
+}
 return { page: page, scrollers: scrollers, spills: spills, taps: taps, edges: edges,
-  buried: buried, measured: measured, zooms: zooms, cells: cells };
+  buried: buried, measured: measured, zooms: zooms, cells: cells, cut: cut };
 """
 
 
@@ -353,6 +362,14 @@ def _rows(found: dict[str, object], key: str) -> list[dict[str, object]]:
     return [r for r in value if isinstance(r, dict)] if isinstance(value, list) else []
 
 
+def _judge_cards(found: dict[str, object], where: str, tally: Tally) -> None:
+    for row in _rows(found, "cut"):
+        tally.problems.append(
+            f"{where}: {row['what']} {row['text']!r} is cut to {row['shown']:.1f}px of "
+            f"{row['full']:.1f}px; only a card's workspace may ellipsize"
+        )
+
+
 def judge(found: dict[str, object], where: str, tally: Tally) -> None:
     """Turn one geometry probe into problems and exception counts."""
     page = found.get("page")
@@ -400,6 +417,7 @@ def judge(found: dict[str, object], where: str, tally: Tally) -> None:
             f"{where}: table cell {row['what']} is {row['inner']:.1f}px wide, narrower than its "
             f"widest word {row['word']!r} ({row['widest']:.1f}px), so the word breaks"
         )
+    _judge_cards(found, where, tally)
     measured = found.get("measured")
     tally.taps += measured if isinstance(measured, int) else 0
 
