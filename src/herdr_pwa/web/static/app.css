@@ -3,6 +3,8 @@
    size and step from a token in :root (scripts/css_tokens.py holds the line). */
 
 :root {
+  /* What the platform still draws (select popups, scrollbars) draws in its dark form. */
+  color-scheme: dark;
   --ground: #0C131B;
   --surface: #141D28;
   --surface-2: #1A2531;
@@ -73,6 +75,12 @@
   --tap: 44px;
   --dot: 8px;
   --check: 22px;
+  /* The checkbox's tick, sized to sit well inside --check. */
+  --tick-w: 6px;
+  --tick-h: 11px;
+  /* The select's chevron: two strokes this long, inset this far from the right edge. */
+  --select-chevron: 5px;
+  --select-chevron-inset: 16px;
   --page-max: 760px;
   --sheet-max: 640px;
 
@@ -318,8 +326,50 @@ input, select, textarea {
   max-width: 100%;
 }
 input, select { min-height: var(--tap); }
-/* A checkbox is drawn small; the label row around it is the 44px target. */
-input[type=checkbox] { min-height: 0; width: var(--check); height: var(--check); margin: 0; }
+/* The platform draws a select its own way (pale on white in WebKit); this one matches the inputs. */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  padding-right: calc(var(--select-chevron-inset) + var(--space-10));
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--ink-2) 50%),
+    linear-gradient(135deg, var(--ink-2) 50%, transparent 50%);
+  background-position:
+    right calc(var(--select-chevron-inset) + var(--select-chevron)) center,
+    right var(--select-chevron-inset) center;
+  background-size: var(--select-chevron) var(--select-chevron);
+  background-repeat: no-repeat;
+}
+/* A checkbox is drawn small; the label row around it is the 44px target. Drawn here, not
+   natively: WebKit's own tick overshoots its box. */
+input[type=checkbox] {
+  appearance: none;
+  -webkit-appearance: none;
+  display: inline-grid;
+  place-content: center;
+  flex: none;
+  min-height: 0;
+  width: var(--check);
+  height: var(--check);
+  margin: 0;
+  padding: 0;
+  background: var(--surface);
+  border: var(--line-1) solid var(--ink-3);
+  border-radius: var(--radius-1);
+}
+input[type=checkbox]:checked { background: var(--accent); border-color: var(--accent); }
+/* The tick: an L of two borders, turned 45 degrees, held inside the box. */
+input[type=checkbox]:checked::after {
+  content: "";
+  width: var(--tick-w);
+  height: var(--tick-h);
+  margin-top: calc(var(--tick-w) * -0.5);
+  border: solid var(--ground);
+  border-width: 0 var(--line-2) var(--line-2) 0;
+  transform: rotate(45deg);
+}
+input[type=checkbox]:focus-visible { outline: var(--line-2) solid var(--accent); outline-offset: var(--line-2); }
 textarea { resize: vertical; min-height: 4.5em; }
 .button {
   font: 600 var(--text-7)/1 var(--sans);
