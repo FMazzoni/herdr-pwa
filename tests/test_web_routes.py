@@ -252,3 +252,22 @@ def test_a_crash_is_a_plain_500_with_the_policy(tmp_path: Path) -> None:
     assert response.status_code == 500
     assert response.headers["content-security-policy"] == CSP
     assert "bug" not in response.text
+
+
+def test_only_the_rowless_feed_shell_may_enter_the_back_forward_cache(tmp_path: Path) -> None:
+    rig = build_rig(tmp_path)
+    assert rig.http.get("/").headers["cache-control"] == "private, no-cache"
+    for path in (f"/agent/{WORKING_SESSION}", "/workspaces", "/feed"):
+        assert rig.http.get(path).headers["cache-control"] == "no-store", path
+
+
+def test_back_belongs_to_the_herd_in_the_markup(tmp_path: Path) -> None:
+    rig = build_rig(tmp_path)
+    feed = rig.http.get("/").text
+    assert 'class="topbar__link" href="/workspaces">' in feed
+    assert 'class="topbar__link" href="/push">' in feed
+    cards = rig.http.get("/feed", headers=FRAGMENT).text
+    assert f'href="/agent/{WORKING_SESSION}">' in cards
+    page = rig.http.get(f"/agent/{WORKING_SESSION}").text
+    assert page.count("data-hp-replace") == 5  # brand, leave, End, two tabs
+    assert f'href="/agent/{WORKING_SESSION}?tab=pane" data-hp-replace' in page

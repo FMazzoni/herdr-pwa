@@ -5,13 +5,13 @@ from typing import Annotated
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, Response
 
 from herdr_pwa import auth
 from herdr_pwa.engine.model import Snapshot, Workspace
 from herdr_pwa.web.deps import WebState, viewer_guard
 from herdr_pwa.web.failures import refused
-from herdr_pwa.web.writing import FormBody, agent_url, form, ticked, writer_for
+from herdr_pwa.web.writing import FormBody, agent_url, form, opened, ticked, writer_for
 from herdr_pwa.writes.lifecycle import (
     HARNESSES,
     AgentStarted,
@@ -41,10 +41,10 @@ def _new_context(snapshot: Snapshot, values: dict[str, str]) -> dict[str, object
     }
 
 
-def _started(result: AgentStarted) -> Response:
+def _started(request: Request, result: AgentStarted) -> Response:
     # A late-identity harness has no session yet, so its page is the door at its address.
     where = agent_url(result.session) if result.session else f"/starting/{quote(result.pane)}"
-    return RedirectResponse(where, status_code=303)
+    return opened(request, where)
 
 
 def _workspace_back(workspace_id: str) -> str:
@@ -76,7 +76,7 @@ def build(web: WebState) -> APIRouter:
         if isinstance(result, Refused):
             context = _new_context(web.client.snapshot(), values)
             return refused(web.pages, "new.html", context, result, whole=True)
-        return _started(result)
+        return _started(request, result)
 
     _workspace_routes(router, web)
     _close_routes(router, web, guard)
@@ -99,12 +99,12 @@ def _workspace_routes(router: APIRouter, web: WebState) -> None:
         return web.pages.page("workspace_new.html", {"label": ""})
 
     @router.post("/workspaces/new", response_model=None)
-    def workspace_new(body: FormBody = b"") -> Response:  # pyright: ignore[reportUnusedFunction]
+    def workspace_new(request: Request, body: FormBody = b"") -> Response:  # pyright: ignore[reportUnusedFunction]
         label = form(body).get("label", "")
         result = create_workspace(web.client, label)
         if isinstance(result, Refused):
             return refused(web.pages, "workspace_new.html", {"label": label}, result, whole=True)
-        return RedirectResponse(_workspace_back(result.workspace_id), status_code=303)
+        return opened(request, _workspace_back(result.workspace_id))
 
     @router.get("/workspaces/{workspace_id}/rename")
     def rename_form(workspace_id: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
@@ -114,14 +114,14 @@ def _workspace_routes(router: APIRouter, web: WebState) -> None:
         return web.pages.page("workspace_rename.html", {"workspace": found, "label": found.label})
 
     @router.post("/workspaces/{workspace_id}/rename", response_model=None)
-    def rename(workspace_id: str, body: FormBody = b"") -> Response:  # pyright: ignore[reportUnusedFunction]
+    def rename(workspace_id: str, request: Request, body: FormBody = b"") -> Response:  # pyright: ignore[reportUnusedFunction]
         label = form(body).get("label", "")
         result = rename_workspace(web.client, workspace_id, label)
         if isinstance(result, Refused):
             found = _find(web.client.snapshot(), workspace_id)
             context = {"workspace": found, "label": label}
             return refused(web.pages, "workspace_rename.html", context, result, whole=True)
-        return RedirectResponse(_workspace_back(workspace_id), status_code=303)
+        return opened(request, _workspace_back(workspace_id))
 
 
 def _close_context(web: WebState, workspace_id: str, *, armed: bool) -> dict[str, object]:
@@ -161,4 +161,4 @@ def _close_routes(
             armed = ask.confirmed and result.refusal in (Refusal.CONFIRM, Refusal.COUNT_CHANGED)
             context = _close_context(web, workspace_id, armed=armed)
             return refused(web.pages, "workspace_close.html", context, result, whole=True)
-        return RedirectResponse("/workspaces", status_code=303)
+        return opened(request, "/workspaces")

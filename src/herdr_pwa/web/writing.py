@@ -1,9 +1,11 @@
 """What every write route shares: the form, the ids in the URL, and a writer that audits who asks."""
 
+import json
 from typing import Annotated, Final
 from urllib.parse import parse_qs, quote
 
 from fastapi import Body, Request
+from fastapi.responses import RedirectResponse, Response
 
 from herdr_pwa import auth
 from herdr_pwa.audit import Origin, Recorder
@@ -15,6 +17,8 @@ from herdr_pwa.writes.refusal import Refusal, Refused
 from herdr_pwa.writes.resolve import Writer
 
 FORM: Final = "application/x-www-form-urlencoded"
+# Names the page a finished write opens; app.js answers it with location.replace.
+OPENED_EVENT: Final = "hp:opened"
 
 type FormBody = Annotated[bytes, Body(media_type=FORM)]
 
@@ -71,3 +75,13 @@ def raise_if_gone(result: Refused) -> None:
     """A write refused because its agent is gone is answered by the read table's 404."""
     if result.refusal is Refusal.GONE:
         raise AgentGone(result.detail)
+
+
+def opened(request: Request, where: str) -> Response:
+    """Send a finished write on to ``where`` without leaving the spent form in history."""
+    if request.headers.get("HX-Request"):
+        # htmx's HX-Redirect is location.href, a push; only the page can replace its own entry.
+        trigger = json.dumps({OPENED_EVENT: {"where": where}})
+        return Response(status_code=200, headers={"HX-Trigger": trigger, "HX-Reswap": "none"})
+    # Without script the form's POST already pushed; the 303 at least lands on a GET.
+    return RedirectResponse(where, status_code=303)
