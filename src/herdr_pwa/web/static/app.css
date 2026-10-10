@@ -3,6 +3,8 @@
    size and step from a token in :root (scripts/css_tokens.py holds the line). */
 
 :root {
+  /* Native controls (select popups, checkboxes, scrollbars) draw in their dark form. */
+  color-scheme: dark;
   --ground: #0C131B;
   --surface: #141D28;
   --surface-2: #1A2531;
@@ -73,6 +75,9 @@
   --tap: 44px;
   --dot: 8px;
   --check: 22px;
+  /* The select's chevron: two strokes this long, inset this far from the right edge. */
+  --chevron: 5px;
+  --chevron-inset: 16px;
   --page-max: 760px;
   --sheet-max: 640px;
 }
@@ -290,8 +295,23 @@ input, select, textarea {
   max-width: 100%;
 }
 input, select { min-height: var(--tap); }
+/* The platform draws a select its own way (pale on white in WebKit); this one matches the inputs. */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  padding-right: calc(var(--chevron-inset) + var(--space-10));
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--ink-2) 50%),
+    linear-gradient(135deg, var(--ink-2) 50%, transparent 50%);
+  background-position:
+    right calc(var(--chevron-inset) + var(--chevron)) center,
+    right var(--chevron-inset) center;
+  background-size: var(--chevron) var(--chevron);
+  background-repeat: no-repeat;
+}
 /* A checkbox is drawn small; the label row around it is the 44px target. */
-input[type=checkbox] { min-height: 0; width: var(--check); height: var(--check); margin: 0; }
+input[type=checkbox] { accent-color: var(--accent); min-height: 0; width: var(--check); height: var(--check); margin: 0; }
 textarea { resize: vertical; min-height: 4.5em; }
 .button {
   font: 600 var(--text-7)/1 var(--sans);
