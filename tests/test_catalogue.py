@@ -24,10 +24,9 @@ FRAGMENT = re.compile(r'hx-get="([^"]+)"')
 def _statuses(state: State, home: Path) -> list[tuple[str, int]]:
     rig = build(state, home)
     page = rig.http.get(state.path, follow_redirects=False)
-    found = [(state.path, page.status_code)]
-    for url in dict.fromkeys(FRAGMENT.findall(page.text)):
-        found.append((url, rig.http.get(url.replace("&amp;", "&")).status_code))
-    return found
+    urls = dict.fromkeys(FRAGMENT.findall(page.text))
+    fragments = [(u, rig.http.get(u.replace("&amp;", "&")).status_code) for u in urls]
+    return [(state.path, page.status_code), *fragments]
 
 
 @pytest.mark.parametrize("state", STATES, ids=[s.name for s in STATES])

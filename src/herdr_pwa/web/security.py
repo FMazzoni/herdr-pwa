@@ -24,6 +24,9 @@ CSP: Final = "; ".join(
     )
 )
 NO_STORE: Final = "no-store"
+# Safari keeps a no-store page out of the back-forward cache; a page that renders no agent
+# state may revalidate instead, so a swipe back to it is instant rather than a blank reload.
+ROWLESS: Final = "private, no-cache"
 BUILD_HEADER: Final = "HP-Build"
 
 
@@ -40,7 +43,7 @@ class SecurityHeaders:
         headers["X-Content-Type-Options"] = "nosniff"
         headers["Referrer-Policy"] = "same-origin"
         headers[BUILD_HEADER] = self.build
-        # Agent content is never cached anywhere; only hashed static files opt out.
+        # Agent content is never cached anywhere; only hashed static files and rowless pages opt out.
         if "cache-control" not in headers:
             headers["Cache-Control"] = NO_STORE
 

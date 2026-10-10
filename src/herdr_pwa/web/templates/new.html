@@ -1,10 +1,11 @@
 {% extends "base.html" %}
+{% from "_nav.html" import replace, sheet %}
 {% block title %}New agent &mdash; herdr{% endblock %}
 {% block body %}
 <main class="agent">
   <h2 class="group__head"><span class="group__label">New agent</span></h2>
   {% include "_notice.html" %}
-  <form class="form" method="post" action="/new">
+  <form class="form" {{ sheet("/new") }}>
     <label class="field"><span class="field__label">Name</span><input name="name" value="{{ values.get('name', '') }}" maxlength="32" required></label>
     <label class="field"><span class="field__label">Kind</span>
       <select name="kind">{% for kind in kinds %}<option value="{{ kind }}"{% if kind == values.get('kind') %} selected{% endif %}>{{ kind }}</option>{% endfor %}</select>

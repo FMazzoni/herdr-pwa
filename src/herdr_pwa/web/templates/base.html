@@ -17,11 +17,14 @@
 <link rel="stylesheet" href="{{ asset('app.css') }}">
 <script src="{{ asset('htmx.min.js') }}" defer></script>
 <script src="{{ asset('app.js') }}" defer></script>
+{% if device_report %}
+<script src="{{ asset('devreport.js') }}" defer></script>
+{% endif %}
 {% block head %}{% endblock %}
 </head>
 <body>
 <header class="topbar">
-  <a class="brand" href="/">herdr</a>
+  {% from "_nav.html" import replace %}<a class="brand" href="/" {{ replace() }}>herdr</a>
   {% block topbar %}{% endblock %}
 </header>
 {# Outside every polled region, so a tick can never replace it under a thumb. #}

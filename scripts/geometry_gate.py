@@ -33,6 +33,8 @@ GUARDED = (
     *(f"tests/fixtures/{name}/detection.txt" for name in CAPTURES),
     "scripts/firefox.py",
     "scripts/geometry.py",
+    "scripts/backnav.py",
+    "tests/_fake_herd.py",
     "scripts/geometry_gate.py",
 )
 SKIP = ("__pycache__",)

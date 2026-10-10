@@ -19,7 +19,16 @@ from herdr_pwa.web.assets import Assets
 from herdr_pwa.web.deps import ClientFactory, WebState
 from herdr_pwa.web.notifier import PushState, open_push
 from herdr_pwa.web.render import Pages
-from herdr_pwa.web.routers import agent, compose, feed, manage, push, shell, workspace
+from herdr_pwa.web.routers import (
+    agent,
+    compose,
+    devreport,
+    feed,
+    manage,
+    push,
+    shell,
+    workspace,
+)
 from herdr_pwa.web.security import SecurityHeaders
 from herdr_pwa.writes.outcome import Pacing
 
@@ -64,7 +73,7 @@ def create_app(
 ) -> FastAPI:
     """Build the web application around one runner client, one snapshot cache and push."""
     assets = Assets.load()
-    pages = Pages(assets)
+    pages = Pages(assets, device_report=settings.device_report)
     audit = AuditLog(
         settings.state_dir,
         max_bytes=settings.audit_max_bytes,
@@ -96,6 +105,9 @@ def create_app(
         app.include_router(build(web))
     app.include_router(push.build(web, pushing))
     app.include_router(shell.build(web, assets))
+    # Off means the route does not exist at all, so a stray post is an ordinary 404.
+    if settings.device_report:
+        app.include_router(devreport.build(web))
     app.add_middleware(GZipMiddleware, minimum_size=GZIP_MIN_BYTES)
     # Added last, so it is outermost and stamps refusals and crashes too.
     app.add_middleware(SecurityHeaders, build=assets.build)

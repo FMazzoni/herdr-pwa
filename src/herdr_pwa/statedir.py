@@ -50,6 +50,23 @@ def write_secret(path: Path, text: str, *, exclusive: bool = False) -> None:
         raise
 
 
+def append_line(path: Path, line: str) -> None:
+    """Append one line to a 0600 file, creating it if missing.
+
+    Raises:
+        OSError: the append failed.
+        StateError: the file has a mode other than 0600.
+    """
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, FILE_MODE)
+    try:
+        mode = stat.S_IMODE(os.fstat(fd).st_mode)
+        if mode != FILE_MODE:
+            raise StateError(f"{path} is mode {mode:04o}, expected 0600")
+        _ = os.write(fd, line.encode("utf-8"))
+    finally:
+        os.close(fd)
+
+
 def _check_mode(path: Path) -> None:
     mode = stat.S_IMODE(path.stat().st_mode)
     if mode != FILE_MODE:

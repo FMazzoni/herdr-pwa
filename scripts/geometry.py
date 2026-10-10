@@ -17,15 +17,21 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+import backnav  # noqa: E402
 from firefox import BrowserError, Marionette, browser, free_port, phone_window  # noqa: E402
 
 from tests.catalogue import STATES, State, build, pick  # noqa: E402
 
+# The --only name for the back-navigation walks.
+HISTORY = "history"
 # 390 is the phone this app is designed on; 320 is the narrowest one still sold (iPhone SE 1st gen).
 WIDTHS = (390, 320)
 HEIGHT = 844
 # Apple's HIG minimum and WCAG 2.5.5: 44 CSS px in both directions.
 TAP_FLOOR = 44
+# The page gutter. iOS starts its back swipe at the left edge; how wide that strip is can only
+# be measured on the device, so a sideways scroller must at least start inside the gutter.
+EDGE_INSET = 16
 READY_SECONDS = 15.0
 
 SCROLL_ALLOWED: dict[str, str] = {
@@ -73,7 +79,7 @@ return {
 
 # One synchronous script, so no htmx poll can swap the DOM halfway through a measurement.
 PROBE_GEOMETRY = r"""
-const [scrollAllowed, tapAllowed, tappable, floor] = arguments;
+const [scrollAllowed, tapAllowed, tappable, floor, edge] = arguments;
 for (const d of document.querySelectorAll("details")) d.open = true;
 const describe = (el) => {
   const cls = (el.getAttribute("class") || "").trim().split(/\s+/).filter(Boolean);
@@ -90,9 +96,14 @@ const contained = (el) => {
   }
   return false;
 };
-const scrollers = [], spills = [], taps = [], spilled = new Set();
+const scrollers = [], spills = [], taps = [], edges = [], spilled = new Set();
 for (const el of document.body.querySelectorAll("*")) {
   const style = getComputedStyle(el);
+  const sideways = style.overflowX === "auto" || style.overflowX === "scroll";
+  // A box that can pan sideways under the left edge takes the swipe that means back.
+  if (sideways && el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().left < edge) {
+    edges.push({ what: describe(el), left: el.getBoundingClientRect().left });
+  }
   if ((style.overflowX === "auto" || style.overflowX === "scroll")
       && el.scrollWidth > el.clientWidth + 1) {
     scrollers.push({ what: describe(el), content: el.scrollWidth, box: el.clientWidth,
@@ -117,7 +128,8 @@ for (const el of document.querySelectorAll(tappable)) {
   taps.push({ what: describe(el), width: r.width, height: r.height,
     allowed: tapAllowed.find((s) => el.matches(s)) || null });
 }
-return { page: page, scrollers: scrollers, spills: spills, taps: taps, measured: measured };
+return { page: page, scrollers: scrollers, spills: spills, taps: taps, edges: edges,
+  measured: measured };
 """
 
 
@@ -132,6 +144,10 @@ class Switch:
         if self.app is None:
             raise RuntimeError("no state is being served")
         await self.app(scope, receive, send)
+
+    def mount(self, app: ASGIApp) -> None:
+        """Serve ``app`` from the next request on."""
+        self.app = app
 
 
 @contextmanager
@@ -241,6 +257,11 @@ def judge(found: dict[str, object], where: str, tally: Tally) -> None:
             tally.problems.append(
                 f"{where}: unlisted scroller {row['what']}: {row['content']}px in {row['box']}px"
             )
+    for row in _rows(found, "edges"):
+        tally.problems.append(
+            f"{where}: sideways scroller {row['what']} starts {row['left']:.1f}px from the "
+            f"left edge, inside the {EDGE_INSET}px the back swipe needs"
+        )
     for row in _rows(found, "spills"):
         tally.problems.append(
             f"{where}: {row['what']} spills out of the viewport "
@@ -272,7 +293,7 @@ def run_state(driver: Marionette, state: State, base: str, width: int, tally: Ta
         tally.problems += [f"{where}: NOT LOADED: {p}" for p in problems]
         return
     found = driver.script(
-        PROBE_GEOMETRY, list(SCROLL_ALLOWED), list(TAP_ALLOWED), TAPPABLE, TAP_FLOOR
+        PROBE_GEOMETRY, list(SCROLL_ALLOWED), list(TAP_ALLOWED), TAPPABLE, TAP_FLOOR, EDGE_INSET
     )
     judge(found if isinstance(found, dict) else {}, where, tally)
     print(f"  measured {where}", flush=True)
@@ -288,7 +309,7 @@ def stale(tally: Tally) -> list[str]:
     ]
 
 
-def report(tally: Tally, *, runs: int, whole: bool) -> int:
+def report(tally: Tally, *, whole: bool, runs: int) -> int:
     """Print the exceptions with their reasons and every problem; non-zero on any problem."""
     for kind, table in (("scroller", SCROLL_ALLOWED), ("tap", TAP_ALLOWED)):
         for selector, why in table.items():
@@ -310,23 +331,29 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     # The unreachable states log a warning per request by design; the report is the output.
     logging.getLogger("herdr_pwa").setLevel(logging.ERROR)
-    chosen = pick(args.only)
+    names = [n for n in args.only if n != HISTORY]
+    chosen = pick(names) if names or not args.only else []
+    widths = WIDTHS if chosen else ()
     tally = Tally()
     switch = Switch()
     with tempfile.TemporaryDirectory(prefix="hp-geometry-") as scratch, serve(switch) as base:
         try:
             with browser() as driver:
-                for width in WIDTHS:
+                for width in widths:
                     phone_window(driver, width, HEIGHT)
                     for state in chosen:
                         install(switch, state, Path(scratch) / f"{width}")
                         run_state(driver, state, base, width, tally)
                     driver.send("WebDriver:CloseWindow", {})
                     driver.send("WebDriver:SwitchToWindow", {"handle": driver.handles()[0]})
+                # History belongs to a top-level window, and this one is left on the app.
+                if not args.only or HISTORY in args.only:
+                    tally.problems += backnav.run(driver, base, switch.mount, Path(scratch))
         except BrowserError as exc:
             print(f"geometry: the browser failed: {exc}", file=sys.stderr)
             return 1
-    return report(tally, runs=len(chosen) * len(WIDTHS), whole=len(chosen) == len(STATES))
+    whole = len(chosen) == len(STATES) and not args.only
+    return report(tally, whole=whole, runs=len(chosen) * len(widths))
 
 
 if __name__ == "__main__":

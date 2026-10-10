@@ -1,5 +1,6 @@
 """Every write route over a fake herd: what it sends, what it refuses, and at which status."""
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -14,7 +15,7 @@ from herdr_pwa.settings import Settings
 from herdr_pwa.web.app import create_app
 from herdr_pwa.writes.keys import control_token
 from herdr_pwa.writes.outcome import Pacing
-from tests._fake_herd import P3, S1, S2, SETTLED, FakeClock, FakeHerd, capture
+from tests._fake_herd import P3, P5, S1, S2, SETTLED, FakeClock, FakeHerd, capture
 from tests.webfakes import IDENTITY
 
 ORIGIN = {"Origin": "http://testserver"}
@@ -288,3 +289,37 @@ def test_a_missing_workspace_is_404(tmp_path: Path) -> None:
     w = idle(tmp_path)
     assert w.http.get("/workspaces/w404/close").status_code == 404
     assert w.http.get("/workspaces/w404/rename").status_code == 404
+
+
+def test_a_sheet_write_under_htmx_replaces_rather_than_redirects(tmp_path: Path) -> None:
+    herd = FakeHerd()
+    herd.put(P3, S1)
+    w = web(tmp_path, herd)
+    made = w.http.post(
+        "/workspaces/new",
+        data={"label": "scratch"},
+        headers={**ORIGIN, "HX-Request": "true"},
+        follow_redirects=False,
+    )
+    assert made.status_code == 200
+    assert "location" not in made.headers
+    assert "HX-Redirect" not in made.headers
+    assert made.headers["hx-reswap"] == "none"
+    assert json.loads(made.headers["hx-trigger"]) == {"hp:opened": {"where": "/workspaces#w7"}}
+
+
+def test_every_form_that_navigates_is_a_sheet(tmp_path: Path) -> None:
+    herd = FakeHerd()
+    herd.put(P3, S1)
+    herd.put(P5, "", status="blocked", launch_pending=True)
+    w = web(tmp_path, herd)
+    for path in (
+        f"/agent/{S1}/close",
+        "/new",
+        "/workspaces/new",
+        "/workspaces/w1/rename",
+        "/workspaces/w1/close",
+        "/starting/w1:p5",
+    ):
+        body = w.http.get(path).text
+        assert body.count("<form") == body.count("data-hp-sheet") > 0, path
