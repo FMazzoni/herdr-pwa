@@ -18,12 +18,15 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 import backnav  # noqa: E402
+import chatend  # noqa: E402
 from firefox import BrowserError, Marionette, browser, free_port, phone_window  # noqa: E402
 
 from tests.catalogue import STATES, State, build, pick  # noqa: E402
 
 # The --only name for the back-navigation walks.
 HISTORY = "history"
+# The --only name for the Chat tab's scroll walk.
+CHAT_END = "chat-end"
 # 390 is the phone this app is designed on; 430 is the largest (a Pro Max size, run as a
 # Home Screen app); 320 is the narrowest one still sold (iPhone SE 1st gen).
 WIDTHS = (390, 430, 320)
@@ -384,7 +387,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     # The unreachable states log a warning per request by design; the report is the output.
     logging.getLogger("herdr_pwa").setLevel(logging.ERROR)
-    names = [n for n in args.only if n != HISTORY]
+    names = [n for n in args.only if n not in (HISTORY, CHAT_END)]
     chosen = pick(names) if names or not args.only else []
     widths = WIDTHS if chosen else ()
     tally = Tally()
@@ -402,6 +405,8 @@ def main(argv: list[str] | None = None) -> int:
                 # History belongs to a top-level window, and this one is left on the app.
                 if not args.only or HISTORY in args.only:
                     tally.problems += backnav.run(driver, base, switch.mount, Path(scratch))
+                if not args.only or CHAT_END in args.only:
+                    tally.problems += chatend.run(driver, base, switch.mount, Path(scratch))
         except BrowserError as exc:
             print(f"geometry: the browser failed: {exc}", file=sys.stderr)
             return 1
