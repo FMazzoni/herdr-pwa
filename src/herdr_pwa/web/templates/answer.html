@@ -87,3 +87,10 @@
     {% endif %}
   </div>
 </section>
+{# The page's status, redrawn with a sent key so it never says blocked under "Answered". Only
+   then: htmx fires afterSwap once per swapped element, and on a poll the extra two would
+   send app.js's open-at-the-question scroll to the end. #}
+{% if sent is defined %}
+<span class="agent__status" id="agent-status" hx-swap-oob="true">{{ status }}</span>
+{{ ui.dot(status, id="agent-dot", oob=true) }}
+{% endif %}

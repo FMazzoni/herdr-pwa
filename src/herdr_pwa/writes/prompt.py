@@ -156,21 +156,23 @@ def send_prompt(writer: Writer, ask: PromptAsk) -> PromptSent | Refused:
     return _type(writer, send)
 
 
-def _look(client: HerdrClient, pane: PaneId) -> str | Refused:
+def _look(client: HerdrClient, pane: PaneId, *, by_address: bool) -> str | Refused:
     # One look at a starting pane: its screen once it reads input, "" before that.
     try:
         started = client.started_agent(pane)
         screen = client.read(pane, source="visible") if started.ready else ""
     except EngineError as exc:
         return Refused(refusal_for(exc), _VERB, detail=str(exc))
-    return Refused(Refusal.HAS_IDENTITY, _VERB) if started.session else screen
+    return Refused(Refusal.HAS_IDENTITY, _VERB) if by_address and started.session else screen
 
 
-def _settled(client: HerdrClient, pane: PaneId, pacing: Pacing) -> Refused | None:
+def _settled(
+    client: HerdrClient, pane: PaneId, pacing: Pacing, *, by_address: bool = True
+) -> Refused | None:
     deadline = pacing.clock() + READY_WAIT
     seen, still = "", 0
     while pacing.clock() < deadline:
-        screen = _look(client, pane)
+        screen = _look(client, pane, by_address=by_address)
         if isinstance(screen, Refused):
             return screen
         still = still + 1 if screen and screen == seen else int(bool(screen))
@@ -198,3 +200,19 @@ def send_first_prompt(
     if refused is not None:
         return refused
     return _type(writer, _Send(pane, NO_SESSION, text, "", confirmed, issue=True))
+
+
+def send_opening_prompt(writer: Writer, pane: PaneId, text: str) -> PromptSent | Refused:
+    """Type the new-agent form's prompt at the agent this request started, once it listens."""
+    # The form held a destructive prompt for its confirm before anything was created.
+    refused = _text_refusal(text) or _settled(writer.client, pane, writer.pacing, by_address=False)
+    if refused is not None:
+        return refused
+    snap = snapshot_now(writer.client, verb=_VERB)
+    if isinstance(snap, Refused):
+        return snap
+    agent = snap.by_target(pane)
+    if agent is None:
+        return Refused(Refusal.GONE, _VERB)
+    # Keyed on whatever identity it has by now; the wire checks that it still holds the pane.
+    return _type(writer, _Send(pane, agent.session, text, "", confirmed=True, issue=True))

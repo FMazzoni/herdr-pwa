@@ -2,7 +2,7 @@
 
 from collections.abc import Callable
 from typing import Annotated
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, Response
@@ -11,7 +11,15 @@ from herdr_pwa import auth
 from herdr_pwa.engine.model import Snapshot, Workspace
 from herdr_pwa.web.deps import WebState, viewer_guard
 from herdr_pwa.web.failures import refused
-from herdr_pwa.web.writing import FormBody, agent_url, form, opened, ticked, writer_for
+from herdr_pwa.web.writing import (
+    FormBody,
+    agent_url,
+    first_code,
+    form,
+    opened,
+    ticked,
+    writer_for,
+)
 from herdr_pwa.writes.lifecycle import (
     HARNESSES,
     AgentStarted,
@@ -44,7 +52,8 @@ def _new_context(snapshot: Snapshot, values: dict[str, str]) -> dict[str, object
 def _started(request: Request, result: AgentStarted) -> Response:
     # A late-identity harness has no session yet, so its page is the door at its address.
     where = agent_url(result.session) if result.session else f"/starting/{quote(result.pane)}"
-    return opened(request, where)
+    code = first_code(result.first)
+    return opened(request, f"{where}?{urlencode({'first': code})}" if code else where)
 
 
 def _workspace_back(workspace_id: str) -> str:
@@ -71,6 +80,8 @@ def build(web: WebState) -> APIRouter:
             workspace_id=values.get("workspace", ""),
             cwd=values.get("cwd", ""),
             model=values.get("model", "").strip(),
+            prompt=values.get("prompt", ""),
+            confirmed=ticked(values, "confirm"),
         )
         result = start_agent(writer_for(web, request, identity), ask)
         if isinstance(result, Refused):

@@ -1,7 +1,7 @@
 {# The repeated pieces of every screen. A look changes here, or in app.css's tokens, once. #}
 
 {# A status dot; the colour comes from its status class. #}
-{% macro dot(status) %}<span class="dot dot--{{ status }}" aria-hidden="true"></span>{% endmacro %}
+{% macro dot(status, id=none, oob=false) %}<span class="dot dot--{{ status }}"{% if id %} id="{{ id }}"{% endif %}{% if oob %} hx-swap-oob="true"{% endif %} aria-hidden="true"></span>{% endmacro %}
 
 {# The small-caps header over a group or a page, with an optional count beside it. #}
 {% macro section_head(label, n=none, note=none) %}<h2 class="group__head"><span class="group__label">{{ label }}</span>{% if n is not none %}<span class="group__n">{{ n }}</span>{% endif %}{% if note %}<span class="group__note">{{ note }}</span>{% endif %}</h2>{% endmacro %}

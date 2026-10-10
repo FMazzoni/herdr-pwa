@@ -1,6 +1,7 @@
 """What every write route shares: the form, the ids in the URL, and a writer that audits who asks."""
 
 import json
+from dataclasses import dataclass
 from typing import Annotated, Final
 from urllib.parse import parse_qs, quote
 
@@ -13,7 +14,8 @@ from herdr_pwa.engine.model import PaneId, SessionId, as_pane_id, as_session_id
 from herdr_pwa.engine.transport import InvalidRequest
 from herdr_pwa.web.deps import WebState
 from herdr_pwa.web.failures import AgentGone
-from herdr_pwa.writes.refusal import Refusal, Refused
+from herdr_pwa.writes.prompt import PromptSent
+from herdr_pwa.writes.refusal import FAILURES, Refusal, Refused
 from herdr_pwa.writes.resolve import Writer
 
 FORM: Final = "application/x-www-form-urlencoded"
@@ -85,3 +87,43 @@ def opened(request: Request, where: str) -> Response:
         return Response(status_code=200, headers={"HX-Trigger": trigger, "HX-Reswap": "none"})
     # Without script the form's POST already pushed; the 303 at least lands on a GET.
     return RedirectResponse(where, status_code=303)
+
+
+# What a create's first prompt came to, carried to the page it opens as ``?first=``.
+FIRST_SENT: Final = "sent"
+FIRST_UNVERIFIED: Final = "unverified"
+
+
+def first_code(first: PromptSent | Refused | None) -> str:
+    """The ``?first=`` value for a create's first prompt, or ``""`` when it carried none."""
+    if first is None:
+        return ""
+    if isinstance(first, Refused):
+        return first.refusal.value
+    return FIRST_SENT if first.verified else FIRST_UNVERIFIED
+
+
+@dataclass(frozen=True, slots=True)
+class FirstNote:
+    """The banner the opened page shows about the first prompt the create carried."""
+
+    kind: str
+    what: str
+    why: str = ""
+
+
+def first_note(code: str) -> FirstNote | None:
+    """What to say about a carried first prompt; an unknown code says nothing."""
+    if code == FIRST_SENT:
+        return FirstNote("sent", "Started, and your first prompt is on the pane.")
+    if code == FIRST_UNVERIFIED:
+        return FirstNote(
+            "held",
+            "Started. Your first prompt was sent, but the pane did not show it.",
+            "Read the Pane before sending it again.",
+        )
+    refusal = next((r for r in Refusal if r.value == code), None)
+    if refusal is None:
+        return None
+    why = FAILURES[refusal].says.format(verb="sent")
+    return FirstNote("failure", "Started, but your first prompt was not sent.", why)

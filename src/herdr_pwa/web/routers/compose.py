@@ -21,6 +21,7 @@ from herdr_pwa.web.writing import (
     address_of,
     agent_url,
     expected,
+    first_note,
     form,
     identity_of,
     opened,
@@ -59,6 +60,16 @@ def _question(web: WebState, agent: Agent) -> BlockedPrompt | None:
         return None
 
 
+# Said, not drawn as a herdr state: the question went, and herdr has not yet said what replaced it.
+UPDATING: Final = "updating"
+
+
+def shown_status(agent: Agent, sent: KeySent | None = None) -> str:
+    """The status word the agent page shows: herdr's, or "updating" over a question just answered."""
+    answered = sent is not None and sent.evidence is Evidence.GONE
+    return UPDATING if answered and agent.status is AgentStatus.BLOCKED else agent.status.value
+
+
 def answer_context(agent: Agent, prompt: BlockedPrompt | None) -> dict[str, object]:
     """What the answer region draws; its digits come from the function the write checks with."""
     allowed = allowed_keys(prompt)
@@ -74,6 +85,7 @@ def answer_context(agent: Agent, prompt: BlockedPrompt | None) -> dict[str, obje
         "pad": [k for k in PAD_KEYS if k not in hinted],
         "interrupt": INTERRUPT_KEY,
         "cadence": ANSWER_CADENCE,
+        "status": shown_status(agent),
     }
 
 
@@ -145,9 +157,24 @@ def _key(web: WebState, writer: Writer, session: SessionId, values: dict[str, st
     return _answered(web, agent, result)
 
 
+def _fresh(web: WebState, agent: Agent) -> Agent:
+    # Refreshes the shared snapshot too, so the poll this answer pokes reads the same herd.
+    try:
+        found = web.cache.get(web.client.snapshot, max_age=0).value.by_session(agent.session)
+    except EngineError:
+        return agent
+    return found or agent
+
+
 def _answered(web: WebState, agent: Agent, result: KeySent) -> HTMLResponse:
     # Controls come back drawn from the screen the key made, never the one it was aimed at.
-    context = {**answer_context(agent, result.prompt), "sent": result, "said": said(result)}
+    agent = _fresh(web, agent)
+    context = {
+        **answer_context(agent, result.prompt),
+        "sent": result,
+        "said": said(result),
+        "status": shown_status(agent, result),
+    }
     return web.pages.fragment("answer.html", context, headers={"HX-Trigger": "hp:poke"})
 
 
@@ -250,12 +277,13 @@ def _starting_routes(
     router: APIRouter, web: WebState, guard: Callable[[Request], auth.Identity]
 ) -> None:
     @router.get("/starting/{pane}", response_model=None)
-    def starting(pane: str) -> Response:  # pyright: ignore[reportUnusedFunction]
+    def starting(pane: str, first: str = "") -> Response:  # pyright: ignore[reportUnusedFunction]
         target = address_of(pane)
         agent = web.client.snapshot().by_target(target)
         if agent is not None and agent.session:
             return RedirectResponse(agent_url(agent.session), status_code=303)
-        return web.pages.page("starting.html", _door_context(target, agent))
+        context = {**_door_context(target, agent), "first": first_note(first)}
+        return web.pages.page("starting.html", context)
 
     @router.post("/starting/{pane}/prompt")
     def first_prompt(  # pyright: ignore[reportUnusedFunction]
