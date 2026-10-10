@@ -7,7 +7,7 @@ from collections.abc import Callable
 
 import uvicorn
 
-from herdr_pwa import auth, pairing, tailscale
+from herdr_pwa import auth, devreport, pairing, tailscale
 from herdr_pwa.engine.client import HerdrClient
 from herdr_pwa.engine.transport import EngineError
 from herdr_pwa.protocol import EXPECTED_PROTOCOL
@@ -90,6 +90,14 @@ def serve(settings: Settings, port: int | None) -> None:
     uvicorn.run(create_app(settings), host=settings.host, port=port or settings.port)
 
 
+def device_report(
+    settings: Settings, session: str = "", *, write: Callable[[str], object] = sys.stdout.write
+) -> int:
+    """Print the latest (or the named) device-report session from the state dir."""
+    write(devreport.render(settings.state_dir.expanduser(), session))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     """Parse arguments and run the chosen command."""
     parser = argparse.ArgumentParser(prog="herdr-pwa")
@@ -101,11 +109,16 @@ def main(argv: list[str] | None = None) -> int:
     pair_cmd.add_argument(
         "--check", action="store_true", help="report what serve has, change nothing"
     )
+    report_cmd = sub.add_parser("device-report", help="print the latest phone device report")
+    report_cmd.add_argument("--session", default="", help="a session id instead of the latest")
     args = parser.parse_args(argv)
     settings = Settings()
     command: str = args.command  # pyright: ignore[reportAny]
     if command == "doctor":
         return doctor(settings)
+    if command == "device-report":
+        session: str = args.session  # pyright: ignore[reportAny]
+        return device_report(settings, session)
     if command == "pair":
         check: bool = args.check  # pyright: ignore[reportAny]
         return pair(settings, publish=not check)

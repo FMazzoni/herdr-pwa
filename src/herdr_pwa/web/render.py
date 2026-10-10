@@ -16,7 +16,9 @@ FRAGMENT_HEADER: Final = "HP-Fragment"
 class Pages:
     """Renders templates into HTML responses; every template autoescapes."""
 
-    def __init__(self, assets: Assets, directory: Path = TEMPLATES_DIR) -> None:
+    def __init__(
+        self, assets: Assets, directory: Path = TEMPLATES_DIR, *, device_report: bool = False
+    ) -> None:
         # autoescape=True rather than select_autoescape, so no file extension can opt out.
         self.env = Environment(
             loader=FileSystemLoader(directory),
@@ -25,7 +27,11 @@ class Pages:
             trim_blocks=True,
             lstrip_blocks=True,
         )
-        self.shared: dict[str, object] = {"asset": assets.url, "build": assets.build}
+        self.shared: dict[str, object] = {
+            "asset": assets.url,
+            "build": assets.build,
+            "device_report": device_report,
+        }
 
     def render(self, name: str, context: Mapping[str, object]) -> str:
         """Render one template to a string."""

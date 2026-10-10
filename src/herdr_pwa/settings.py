@@ -51,6 +51,9 @@ class Settings(BaseSettings):
     push_unseen_finish: bool = True
     push_quiet_managed: bool = True
 
+    # Debug only: every page reports the phone's real geometry and navigation to the state dir.
+    device_report: bool = False
+
     audit_max_bytes: int = Field(default=5 * 1024 * 1024, ge=4096)
     audit_payload_chars: int = Field(default=512, ge=0)
 
