@@ -20,6 +20,7 @@ sys.path.insert(0, str(ROOT))
 import backnav  # noqa: E402
 import chatend  # noqa: E402
 import feedhold  # noqa: E402
+import voiceover  # noqa: E402
 from firefox import BrowserError, Marionette, browser, free_port, phone_window  # noqa: E402
 
 from tests.catalogue import STATES, State, build, pick  # noqa: E402
@@ -30,10 +31,16 @@ HISTORY = "history"
 CHAT_END = "chat-end"
 # The --only name for the feed's hold-under-the-thumb walk.
 FEED_HOLD = "feed-hold"
+# The --only name for the walks that listen as VoiceOver would.
+VOICEOVER = "voiceover"
 # 390 is the phone this app is designed on; 430 is the largest (a Pro Max size, run as a
 # Home Screen app); 320 is the narrowest one still sold (iPhone SE 1st gen).
 WIDTHS = (390, 430, 320)
 HEIGHT = 844
+# iPhone Text Size, as a multiple of the default root: 130% is a common setting, 200% is the
+# largest the plain slider reaches. The two widths that bracket the phones are run again at each.
+TEXT_SIZES = (1.3, 2.0)
+TEXT_WIDTHS = (430, 320)
 # Apple's HIG minimum and WCAG 2.5.5: 44 CSS px in both directions.
 TAP_FLOOR = 44
 # iOS Safari zooms the page into a focused field whose text is under 16px, and does not zoom back.
@@ -53,7 +60,7 @@ SCROLL_ALLOWED: dict[str, str] = {
         "the terminal mirror with Keep the columns on: the toggle asks for the terminal's own "
         "line breaks, so the pane scrolls inside its box, which starts inside the gutter"
     ),
-    ".turn__result pre": (
+    ".tool__result": (
         "a tool's output, which is terminal text with the same column meaning as code; it "
         "scrolls in its own box and the page around it does not move"
     ),
@@ -112,6 +119,22 @@ return {
   settled: (HTMX_SETTLED)(),
 };
 """.replace("HTMX_SETTLED", HTMX_SETTLED)
+
+# Text Size moves the root font, and every rem token with it; the browser's default stands in
+# for the system body size here, because only iOS answers -apple-system-body.
+GROW_TEXT = r"""
+const root = document.documentElement;
+root.style.fontSize = parseFloat(getComputedStyle(root).fontSize) * arguments[0] + "px";
+"""
+
+# The room the page keeps for the docked composer is its height now (app.js keeps it in step).
+DOCK_KEPT = r"""
+const bar = document.getElementById("composer");
+const kept = getComputedStyle(document.documentElement).getPropertyValue("--dock-h").trim();
+return !bar || kept === bar.offsetHeight + "px";
+"""
+# A few frames: the dock must follow the text itself, not wait for the next poll to redraw.
+DOCK_SECONDS = 0.3
 
 # One synchronous script, so no htmx poll can swap the DOM halfway through a measurement.
 PROBE_GEOMETRY = r"""
@@ -349,9 +372,37 @@ def judge(found: dict[str, object], where: str, tally: Tally) -> None:
     tally.taps += measured if isinstance(measured, int) else 0
 
 
-def run_state(driver: Marionette, state: State, base: str, width: int, tally: Tally) -> None:
-    """Load one state at one width; it must prove it loaded before anything is measured."""
-    where = f"{width}px {state.name}"
+def _grow_text(driver: Marionette, scale: float) -> bool:
+    """Set the page's text ``scale`` times its default; whether the dock followed it at once."""
+    driver.script(GROW_TEXT, scale)
+    deadline = time.monotonic() + DOCK_SECONDS
+    kept = False
+    while not kept and time.monotonic() < deadline:
+        time.sleep(0.05)
+        kept = bool(driver.script(DOCK_KEPT))
+    deadline = time.monotonic() + READY_SECONDS
+    while time.monotonic() < deadline and not driver.script(f"return ({HTMX_SETTLED})();"):
+        time.sleep(0.1)
+    return kept
+
+
+@dataclass(frozen=True)
+class Size:
+    """A phone width and an iPhone Text Size, as a multiple of the default."""
+
+    width: int
+    scale: float = 1.0
+
+    def label(self, name: str) -> str:
+        """Where a finding was made, for the report."""
+        text = f" at {self.scale:.0%} text" if self.scale != 1.0 else ""
+        return f"{self.width}px {name}{text}"
+
+
+def run_state(driver: Marionette, state: State, base: str, size: Size, tally: Tally) -> None:
+    """Load one state at one size; it must prove it loaded before anything is measured."""
+    where = size.label(state.name)
+    scale = size.scale
     try:
         driver.send("WebDriver:Navigate", {"url": base + state.path})
     except BrowserError as exc:
@@ -362,6 +413,11 @@ def run_state(driver: Marionette, state: State, base: str, width: int, tally: Ta
     if problems:
         tally.problems += [f"{where}: NOT LOADED: {p}" for p in problems]
         return
+    if scale != 1.0 and not _grow_text(driver, scale):
+        tally.problems.append(
+            f"{where}: the docked composer was not re-measured after the text grew, so the "
+            "room the page keeps for it is the old size"
+        )
     found = driver.script(
         PROBE_GEOMETRY,
         list(SCROLL_ALLOWED),
@@ -410,19 +466,22 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     # The unreachable states log a warning per request by design; the report is the output.
     logging.getLogger("herdr_pwa").setLevel(logging.ERROR)
-    names = [n for n in args.only if n not in (HISTORY, CHAT_END, FEED_HOLD)]
+    names = [n for n in args.only if n not in (HISTORY, CHAT_END, FEED_HOLD, VOICEOVER)]
     chosen = pick(names) if names or not args.only else []
     widths = WIDTHS if chosen else ()
+    sizes = [Size(w) for w in widths] + [
+        Size(w, s) for w in TEXT_WIDTHS for s in TEXT_SIZES if chosen
+    ]
     tally = Tally()
     switch = Switch()
     with tempfile.TemporaryDirectory(prefix="hp-geometry-") as scratch, serve(switch) as base:
         try:
             with browser() as driver:
-                for width in widths:
-                    phone_window(driver, width, HEIGHT)
+                for size in sizes:
+                    phone_window(driver, size.width, HEIGHT)
                     for state in chosen:
-                        install(switch, state, Path(scratch) / f"{width}")
-                        run_state(driver, state, base, width, tally)
+                        install(switch, state, Path(scratch) / f"{size.width}-{size.scale}")
+                        run_state(driver, state, base, size, tally)
                     driver.send("WebDriver:CloseWindow", {})
                     driver.send("WebDriver:SwitchToWindow", {"handle": driver.handles()[0]})
                 # History belongs to a top-level window, and this one is left on the app.
@@ -432,11 +491,13 @@ def main(argv: list[str] | None = None) -> int:
                     tally.problems += chatend.run(driver, base, switch.mount, Path(scratch))
                 if not args.only or FEED_HOLD in args.only:
                     tally.problems += feedhold.run(driver, base, switch.mount, Path(scratch))
+                if not args.only or VOICEOVER in args.only:
+                    tally.problems += voiceover.run(driver, base, switch.mount, Path(scratch))
         except BrowserError as exc:
             print(f"geometry: the browser failed: {exc}", file=sys.stderr)
             return 1
     whole = len(chosen) == len(STATES) and not args.only
-    return report(tally, whole=whole, runs=len(chosen) * len(widths))
+    return report(tally, whole=whole, runs=len(chosen) * len(sizes))
 
 
 if __name__ == "__main__":

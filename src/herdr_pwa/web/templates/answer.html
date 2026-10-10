@@ -33,7 +33,7 @@
   {% if decision.steps and decision.steps.total > 1 %}
   <p class="answer__note">One of {{ decision.steps.total }} questions: a tap picks a row, and the next question follows.</p>
   {% endif %}
-  <p class="answer__question">{{ decision.question }}</p>
+  <h2 class="answer__question">{{ decision.question }}</h2>
   {% if still %}
   <p class="answer__note answer__note--line">Rows aren't buttons here. Use the keys below{% if multi %}; Submit is the last row{% endif %}. <a class="answer__go" href="{{ pane_link }}" {{ replace() }}>Pane</a></p>
   {% endif %}
@@ -59,7 +59,7 @@
   {% endif %}
   {% endif %}
   {% elif blocked and sent is not defined and refused is not defined %}
-  {% call ui.banner("held", "It is waiting, and its question could not be read here.", "The keys below still reach it; look at the screen before you press one.", role="alert") %}<a class="banner__go" href="{{ pane_link }}" {{ replace() }}>Look at the Pane</a>{% endcall %}
+  {% call ui.banner("held", "It is waiting, and its question could not be read here.", "The keys below still reach it; look at the screen before you press one.") %}<a class="banner__go" href="{{ pane_link }}" {{ replace() }}>Look at the Pane</a>{% endcall %}
   {% endif %}
   <div class="answer__keys">
     {% if not still %}

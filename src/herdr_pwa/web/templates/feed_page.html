@@ -3,6 +3,7 @@
 {% block body %}
 {# The shell never reads the herd; the fragment does, and carries its own clock. #}
 <main class="feed-host">
+  <h1 class="sr-only">Herd</h1>
   {% set src = "/feed" ~ ("?ws=" ~ (ws|urlencode) if ws else "") %}
   <div id="feed-list" class="feed" data-hp-poll="{{ src }}" hx-get="{{ src }}" hx-trigger="load" hx-target="this" hx-swap="outerHTML">
     <p class="boot" role="status">Reaching the herd&hellip;</p>

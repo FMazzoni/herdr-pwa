@@ -2,12 +2,20 @@
 {% from "_nav.html" import replace, sheet %}
 {% import "_ui.html" as ui %}
 {% block title %}{{ heading }} &mdash; herdr{% endblock %}
-{# The back arrow is the way home here, so the brand gives its room to the title. #}
-{% block brand %}{% endblock %}
-{% block topbar %}<a class="leave topbar__back" href="/" {{ replace() }}>&lsaquo; Herd</a>{{ ui.dot(agent.status.value) }}<span class="topbar__title topbar__title--agent">{{ heading }}</span>{% endblock %}
-{% block body %}
 {% set base = "/agent/" ~ (agent.session|urlencode) %}
+{# The back arrow is the way home here, so the brand gives its room to the switch. #}
+{% block brand %}{% endblock %}
+{# Chat | Pane sits in the bar that never scrolls away: both tabs open at their newest line,
+   a long scroll below wherever the switch would otherwise be. #}
+{% block topbar %}<a class="leave topbar__back" href="/" aria-label="Back to herd" {{ replace() }}>&lsaquo; Herd</a>{{ ui.dot(agent.status.value) }}
+  <nav class="tabs" aria-label="View">
+    {%- for name in tabs %}
+    <a class="tab{% if name == tab %} tab--on{% endif %}" href="{{ base }}?tab={{ name }}" {{ replace() }}{% if name == tab %} aria-current="page"{% endif %}><span class="tab__label">{{ name|capitalize }}</span></a>
+    {%- endfor %}
+  </nav>{% endblock %}
+{% block body %}
 <main class="agent agent--docked" data-hp-seen="{{ agent.session }}">
+  <h1 class="agent__title">{{ heading }}</h1>
   <p class="agent__meta agent__meta--line">
     <span class="agent__facts">
       {#- No whitespace between facts: the separator's own margins space them evenly. -#}
@@ -18,11 +26,6 @@
     </span>
     <a class="leave agent__end" href="{{ base }}/close" {{ replace() }}>End</a>
   </p>
-  <nav class="tabs" aria-label="View">
-    {% for name in tabs %}
-    <a class="tab{% if name == tab %} tab--on{% endif %}" href="{{ base }}?tab={{ name }}" {{ replace() }}{% if name == tab %} aria-current="page"{% endif %}>{{ name|capitalize }}</a>
-    {% endfor %}
-  </nav>
   <div class="agent__answer" hx-get="{{ base }}/answer" hx-trigger="load" hx-swap="outerHTML"></div>
   {% if tab == "pane" %}
   {# app.js shows it and remembers the choice; without script the pane just wraps. #}

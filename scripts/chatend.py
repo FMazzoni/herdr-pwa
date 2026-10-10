@@ -1,7 +1,9 @@
 """Drive the Chat and Pane tabs in headless Firefox: each opens on its newest line, follows new
 lines while the reader is at the end, and leaves a reader who scrolled up where they were. An
 agent that is asking opens at the top instead, with its question on the first screen. A tool's
-result the reader opened stays open across a poll, and the page does not move under them."""
+result the reader opened stays open across a poll, and the page does not move under them. A
+burst of tool calls lands folded, its failure in plain sight, and a fold the reader opened
+stays open while calls are added to it."""
 
 import time
 from collections.abc import Callable
@@ -74,20 +76,52 @@ END_SLACK = 120
 
 # Open the last tool result and bring the middle of its output to the middle of the screen.
 OPEN_RESULT = r"""
-const details = [...document.querySelectorAll("#agent-view details.turn__result")].pop();
+const details = [...document.querySelectorAll("#agent-view details.tool")].pop();
 if (!details) return false;
 details.querySelector("summary").click();
-const out = details.querySelector("pre").getBoundingClientRect();
+const out = details.querySelector(".tool__result").getBoundingClientRect();
 window.scrollBy(0, out.top + out.height / 2 - innerHeight / 2);
 window.__hpSwaps = 0;
 document.addEventListener("htmx:afterSettle", () => { window.__hpSwaps += 1; });
 return true;
 """
 READ_RESULT = r"""
-const details = [...document.querySelectorAll("#agent-view details.turn__result")].pop();
+const details = [...document.querySelectorAll("#agent-view details.tool")].pop();
 const busy = document.querySelector(".htmx-request, .htmx-swapping, .htmx-settling");
 return { open: !!(details && details.open), scrollY: window.scrollY,
   swaps: window.__hpSwaps || 0, busy: !!busy };
+"""
+
+
+# The burst: calls in a row, the third of them failing, then the agent's reply.
+BURST = 6
+FAILS_AT = 2
+# Open the burst's first fold and its first call, and bring the fold to the middle of the screen.
+OPEN_FOLD = r"""
+const fold = document.querySelector("#agent-view details.tools");
+if (!fold) return false;
+fold.querySelector("summary").click();
+fold.querySelector("details.tool summary").click();
+const box = fold.getBoundingClientRect();
+window.scrollBy(0, box.top + box.height / 2 - innerHeight / 2);
+window.__hpSwaps = 0;
+document.addEventListener("htmx:afterSettle", () => { window.__hpSwaps += 1; });
+return true;
+"""
+READ_FOLD = r"""
+const folds = [...document.querySelectorAll("#agent-view details.tools")];
+const fold = folds[0];
+const failed = document.querySelector("#agent-view .tool--failed");
+const shut = failed && failed.parentElement.closest("details:not([open])");
+const busy = document.querySelector(".htmx-request, .htmx-swapping, .htmx-settling");
+return {
+  folds: folds.length,
+  open: folds.filter((f) => f.open).length,
+  head: fold ? fold.querySelector("summary").textContent.trim() : "",
+  inner: fold ? !!fold.querySelector("details.tool[open]") : false,
+  failedShown: !!failed && !shut && failed.getBoundingClientRect().height > 0,
+  scrollY: window.scrollY, swaps: window.__hpSwaps || 0, busy: !!busy,
+};
 """
 
 
@@ -250,6 +284,102 @@ def kept_open(driver: Marionette, base: str, tab: Tab, _rig: Rig, _home: Path) -
     return problems
 
 
+def _call(n: int, *, failed: bool = False) -> list[JsonObject]:
+    """One tool call and its result, with a result long enough to scroll when it is open."""
+    call: JsonObject = {
+        "type": "assistant",
+        "uuid": f"call{n}",
+        "timestamp": "2026-10-10T10:00:01.000Z",
+        "message": {
+            "role": "assistant",
+            "content": [
+                {
+                    "type": "tool_use",
+                    "id": f"tu{n}",
+                    "name": "Bash",
+                    "input": {"command": f"pytest -k case{n}"},
+                }
+            ],
+        },
+    }
+    output = "\n".join(f"case{n} line {k:03d}" for k in range(RESULT_LINES // 4))
+    result: JsonObject = {
+        "type": "user",
+        "uuid": f"res{n}",
+        "timestamp": "2026-10-10T10:00:02.000Z",
+        "message": {
+            "role": "user",
+            "content": [
+                {
+                    "type": "tool_result",
+                    "tool_use_id": f"tu{n}",
+                    "content": output,
+                    "is_error": failed,
+                }
+            ],
+        },
+    }
+    return [call, result]
+
+
+def _burst_chat(calls: int) -> list[JsonObject]:
+    """A long chat, then ``calls`` tool calls in a row with one failing, then the reply."""
+    records = list(long_chat(TURNS))
+    for n in range(calls):
+        records += _call(n, failed=n == FAILS_AT)
+    return [*records, assistant_says("Reply after the burst: fixed.", uuid="end")]
+
+
+def _fold_problems(name: str, seen: dict[str, object], *, opened: bool) -> list[str]:
+    problems: list[str] = []
+    if not seen.get("failedShown"):
+        problems.append(f"{name}: the failed call is hidden inside a closed fold")
+    if not opened and seen.get("open"):
+        problems.append(f"{name}: a burst of tool calls landed unfolded")
+    return problems
+
+
+def burst(driver: Marionette, base: str, tab: Tab, _rig: Rig, home: Path) -> list[str]:
+    """Land folded; open a fold and a call in it; a poll that adds a call leaves both open."""
+    driver.send("WebDriver:Navigate", {"url": base + tab.state.path})
+    if not _wait_for(driver, tab.newest):
+        return [f"{tab.name}: never drew its reply"]
+    landed = driver.script(READ_FOLD)
+    if not isinstance(landed, dict) or not landed.get("folds"):
+        return [f"{tab.name}: the burst drew no fold"]
+    problems = _fold_problems(tab.name, landed, opened=False)
+    driver.script(OPEN_FOLD)
+    time.sleep(SETTLE_SECONDS)
+    before = driver.script(READ_FOLD)
+    # One more call joins the first run, before the failure: the run's text changes, its
+    # first call does not.
+    grown = _burst_chat(BURST)
+    at = TURNS + 2 * FAILS_AT
+    write_transcript(home / "transcripts", WORKING_SESSION, [*grown[:at], *_call(99), *grown[at:]])
+    driver.script(POKE)
+    deadline = time.monotonic() + WAIT_SECONDS
+    after: object = None
+    while time.monotonic() < deadline:
+        after = driver.script(READ_FOLD)
+        if isinstance(after, dict) and after.get("swaps") and not after.get("busy"):
+            break
+        time.sleep(0.1)
+    time.sleep(SETTLE_SECONDS)
+    after = driver.script(READ_FOLD)
+    if not isinstance(before, dict) or not isinstance(after, dict) or not after.get("swaps"):
+        return [*problems, f"{tab.name}: the poll never redrew the chat"]
+    if before.get("head") == after.get("head"):
+        return [*problems, f"{tab.name}: the poll added no call to the fold, so it proves nothing"]
+    if not after.get("open") or not after.get("inner"):
+        problems.append(
+            f"{tab.name}: the fold or the call the reader opened closed when a call joined it"
+        )
+    start, end = _num(before, "scrollY"), _num(after, "scrollY")
+    if abs(end - start) > DRIFT:
+        problems.append(f"{tab.name}: a poll moved the reader from {start:.0f}px to {end:.0f}px")
+    return problems + _fold_problems(tab.name, after, opened=True)
+
+
 def _tabs() -> tuple[tuple[Tab, Callable[[Marionette, str, Tab, Rig, Path], list[str]]], ...]:
     blocked = runner(lambda: herd(**BLOCKED), long_pane(LINES) + capture(MENU))
     chat = State("chat", f"{AGENT}?tab=chat", "", runner(snapshot_frame), long_chat(TURNS))
@@ -259,7 +389,9 @@ def _tabs() -> tuple[tuple[Tab, Callable[[Marionette, str, Tab, Rig, Path], list
     last_reply = f"Reply {TURNS - 1}:"
     last_line = f"step {LINES - 1:03d}"
     tool = State("tool result", chat.path, "", runner(snapshot_frame), _tool_chat(TURNS))
+    folds = State("tool burst", chat.path, "", runner(snapshot_frame), _burst_chat(BURST))
     return (
+        (Tab("tool burst", folds, "Reply after the burst", _say), burst),
         (Tab("tool result", tool, "Reply after the tests", _say), kept_open),
         (Tab("chat end", chat, last_reply, _say), follow),
         (Tab("pane end", pane, last_line, _print), follow),
