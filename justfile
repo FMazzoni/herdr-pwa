@@ -8,6 +8,16 @@ check:
     uv run basedpyright
     uv run complexipy --quiet src
     uv run pytest -q
+    uv run python scripts/geometry_gate.py
+
+# Headless Firefox over the real templates at 390px and 320px: no sideways scroll, 44px tap
+# targets, content inside the viewport. Skips when a receipt for this exact tree exists.
+geometry:
+    uv run python scripts/geometry_gate.py
+
+# The same checks with no receipt consulted, for when the fingerprint is not trusted.
+geometry-force:
+    uv run python scripts/geometry_gate.py --force
 
 # Serve on the build port against the throwaway hp-test session, never the default one.
 live-serve: live-session
