@@ -1,0 +1,17 @@
+{
+  "name": "blocked-plan-approval",
+  "target": "w2:p2",
+  "session": "5e550003-0000-0000-0000-000000000000",
+  "captured_at": "2026-08-29T05:14:15.342282+00:00",
+  "captured_by": "the notifier's capture store, promoted by hand",
+  "herdr_version": "0.8.2",
+  "protocol": 20,
+  "detection_manifest": {
+    "id": "claude",
+    "version": "2026.08.21.1"
+  },
+  "agent_status": "blocked",
+  "shape": "0ed97f89984ea6858d0da899686624b616d91625e408cbd7f269cf2da7704769",
+  "note": "The ExitPlanMode approval screen, taken on Claude Code 2.1.251 by driving a real `claude --permission-mode plan` in the hp-test session and handing the blocked agent to CaptureStore.capture. Read line by line before promotion: the plan text is this probe's own, and the pane carries no secret.",
+  "promoted_from": "20260829T051415Z-legacy-no-prompt-blocker-0ed97f89984e"
+}

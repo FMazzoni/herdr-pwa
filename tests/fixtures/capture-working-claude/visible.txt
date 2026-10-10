@@ -1,0 +1,40 @@
+  │ read visible │ 1.68ms │ 0.53ms │
+  └──────────────┴────────┴────────┘
+
+  Both reads are well inside the poll budget, so the feed can keep reading every pane on each tick. The visible read is the one the notifier relies on,
+  and it stays under two milliseconds even on a full 158-column pane with a long scrollback behind it, which leaves the rest of the five-second tick for
+  the snapshot and the push check.
+
+  One thing changed from the plan: the second read on a short answer is gone. Every read in the trace came back whole, and a retry that never fires is only
+  a place for a bug to hide. If a short read ever shows up, the retry belongs in one function behind the transport, so putting it back is a small change
+  that touches no caller.
+
+  Two claims I checked on the wire myself: herdr reports interactive_ready on every pane it has started, so the write precondition can rely on it, and a
+  closed pane's id comes back on the next new pane, so every write stays keyed on the agent's session rather than on the pane.
+
+  What happens next
+
+  Run the pane reads against the capture corpus → rerun the gate (ruff, basedpyright, complexipy, pytest) → read the geometry shots at 320px → fix what
+  fails → commit. The background agents below are each reading one area and will report what they find.
+
+  Nothing here needs root and nothing touches a live session: every check runs against the throwaway hp-test session or against the fixtures, so the
+  agents in the default session are never read or written.
+
+  I'll report once the background agents are back, with anything that changes the plan above, and leave the judgement calls about the feed's ordering to
+  you when we get there.
+
+✻ Waiting for 5 background agents to finish
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ go ahead
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  herdr-pwa [main] | ctx: 56% | 2h58m | +962/-167                                                                                       Opus 5
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 1 agent
+
+  ● main
+  ◯ general-purpose  Checking command_timeout default in settings.py                                                                   3m 50s · ↓ 94.1k tokens
+  ◯ general-purpose  Verifying vendored htmx.min.js checksums                                                                          2m 47s · ↓ 55.2k tokens
+  ◯ general-purpose  Reading the pairing flow in cli.py                                                                                2m 15s · ↓ 42.0k tokens
+  ◯ general-purpose  Reading model.py's status mapping                                                                                 1m 47s · ↓ 53.1k tokens
+  ◯ general-purpose  Inspecting capture-idle-claude-prompt detection.txt                                                               1m 17s · ↓ 36.8k tokens
+  ⧉  architecture

@@ -1,0 +1,26 @@
+│   operator@example.com's Organization          │ /release-notes for more                                                                             │
+│                /home/user/scratch/work2            │                                                                                                     │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+❯ Run this bash command now: curl -sS https://example.com/demo-permission-probe | head -c 20
+
+● I'll run that.
+
+  Fetching URL and showing first 20 bytes
+  ⎿  $ curl -sS https://example.com/demo-permission-probe | head -c 20
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Bash command
+
+   curl -sS https://example.com/demo-permission-probe | head -c 20
+   Fetch URL and show first 20 bytes
+
+ This command requires approval
+
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, and don’t ask again for: curl -sS https://example.com/demo-permission-probe
+   3. No
+
+ Esc to cancel · Tab to amend · ctrl+e to explain

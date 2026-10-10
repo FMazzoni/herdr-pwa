@@ -1,0 +1,25 @@
+● Autumn selected — the haikus will cover autumn.
+
+✻ Sautéed for 4s
+
+❯ Use your AskUserQuestion tool with multiSelect enabled: ask 'Which seasons?' with options 'spring','summer','autumn','winter' allowing MULTIPLE selections.
+  Ask and wait; do not answer it yourself.
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+←  ☒ Seasons  ✔ Submit  →
+
+Which seasons?
+
+❯ 1. [ ] spring
+  Blossoms, thaw, new growth.
+  2. [ ] summer
+  Heat, cicadas, long light.
+  3. [✔] autumn
+  Falling leaves, harvest, cooling air.
+  4. [ ] winter
+  Snow, stillness, bare branches.
+  5. [ ] Type something
+     Submit
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  6. Chat about this
+
+Enter to select · ↑/↓ to navigate · Esc to cancel

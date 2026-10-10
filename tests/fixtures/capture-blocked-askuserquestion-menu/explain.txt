@@ -1,0 +1,5 @@
+agent: claude
+state: blocked
+manifest: remote:/home/user/.local/state/herdr/agent-detection/remote/claude.toml 2026.08.13.1
+rule: live_blocked_form (region=after_last_horizontal_rule priority=980)
+evidence: "  5. Chat about this\n\nEnter to select · ↑/↓ to navigate · Esc to cancel\n"

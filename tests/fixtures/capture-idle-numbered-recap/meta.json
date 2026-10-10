@@ -1,0 +1,11 @@
+{
+  "name": "idle-numbered-recap",
+  "target": "w1:pT",
+  "captured_at": "2026-08-18T02:16:21-04:00",
+  "captured_by": "an agent, in a pane it created for the purpose",
+  "herdr_version": "0.8.0",
+  "protocol": 19,
+  "detection_manifest": {"id": "claude", "version": "2026.08.13.1"},
+  "agent_status": "idle",
+  "note": "idle agent whose finished transcript ENDS on a 1./2./3. numbered list -- the false-positive case the parser must refuse; pane w1:pT, created for the purpose"
+}

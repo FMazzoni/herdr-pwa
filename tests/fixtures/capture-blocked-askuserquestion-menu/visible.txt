@@ -1,0 +1,26 @@
+│                      ▝▜█████▛▘                     │ Added the optional `CLAUDE_CODE_PROJECT_DIR_NAME` environment variable: hosts that give each sessi… │
+│                        ▘▘ ▝▝                       │ Added the `selection:clear` keybinding action, so a key can be bound to clear an in-app text selec… │
+│   Opus 5 with medi… · Claude API ·                 │ Added a GitLab merge request badge to the footer and statusline: repos with a GitLab remote and an… │
+│   operator@example.com's Organization          │ /release-notes for more                                                                             │
+│                /home/user/scratch/work1            │                                                                                                     │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+❯ Use the AskUserQuestion tool right now to ask me: Should I force-push to main? Offer exactly three options: 'Force-push', 'Open a PR instead', 'Do
+  nothing'. Do not do anything else first.
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ☐ Push?
+
+Should I force-push to main?
+
+❯ 1. Force-push
+     Force-push the current branch to main, overwriting remote history.
+  2. Open a PR instead
+     Push to a branch and open a pull request for review rather than rewriting main.
+  3. Do nothing
+     Leave the remote untouched for now.
+  4. Type something.
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  5. Chat about this
+
+Enter to select · ↑/↓ to navigate · Esc to cancel

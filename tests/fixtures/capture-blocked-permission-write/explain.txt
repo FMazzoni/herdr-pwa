@@ -1,0 +1,5 @@
+agent: claude
+state: blocked
+manifest: remote:/home/user/.local/state/herdr/agent-detection/remote/claude.toml 2026.08.13.1
+rule: legacy_no_prompt_blocker (region=whole_recent priority=300)
+evidence: "\n\n❯ Run this bash command now: curl -sS https://example.com/demo-permission-probe | head -c 20\n\n● I'll run that.\n\n  Ran 1 shell command\n\n✻ Cooked for 34s\n\n❯ Create a file called notes.txt in this directory containing the single line: hello\n..."

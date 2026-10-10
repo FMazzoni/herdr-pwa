@@ -1,0 +1,11 @@
+{
+  "name": "blocked-trust-folder",
+  "target": "w1:pS",
+  "captured_at": "2026-08-18T02:15:14-04:00",
+  "captured_by": "an agent, in a pane it created for the purpose",
+  "herdr_version": "0.8.0",
+  "protocol": 19,
+  "detection_manifest": {"id": "claude", "version": "2026.08.13.1"},
+  "agent_status": "blocked",
+  "note": "'Do you trust this folder?' safety dialog on first claude start in an unregistered cwd; pane w1:pS, created for the purpose"
+}

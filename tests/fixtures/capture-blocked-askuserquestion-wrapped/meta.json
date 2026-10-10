@@ -1,0 +1,13 @@
+{
+  "name": "blocked-askuserquestion-wrapped",
+  "target": "w2:pD",
+  "captured_at": "2026-08-20T13:16:12-04:00",
+  "captured_by": "an agent, in a 58-column pane and tab it created for the purpose",
+  "herdr_version": "0.8.0",
+  "protocol": 19,
+  "detection_manifest": {"id": "claude", "version": "2026.08.13.1"},
+  "claude_code_version": "2.1.237",
+  "pane_columns": 58,
+  "agent_status": "blocked",
+  "note": "An AskUserQuestion menu on the same 58-column pane; four of six option labels soft-wrap. Same pane as blocked-permission-prompt-wrapped, taken minutes apart; the pane and its tab were closed afterwards."
+}

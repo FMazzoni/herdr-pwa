@@ -1,0 +1,25 @@
+✻ Cooked for 3m 12s
+
+❯ Run this exact command with the Bash tool: curl -sS
+  https://example.com/thing | head -c 20
+
+  Running curl command against example.com and displaying
+  first 20 characters
+  ⎿  $ curl -sS https://example.com/thing | head -c 20
+
+──────────────────────────────────────────────────────────
+ Bash command
+
+   curl -sS https://example.com/thing | head -c 20
+   Run curl command against example.com and display
+   first 20 characters
+
+ This command requires approval
+
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, and don’t ask again for: curl -sS
+      https://example.com/thing
+   3. No
+
+ Esc to cancel · Tab to amend · ctrl+e to explain

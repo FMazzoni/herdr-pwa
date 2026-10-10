@@ -1,0 +1,11 @@
+{
+  "name": "blocked-permission-write",
+  "target": "w1:pR",
+  "captured_at": "2026-08-18T02:12:19-04:00",
+  "captured_by": "an agent, in a pane it created for the purpose",
+  "herdr_version": "0.8.0",
+  "protocol": 19,
+  "detection_manifest": {"id": "claude", "version": "2026.08.13.1"},
+  "agent_status": "blocked",
+  "note": "File-write permission prompt with a diff body whose gutter line numbers ('  1 hello') are a decoy for numbered-option parsing; pane w1:pR, created for the purpose"
+}

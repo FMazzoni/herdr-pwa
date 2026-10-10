@@ -1,0 +1,25 @@
+  open, see below), and the old geometry flake.
+
+  Reversals are noted beside the decisions they undo, so nobody reinstates removed behaviour from the original notes.
+
+  Three things still open before this is committable, all flagged earlier and none actioned:
+
+  1. README is stale — documents --port-file, --no-push, --theme, --open, --qr-only, --no-doctor, none of which exist.
+  2. The fast test default isn't fully done — it required updating the gate in the same change, or the fast default silently hollows the gate. CI still
+  runs a plain pytest.
+  3. Nothing is committed. ~25 files across five areas plus this whole refactor.
+
+  Want me to fix the README and the gate, then commit?
+
+✻ Baked for 53s
+
+● No completion record was found for this background shell command from the previous session. It may have been stopped (via the UI, Monitor timeout, or agent
+teardown — these leave no transcript marker), or it may have been running when the previous Claude Code process exited. Check the output file for partial
+results before assuming it completed.
+  ⎿  Interrupted · What should Claude do instead?
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  herdr-pwa [main] | ctx: 71% | 113h8m | +3782/-1221                                                                                    Opus 5
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 1 agent

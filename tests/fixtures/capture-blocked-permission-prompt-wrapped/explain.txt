@@ -1,0 +1,5 @@
+agent: claude
+state: blocked
+manifest: remote:/home/user/.local/state/herdr/agent-detection/remote/claude.toml 2026.08.13.1
+rule: generic_permission_prompt (region=after_last_horizontal_rule priority=840)
+evidence: " Bash command\n\n   curl -sS https://example.com/thing | head -c 20\n   Run curl command against example.com and display\n   first 20 characters\n\n This command requires approval\n\n Do you want to proceed?\n ❯ 1. Yes\n   2. Yes, and don’t ask again..."
