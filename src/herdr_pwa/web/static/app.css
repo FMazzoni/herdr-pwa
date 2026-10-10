@@ -75,7 +75,7 @@
   --check: 22px;
   --page-max: 760px;
   /* The longest a filter chip's name may run before it ellipsizes. */
-  --chip-max: 140px;
+  --chip-label-max: 14ch;
   /* How wide the fade at a sideways strip's right edge is. */
   --fade: 32px;
   --radius-pill: 999px;
@@ -189,7 +189,7 @@ a { color: var(--accent); }
 }
 .chip--on { color: var(--accent); }
 .chip--on .chip__pill { background: var(--surface-2); border-color: var(--accent); }
-.chip__label { max-width: var(--chip-max); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip__label { max-width: var(--chip-label-max); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chip__n { color: var(--ink-3); }
 
 .group { margin-bottom: var(--space-9); }
