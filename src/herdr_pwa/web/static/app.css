@@ -184,3 +184,41 @@ a { color: var(--accent); }
 .ansi-d { opacity: 0.7; }
 .ansi-i { font-style: italic; }
 .ansi-u { text-decoration: underline; }
+
+.actions { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12.5px; }
+.agent__end { margin-left: auto; color: var(--blocked); }
+.form, .composer, .answer { display: grid; gap: 10px; margin: 12px 0; }
+.field { display: grid; gap: 4px; }
+.field--check { display: flex; align-items: center; gap: 8px; }
+.field__label { font-size: 12px; color: var(--ink-3); }
+.field__note { margin: 0; font-size: 12px; color: var(--ink-3); }
+input, select, textarea {
+  font: 14px/1.4 var(--sans);
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  padding: 8px 10px;
+  max-width: 100%;
+}
+textarea { resize: vertical; min-height: 4.5em; }
+.button {
+  font: 600 14px/1 var(--sans);
+  color: var(--ink);
+  background: var(--surface-2);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  padding: 10px 14px;
+  min-height: 40px;
+}
+.button[disabled] { opacity: 0.5; }
+.button--option { width: 100%; text-align: left; line-height: 1.35; }
+.button--danger { border-color: var(--blocked); color: var(--blocked); }
+.keys { display: grid; gap: 6px; }
+.keys--pad { display: flex; flex-wrap: wrap; gap: 6px; }
+.answer__question { margin: 0; font-weight: 600; white-space: pre-wrap; }
+.answer__row { margin: 0; color: var(--ink-2); }
+.banner--held { border-left-color: var(--unknown); }
+.banner--sent { border-left-color: var(--done); }
+/* While a write is in flight, leaving would hide whether it landed. */
+.is-sending .leave { pointer-events: none; opacity: 0.4; }

@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Close workspace &mdash; herdr{% endblock %}
+{% block body %}
+<main class="agent">
+  {% include "_notice.html" %}
+  {% if cost %}
+  <h2 class="group__head"><span class="group__label">Close {{ cost.workspace.label or cost.workspace.workspace_id }}</span><span class="group__n">{{ cost.total }}</span></h2>
+  {% if cost.total %}
+  <p>{{ cost.reason }}</p>
+  <ul class="cards">{% for agent in cost.agents %}<li class="card card--{{ agent.status.value }}"><span class="card__link">{{ agent.title or agent.agent }} &middot; {{ agent.status.value }} &middot; {{ agent.target }}</span></li>{% endfor %}</ul>
+  {% else %}
+  <p>It holds no agents.</p>
+  {% endif %}
+  <form class="form" method="post" action="/workspaces/{{ cost.workspace.workspace_id|urlencode }}/close">
+    <input type="hidden" name="confirm" value="1">
+    {% if armed %}
+    <input type="hidden" name="armed" value="1">
+    <input type="hidden" name="saw" value="{{ cost.total }}">
+    <button class="button button--danger" type="submit">Yes, end all {{ cost.total }}</button>
+    {% else %}
+    <button class="button button--danger" type="submit">Close workspace</button>
+    {% endif %}
+  </form>
+  {% endif %}
+  <p><a href="/workspaces">Back</a></p>
+</main>
+{% endblock %}

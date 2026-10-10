@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}{{ agent.title or agent.agent or agent.target }} &mdash; herdr{% endblock %}
-{% block topbar %}<span class="topbar__title">{{ agent.title or agent.agent or agent.target }}</span>{% endblock %}
+{% block topbar %}<a class="leave" href="/">&larr;</a><span class="topbar__title">{{ agent.title or agent.agent or agent.target }}</span>{% endblock %}
 {% block body %}
 {% set base = "/agent/" ~ (agent.session|urlencode) %}
 <main class="agent">
@@ -10,7 +10,9 @@
     {% if agent.agent %}<span>{{ agent.agent }}</span>{% endif %}
     {% if agent.workspace %}<span>{{ agent.workspace }}</span>{% endif %}
     <span>{{ agent.target }}</span>
+    <a class="leave agent__end" href="{{ base }}/close">End</a>
   </p>
+  <div hx-get="{{ base }}/answer" hx-trigger="load" hx-swap="outerHTML"></div>
   <nav class="tabs" aria-label="View">
     {% for name in tabs %}
     <a class="tab{% if name == tab %} tab--on{% endif %}" href="{{ base }}?tab={{ name }}"{% if name == tab %} aria-current="page"{% endif %}>{{ name|capitalize }}</a>
@@ -19,5 +21,6 @@
   <div id="agent-view" data-hp-poll="{{ base }}/{{ tab }}" hx-get="{{ base }}/{{ tab }}" hx-trigger="load" hx-target="this" hx-swap="outerHTML">
     <p class="boot" role="status">Reading&hellip;</p>
   </div>
+  <div hx-get="{{ base }}/compose" hx-trigger="load" hx-swap="outerHTML"></div>
 </main>
 {% endblock %}

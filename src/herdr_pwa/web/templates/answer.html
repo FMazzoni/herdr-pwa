@@ -1,0 +1,48 @@
+{% set base = "/agent/" ~ (agent.session|urlencode) %}
+<section id="answer" class="answer" data-hp-poll="{{ base }}/answer" hx-get="{{ base }}/answer" hx-target="this" hx-swap="outerHTML"
+         {% if refused is not defined and sent is not defined %}hx-trigger="every {{ cadence }}s, hp:poke from:body"{% else %}hx-trigger="hp:poke from:body"{% endif %}>
+  {% include "_notice.html" %}
+  {% if sent is defined %}
+  <p class="banner banner--sent" role="status">Sent {{ sent.key }}: {{ sent.outcome.value }} ({{ sent.evidence.value }}).</p>
+  {% endif %}
+  {% if decision %}
+  <p class="answer__question">{{ decision.question }}</p>
+  <div class="keys">
+    {% for option in decision.options %}
+    {% if option.digit and option.digit in digits %}
+    <form method="post" action="{{ base }}/keys" hx-post="{{ base }}/keys" hx-target="#answer" hx-swap="outerHTML" hx-disabled-elt="find button">
+      <input type="hidden" name="key" value="{{ option.digit }}"><input type="hidden" name="screen" value="{{ fingerprint }}"><input type="hidden" name="target" value="{{ agent.target }}">
+      <button class="button button--option" type="submit">{{ option.number }}. {{ option.label }}</button>
+    </form>
+    {% else %}
+    <p class="answer__row">{{ option.number }}. {{ option.label }}</p>
+    {% endif %}
+    {% endfor %}
+  </div>
+  {% elif agent.status.value != "blocked" %}
+  <p class="empty">Nothing is waiting on you here.</p>
+  {% endif %}
+  <div class="keys keys--pad">
+    {% for hint in hints %}
+    <form method="post" action="{{ base }}/keys" hx-post="{{ base }}/keys" hx-target="#answer" hx-swap="outerHTML" hx-disabled-elt="find button">
+      <input type="hidden" name="key" value="{{ hint.key }}"><input type="hidden" name="screen" value="{{ fingerprint }}"><input type="hidden" name="target" value="{{ agent.target }}">
+      <button class="button" type="submit">{{ hint.label }}</button>
+    </form>
+    {% endfor %}
+    {% for key in pad %}
+    <form method="post" action="{{ base }}/keys" hx-post="{{ base }}/keys" hx-target="#answer" hx-swap="outerHTML" hx-disabled-elt="find button">
+      <input type="hidden" name="key" value="{{ key }}"><input type="hidden" name="screen" value="{{ fingerprint }}"><input type="hidden" name="target" value="{{ agent.target }}">
+      <button class="button" type="submit">{{ key|capitalize }}</button>
+    </form>
+    {% endfor %}
+    <form method="post" action="{{ base }}/keys" hx-post="{{ base }}/keys" hx-target="#answer" hx-swap="outerHTML" hx-disabled-elt="find button">
+      <input type="hidden" name="key" value="{{ interrupt }}"><input type="hidden" name="target" value="{{ agent.target }}">
+      {% if refused is defined and refused.held and key is defined and key == interrupt %}
+      <input type="hidden" name="confirm" value="1">
+      <button class="button button--danger" type="submit">Really interrupt</button>
+      {% else %}
+      <button class="button button--danger" type="submit">Ctrl+C</button>
+      {% endif %}
+    </form>
+  </div>
+</section>

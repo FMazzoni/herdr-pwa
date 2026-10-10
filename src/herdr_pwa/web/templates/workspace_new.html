@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}New workspace &mdash; herdr{% endblock %}
+{% block body %}
+<main class="agent">
+  <h2 class="group__head"><span class="group__label">New workspace</span></h2>
+  {% include "_notice.html" %}
+  <form class="form" method="post" action="/workspaces/new">
+    <label class="field"><span class="field__label">Name</span><input name="label" value="{{ label }}" maxlength="40"></label>
+    <button class="button" type="submit">Make it</button>
+  </form>
+</main>
+{% endblock %}
