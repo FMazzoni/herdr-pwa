@@ -17,6 +17,7 @@ from herdr_pwa.engine.transcript import (
     MAX_RESULT_CHARS,
     MAX_SUMMARY_CHARS,
     MAX_USAGE_BYTES,
+    Gather,
     HistoryState,
     ModelRef,
     SessionUsage,
@@ -468,21 +469,12 @@ def _charge(
     return part, messages.spent > max_bytes
 
 
-def _collect(turns: list[TranscriptTurn], turn: TranscriptTurn | None, limit: int) -> bool:
-    """Keep *turn* if there is one; true once *limit* turns are held."""
-    if turn is None:
-        return False
-    turns.append(turn)
-    return len(turns) >= limit
-
-
-def _page(store: _Store, *, limit: int, before: int | None, max_bytes: int) -> TranscriptPage:
-    """Up to *limit* turns ending at frontier *before*, oldest first."""
+def _page(store: _Store, *, gather: Gather, before: int | None, max_bytes: int) -> TranscriptPage:
+    """Turns until *gather* is full, ending at frontier *before*, oldest first."""
     stream = store.stream()
     size = len(stream)
     end = size if before is None else max(0, min(before, size))
     messages = _Messages(store)
-    turns: list[TranscriptTurn] = []
     cursor = end
     for position in range(end, 0, -1):
         identifier, key = stream[position - 1]
@@ -491,8 +483,9 @@ def _page(store: _Store, *, limit: int, before: int | None, max_bytes: int) -> T
             break
         cursor = position - 1
         turn = None if part is None else _turn(part, messages.get(identifier))
-        if _collect(turns, turn, limit):
+        if gather.take(turn, cursor):
             break
+    turns = gather.turns
     turns.reverse()
     return TranscriptPage(
         turns=turns,
@@ -512,7 +505,8 @@ def _since(store: _Store, *, after: int, limit: int, max_bytes: int) -> Transcri
     if start > size:
         return TranscriptPage(size=size, end=size, reset=True, state=HistoryState.empty)
     messages = _Messages(store)
-    turns: list[TranscriptTurn] = []
+    gather = Gather(limit)
+    turns = gather.turns
     end = start
     for position in range(start + 1, size + 1):
         identifier, key = stream[position - 1]
@@ -520,7 +514,7 @@ def _since(store: _Store, *, after: int, limit: int, max_bytes: int) -> Transcri
         if over or part is None:
             break
         end = position
-        if _collect(turns, _turn(part, messages.get(identifier)), limit):
+        if gather.take(_turn(part, messages.get(identifier)), position - 1):
             break
     return TranscriptPage(
         turns=turns,
@@ -614,14 +608,16 @@ class OpencodeAdapter(TranscriptAdapter):
         before: int | None = None,
         max_bytes: int = MAX_PAGE_BYTES,
         expect: str = "",
+        messages: int = 0,
     ) -> TranscriptPage:
-        """Up to *limit* turns ending at *before*, oldest first."""
+        """Up to *limit* turns, or *messages* messages, ending at *before*, oldest first."""
         # `expect` is ignored: one directory per session cannot move under a cursor.
         store = _open(roots, session)
         if store is None:
             return TranscriptPage(state=HistoryState.absent)
         with closing(store):
-            return _page(store, limit=limit, before=before, max_bytes=max_bytes)
+            gather = Gather(limit, messages)
+            return _page(store, gather=gather, before=before, max_bytes=max_bytes)
 
     @override
     def since(

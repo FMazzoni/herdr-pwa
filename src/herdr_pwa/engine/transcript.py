@@ -29,6 +29,12 @@ type TurnParser = Callable[[JsonObject], TranscriptTurn | None]
 
 MAX_PAGE_BYTES: Final = 4 * 1024 * 1024
 
+# Measured: a real session stores screenshots inline, so twenty messages sat 18MB from the end.
+MAX_HISTORY_BYTES: Final = 64 * 1024 * 1024
+
+# A page of messages still stops here, so a long tool burst cannot make one page unbounded.
+MAX_PAGE_TURNS: Final = 400
+
 MAX_PROSE_CHARS: Final = 12000
 
 MAX_RESULT_CHARS: Final = 2000
@@ -88,6 +94,32 @@ class TranscriptTurn(BaseModel):
     result_truncated: bool = False
     # Kept out of `text`, which stays the one-line gist (the path), as Collie's summarizeToolInput does.
     diff: FileDiff | None = None
+    # The frontier just before this turn: `before=at` leaves it out, `after=at` starts with it.
+    at: int = -1
+
+
+def is_message(turn: TranscriptTurn) -> bool:
+    """Whether *turn* is a message a page counts: a person's prompt or the agent's prose."""
+    return turn.speaker in (Speaker.human, Speaker.agent)
+
+
+class Gather:
+    """The turns a page has taken so far, and whether it is full by turns or by messages."""
+
+    def __init__(self, limit: int, messages: int = 0) -> None:
+        self.limit = limit
+        self.messages = messages
+        self.turns: list[TranscriptTurn] = []
+        self.said = 0
+
+    def take(self, turn: TranscriptTurn | None, at: int) -> bool:
+        """Keep *turn* if there is one, marked with frontier *at*; true once the page is full."""
+        if turn is None:
+            return False
+        turn.at = at
+        self.turns.append(turn)
+        self.said += is_message(turn)
+        return len(self.turns) >= self.limit or 0 < self.messages <= self.said
 
 
 class TranscriptPage(BaseModel):
@@ -268,6 +300,27 @@ def _last_timestamp(path: Path) -> str:
     return ""
 
 
+# A log's head never changes once the file outgrows the window, so its parent is read once.
+_HEADS: Final[dict[tuple[str, int, int, int], str]] = {}
+
+_HEADS_MAX: Final = 4096
+
+
+def _copied_from_cached(path: Path) -> str:
+    """`_copied_from`, remembered per file for as long as its head window cannot change."""
+    try:
+        stat = path.stat()
+    except OSError:
+        return ""
+    key = (str(path), stat.st_dev, stat.st_ino, min(stat.st_size, _HEAD_BYTES))
+    found = _HEADS.get(key)
+    if found is None:
+        if len(_HEADS) >= _HEADS_MAX:
+            _HEADS.clear()
+        found = _HEADS[key] = _copied_from(path)
+    return found
+
+
 def _copies(directory: Path) -> dict[str, list[Path]]:
     """Parent session -> the sibling logs that declare themselves copied from it."""
     edges: dict[str, list[Path]] = {}
@@ -276,7 +329,7 @@ def _copies(directory: Path) -> dict[str, list[Path]]:
     except OSError:
         return edges
     for sibling in siblings:
-        parent = _copied_from(sibling)
+        parent = _copied_from_cached(sibling)
         if parent:
             edges.setdefault(parent, []).append(sibling)
     return edges
@@ -439,64 +492,75 @@ def _parse_line(raw: bytes, parse: TurnParser) -> TranscriptTurn | None:
     return parse(record) if record is not None else None
 
 
+def parse_claude_line(raw: bytes) -> TranscriptTurn | None:
+    """One Claude Code JSONL line as a turn, or ``None`` for anything that is not one."""
+    return _parse_line(raw, _claude_turn)
+
+
 def _take_backwards(
-    lines: list[tuple[int, bytes]],
-    parse: TurnParser,
-    turns: list[TranscriptTurn],
-    limit: int,
+    lines: list[tuple[int, bytes]], parse: TurnParser, gather: Gather
 ) -> tuple[int | None, bool]:
-    """Append the turns in *lines*, newest first, up to *limit*."""
+    """Take the turns in *lines*, newest first, until *gather* is full."""
     oldest: int | None = None
     for offset, raw in reversed(lines):
         turn = _parse_line(raw, parse)
         if turn is None:
             continue
-        turns.append(turn)
         oldest = offset
-        if len(turns) >= limit:
+        if gather.take(turn, offset):
             return oldest, True
     return oldest, False
 
 
-def _walk_back(
-    path: Path, end: int, parse: TurnParser, *, limit: int, max_bytes: int
-) -> tuple[list[TranscriptTurn], int]:
-    """The turns newest first from byte *end* backwards, and the page cursor."""
-    turns: list[TranscriptTurn] = []
+def _lines_reaching(path: Path, before: int, room: int) -> tuple[list[tuple[int, bytes]], int]:
+    """`_lines_before`, widened past a record longer than the window, within *room* bytes."""
+    window = _CHUNK * 4
+    while True:
+        lines, start = _lines_before(path, before, min(window, room))
+        # One record longer than the window (an inline screenshot): widen it.
+        if start != before or window >= room:
+            return lines, start
+        window *= 2
+
+
+def _walk_back(path: Path, end: int, parse: TurnParser, gather: Gather, *, max_bytes: int) -> int:
+    """Gather turns newest first from byte *end* backwards; return the page cursor."""
     frontier = end
     cursor = end
     spent = 0
-    hit_limit = False
-    while frontier > 0 and len(turns) < limit and spent < max_bytes:
-        lines, start = _lines_before(path, frontier, min(_CHUNK * 4, max_bytes - spent))
-        if start == frontier:  # no progress; nothing more is readable
+    full = False
+    while frontier > 0 and not full and spent < max_bytes:
+        lines, start = _lines_reaching(path, frontier, max_bytes - spent)
+        if start == frontier:  # no progress within the budget; nothing more is readable
             break
         spent += frontier - start
         frontier = start
-        cursor = start
-        taken, hit_limit = _take_backwards(lines, parse, turns, limit)
+        taken, full = _take_backwards(lines, parse, gather)
         cursor = start if taken is None else taken
-    if frontier == 0 and not hit_limit:
+    if frontier == 0 and not full:
         cursor = 0
-    return turns, cursor
+    return cursor
 
 
-def read_page(
+def read_page(  # noqa: PLR0913
     path: Path,
     *,
     limit: int = 40,
     before: int | None = None,
     max_bytes: int = MAX_PAGE_BYTES,
     parse: TurnParser | None = None,
+    messages: int = 0,
 ) -> TranscriptPage:
-    """Up to *limit* turns ending at byte *before*, oldest first."""
+    """Up to *limit* turns, or *messages* messages, ending at byte *before*, oldest first."""
     parse = parse or _claude_turn
     try:
         size = path.stat().st_size
     except OSError:
         return TranscriptPage(state=HistoryState.unreadable)
     end = _complete_end(path, size if before is None else max(0, min(before, size)))
-    turns, cursor = _walk_back(path, end, parse, limit=limit, max_bytes=max_bytes)
+    gather = Gather(limit, messages)
+    cursor = _walk_back(path, end, parse, gather, max_bytes=max_bytes)
+    turns = gather.turns
     turns.reverse()
     return TranscriptPage(
         turns=turns,
@@ -541,34 +605,30 @@ def read_since(
             state=HistoryState.empty,
             log=path.stem,
         )
-    turns: list[TranscriptTurn] = []
-    end = _take_forward(window[:tail], start, parse, turns, limit)
+    gather = Gather(limit)
+    end = _take_forward(window[:tail], start, parse, gather)
     return TranscriptPage(
-        turns=turns,
+        turns=gather.turns,
         cursor=start,
         size=size,
         end=end,
         has_more=end < size,
-        state=HistoryState.ok if turns else HistoryState.empty,
+        state=HistoryState.ok if gather.turns else HistoryState.empty,
         log=path.stem,
     )
 
 
-def _take_forward(
-    window: bytes, start: int, parse: TurnParser, turns: list[TranscriptTurn], limit: int
-) -> int:
-    """Append the turns in *window* oldest first, up to *limit*; return the end offset."""
+def _take_forward(window: bytes, start: int, parse: TurnParser, gather: Gather) -> int:
+    """Take the turns in *window* oldest first until *gather* is full; return the end offset."""
     end = start
     offset = start
     for raw in window.split(b"\n"):
+        at = offset
         offset += len(raw) + 1
         end = offset
         if not raw.strip():
             continue
-        turn = _parse_line(raw, parse)
-        if turn is not None:
-            turns.append(turn)
-        if len(turns) >= limit:
+        if gather.take(_parse_line(raw, parse), at):
             break
     return end
 
@@ -690,11 +750,7 @@ def _user_block(block: JsonObject, uuid: str, ts: str, *, meta: bool) -> Transcr
     """One content block of a user record, or ``None`` if it is not conversation."""
     kind = block.get("type")
     if kind == "tool_result":
-        body = block.get("content")
-        text, cut = clip(
-            body if isinstance(body, str) else json.dumps(body, ensure_ascii=False),
-            MAX_RESULT_CHARS,
-        )
+        text, cut = clip(_result_text(block.get("content")), MAX_RESULT_CHARS)
         return TranscriptTurn(
             uuid=uuid,
             speaker=Speaker.tool,
@@ -712,6 +768,18 @@ def _user_block(block: JsonObject, uuid: str, ts: str, *, meta: bool) -> Transcr
                 uuid=uuid, speaker=Speaker.system, text=text, ts=ts, truncated=cut
             )
     return None
+
+
+def _result_text(body: object) -> str:
+    """A tool result as text; an inline image is named, never dumped as its base64."""
+    if isinstance(body, str):
+        return body
+    parts = list(objects(body))
+    if not parts or any(part.get("type") not in ("text", "image") for part in parts):
+        return json.dumps(body, ensure_ascii=False)
+    return "\n".join(
+        str(part.get("text", "")) if part.get("type") == "text" else "[image]" for part in parts
+    )
 
 
 def _assistant_record(record: JsonObject, uuid: str, ts: str) -> TranscriptTurn | None:
@@ -789,7 +857,7 @@ class TranscriptAdapter(Protocol):
 
     default_roots: ClassVar[tuple[str, ...]]
 
-    def page(
+    def page(  # noqa: PLR0913
         self,
         session: str,
         *,
@@ -797,8 +865,9 @@ class TranscriptAdapter(Protocol):
         limit: int = 40,
         before: int | None = None,
         expect: str = "",
+        messages: int = 0,
     ) -> TranscriptPage:
-        """Up to *limit* turns ending at frontier *before*, oldest first."""
+        """Up to *limit* turns, or *messages* messages, ending at frontier *before*, oldest first."""
         ...
 
     def since(
@@ -825,7 +894,7 @@ class ClaudeAdapter:
 
     default_roots: ClassVar[tuple[str, ...]] = (CLAUDE_TRANSCRIPT_ROOT,)
 
-    def page(
+    def page(  # noqa: PLR0913
         self,
         session: str,
         *,
@@ -833,16 +902,19 @@ class ClaudeAdapter:
         limit: int = 40,
         before: int | None = None,
         expect: str = "",
+        messages: int = 0,
     ) -> TranscriptPage:
-        """Up to *limit* turns ending at byte *before*, oldest first."""
+        """Up to *limit* turns, or *messages* messages, ending at byte *before*, oldest first."""
         path = self._log(session, roots, follow=True)
         if path is None:
             return TranscriptPage(state=HistoryState.absent)
+        # Counting messages, the budget must reach past inline screenshots to find them.
+        budget = MAX_HISTORY_BYTES if messages else MAX_PAGE_BYTES
         if expect and expect != path.stem:
             # A `before` offset into another file would be clamped, not refused, so drop it.
-            page = read_page(path, limit=limit, before=None, parse=_claude_turn)
+            page = read_page(path, limit=limit, messages=messages, max_bytes=budget)
             return page.model_copy(update={"reset": True, "moved": True})
-        return read_page(path, limit=limit, before=before, parse=_claude_turn)
+        return read_page(path, limit=limit, before=before, messages=messages, max_bytes=budget)
 
     def since(
         self,
@@ -871,6 +943,10 @@ class ClaudeAdapter:
         if path is None:
             return SessionUsage(state=HistoryState.absent)
         return _tally_lineage(path, max_bytes=max_bytes)
+
+    def log(self, session: str, roots: Sequence[Path]) -> Path | None:
+        """The file *session*'s conversation is in now, forks followed, or ``None``."""
+        return self._log(session, roots, follow=True)
 
     @staticmethod
     def _log(session: str, roots: Sequence[Path], *, follow: bool) -> Path | None:
@@ -912,6 +988,7 @@ def history(  # noqa: PLR0913
     after: int | None = None,
     log: str = "",
     root: TranscriptRoots = None,
+    messages: int = 0,
 ) -> TranscriptPage:
     """One page of *session*'s conversation, oldest first. Never raises."""
     kind = (agent_kind or "").strip().lower()
@@ -926,7 +1003,9 @@ def history(  # noqa: PLR0913
         page = (
             adapter.since(text, roots=roots, after=after, limit=limit, expect=log)
             if after is not None
-            else adapter.page(text, roots=roots, limit=limit, before=before, expect=log)
+            else adapter.page(
+                text, roots=roots, limit=limit, before=before, expect=log, messages=messages
+            )
         )
     except OSError:
         # Found and then unreadable is not "there is none"; the view must not show a quiet chat.

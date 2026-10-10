@@ -29,6 +29,8 @@ class ChatTurn:
     long: bool = False
     # A tool call's id, which names its line across the polls that redraw it.
     call: str = ""
+    # The record's own id, which names a message across redraws and an earlier page landing above.
+    key: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,6 +67,10 @@ class ChatView:
 
     items: tuple[ChatTurn | ToolRun, ...]
     note: str
+    # The frontier this view starts at, the file it is in, and whether anything is older.
+    start: int = 0
+    log: str = ""
+    more: bool = False
 
 
 def fold_tools(turns: tuple[ChatTurn, ...]) -> tuple[ChatTurn | ToolRun, ...]:
@@ -97,12 +103,12 @@ def _turn(turn: TranscriptTurn) -> ChatTurn:
         truncated=turn.truncated or turn.result_truncated,
         long=turn.speaker is not Speaker.tool and is_long(turn.text),
         call=turn.call,
+        key=turn.uuid,
     )
 
 
 def chat_view(page: TranscriptPage) -> ChatView:
     """The Chat tab's content for one transcript page."""
     turns = tuple(_turn(t) for t in page.turns)
-    if turns:
-        return ChatView(fold_tools(turns), "")
-    return ChatView((), _STATE_NOTES.get(page.state, "Nothing has been said yet."))
+    note = "" if turns else _STATE_NOTES.get(page.state, "Nothing has been said yet.")
+    return ChatView(fold_tools(turns), note, start=page.cursor, log=page.log, more=page.has_more)

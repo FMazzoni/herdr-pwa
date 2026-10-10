@@ -16,6 +16,7 @@ from herdr_pwa.engine.transcript import (
     MAX_PROSE_CHARS,
     MAX_RESULT_CHARS,
     MAX_USAGE_BYTES,
+    Gather,
     HistoryState,
     ModelRef,
     SessionUsage,
@@ -240,14 +241,15 @@ def _charged(row: _Row | None) -> int:
     return text + _ROW_BYTES
 
 
-def _page(db: _Db, *, limit: int, before: int | None, max_bytes: int) -> TranscriptPage:
-    """Up to *limit* turns ending at frontier *before*, oldest first."""
+def _page(db: _Db, *, gather: Gather, before: int | None, max_bytes: int) -> TranscriptPage:
+    """Turns until *gather* is full, ending at frontier *before*, oldest first."""
     stream = db.stream()
     size = len(stream)
     end = size if before is None else max(0, min(before, size))
+    limit = gather.limit
     rows = db.rows(stream[max(0, end - limit) : end])
     positions = range(end, max(0, end - limit), -1)
-    turns, last = _take(stream, rows, positions, limit=limit, max_bytes=max_bytes)
+    turns, last = _take(stream, rows, positions, gather=gather, max_bytes=max_bytes)
     cursor = end if last is None else last - 1
     turns.reverse()
     return TranscriptPage(
@@ -269,7 +271,7 @@ def _since(db: _Db, *, after: int, limit: int, max_bytes: int) -> TranscriptPage
         return TranscriptPage(size=size, end=size, reset=True, state=HistoryState.empty)
     rows = db.rows(stream[start : start + limit])
     positions = range(start + 1, min(size, start + limit) + 1)
-    turns, last = _take(stream, rows, positions, limit=limit, max_bytes=max_bytes)
+    turns, last = _take(stream, rows, positions, gather=Gather(limit), max_bytes=max_bytes)
     end = start if last is None else last
     return TranscriptPage(
         turns=turns,
@@ -282,10 +284,9 @@ def _since(db: _Db, *, after: int, limit: int, max_bytes: int) -> TranscriptPage
 
 
 def _take(
-    stream: list[int], rows: dict[int, _Row], positions: range, *, limit: int, max_bytes: int
+    stream: list[int], rows: dict[int, _Row], positions: range, *, gather: Gather, max_bytes: int
 ) -> tuple[list[TranscriptTurn], int | None]:
     """Turns at *positions* in walk order, and the last position the budget paid for."""
-    turns: list[TranscriptTurn] = []
     spent = 0
     last: int | None = None
     for position in positions:
@@ -294,12 +295,9 @@ def _take(
         if spent > max_bytes:
             break
         last = position
-        turn = _row_turn(row)
-        if turn is not None:
-            turns.append(turn)
-            if len(turns) >= limit:
-                break
-    return turns, last
+        if gather.take(_row_turn(row), position - 1):
+            break
+    return gather.turns, last
 
 
 def _row_turn(row: _Row | None) -> TranscriptTurn | None:
@@ -357,14 +355,16 @@ class HermesAdapter(TranscriptAdapter):
         before: int | None = None,
         max_bytes: int = MAX_PAGE_BYTES,
         expect: str = "",
+        messages: int = 0,
     ) -> TranscriptPage:
-        """Up to *limit* turns ending at *before*, oldest first."""
+        """Up to *limit* turns, or *messages* messages, ending at *before*, oldest first."""
         # `expect` is ignored: one file holds every session, so it cannot move under a cursor.
         db = _open(roots, session)
         if db is None:
             return TranscriptPage(state=HistoryState.absent)
         with closing(db):
-            return _page(db, limit=limit, before=before, max_bytes=max_bytes)
+            gather = Gather(limit, messages)
+            return _page(db, gather=gather, before=before, max_bytes=max_bytes)
 
     @override
     def since(

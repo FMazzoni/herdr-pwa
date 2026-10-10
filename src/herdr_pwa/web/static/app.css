@@ -360,6 +360,9 @@ html { -webkit-tap-highlight-color: transparent; }
 .button--toggle[aria-pressed=true]::before { content: "\25A0\00A0"; }
 
 .chat { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-5); }
+/* Older pages are asked for, never pushed: a quiet, centred button at the top of Chat. */
+.chat__earlier { margin: 0; display: flex; justify-content: center; }
+.button.chat__earlier-button { color: var(--accent); font-size: var(--text-meta); }
 .turn { padding: var(--space-5) var(--space-6); border-radius: var(--radius-3); background: var(--surface); overflow-wrap: anywhere; }
 .turn--human { background: var(--surface-2); border-left: var(--line-3) solid var(--accent); }
 .turn--system { background: transparent; color: var(--ink-3); font-size: var(--text-small); }

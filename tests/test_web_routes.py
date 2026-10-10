@@ -73,7 +73,10 @@ def test_feed_fragment_ranks_sections_and_names_agents(tmp_path: Path) -> None:
     assert body.index("Needs you") < body.index("Working") < body.index("Idle")
     assert f'href="/agent/{WORKING_SESSION}"' in body
     assert "nobody is waiting on you" in body
-    assert "every 5s" in body
+    # A live herd is redrawn when the event stream says it changed, not on a timer.
+    assert "every 5s" not in body
+    assert 'data-hp-topic="feed"' in body
+    assert 'hx-trigger="hp:stale, hp:poke from:body"' in body
     assert response.headers["cache-control"] == "no-store"
     assert response.headers["hp-fragment"] == "1"
 

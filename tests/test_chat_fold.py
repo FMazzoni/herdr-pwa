@@ -91,5 +91,5 @@ def test_the_chat_draws_a_fold_a_failure_in_sight_and_messages_as_cards(tmp_path
     assert alone in chat
     line = chat[chat.index(alone) :]
     assert "failed</span></summary>" in line[: line.index("</summary>") + len("</summary>")]
-    assert '<article class="turn turn--human">' in chat
-    assert '<article class="turn turn--agent">' in chat
+    assert '<article class="turn turn--human" data-hp-key="turn:u1">' in chat
+    assert '<article class="turn turn--agent" data-hp-key="turn:a1">' in chat

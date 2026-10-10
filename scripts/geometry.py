@@ -281,7 +281,15 @@ class Switch:
 def serve(switch: Switch) -> Iterator[str]:
     """Serve ``switch`` on an ephemeral loopback port, never one a real bridge uses."""
     port = free_port()
-    config = uvicorn.Config(switch, host="127.0.0.1", port=port, log_level="error", lifespan="off")
+    # Open event streams never end on their own; cut them rather than wait on them at the end.
+    config = uvicorn.Config(
+        switch,
+        host="127.0.0.1",
+        port=port,
+        log_level="error",
+        lifespan="off",
+        timeout_graceful_shutdown=1,
+    )
     server = uvicorn.Server(config)
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()
