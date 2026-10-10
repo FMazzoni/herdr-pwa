@@ -707,10 +707,16 @@ textarea { resize: vertical; min-height: 4.5em; }
 .files__toggle a.button { text-decoration: none; }
 
 /* The path above a page: each folder a 44px link, wrapping rather than scrolling sideways. */
-.crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--space-3); margin: 0 0 var(--space-2); font-size: var(--text-meta); overflow-wrap: anywhere; }
-.crumbs a { display: inline-flex; align-items: center; justify-content: center; min-height: var(--tap); min-width: var(--tap); }
+/* Every folder gets the same padding, so the slashes sit evenly however short a name is; the
+   44px hit area is drawn by each link's ::after, centred on its word. */
+.crumbs { display: flex; flex-wrap: wrap; align-items: center; margin: 0 0 var(--space-2); font-size: var(--text-meta); overflow-wrap: anywhere; }
+.crumbs a { position: relative; display: inline-flex; align-items: center; min-height: var(--tap); padding: 0 var(--space-3); }
+.crumbs a::after { content: ""; position: absolute; top: 50%; left: 50%; width: max(100%, var(--tap)); height: var(--tap); transform: translate(-50%, -50%); }
+.crumbs > a:first-child { padding-left: 0; }
+.crumbs__here { padding-left: var(--space-3); }
 .crumbs__sep { color: var(--ink-3); }
 .crumbs__here { min-width: 0; font-weight: 600; }
+.fbadge--dir { font-family: var(--sans); }
 
 .flist { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); border-top: var(--line-1) solid var(--rule); }
 .flist > li { border-bottom: var(--line-1) solid var(--rule); }
@@ -737,6 +743,14 @@ textarea { resize: vertical; min-height: 4.5em; }
 .src__n { padding: 0 var(--space-4) 0 var(--space-5); color: var(--ink-3); text-align: right; font-variant-numeric: tabular-nums; -webkit-user-select: none; user-select: none; scroll-margin-top: calc(env(safe-area-inset-top) + var(--tap) + var(--space-10)); }
 .src__code { min-height: 1.45em; padding-right: var(--space-5); font: inherit; white-space: pre-wrap; overflow-wrap: anywhere; tab-size: 4; }
 .src__n--at, .src__code--at { background: var(--surface-2); }
+/* Keep the columns, as on the Pane: each line unwrapped at its own indentation, the box
+   scrolling sideways inside the gutter, the line numbers held at its left edge. */
+.files__columns { margin: 0 0 calc(-1 * var(--space-4)); }
+.is-columns .src { overflow-x: auto; }
+.is-columns .src__chunk { grid-template-columns: max-content max-content; width: max-content; min-width: 100%; }
+.is-columns .src__code { white-space: pre; overflow-wrap: normal; }
+.is-columns .src__n { position: sticky; left: 0; z-index: 1; background: var(--pane-ground); }
+.is-columns .src__n--at { background: var(--surface-2); }
 .src__n--at { color: var(--accent); }
 .src__cut { color: var(--ink-3); font-style: italic; }
 .src__hunk { grid-column: 1 / -1; margin: var(--space-3) 0; padding: var(--space-2) var(--space-5); background: var(--surface); color: var(--ink-3); overflow-wrap: anywhere; }

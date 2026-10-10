@@ -20,9 +20,55 @@ FILES_TTL: Final = 5.0
 LAYOUT_TTL: Final = 30.0
 # git's well-known empty tree, to diff against in a repository with no commit yet.
 EMPTY_TREE: Final = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
-# No optional locks (status never blocks an agent's commit), no prompt, no fsmonitor hook.
-_ENV: Final = {"GIT_OPTIONAL_LOCKS": "0", "GIT_TERMINAL_PROMPT": "0", "LC_ALL": "C"}
-_CONFIG: Final = ("-c", "core.fsmonitor=false", "-c", "core.quotepath=off")
+# No optional locks (status never blocks an agent's commit), no prompt, no system config.
+_ENV: Final = {
+    "GIT_OPTIONAL_LOCKS": "0",
+    "GIT_TERMINAL_PROMPT": "0",
+    "GIT_CONFIG_NOSYSTEM": "1",
+    "LC_ALL": "C",
+}
+# An agent writes to these repositories, and a repository's own config can name a command
+# for git to run: an fsmonitor hook on status, an external diff, a pager, hooks. Each is
+# switched off on the command line, which outranks every config file.
+HARDENED: Final = (
+    "-c",
+    "core.fsmonitor=",
+    "-c",
+    "core.hooksPath=/dev/null",
+    "-c",
+    "core.pager=cat",
+    "-c",
+    "diff.external=",
+    "-c",
+    "core.quotepath=off",
+)
+# A filter driver's command runs on diff and status for any path its attributes name, and
+# .git/info/attributes can name one too; each driver the config defines is blanked by name.
+_FILTER_KEYS: Final = ("clean", "smudge", "process")
+
+
+def _filter_names(raw: bytes) -> list[str] | None:
+    """Driver names from ``git config --null --get-regexp ^filter[.]``; None if one is unsafe."""
+    names: list[str] = []
+    for entry in raw.decode("utf-8", "replace").split("\0"):
+        key = entry.split("\n", 1)[0]
+        if not key.startswith("filter."):
+            continue
+        name = key[len("filter.") :].rpartition(".")[0]
+        # git splits -c at its first "=", so a name holding one cannot be blanked.
+        if "=" in name or not name:
+            return None
+        names.append(name)
+    return list(dict.fromkeys(names))
+
+
+def _blanked(names: list[str]) -> list[str]:
+    args: list[str] = []
+    for name in names:
+        for key in _FILTER_KEYS:
+            args += ["-c", f"filter.{name}.{key}="]
+        args += ["-c", f"filter.{name}.required=false"]
+    return args
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,15 +134,14 @@ class Git:
         self.binary = shutil.which("git") or ""
         self._memo: dict[tuple[str, ...], tuple[float, object]] = {}
 
-    def run(self, cwd: Path, *args: str) -> bytes | None:
-        """Standard output of one git command, or None when it fails, times out or is absent."""
-        if not self.binary:
-            return None
-        command = [self.binary, "-C", str(cwd), *_CONFIG, *args]
+    def _spawn(self, cwd: Path, args: list[str]) -> bytes | None:
+        command = [self.binary, "-C", str(cwd), *HARDENED, *args]
         try:
             # A fixed argument list with no shell; the binary is the one on this box's PATH.
+            # No stdin: a command a repository names must not wait on the server's.
             done = subprocess.run(  # noqa: S603
                 command,
+                stdin=subprocess.DEVNULL,
                 capture_output=True,
                 timeout=TIMEOUT,
                 check=False,
@@ -106,6 +151,18 @@ class Git:
             log.info("git %s in %s failed: %s", args[0], cwd, exc)
             return None
         return done.stdout if done.returncode == 0 else None
+
+    def run(self, cwd: Path, *args: str) -> bytes | None:
+        """Standard output of one git command, or None when it fails, times out or is absent."""
+        if not self.binary:
+            return None
+        # Reading config runs nothing; it is read afresh so a driver added a moment ago is seen.
+        found = self._spawn(cwd, ["config", "--null", "--get-regexp", "^filter[.]"])
+        names = _filter_names(found or b"")
+        if names is None:
+            log.warning("git in %s: a filter driver name cannot be blanked; not run", cwd)
+            return None
+        return self._spawn(cwd, [*_blanked(names), *args])
 
     def _cached[T](self, key: tuple[str, ...], ttl: float, read: Callable[[], T]) -> T:
         now = self.clock()

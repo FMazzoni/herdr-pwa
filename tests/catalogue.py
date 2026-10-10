@@ -956,6 +956,16 @@ FILES: Final = (
         ".src [data-hp-at]",
         "Files: highlighted Python, opened at a line",
     ),
+    State(
+        "files-code-columns",
+        f"{AGENT}/files?path=src/app/server.py&line=34",
+        ".is-columns .src [data-hp-at]",
+        runner(snapshot_frame),
+        prime=_in_repo,
+        title="Files: code with Keep the columns on, unwrapped and scrolling sideways",
+        armed=".src [data-hp-at]",
+        act=_click("[data-hp-columns]"),
+    ),
     _files("files-markdown", "path=docs/guide.md", ".filemd table", "Files: rendered markdown"),
     _files(
         "files-paged",

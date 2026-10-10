@@ -17,7 +17,7 @@
   <span>{{ size(file.size) }}</span>
   {%- if file.kind in ("code", "paged") and file.lines %}<span class="files__fact">{{ "{:,}".format(file.lines[-1].n) if file.kind == "code" else "paged" }}{{ " lines" if file.kind == "code" else "" }}</span>{% endif %}
   {%- if file.language %}<span class="files__fact">{{ file.language }}</span>{% endif %}
-  {%- if change %}<a class="files__fact files__change" href="{{ nav.href('diff', rel) }}" {{ replace() }}>{{ change.kind }}: see the change</a>{% endif -%}
+  {%- if change %}<span class="files__fact"><a class="files__change" href="{{ nav.href('diff', rel) }}" {{ replace() }}>{{ change.kind }}: see the change</a></span>{% endif -%}
 </p>
 {% if file.note %}{{ ui.banner("unsure", what=file.note) }}{% endif %}
 {% if file.kind == "secret" %}
@@ -36,6 +36,8 @@
 <p class="files__toggle"><a href="{{ nav.href('file', rel, source=1) }}" {{ replace() }}>Show the source</a></p>
 {% else %}
 {% if file.kind == "paged" %}{{ pager() }}{% endif %}
+{# The pane's own switch and its remembered choice: unwrapped, a line keeps its indentation. #}
+<p class="agent__columns files__columns" hidden><button type="button" class="button button--toggle" data-hp-columns aria-pressed="false">Keep the columns</button></p>
 {% if source %}<p class="files__toggle"><a href="{{ nav.href('file', rel) }}" {{ replace() }}>Show it rendered</a></p>{% endif %}
 <div class="src" role="region" aria-label="{{ file.name }}">
   {%- for chunk in file.chunks %}<div class="src__chunk">{% for l in chunk %}{{ f.line(l.n, l.runs, l.cut, at) }}{% endfor %}</div>{% endfor -%}

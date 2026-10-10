@@ -5,7 +5,7 @@
 {{ f.crumbs(nav, root, parts[0], here=parts[2]) }}
 <p class="files__meta">
   {%- if change %}<span>{{ change.kind }}</span>{% else %}<span>unchanged</span>{% endif -%}
-  {%- if not change or change.kind != "deleted" %}<a class="files__fact files__change" href="{{ nav.href('file', rel, line=diff.first_changed if diff else 0) }}" {{ replace() }}>open the file</a>{% endif -%}
+  {%- if not change or change.kind != "deleted" %}<span class="files__fact"><a class="files__change" href="{{ nav.href('file', rel, line=diff.first_changed if diff else 0) }}" {{ replace() }}>open the file</a></span>{% endif -%}
 </p>
 {% if gated %}
 {% call ui.banner("held", what="This file may hold secrets", why="Its name is one secrets are kept under, so its change was not read.") %}{% endcall %}

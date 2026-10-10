@@ -16,7 +16,7 @@ from fastapi.routing import APIRoute
 from starlette.routing import BaseRoute
 
 from herdr_pwa.files import fuzzy
-from herdr_pwa.files.git import parse_status
+from herdr_pwa.files.git import _filter_names, parse_status  # pyright: ignore[reportPrivateUsage]
 from herdr_pwa.files.reader import LocalReader, OutsideRoot
 from herdr_pwa.files.roots import Fence, is_secret, root_id
 from herdr_pwa.files.view import (
@@ -28,7 +28,7 @@ from herdr_pwa.files.view import (
 )
 from herdr_pwa.web.mdnode import MdNode
 from herdr_pwa.web.routers import files as files_router
-from tests.filefakes import git, make_repo, stand_in
+from tests.filefakes import booby_trap, git, make_repo, stand_in
 from tests.webfakes import (
     SNAPSHOT,
     WORKING_SESSION,
@@ -255,6 +255,8 @@ def test_code_is_highlighted_and_opens_on_the_line_asked_for(tmp_path: Path, rep
     assert 'id="L30" data-hp-at' in page
     assert '<span class="tok-keyword">class</span>' in page
     assert 'class="src__chunk"' in page
+    # The Pane's own switch, so the remembered choice carries over to files.
+    assert 'data-hp-columns aria-pressed="false">Keep the columns</button>' in page
 
 
 def test_markdown_renders_through_the_prose_tree(tmp_path: Path, repo: Path) -> None:
@@ -665,3 +667,40 @@ def test_too_many_bytes_is_paged_even_when_the_lines_are_few(tmp_path: Path) -> 
     assert not _holds(page, f'id="L{PAGE_LINES + 1}"')
     assert not _holds(page, "tok-")
     assert _holds(page, "page 1 of 4")
+
+
+# ---- git never runs a command the repository names ----------------------------------------
+
+
+def test_no_command_a_repository_configures_is_ever_run(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path / "trapped")
+    marks = tmp_path / "marks"
+    booby_trap(repo, marks)
+    # Dirty again after the trap is set, so status and diff have content to compare.
+    (repo / "src/app/server.py").write_text("PORT = 9\n")
+    (repo / "README.md").write_text("# moved\n")
+    rig = _rig(tmp_path, repo)
+    base = _base(repo)
+    for url in (
+        "/files",
+        base,
+        f"{base}/tree",
+        f"{base}/tree?path=src/app",
+        f"{base}/find?q=serv",
+        f"{base}/diff?path=src/app/server.py",
+        f"{base}/diff?path=README.md",
+        f"{base}/diff?path=src/app/metrics.py",
+        f"{base}/file?path=src/app/server.py",
+        f"{base}/file?path=README.md",
+        f"/agent/{WORKING_SESSION}/files?path=README.md&line=1",
+    ):
+        assert rig.http.get(url).status_code == 200, url
+        assert sorted(p.name for p in marks.iterdir()) == [], url
+    assert "PORT = 9" in rig.http.get(f"{base}/diff?path=src/app/server.py").text
+
+
+def test_a_filter_name_that_cannot_be_blanked_stops_git() -> None:
+    raw = b"filter.lfs.clean\ngit-lfs clean\0filter.a.b.process\nx\0"
+    assert _filter_names(raw) == ["lfs", "a.b"]
+    assert _filter_names(b"filter.x=y.clean\nrm\0") is None
+    assert _filter_names(b"") == []

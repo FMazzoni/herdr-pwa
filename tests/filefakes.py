@@ -166,3 +166,33 @@ def stand_in(frame: JsonObject, repo: Path, pane: str = WORKING_PANE) -> JsonObj
             agent["cwd"] = str(repo)
             agent["foreground_cwd"] = str(repo)
     return frame
+
+
+def booby_trap(repo: Path, marks: Path) -> None:
+    """Point every command a repository's config can make git run at a script leaving a mark."""
+    marks.mkdir(parents=True, exist_ok=True)
+    script = repo.parent / f"{repo.name}-trap.sh"
+    # It leaves a file named for what ran it, then copies stdin through, as a filter must.
+    script.write_text(f'#!/bin/sh\ntouch "{marks}/$1"\ncat\n')
+    script.chmod(0o755)
+    hooks = repo / ".git" / "trap-hooks"
+    hooks.mkdir()
+    for hook in ("post-index-change", "reference-transaction", "post-checkout"):
+        (hooks / hook).write_text(f'#!/bin/sh\ntouch "{marks}/hook-{hook}"\n')
+        (hooks / hook).chmod(0o755)
+    for key, value in (
+        ("core.fsmonitor", f"{script} fsmonitor"),
+        ("core.hooksPath", str(hooks)),
+        ("core.pager", f"{script} pager"),
+        ("diff.external", f"{script} external"),
+        ("diff.trap.textconv", f"{script} textconv"),
+        ("diff.trap.command", f"{script} diffcommand"),
+        ("filter.trap.clean", f"{script} clean"),
+        ("filter.trap.process", f"{script} process"),
+        ("filter.trap.required", "true"),
+    ):
+        git(repo, "config", key, value)
+    (repo / ".gitattributes").write_text("*.py diff=trap filter=trap\n*.md diff=trap\n")
+    # Where an agent could also name a driver, outside the work tree.
+    (repo / ".git" / "info").mkdir(exist_ok=True)
+    (repo / ".git" / "info" / "attributes").write_text("*.md filter=trap\n")
