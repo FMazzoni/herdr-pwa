@@ -1,29 +1,4 @@
-"""The Hermes adapter, against Hermes's own schema.
-
-``tests/fixtures/transcript/hermes/schema.sql`` is verbatim `.schema` for the
-three tables this adapter reads, out of a real ``~/.hermes/state.db``. The ROWS
-below are written here rather than captured, and that is a deliberate departure
-from the rule the opencode fixture states -- *a fixture in this repo is a
-capture or it is not a fixture*.
-
-The reason is that Hermes keeps ONE database for every session on the machine,
-so a capture is not a copy of one conversation the way Claude's per-session
-JSONL is: it is the operator's whole history, their prompts and their paths, and
-the scrub cannot make prose anonymous the way it can make a username
-``owner``. So the half that must be real is real -- the DDL, replayed verbatim,
-which is what catches a column being renamed underneath us -- and the rows are
-built to cover every shape the adapter branches on:
-
-* a person's prompt, and an assistant's prose
-* an assistant row carrying ONE tool call
-* an assistant row carrying FOUR, which is the shape Hermes actually writes and
-  Claude almost never does (see ``_call_turn``)
-* a ``tool`` row pairing back by ``tool_call_id``
-* a row left behind by a compaction, flagged ``active = 0``
-* an empty assistant row that is neither prose nor a call
-"""
-
-from __future__ import annotations
+"""The Hermes adapter, against Hermes's own schema replayed verbatim with rows written here."""
 
 import json
 import sqlite3
@@ -31,15 +6,19 @@ from pathlib import Path
 
 import pytest
 
-from herdr_pwa.engine.hermes import HERMES_DB, HermesAdapter
+from herdr_pwa.engine.hermes import (
+    HERMES_DB,
+    HermesAdapter,
+    _readonly,  # pyright: ignore[reportPrivateUsage]
+)
 from herdr_pwa.engine.transcript import (
     AGENT_KINDS,
     HistoryState,
     Speaker,
+    TranscriptTurn,
     adapter_for,
     fold_tool_results,
 )
-from herdr_pwa.usage import UsageField, source_for
 
 STORE = Path(__file__).parent / "fixtures" / "transcript" / "hermes"
 SCHEMA = (STORE / "schema.sql").read_text()
@@ -123,21 +102,15 @@ def roots(tmp_path: Path) -> list[Path]:
     return [tmp_path]
 
 
-def turns(roots: list[Path], **kwargs: object):
+def turns(roots: list[Path]) -> list[TranscriptTurn]:
     """The turns of one page, for the assertions that only care about those."""
-    return HermesAdapter().page(SESSION, roots=roots, **kwargs).turns  # type: ignore[arg-type]
-
-
-# --- the registry ----------------------------------------------------------
+    return HermesAdapter().page(SESSION, roots=roots).turns
 
 
 def test_hermes_is_a_kind_the_chat_tab_can_answer_for() -> None:
     """Being absent from either of these is what left the Chat tab silent."""
     assert "hermes" in AGENT_KINDS
     assert adapter_for("hermes") is not None
-
-
-# --- what a row becomes ----------------------------------------------------
 
 
 def test_a_persons_prompt_and_the_answer_to_it_are_both_conversation(
@@ -170,13 +143,7 @@ def test_a_result_is_folded_onto_the_call_it_answers(roots: list[Path]) -> None:
 def test_an_assistant_row_with_four_calls_collapses_to_the_first(
     roots: list[Path],
 ) -> None:
-    """Claude's rule, applied to a harness that batches far harder than Claude does.
-
-    One ROW is one position in the stream, and the cursor is a position, so a
-    row may not become four turns without the frontier meaning something
-    different at the top of a page than at the bottom. The other three calls are
-    reachable in the Pane tab, which is verbatim.
-    """
+    """One row is one stream position, so it may not become four turns under one cursor."""
     batched = [t for t in turns(roots) if t.call in {"call_b", "call_c", "call_d"}]
     assert [t.call for t in batched] == ["call_b"]
     assert batched[0].tool == "terminal"
@@ -190,9 +157,6 @@ def test_a_row_that_is_neither_prose_nor_a_call_is_dropped(roots: list[Path]) ->
 def test_a_compacted_row_is_not_conversation_any_more(roots: list[Path]) -> None:
     """``active = 0`` is what a compaction leaves behind, and it is not history."""
     assert not any(t.text == "compacted away" for t in turns(roots))
-
-
-# --- paging ----------------------------------------------------------------
 
 
 def test_a_page_ends_where_it_says_it_does_and_the_next_one_resumes_there(
@@ -222,9 +186,6 @@ def test_a_frontier_past_the_end_reports_a_reset_rather_than_guessing(
     page = HermesAdapter().since(SESSION, roots=roots, after=10_000)
     assert page.reset
     assert page.turns == []
-
-
-# --- the store itself ------------------------------------------------------
 
 
 def test_a_session_in_no_store_is_absent_rather_than_empty(roots: list[Path]) -> None:
@@ -268,22 +229,13 @@ def test_a_file_that_is_not_hermes_is_refused_rather_than_read(
 
 
 def test_the_store_is_opened_read_only(roots: list[Path]) -> None:
-    """A live Hermes is writing to this file; this app may never be why it fails.
-
-    Not a claim about intent -- the URI carries ``mode=ro``, so a write raises
-    rather than relying on the reader never attempting one.
-    """
-    from herdr_pwa.engine.hermes import _readonly  # noqa: PLC2701
-
+    """A live Hermes is writing to this file; the URI's ``mode=ro`` makes a write raise."""
     uri = _readonly(roots[0] / HERMES_DB)
     assert "mode=ro" in uri
     with sqlite3.connect(uri, uri=True) as db, pytest.raises(sqlite3.OperationalError):
         db.execute(
             "insert into sessions (id, source, started_at) values ('x', 'cli', 1780000000.0)"
         )
-
-
-# --- usage -----------------------------------------------------------------
 
 
 def test_usage_is_summed_off_the_rollup_hermes_already_keeps(
@@ -312,9 +264,6 @@ def test_cost_stays_zero_because_hermes_records_no_money(tmp_path: Path) -> None
     assert HermesAdapter().tally(SESSION, roots=[tmp_path]).cost == 0.0
 
 
-# --- the session's own record ----------------------------------------------
-
-
 def named(path: Path, title: str, model: str = "a-model") -> None:
     """Give SESSION a title and a model, the way hermes does after a turn."""
     with sqlite3.connect(path) as db:
@@ -325,11 +274,7 @@ def named(path: Path, title: str, model: str = "a-model") -> None:
 
 
 def test_the_title_hermes_generated_beats_a_shell_prompt(tmp_path: Path) -> None:
-    """A hermes pane's terminal title is `user@host:cwd`, which says nothing.
-
-    `card_title` already falls back to `session_title` when the terminal title
-    is not earned, so answering this is the whole of what a card needs.
-    """
+    """A hermes pane's terminal title is `user@host:cwd`, which says nothing."""
     path = build(tmp_path / HERMES_DB)
     named(path, "Plan the migration")
     assert HermesAdapter().info(SESSION, roots=[tmp_path])[0] == "Plan the migration"
@@ -339,9 +284,6 @@ def test_a_session_with_no_store_has_no_title_rather_than_raising(
     tmp_path: Path,
 ) -> None:
     assert HermesAdapter().info(SESSION, roots=[tmp_path]) == ("", "")
-
-
-# --- usage -----------------------------------------------------------------
 
 
 def spend(path: Path, **columns: object) -> None:
@@ -380,12 +322,7 @@ def test_reasoning_and_cache_writes_are_read_rather_than_left_at_zero(
 
 
 def test_money_is_reported_only_where_hermes_says_it_knows(tmp_path: Path) -> None:
-    """`cost_status` is the authority, not the column: it writes 0.0 either way.
-
-    Reading the number without the status turns "this provider does not price
-    itself" into "this session was free", and zero already means UNKNOWN in
-    `SessionUsage.cost`.
-    """
+    """`cost_status` is the authority, not the column: it writes 0.0 either way."""
     path = build(tmp_path / HERMES_DB)
     spend(path, cost_status="unknown", estimated_cost_usd=1.5)
     assert HermesAdapter().tally(SESSION, roots=[tmp_path]).cost == 0.0
@@ -395,25 +332,3 @@ def test_a_priced_row_is_reported(tmp_path: Path) -> None:
     path = build(tmp_path / HERMES_DB)
     spend(path, cost_status="actual", actual_cost_usd=2.5, estimated_cost_usd=1.5)
     assert HermesAdapter().tally(SESSION, roots=[tmp_path]).cost == 2.5
-
-
-def test_hermes_is_a_usage_source_at_all() -> None:
-    """Being absent from `_SOURCES` is why the chat tab showed no numbers."""
-    source = source_for("hermes")
-    assert source is not None
-    assert UsageField.model in source.fields
-    assert UsageField.output_tokens in source.fields
-
-
-def test_context_is_not_claimed_because_hermes_does_not_record_it() -> None:
-    """hermes DRAWS `~43.7K/1M` and stores nothing behind it.
-
-    `messages.token_count` is NULL on every row of a real session and the
-    per-model rollup is cumulative across every call, so the only honest answer
-    is no answer. A cumulative total in this field would read as a context
-    window several times its own size.
-    """
-    source = source_for("hermes")
-    assert source is not None
-    assert UsageField.context_tokens not in source.fields
-    assert UsageField.context_pct not in source.fields

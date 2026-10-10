@@ -1,15 +1,12 @@
 """opencode's store, in either of its two layouts, read as one conversation."""
 
-from __future__ import annotations
-
-import json
 import re
 import sqlite3
 from collections.abc import Sequence
 from contextlib import closing, suppress
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, ClassVar, Final, NamedTuple, Protocol
+from typing import ClassVar, Final, NamedTuple, Protocol, Self, cast, override
 from urllib.parse import quote
 
 from herdr_pwa.diff import tool_diff
@@ -24,12 +21,16 @@ from herdr_pwa.engine.transcript import (
     ModelRef,
     SessionUsage,
     Speaker,
+    TranscriptAdapter,
     TranscriptPage,
     TranscriptTurn,
-    _clip,
-    _one_line,
-    _remember,
+    clip,
+    one_line,
+    remember,
 )
+from herdr_pwa.jsontypes import JsonObject, as_object, get_object, loads
+
+type _Row = tuple[object, ...]
 
 
 OPENCODE_ROOT: Final = "~/.local/share/opencode"
@@ -65,15 +66,15 @@ def _named(path: Path) -> bool:
     return path.suffix == ".json" and bool(_ID.match(path.stem))
 
 
-def _decode(blob: object) -> dict[str, Any] | None:
+def _decode(blob: object) -> JsonObject | None:
     """One stored record as a dict, or ``None`` if it is not one."""
     if not isinstance(blob, str | bytes):
         return None
     try:
-        record = json.loads(blob)
+        record = loads(blob)
     except (ValueError, UnicodeDecodeError):
         return None
-    return record if isinstance(record, dict) else None
+    return as_object(record)
 
 
 class SessionInfo(NamedTuple):
@@ -104,11 +105,11 @@ class _Store(Protocol):
         """Every part as ``(message id, key)``, oldest first."""
         ...
 
-    def part(self, key: str) -> tuple[dict[str, Any] | None, int]:
+    def part(self, key: str) -> tuple[JsonObject | None, int]:
         """One part record and what reading it spent, ``None`` if not whole."""
         ...
 
-    def message(self, key: str) -> tuple[dict[str, Any] | None, int]:
+    def message(self, key: str) -> tuple[JsonObject | None, int]:
         """One message record and what reading it spent."""
         ...
 
@@ -133,7 +134,7 @@ class _Files:
         self._session = session
 
     @classmethod
-    def open(cls, base: Path, session: str) -> _Files | None:
+    def open(cls, base: Path, session: str) -> Self | None:
         """*base* if it holds *session*'s messages, contained to THAT root."""
         try:
             resolved = base.expanduser().resolve(strict=True)
@@ -155,11 +156,11 @@ class _Files:
             found.extend((message, str(part)) for part in parts if _named(part))
         return found
 
-    def part(self, key: str) -> tuple[dict[str, Any] | None, int]:
+    def part(self, key: str) -> tuple[JsonObject | None, int]:
         """One part file, and its size whether or not it parsed."""
         return self._file(Path(key))
 
-    def message(self, key: str) -> tuple[dict[str, Any] | None, int]:
+    def message(self, key: str) -> tuple[JsonObject | None, int]:
         """One message file, and its size whether or not it parsed."""
         return self._file(self._base / "message" / self._session / f"{key}.json")
 
@@ -183,13 +184,13 @@ class _Files:
         for project in projects:
             record, _ = self._file(project / f"{self._session}.json")
             if record is not None:
-                return SessionInfo(title=_one_line(record.get("title"))[0])
+                return SessionInfo(title=one_line(record.get("title"))[0])
         return SessionInfo()
 
     def close(self) -> None:
         """Nothing was held open."""
 
-    def _file(self, path: Path) -> tuple[dict[str, Any] | None, int]:
+    def _file(self, path: Path) -> tuple[JsonObject | None, int]:
         """*path* as a record and a cost, ``None`` while it is not yet whole."""
         try:
             blob = path.read_bytes()
@@ -214,7 +215,7 @@ class _Db:
         self._session = session
 
     @classmethod
-    def open(cls, path: Path, session: str) -> _Db | None:
+    def open(cls, path: Path, session: str) -> Self | None:
         """*path* if it is a store we recognise and *session* is in it."""
         try:
             resolved = path.expanduser().resolve(strict=True)
@@ -223,9 +224,12 @@ class _Db:
         try:
             connection = sqlite3.connect(_readonly(resolved), uri=True, timeout=_BUSY_SECONDS)
             connection.execute("select id from session limit 0").close()
-            held = connection.execute(
-                "select 1 from session where id = ? limit 1", (session,)
-            ).fetchone()
+            held = cast(
+                _Row | None,
+                connection.execute(
+                    "select 1 from session where id = ? limit 1", (session,)
+                ).fetchone(),
+            )
         except (sqlite3.Error, OSError, ValueError):
             return None
         if held is None:
@@ -238,44 +242,47 @@ class _Db:
         rows = self._ask(
             "select message_id, id from part where session_id = ? order by message_id, id"
         )
-        return [(m, k) for m, k in rows if _ID.match(m) and _ID.match(k)]
+        return [
+            (m, k)
+            for m, k in rows
+            if isinstance(m, str) and isinstance(k, str) and _ID.match(m) and _ID.match(k)
+        ]
 
-    def part(self, key: str) -> tuple[dict[str, Any] | None, int]:
+    def part(self, key: str) -> tuple[JsonObject | None, int]:
         """One part row, with its own id folded back in as the store spells it."""
         record, spent = self._row("part", key)
         if record is not None:
             record["id"] = key
         return record, spent
 
-    def message(self, key: str) -> tuple[dict[str, Any] | None, int]:
+    def message(self, key: str) -> tuple[JsonObject | None, int]:
         """One message row."""
         return self._row("message", key)
 
     def messages(self) -> list[str]:
         """Every message id of the session, oldest first."""
         rows = self._ask("select id from message where session_id = ? order by id")
-        return [key for (key,) in rows if _ID.match(key)]
+        return [key for (key,) in rows if isinstance(key, str) and _ID.match(key)]
 
     def info(self) -> SessionInfo:
         """The session row itself, which is where opencode keeps both of these."""
         found = self._named("title, model")
         if found is None:
-            # A store older than the column: narrow the read rather than lose
-            # the title, which is the half this is here for.
+            # A store older than the column: narrow the read rather than lose the title.
             found = self._named("title")
         if not found:
             return SessionInfo()
         title, *rest = found
         return SessionInfo(
-            title=_one_line(title)[0], model=_model_ref(rest[0]) if rest else ModelRef()
+            title=one_line(title)[0], model=_model_ref(rest[0]) if rest else ModelRef()
         )
 
-    def _named(self, columns: str) -> tuple[Any, ...] | None:
+    def _named(self, columns: str) -> _Row | None:
         """The session's own row, or ``None`` -- a store without *columns* included."""
         sql = f"select {columns} from session where id = ?"  # noqa: S608
         try:
             with closing(self._db.execute(sql, (self._session,))) as rows:
-                return rows.fetchone()
+                return cast(_Row | None, rows.fetchone())
         except (sqlite3.Error, OSError):
             return None
 
@@ -284,22 +291,22 @@ class _Db:
         with suppress(sqlite3.Error):
             self._db.close()
 
-    def _ask(self, sql: str) -> list[tuple[Any, ...]]:
+    def _ask(self, sql: str) -> list[_Row]:
         """One listing query, or an empty listing if the store would not answer."""
         try:
             with closing(self._db.execute(sql, (self._session,))) as rows:
-                return rows.fetchall()
+                return cast(list[_Row], rows.fetchall())
         except (sqlite3.Error, OSError):
             return []
 
-    def _row(self, table: str, key: str) -> tuple[dict[str, Any] | None, int]:
+    def _row(self, table: str, key: str) -> tuple[JsonObject | None, int]:
         """One record by id, refusing any name that is not the store's own shape."""
         if not _ID.match(key):
             return None, 0
         sql = f"select data from {table} where id = ? and session_id = ?"  # noqa: S608
         try:
             with closing(self._db.execute(sql, (key, self._session))) as rows:
-                found = rows.fetchone()
+                found = cast(_Row | None, rows.fetchone())
         except (sqlite3.Error, OSError):
             return None, 0
         if found is None:
@@ -336,17 +343,17 @@ def _stamp(value: object) -> str:
     return datetime.fromtimestamp(value / 1000, UTC).isoformat().replace("+00:00", "Z")
 
 
-def _moment(part: dict[str, Any], message: dict[str, Any]) -> str:
+def _moment(part: JsonObject, message: JsonObject) -> str:
     """When a part happened, falling back to when its message was created."""
     # A tool part keeps its clock inside ``state``, where the result also is.
-    state = part.get("state")
+    state = get_object(part, "state")
     times = [
-        part.get("time"),
-        state.get("time") if isinstance(state, dict) else None,
-        message.get("time"),
+        get_object(part, "time"),
+        get_object(state, "time"),
+        get_object(message, "time"),
     ]
     for holder in times:
-        if not isinstance(holder, dict):
+        if holder is None:
             continue
         for key in ("start", "created"):
             stamp = _stamp(holder.get(key))
@@ -357,39 +364,39 @@ def _moment(part: dict[str, Any], message: dict[str, Any]) -> str:
 
 def _summary(params: object) -> tuple[str, bool]:
     """The one identifying input of a tool call (see `_TOOL_INPUT_KEYS`)."""
-    if not isinstance(params, dict):
+    args = as_object(params)
+    if args is None:
         return "", False
     for key in _TOOL_INPUT_KEYS:
-        if key in params:
-            line, cut = _one_line(params.get(key), MAX_SUMMARY_CHARS)
+        if key in args:
+            line, cut = one_line(args.get(key), MAX_SUMMARY_CHARS)
             if line:
                 return line, cut
     return "", False
 
 
-def _text_turn(part: dict[str, Any], uuid: str, ts: str, role: str) -> TranscriptTurn | None:
+def _text_turn(part: JsonObject, uuid: str, ts: str, role: str) -> TranscriptTurn | None:
     """A ``text`` part, where the whole speaker question lives."""
     body = part.get("text")
     if not isinstance(body, str):
         return None
     human = role == "user" and not part.get("synthetic")
     system = role == "user" and bool(part.get("synthetic"))
-    text, cut = _clip(body, MAX_NOTE_CHARS if system else MAX_PROSE_CHARS)
+    text, cut = clip(body, MAX_NOTE_CHARS if system else MAX_PROSE_CHARS)
     if not text:
         return None
     speaker = Speaker.human if human else Speaker.system if system else Speaker.agent
     return TranscriptTurn(uuid=uuid, speaker=speaker, text=text, ts=ts, truncated=cut)
 
 
-def _tool_turn(part: dict[str, Any], uuid: str, ts: str) -> TranscriptTurn:
+def _tool_turn(part: JsonObject, uuid: str, ts: str) -> TranscriptTurn:
     """A ``tool`` part, which carries the call AND its result in one record."""
-    state = part.get("state")
-    state = state if isinstance(state, dict) else {}
+    state = get_object(part, "state") or {}
     params = state.get("input")
     text, cut = _summary(params)
     failed = state.get("status") == "error"
     body = state.get("error") if failed else state.get("output")
-    result, result_cut = _clip(body if isinstance(body, str) else "", MAX_RESULT_CHARS)
+    result, result_cut = clip(body if isinstance(body, str) else "", MAX_RESULT_CHARS)
     return TranscriptTurn(
         uuid=uuid,
         speaker=Speaker.tool,
@@ -405,20 +412,20 @@ def _tool_turn(part: dict[str, Any], uuid: str, ts: str) -> TranscriptTurn:
     )
 
 
-def _mention_turn(part: dict[str, Any], uuid: str, ts: str) -> TranscriptTurn | None:
+def _mention_turn(part: JsonObject, uuid: str, ts: str) -> TranscriptTurn | None:
     """A ``file`` or ``agent`` part: the ``@`` a person typed into their prompt."""
-    source = part.get("source")
-    written = source.get("value") if isinstance(source, dict) else None
-    if isinstance(source, dict) and isinstance(source.get("text"), dict):
-        written = source["text"].get("value") or written
+    source = get_object(part, "source")
+    written = source.get("value") if source is not None else None
+    if (inner := get_object(source, "text")) is not None:
+        written = inner.get("value") or written
     fallback = part.get("filename") or part.get("name")
-    text, cut = _one_line(written if isinstance(written, str) else fallback)
+    text, cut = one_line(written if isinstance(written, str) else fallback)
     if not text:
         return None
     return TranscriptTurn(uuid=uuid, speaker=Speaker.system, text=text, ts=ts, truncated=cut)
 
 
-def _turn(part: dict[str, Any], message: dict[str, Any]) -> TranscriptTurn | None:
+def _turn(part: JsonObject, message: JsonObject) -> TranscriptTurn | None:
     """One part as a chat turn, or ``None`` for the machinery around it."""
     kind = part.get("type")
     uuid = part.get("id")
@@ -440,16 +447,33 @@ class _Messages:
 
     def __init__(self, store: _Store) -> None:
         self._store = store
-        self._held: dict[str, dict[str, Any]] = {}
+        self._held: dict[str, JsonObject] = {}
         self.spent = 0
 
-    def get(self, identifier: str) -> dict[str, Any]:
+    def get(self, identifier: str) -> JsonObject:
         """*identifier*'s record, from the store or from what was already read."""
         if identifier not in self._held:
             record, spent = self._store.message(identifier)
             self.spent += spent
             self._held[identifier] = record or {}
         return self._held[identifier]
+
+
+def _charge(
+    store: _Store, messages: _Messages, key: str, max_bytes: int
+) -> tuple[JsonObject | None, bool]:
+    """One part, its read charged to the page; and whether that broke the budget."""
+    part, spent = store.part(key)
+    messages.spent += spent
+    return part, messages.spent > max_bytes
+
+
+def _collect(turns: list[TranscriptTurn], turn: TranscriptTurn | None, limit: int) -> bool:
+    """Keep *turn* if there is one; true once *limit* turns are held."""
+    if turn is None:
+        return False
+    turns.append(turn)
+    return len(turns) >= limit
 
 
 def _page(store: _Store, *, limit: int, before: int | None, max_bytes: int) -> TranscriptPage:
@@ -462,16 +486,13 @@ def _page(store: _Store, *, limit: int, before: int | None, max_bytes: int) -> T
     cursor = end
     for position in range(end, 0, -1):
         identifier, key = stream[position - 1]
-        part, spent = store.part(key)
-        messages.spent += spent
-        if messages.spent > max_bytes:
+        part, over = _charge(store, messages, key, max_bytes)
+        if over:
             break
         cursor = position - 1
         turn = None if part is None else _turn(part, messages.get(identifier))
-        if turn is not None:
-            turns.append(turn)
-            if len(turns) >= limit:
-                break
+        if _collect(turns, turn, limit):
+            break
     turns.reverse()
     return TranscriptPage(
         turns=turns,
@@ -495,18 +516,12 @@ def _since(store: _Store, *, after: int, limit: int, max_bytes: int) -> Transcri
     end = start
     for position in range(start + 1, size + 1):
         identifier, key = stream[position - 1]
-        part, spent = store.part(key)
-        messages.spent += spent
-        if messages.spent > max_bytes:
-            break
-        if part is None:
+        part, over = _charge(store, messages, key, max_bytes)
+        if over or part is None:
             break
         end = position
-        turn = _turn(part, messages.get(identifier))
-        if turn is not None:
-            turns.append(turn)
-            if len(turns) >= limit:
-                break
+        if _collect(turns, _turn(part, messages.get(identifier)), limit):
+            break
     return TranscriptPage(
         turns=turns,
         cursor=start,
@@ -517,19 +532,19 @@ def _since(store: _Store, *, after: int, limit: int, max_bytes: int) -> Transcri
     )
 
 
-def _count(tokens: dict[str, Any], key: str) -> int:
+def _count(tokens: JsonObject, key: str) -> int:
     """One token field as a non-negative int, whatever the provider wrote."""
     value = tokens.get(key)
     return value if isinstance(value, int) and value > 0 else 0
 
 
-def _cached(tokens: dict[str, Any], key: str) -> int:
+def _cached(tokens: JsonObject, key: str) -> int:
     """The read or written half of ``tokens.cache``."""
-    cache = tokens.get("cache")
-    return _count(cache, key) if isinstance(cache, dict) else 0
+    cache = get_object(tokens, "cache")
+    return _count(cache, key) if cache is not None else 0
 
 
-def _add(tally: SessionUsage, tokens: dict[str, Any], ref: ModelRef) -> None:
+def _add(tally: SessionUsage, tokens: JsonObject, ref: ModelRef) -> None:
     """Fold one assistant message's tokens into *tally*, in place."""
     tally.messages += 1
     tally.input_tokens += _count(tokens, "input")
@@ -537,10 +552,10 @@ def _add(tally: SessionUsage, tokens: dict[str, Any], ref: ModelRef) -> None:
     tally.thinking_tokens += _count(tokens, "reasoning")
     tally.cache_creation_tokens += _cached(tokens, "write")
     tally.cache_read_tokens += _cached(tokens, "read")
-    _remember(tally, ref)
+    remember(tally, ref)
 
 
-def _spent(record: dict[str, Any]) -> float:
+def _spent(record: JsonObject) -> float:
     """One message's ``cost``, which is money and which only this store records."""
     value = record.get("cost")
     if isinstance(value, bool) or not isinstance(value, int | float):
@@ -548,7 +563,7 @@ def _spent(record: dict[str, Any]) -> float:
     return float(value) if value > 0 else 0.0
 
 
-def _prompt_size(tokens: dict[str, Any]) -> int:
+def _prompt_size(tokens: JsonObject) -> int:
     """Everything that went UP with one message: fresh, cache-written, cache-read."""
     return _count(tokens, "input") + _cached(tokens, "write") + _cached(tokens, "read")
 
@@ -567,11 +582,10 @@ def _tally(store: _Store, *, max_bytes: int) -> SessionUsage:
         if record is None or record.get("role") != "assistant":
             continue
         tally.cost += _spent(record)
-        tokens = record.get("tokens")
-        if not isinstance(tokens, dict):
+        tokens = get_object(record, "tokens")
+        if tokens is None:
             continue
-        # Every assistant row names BOTH, because which provider served a
-        # model is not derivable from the model id.
+        # Every assistant row names both: the provider is not derivable from the model id.
         _add(
             tally,
             tokens,
@@ -579,18 +593,18 @@ def _tally(store: _Store, *, max_bytes: int) -> SessionUsage:
         )
         tally.context_tokens = _prompt_size(tokens)
     if not tally.models:
-        # No message has named a model, which is every session before its first
-        # answer -- and the session row names one from the moment it is created.
-        _remember(tally, store.info().model)
+        # Before its first answer no message names a model, but the session row already does.
+        remember(tally, store.info().model)
     tally.state = HistoryState.ok if tally.messages else HistoryState.empty
     return tally
 
 
-class OpencodeAdapter:
+class OpencodeAdapter(TranscriptAdapter):
     """opencode's history: either normalised store, paged by POSITION not byte."""
 
     default_roots: ClassVar[tuple[str, ...]] = (OPENCODE_ROOT,)
 
+    @override
     def page(
         self,
         session: str,
@@ -602,14 +616,14 @@ class OpencodeAdapter:
         expect: str = "",
     ) -> TranscriptPage:
         """Up to *limit* turns ending at *before*, oldest first."""
-        # `expect` is ignored here for the same reason `since` ignores it: this
-        # store is one directory per session and cannot move under a cursor.
+        # `expect` is ignored: one directory per session cannot move under a cursor.
         store = _open(roots, session)
         if store is None:
             return TranscriptPage(state=HistoryState.absent)
         with closing(store):
             return _page(store, limit=limit, before=before, max_bytes=max_bytes)
 
+    @override
     def since(
         self,
         session: str,
@@ -621,15 +635,14 @@ class OpencodeAdapter:
         expect: str = "",
     ) -> TranscriptPage:
         """Whatever the store has grown past frontier *after*, oldest first."""
-        # `expect` names which FILE a cursor was taken against; this
-        # store is one directory per session and cannot move under a cursor,
-        # so it never reports a log and is never asked to check one.
+        # `expect` is ignored: one directory per session cannot move under a cursor.
         store = _open(roots, session)
         if store is None:
             return TranscriptPage(state=HistoryState.absent)
         with closing(store):
             return _since(store, after=after, limit=limit, max_bytes=max_bytes)
 
+    @override
     def tally(
         self,
         session: str,

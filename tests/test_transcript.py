@@ -1,18 +1,4 @@
-"""The transcript reader, against a transcript nobody wrote by hand.
-
-Every assertion here runs on ``tests/fixtures/transcript/claude/`` -- a real
-Claude Code JSONL file, captured verbatim off disk from a live agent in the
-isolated ``hp-test`` session on 2026-08-19. The recap fix is the reason: a grammar
-designed against an imagined screen once drove a safety decision the wrong way,
-so a fixture in this repo is a capture or it is not a fixture.
-
-What the fixture is, exactly: a haiku agent in ``/tmp``, given two prompts --
-one prose question, one ``echo`` -- producing 23 records that between them cover
-every shape the reader has to deal with: a typed human prompt, ``thinking``,
-``text``, ``tool_use``, ``tool_result``, four ``attachment`` records, a
-``system`` turn duration, and the ``mode`` / ``permission-mode`` / ``ai-title`` /
-``atis-latch`` / ``file-history-snapshot`` sidecars.
-"""
+"""The transcript reader, against a transcript nobody wrote by hand."""
 
 from __future__ import annotations
 
@@ -34,6 +20,7 @@ from herdr_pwa.engine.transcript import (
     locate,
     read_page,
 )
+from herdr_pwa.jsontypes import get_object, get_str, loads, objects
 
 FIXTURES = Path(__file__).parent / "fixtures" / "transcript"
 SESSION = "00000000-0000-4000-8000-000000000153"
@@ -42,30 +29,18 @@ TRANSCRIPT = FIXTURES / "claude" / f"{SESSION}.jsonl"
 
 @pytest.fixture
 def transcript_root(tmp_path: Path) -> Path:
-    """The fixture laid out the way Claude Code lays a real tree out.
-
-    The directory name is a *lossy* encoding of the session's startup cwd, which
-    is exactly why the reader globs. Reproducing the encoding here keeps the
-    test honest about what it is exercising.
-    """
+    """The fixture laid out the way Claude Code lays a real tree out."""
     project = tmp_path / "-tmp"
     project.mkdir()
     (project / f"{SESSION}.jsonl").write_bytes(TRANSCRIPT.read_bytes())
     return tmp_path
 
 
-# ---------------------------------------------------------------------------
-# The fixture itself. If these fail the capture has been edited, and every
-# assertion below is measuring something other than what it says.
-# ---------------------------------------------------------------------------
+# The fixture: if these fail, the capture has been edited.
 
 
 def test_fixture_is_one_json_object_per_line() -> None:
-    """4269 lines parsed to 4269 records on the 13 MB original; hold the shape.
-
-    This is the property the byte-cursor paging depends on: a line boundary is a
-    record boundary, so seeking to one and parsing forward cannot land mid-record.
-    """
+    """4269 lines parsed to 4269 records on the 13 MB original; hold the shape."""
     lines = TRANSCRIPT.read_text().splitlines()
     assert lines
     for line in lines:
@@ -76,17 +51,14 @@ def test_fixture_covers_every_shape_the_reader_branches_on() -> None:
     kinds = {json.loads(line)["type"] for line in TRANSCRIPT.read_text().splitlines()}
     assert {"user", "assistant", "attachment", "system"} <= kinds
     blocks = {
-        block["type"]
+        get_str(block, "type")
         for line in TRANSCRIPT.read_text().splitlines()
-        for block in (json.loads(line).get("message") or {}).get("content", [])
-        if isinstance(block, dict)
+        for block in objects((get_object(loads(line), "message") or {}).get("content", []))
     }
     assert {"thinking", "text", "tool_use", "tool_result"} <= blocks
 
 
-# ---------------------------------------------------------------------------
 # locate
-# ---------------------------------------------------------------------------
 
 
 def test_locate_finds_the_file_by_uuid_alone(transcript_root: Path) -> None:
@@ -97,16 +69,14 @@ def test_locate_finds_the_file_by_uuid_alone(transcript_root: Path) -> None:
 
 
 def test_locate_is_none_when_the_provider_wrote_nothing(tmp_path: Path) -> None:
-    """Observed for real: a child session writes no transcript and says so only
-    in a pane footer. That is an ordinary state, not an error."""
+    """A child session that writes no transcript is an ordinary state, not an error."""
     assert locate(SESSION, root=tmp_path) is None
 
 
 def test_locate_does_not_ignore_a_subagent_directory_by_accident(
     transcript_root: Path,
 ) -> None:
-    """A subagent's transcript is a different conversation and lives one level
-    deeper. The glob is one level, so it must not be picked up."""
+    """A subagent's transcript lives one level deeper and must not be picked up."""
     nested = transcript_root / "-tmp" / SESSION / "subagents"
     nested.mkdir(parents=True)
     (nested / "agent-abc.jsonl").write_text("{}\n")
@@ -123,9 +93,7 @@ def test_locate_refuses_a_session_id_that_is_really_a_path(
     assert locate(hostile, root=transcript_root) is None
 
 
-# ---------------------------------------------------------------------------
 # read_page: what actually comes out
-# ---------------------------------------------------------------------------
 
 
 def test_the_page_is_a_conversation_not_a_screen() -> None:
@@ -141,9 +109,9 @@ def test_the_page_is_a_conversation_not_a_screen() -> None:
 def test_turns_come_back_oldest_first_and_in_file_order() -> None:
     page = read_page(TRANSCRIPT, limit=100)
     order = [
-        json.loads(line).get("uuid")
+        get_str(loads(line), "uuid")
         for line in TRANSCRIPT.read_text().splitlines()
-        if json.loads(line).get("uuid")
+        if get_str(loads(line), "uuid")
     ]
     got = [turn.uuid for turn in page.turns]
     assert got == [uuid for uuid in order if uuid in set(got)]
@@ -158,11 +126,8 @@ def test_the_human_turns_are_the_two_prompts_that_were_typed() -> None:
     ]
 
 
-def test_a_tool_result_is_not_filed_as_the_human(transcript_root: Path) -> None:
-    """The trap this reader exists to avoid. Claude Code files a tool result as
-    ``role: "user"`` -- 719 of 818 user records in the 13 MB original -- so
-    rendering by role puts the agent's own shell output in the person's column.
-    """
+def test_a_tool_result_is_not_filed_as_the_human() -> None:
+    """A tool result filed as ``role: "user"`` must not render in the person's column."""
     page = read_page(TRANSCRIPT, limit=100)
     human = " ".join(t.text for t in page.turns if t.speaker is Speaker.human)
     assert "hello-from-agent\n" not in human
@@ -178,8 +143,7 @@ def test_a_tool_call_carries_its_name() -> None:
 
 
 def test_bookkeeping_records_never_reach_the_chat() -> None:
-    """4 attachments, a turn-duration system record and five sidecar types are in
-    this file; none of them is anything a person would call a message."""
+    """Attachments, system records and sidecar types are not messages."""
     page = read_page(TRANSCRIPT, limit=100)
     text = " ".join(turn.text for turn in page.turns)
     assert "deferred_tools_delta" not in text
@@ -188,17 +152,14 @@ def test_bookkeeping_records_never_reach_the_chat() -> None:
 
 
 def test_every_turn_has_a_stable_id_to_append_by() -> None:
-    """An append-only view re-reads an overlapping page and must drop duplicates
-    without comparing text. The provider's uuid is what it keys on."""
+    """Overlapping pages dedupe on the provider's uuid, never on text."""
     page = read_page(TRANSCRIPT, limit=100)
     uuids = [turn.uuid for turn in page.turns]
     assert all(uuids)
     assert len(uuids) == len(set(uuids))
 
 
-# ---------------------------------------------------------------------------
 # Paging upward, bounded
-# ---------------------------------------------------------------------------
 
 
 def test_paging_upward_walks_the_whole_file_without_repeating() -> None:
@@ -220,9 +181,7 @@ def test_paging_upward_walks_the_whole_file_without_repeating() -> None:
 
 
 def test_a_page_never_reads_more_than_its_byte_budget(tmp_path: Path) -> None:
-    """The bound that matters: the largest transcript on the capture box was
-    28 MB and its longest single line 1 MB, so a page has to be capped in bytes
-    and not only in turns."""
+    """A page is capped in bytes, not only in turns: real lines reach 1 MB."""
     fat = tmp_path / "fat.jsonl"
     noise = json.dumps({"type": "attachment", "attachment": {"pad": "x" * 20000}})
     fat.write_text("\n".join([noise] * 500) + "\n")
@@ -254,12 +213,7 @@ def test_an_oversized_turn_is_clipped_and_says_so(tmp_path: Path) -> None:
 
 
 def test_a_tool_result_gets_a_gist_and_prose_gets_room(tmp_path: Path) -> None:
-    """The two caps are different NUMBERS and different JOBS.
-
-    One flat cap was wrong in both directions at once: it let a megabyte of
-    ``cat`` output take four thousand characters of a metered page, and it cut
-    the model's answer -- the thing the tab exists for -- at the same number.
-    """
+    """The prose cap and the note cap are different numbers and different jobs."""
     mixed = tmp_path / "mixed.jsonl"
     mixed.write_text(
         "\n".join(
@@ -313,16 +267,14 @@ def test_a_tool_result_gets_a_gist_and_prose_gets_room(tmp_path: Path) -> None:
     by_uuid = {turn.uuid: turn for turn in page.turns}
     assert len(by_uuid["res"].text) == MAX_RESULT_CHARS
     assert by_uuid["res"].truncated
-    # 9 000 characters of prose is past the OLD flat cap and well inside the new
-    # one: the answer arrives whole rather than ending mid-sentence.
+    # Past the old flat cap and inside the prose cap, so the answer arrives whole.
     assert by_uuid["prose"].text == "y" * 9000
     assert not by_uuid["prose"].truncated
     assert MAX_RESULT_CHARS < MAX_PROSE_CHARS
 
 
 def test_injected_context_is_capped_at_what_can_be_seen(tmp_path: Path) -> None:
-    """A system turn renders clamped to three lines and has no disclosure, so
-    the cap is what a person could ever look at -- not what prose gets."""
+    """A system turn gets the note cap, not the prose cap."""
     injected = tmp_path / "injected.jsonl"
     injected.write_text(
         json.dumps(
@@ -342,8 +294,7 @@ def test_injected_context_is_capped_at_what_can_be_seen(tmp_path: Path) -> None:
 
 
 def test_a_torn_final_line_is_skipped_rather_than_raised(tmp_path: Path) -> None:
-    """A transcript is appended to while it is read. A chat that 500s because the
-    agent was mid-write is worse than a chat one turn behind."""
+    """A record torn mid-write is skipped, not an error."""
     torn = tmp_path / "torn.jsonl"
     good = TRANSCRIPT.read_text()
     torn.write_text(good + '{"type": "assistant", "uuid": "half", "mess')
@@ -355,10 +306,7 @@ def test_a_torn_final_line_is_skipped_rather_than_raised(tmp_path: Path) -> None
 def test_a_torn_final_line_does_not_take_the_live_cursor_with_it(
     tmp_path: Path,
 ) -> None:
-    """Skipping the torn record is only half of it: ``end`` is what the
-    view asks from next, so declaring it at the end of the FILE says those bytes
-    were delivered when they were dropped. The rest of the record then lands
-    below the cursor and no read ever reaches it."""
+    """``end`` never claims the bytes of a torn record were delivered."""
     torn = tmp_path / "torn.jsonl"
     good = TRANSCRIPT.read_text()
     torn.write_text(good + '{"type": "assistant", "uuid": "half", "mess')
@@ -372,8 +320,7 @@ def test_a_torn_final_line_does_not_take_the_live_cursor_with_it(
 def test_a_torn_line_longer_than_one_read_still_holds_the_cursor(
     tmp_path: Path,
 ) -> None:
-    """The longest single line measured on a real transcript was 1 067 853 bytes,
-    so the walk back to the last whole line cannot assume one chunk is enough."""
+    """The walk back to the last whole line spans more than one chunk."""
     torn = tmp_path / "torn.jsonl"
     good = TRANSCRIPT.read_text()
     torn.write_text(good + '{"type": "assistant", "uuid": "half", "x": "' + "y" * 900_000)
@@ -384,8 +331,7 @@ def test_a_torn_line_longer_than_one_read_still_holds_the_cursor(
 
 
 def test_a_file_holding_no_whole_line_yet_delivers_no_cursor(tmp_path: Path) -> None:
-    """The degenerate case of the same rule: the very first record is still
-    being written, so nothing has been delivered and the frontier is byte zero."""
+    """With the first record still being written, the frontier is byte zero."""
     partial = tmp_path / "partial.jsonl"
     partial.write_text('{"type": "user", "uuid": "h1", "mess')
 
@@ -395,9 +341,7 @@ def test_a_file_holding_no_whole_line_yet_delivers_no_cursor(tmp_path: Path) -> 
     assert page.end == 0
 
 
-# ---------------------------------------------------------------------------
 # history(): the door the app uses
-# ---------------------------------------------------------------------------
 
 
 def test_history_reads_the_real_file_through_the_registry(
@@ -410,17 +354,13 @@ def test_history_reads_the_real_file_through_the_registry(
 def test_a_provider_with_no_adapter_simply_has_no_history(
     transcript_root: Path,
 ) -> None:
-    """The provider rule, and cursor is now the case that proves it: ~/.cursor was
-    searched on 2026-08-20 and holds no session log at all. opencode does keep
-    one, in a store of its own, and tests/test_opencode.py is that reader."""
+    """A provider with no session log is unsupported, not absent."""
     assert adapter_for("cursor") is None
     assert history(SESSION, agent_kind="cursor", root=transcript_root).turns == []
 
 
 def test_the_registry_and_the_kinds_agree() -> None:
-    """AGENT_KINDS is what a qualified root entry may name, so it may not drift
-    from the registry: a kind in one and not the other is a root entry silently
-    searched by nobody, or an adapter nobody can point at a captured tree."""
+    """AGENT_KINDS may not drift from the adapter registry."""
     assert set(AGENT_KINDS) == {"claude", "opencode", "hermes"}
     assert all(adapter_for(kind) is not None for kind in AGENT_KINDS)
 
@@ -428,7 +368,7 @@ def test_the_registry_and_the_kinds_agree() -> None:
 def test_a_qualified_root_is_searched_only_by_the_harness_it_names(
     transcript_root: Path,
 ) -> None:
-    """Two providers, one setting: an entry may say which it is for."""
+    """A root entry may name the provider it is for."""
     entry = f"claude:{transcript_root}"
     assert history(SESSION, agent_kind="claude", root=entry).turns
     assert history(SESSION, agent_kind="opencode", root=entry).state is (HistoryState.absent)
@@ -437,8 +377,7 @@ def test_a_qualified_root_is_searched_only_by_the_harness_it_names(
 def test_an_unqualified_root_replaces_every_provider_default(
     transcript_root: Path,
 ) -> None:
-    """The override rule: pointing the reader at a fixture must not leave some
-    other provider free to fall back to the real store on the machine."""
+    """An override leaves no provider free to fall back to the real store."""
     page = history("ses_whatever", agent_kind="opencode", root=transcript_root)
     assert page.state is HistoryState.absent
     assert page.turns == []

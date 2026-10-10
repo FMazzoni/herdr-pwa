@@ -7,25 +7,25 @@ import os
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, ClassVar, Final, NamedTuple, Protocol
+from typing import ClassVar, Final, NamedTuple, Protocol
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, JsonValue
 
 from herdr_pwa.diff import FileDiff, tool_diff
 from herdr_pwa.engine.model import SessionId
-
+from herdr_pwa.jsontypes import JsonObject, as_object, loads, objects
 
 CLAUDE_TRANSCRIPT_ROOT: Final = "~/.claude/projects"
 
 AGENT_KINDS: Final = ("claude", "opencode", "hermes")
 
+# A path, or the string an env var carries.
 type OneRoot = str | os.PathLike[str]
-"""A single transcript root, as a path or as the string an env var carries.
-"""
 
+# One root, several searched in order, or the provider's default.
 type TranscriptRoots = OneRoot | Sequence[OneRoot] | None
-"""One root, several searched IN ORDER, or the provider's default.
-"""
+
+type TurnParser = Callable[[JsonObject], TranscriptTurn | None]
 
 MAX_PAGE_BYTES: Final = 4 * 1024 * 1024
 
@@ -75,36 +75,19 @@ class Speaker(StrEnum):
 class TranscriptTurn(BaseModel):
     """One renderable line of conversation."""
 
-    uuid: str = Field(description="The provider's record id. Stable, unique.")
+    uuid: str
     speaker: Speaker
     text: str
-    ts: str = Field(default="", description="ISO 8601 as the provider wrote it.")
-    tool: str = Field(default="", description="Tool name, when speaker is tool.")
-    truncated: bool = Field(default=False, description="text was cut at its kind's cap.")
-    call: str = Field(
-        default="",
-        description=(
-            "The provider's tool_use id. Carried by a call AND by its result, "
-            "which is the only thing that pairs the two -- they are separate "
-            "records and there may be other records between them."
-        ),
-    )
-    result: str = Field(
-        default="", description="A folded-in tool result body (see fold_tool_results)."
-    )
-    failed: bool = Field(default=False, description="The provider marked the result is_error.")
-    result_truncated: bool = Field(default=False, description="result was cut.")
-    diff: FileDiff | None = Field(
-        default=None,
-        description=(
-            "WHAT THE CALL CHANGED, when its arguments carry a change: an Edit's "
-            "two strings, a Write's contents. It is not in `text` and must not "
-            "be -- `text` is the one-line gist and the gist stays the PATH "
-            "(after Collie's summarizeToolInput). This is the "
-            "expanded body's, computed by herdr_pwa.diff and drawn by "
-            "templates/diff.html, which owns every tag it can emit."
-        ),
-    )
+    ts: str = ""
+    tool: str = ""
+    truncated: bool = False
+    # The tool_use id, carried by a call and by its result: the only thing pairing the two.
+    call: str = ""
+    result: str = ""
+    failed: bool = False
+    result_truncated: bool = False
+    # Kept out of `text`, which stays the one-line gist (the path), as Collie's summarizeToolInput does.
+    diff: FileDiff | None = None
 
 
 class TranscriptPage(BaseModel):
@@ -114,54 +97,19 @@ class TranscriptPage(BaseModel):
     cursor: int = 0
     size: int = 0
     has_more: bool = False
-    end: int = Field(
-        default=0,
-        description=(
-            "Byte offset just past the newest line this page took in. Handing it "
-            "back as ``after`` reads what has been APPENDED since -- which is "
-            "what makes the chat append rather than re-render."
-        ),
-    )
-    reset: bool = Field(
-        default=False,
-        description=(
-            "The file is smaller than the cursor held against it, so the "
-            "append-only assumption broke (a rewrite, a compaction, a different "
-            "file at the same path). The held cursor means nothing and the view "
-            "must re-read the tail rather than splice the two together."
-        ),
-    )
-    moved: bool = Field(
-        default=False,
-        description=(
-            "The reset above happened because the cursor named ANOTHER FILE, not "
-            "because this one was rewritten. Both drop the cursor; they "
-            "are different sentences on the screen, and the view must not say a "
-            "record was rewritten when the conversation simply moved."
-        ),
-    )
-    state: HistoryState = Field(
-        default=HistoryState.absent,
-        description=(
-            "Why this page is what it is. The default is ``absent`` because that "
-            "is the only thing true of a page nobody read."
-        ),
-    )
-    log: str = Field(
-        default="",
-        description=(
-            "WHICH FILE this page was actually read out of, as its stem -- which "
-            "is not the session herdr named once a fork has been followed "
-            "(after a fork). Two readers need it: the cursor, which is a promise about "
-            "one file and must not be honoured against another, and the stall "
-            "watch, whose byte counts mean nothing across a change of file."
-        ),
-    )
+    # Handed back as `after`, it reads only what was appended, so the chat appends.
+    end: int = 0
+    # The file shrank under the held cursor: re-read the tail rather than splice.
+    reset: bool = False
+    # The reset was a move to another file, not a rewrite; the view words them differently.
+    moved: bool = False
+    # Absent is the only thing true of a page nobody read.
+    state: HistoryState = HistoryState.absent
+    # The file actually read, which is not the named session once a fork was followed.
+    log: str = ""
 
 
-# ---------------------------------------------------------------------------
 # Locating the file
-# ---------------------------------------------------------------------------
 
 
 def _for_kind(entry: str, kind: str) -> str:
@@ -187,8 +135,7 @@ def _roots(
         given = list(root)
     found: list[Path] = []
     for entry in given:
-        # An empty entry resolves relative to the process cwd, which is
-        # nobody's transcript directory. Dropped, never searched.
+        # An empty entry would resolve against the process cwd, nobody's transcript directory.
         text = _for_kind(str(entry).strip(), kind)
         if not text.strip():
             continue
@@ -200,8 +147,7 @@ def _roots(
 
 def _contained(path: Path, base: Path) -> Path | None:
     """*path* resolved, then re-checked to still be a file inside *base*."""
-    # Resolve, then re-check containment: a symlink satisfies any comparison of
-    # The strings we were handed. Callers `continue`, never `return`.
+    # A symlink satisfies any comparison of the strings we were handed, so resolve first.
     try:
         resolved = path.resolve(strict=True)
     except OSError:
@@ -220,45 +166,35 @@ def _head_window(path: Path) -> bytes:
         return b""
 
 
-def _head_records(window: bytes) -> Iterator[dict[str, Any]]:
-    """Every record *window* holds WHOLE, in order."""
-    # The trailing fragment is dropped: past the budget it is half a record,
-    # and at EOF it is the empty string after the final newline.
+def _head_records(window: bytes) -> Iterator[JsonObject]:
+    """Every record *window* holds whole, in order."""
+    # The trailing fragment is half a record past the budget, or empty at EOF.
     for raw in window.split(b"\n")[:-1]:
         yield _loads(raw)
 
 
-def _head_record(path: Path) -> dict[str, Any]:
-    """The first whole record in *path* that carries a ``sessionId``."""
-    for record in _head_records(_head_window(path)):
-        if isinstance(record.get("sessionId"), str):
-            return record
-    return {}
-
-
-def _loads(raw: bytes) -> dict[str, Any]:
+def _loads(raw: bytes) -> JsonObject:
     """One JSONL line as a dict, or an empty one for anything that is not."""
     if not raw.strip():
         return {}
     try:
-        record = json.loads(raw)
+        record = loads(raw)
     except (ValueError, UnicodeDecodeError):
         return {}
-    return record if isinstance(record, dict) else {}
+    found = as_object(record)
+    return found if found is not None else {}
 
 
-def _forked_from(record: dict[str, Any]) -> str:
+def _forked_from(record: JsonObject) -> str:
     """The declared parent on *record*, as logs up to 2.1.214 spell it."""
-    forked = record.get("forkedFrom")
-    parent = forked.get("sessionId") if isinstance(forked, dict) else None
+    forked = as_object(record.get("forkedFrom"))
+    parent = forked.get("sessionId") if forked is not None else None
     return parent if isinstance(parent, str) else ""
 
 
 def _stamped_parent(window: bytes, own: str) -> str:
     """The first foreign ``session_id`` in *window* -- a BACKGROUND session's stamp."""
-    # TWO STEPS, the way `_background_handoff` does it: the byte
-    # substrings are a cheap PREFILTER, and `sessionKind` is confirmed on a
-    # parsed record.
+    # The byte substrings are a cheap prefilter; `sessionKind` is confirmed on a parsed record.
     if b'"session_id"' not in window or b'"bg"' not in window:
         return ""
     stamp = ""
@@ -273,8 +209,7 @@ def _stamped_parent(window: bytes, own: str) -> str:
 
 def _first_stamp(window: bytes, own: str) -> str:
     """The first foreign ``session_id`` in *window*, once the kind is confirmed."""
-    # Only reached when the confirming record came BEFORE any stamp, so the
-    # first loop had nothing to carry: this re-reads the same parsed head.
+    # Reached when the confirming record came before any stamp, so the first pass carried none.
     for record in _head_records(window):
         value = record.get("session_id")
         if isinstance(value, str) and value and value != own:
@@ -285,7 +220,7 @@ def _first_stamp(window: bytes, own: str) -> str:
 def _copied_from(path: Path) -> str:
     """The session *path*'s thread was COPIED OUT OF, per its own head window."""
     window = _head_window(path)
-    head = {}
+    head: JsonObject = {}
     for record in _head_records(window):
         if isinstance(record.get("sessionId"), str):
             head = record
@@ -293,7 +228,7 @@ def _copied_from(path: Path) -> str:
     return _forked_from(head) or _stamped_parent(window, str(head.get("sessionId", "")))
 
 
-def _is_compact(record: dict[str, Any]) -> bool:
+def _is_compact(record: JsonObject) -> bool:
     """Whether *record* is a compaction boundary, however the CLI spelled it."""
     return (
         isinstance(record.get("compactMetadata"), dict)
@@ -353,18 +288,26 @@ def _descendants(session: str, edges: dict[str, list[Path]]) -> list[Path]:
     frontier = [session]
     found: list[Path] = []
     for _ in range(_MAX_HOPS):
-        onward: list[str] = []
-        for parent in frontier:
-            for child in edges.get(parent, ()):
-                if child.stem in seen:
-                    continue
-                seen.add(child.stem)
-                found.append(child)
-                onward.append(child.stem)
+        onward = _one_hop(frontier, edges, seen, found)
         if not onward:
             return found
         frontier = onward
     return found
+
+
+def _one_hop(
+    frontier: list[str], edges: dict[str, list[Path]], seen: set[str], found: list[Path]
+) -> list[str]:
+    """The unseen children of *frontier*, recorded into *seen* and *found*."""
+    onward: list[str] = []
+    for parent in frontier:
+        for child in edges.get(parent, ()):
+            if child.stem in seen:
+                continue
+            seen.add(child.stem)
+            found.append(child)
+            onward.append(child.stem)
+    return onward
 
 
 def _follow(named: Path, session: str, base: Path) -> Path:
@@ -378,20 +321,27 @@ def _follow(named: Path, session: str, base: Path) -> Path:
         return named
     best = named
     for candidate in _descendants(session, _copies(named.parent)):
-        # Containment is re-checked per candidate, against the SAME root the
-        # named file was resolved through -- never a union of roots.
-        resolved = _contained(candidate, base)
+        resolved = _eligible(candidate, base, floor)
         if resolved is None:
-            continue
-        try:
-            if resolved.stat().st_size < floor and not _background_handoff(resolved):
-                continue
-        except OSError:
             continue
         stamp = _last_timestamp(resolved)
         if stamp > newest:
             best, newest = resolved, stamp
     return best
+
+
+def _eligible(candidate: Path, base: Path, floor: int) -> Path | None:
+    """*candidate* resolved, if it may replace a log of *floor* bytes, else ``None``."""
+    # Contained to the same root the named file came through, never a union of roots.
+    resolved = _contained(candidate, base)
+    if resolved is None:
+        return None
+    try:
+        if resolved.stat().st_size < floor and not _background_handoff(resolved):
+            return None
+    except OSError:
+        return None
+    return resolved
 
 
 def _in_root(base: Path, session: str, *, follow: bool) -> Path | None:
@@ -436,9 +386,7 @@ def locate(
     return None
 
 
-# ---------------------------------------------------------------------------
 # Reading it, backwards, bounded
-# ---------------------------------------------------------------------------
 
 
 def _lines_before(path: Path, before: int, budget: int) -> tuple[list[tuple[int, bytes]], int]:
@@ -478,25 +426,22 @@ def _complete_end(path: Path, end: int, max_bytes: int = MAX_PAGE_BYTES) -> int:
             if cut >= 0:
                 return start + cut + 1
             frontier = start
-    # No newline anywhere means no whole line and nothing delivered. Past the
-    # budget, one record is longer than we will scan back over: leave it.
+    # No newline means nothing delivered; past the budget one record is too long to scan back over.
     return 0 if frontier == 0 else end
 
 
-def _parse_line(
-    raw: bytes, parse: Callable[[dict[str, Any]], TranscriptTurn | None]
-) -> TranscriptTurn | None:
+def _parse_line(raw: bytes, parse: TurnParser) -> TranscriptTurn | None:
     """One JSONL line as a turn, or ``None`` for anything that is not one."""
     try:
-        record = json.loads(raw)
+        record = as_object(loads(raw))
     except (ValueError, UnicodeDecodeError):
         return None
-    return parse(record) if isinstance(record, dict) else None
+    return parse(record) if record is not None else None
 
 
 def _take_backwards(
     lines: list[tuple[int, bytes]],
-    parse: Callable[[dict[str, Any]], TranscriptTurn | None],
+    parse: TurnParser,
     turns: list[TranscriptTurn],
     limit: int,
 ) -> tuple[int | None, bool]:
@@ -513,21 +458,10 @@ def _take_backwards(
     return oldest, False
 
 
-def read_page(
-    path: Path,
-    *,
-    limit: int = 40,
-    before: int | None = None,
-    max_bytes: int = MAX_PAGE_BYTES,
-    parse: Callable[[dict[str, Any]], TranscriptTurn | None] | None = None,
-) -> TranscriptPage:
-    """Up to *limit* turns ending at byte *before*, oldest first."""
-    parse = parse or _claude_turn
-    try:
-        size = path.stat().st_size
-    except OSError:
-        return TranscriptPage(state=HistoryState.unreadable)
-    end = _complete_end(path, size if before is None else max(0, min(before, size)))
+def _walk_back(
+    path: Path, end: int, parse: TurnParser, *, limit: int, max_bytes: int
+) -> tuple[list[TranscriptTurn], int]:
+    """The turns newest first from byte *end* backwards, and the page cursor."""
     turns: list[TranscriptTurn] = []
     frontier = end
     cursor = end
@@ -544,6 +478,25 @@ def read_page(
         cursor = start if taken is None else taken
     if frontier == 0 and not hit_limit:
         cursor = 0
+    return turns, cursor
+
+
+def read_page(
+    path: Path,
+    *,
+    limit: int = 40,
+    before: int | None = None,
+    max_bytes: int = MAX_PAGE_BYTES,
+    parse: TurnParser | None = None,
+) -> TranscriptPage:
+    """Up to *limit* turns ending at byte *before*, oldest first."""
+    parse = parse or _claude_turn
+    try:
+        size = path.stat().st_size
+    except OSError:
+        return TranscriptPage(state=HistoryState.unreadable)
+    end = _complete_end(path, size if before is None else max(0, min(before, size)))
+    turns, cursor = _walk_back(path, end, parse, limit=limit, max_bytes=max_bytes)
     turns.reverse()
     return TranscriptPage(
         turns=turns,
@@ -562,9 +515,9 @@ def read_since(
     after: int,
     limit: int = 40,
     max_bytes: int = MAX_PAGE_BYTES,
-    parse: Callable[[dict[str, Any]], TranscriptTurn | None] | None = None,
+    parse: TurnParser | None = None,
 ) -> TranscriptPage:
-    """Whatever has been APPENDED past byte *after*, oldest first."""
+    """Whatever has been appended past byte *after*, oldest first."""
     parse = parse or _claude_turn
     try:
         size = path.stat().st_size
@@ -580,9 +533,7 @@ def read_since(
         window = handle.read(min(max_bytes, size - start))
     tail = window.rfind(b"\n")
     if tail < 0:
-        # Not one whole line yet: either the record is still being written or it
-        # is longer than the budget. Either way nothing here can be parsed, and
-        # the cursor must NOT move past bytes that were never delivered.
+        # No whole line yet, so the cursor must not move past bytes never delivered.
         return TranscriptPage(
             size=size,
             end=start,
@@ -591,18 +542,7 @@ def read_since(
             log=path.stem,
         )
     turns: list[TranscriptTurn] = []
-    end = start
-    offset = start
-    for raw in window[:tail].split(b"\n"):
-        offset += len(raw) + 1
-        end = offset
-        if not raw.strip():
-            continue
-        turn = _parse_line(raw, parse)
-        if turn is not None:
-            turns.append(turn)
-        if len(turns) >= limit:
-            break
+    end = _take_forward(window[:tail], start, parse, turns, limit)
     return TranscriptPage(
         turns=turns,
         cursor=start,
@@ -614,9 +554,26 @@ def read_since(
     )
 
 
-# ---------------------------------------------------------------------------
+def _take_forward(
+    window: bytes, start: int, parse: TurnParser, turns: list[TranscriptTurn], limit: int
+) -> int:
+    """Append the turns in *window* oldest first, up to *limit*; return the end offset."""
+    end = start
+    offset = start
+    for raw in window.split(b"\n"):
+        offset += len(raw) + 1
+        end = offset
+        if not raw.strip():
+            continue
+        turn = _parse_line(raw, parse)
+        if turn is not None:
+            turns.append(turn)
+        if len(turns) >= limit:
+            break
+    return end
+
+
 # The Claude Code adapter
-# ---------------------------------------------------------------------------
 
 _SKIP_TYPES: Final = frozenset(
     {
@@ -637,17 +594,18 @@ _SKIP_TYPES: Final = frozenset(
 _HUMAN_SOURCES: Final = frozenset({"typed", "queued", "pasted"})
 
 
-def _is_human(record: dict[str, Any]) -> bool:
-    source = record.get("promptSource")
+def _is_human(record: JsonObject) -> bool:
+    source: JsonValue = record.get("promptSource")
     if isinstance(source, dict):
         source = source.get("kind")
     if isinstance(source, str) and source in _HUMAN_SOURCES:
         return True
-    origin = record.get("origin")
-    return isinstance(origin, dict) and origin.get("kind") == "human"
+    origin = as_object(record.get("origin"))
+    return origin is not None and origin.get("kind") == "human"
 
 
-def _clip(text: str, limit: int) -> tuple[str, bool]:
+def clip(text: str, limit: int) -> tuple[str, bool]:
+    """*text* stripped and cut to *limit* characters, with whether it was cut."""
     text = text.strip()
     if len(text) <= limit:
         return text, False
@@ -672,43 +630,45 @@ _TOOL_ARGUMENT_KEYS: Final = (
 )
 
 
-def _one_line(value: object, limit: int = MAX_SUMMARY_CHARS) -> tuple[str, bool]:
+def one_line(value: object, limit: int = MAX_SUMMARY_CHARS) -> tuple[str, bool]:
     """*value* as a single collapsed line, clipped, with whether it was clipped."""
     if not isinstance(value, str):
         return "", False
-    return _clip(" ".join(value.split()), limit)
+    return clip(" ".join(value.split()), limit)
 
 
-def _tool_summary(params: object) -> tuple[str, bool]:
+def tool_summary(params: object) -> tuple[str, bool]:
     """The one identifying argument of a tool call (see `_TOOL_ARGUMENT_KEYS`)."""
-    if not isinstance(params, dict):
+    args = as_object(params)
+    if args is None:
         return "", False
     for key in _TOOL_ARGUMENT_KEYS:
-        if key in params:
-            line, cut = _one_line(params.get(key))
+        if key in args:
+            line, cut = one_line(args.get(key))
             if line:
                 return line, cut
     return "", False
 
 
-def _blocks(content: object) -> Iterator[dict[str, Any]]:
-    if isinstance(content, list):
-        for block in content:
-            if isinstance(block, dict):
-                yield block
+def _blocks(content: object) -> Iterator[JsonObject]:
+    yield from objects(content)
 
 
-def _user_record(record: dict[str, Any], uuid: str, ts: str) -> TranscriptTurn | None:
+def _content(record: JsonObject) -> JsonValue:
+    """``record["message"]["content"]``; callers have already checked the message is an object."""
+    message = as_object(record.get("message"))
+    return message.get("content") if message is not None else None
+
+
+def _user_record(record: JsonObject, uuid: str, ts: str) -> TranscriptTurn | None:
     """A ``role: "user"`` record, which is where the whole trap lives."""
-    content = record.get("message", {}).get("content")
+    content = _content(record)
     if isinstance(content, str):
         if record.get("isMeta"):
             return None
-        # The cap follows the SPEAKER, so it is decided before the clip: a
-        # person's own prompt is prose and gets the prose cap, and injected
-        # machinery gets the note cap, because the view shows three lines of it.
+        # The cap follows the speaker: injected machinery gets the note cap, as the view shows three lines.
         human = _is_human(record)
-        text, cut = _clip(content, MAX_PROSE_CHARS if human else MAX_NOTE_CHARS)
+        text, cut = clip(content, MAX_PROSE_CHARS if human else MAX_NOTE_CHARS)
         if not text:
             return None
         return TranscriptTurn(
@@ -726,12 +686,12 @@ def _user_record(record: dict[str, Any], uuid: str, ts: str) -> TranscriptTurn |
     return None
 
 
-def _user_block(block: dict[str, Any], uuid: str, ts: str, *, meta: bool) -> TranscriptTurn | None:
+def _user_block(block: JsonObject, uuid: str, ts: str, *, meta: bool) -> TranscriptTurn | None:
     """One content block of a user record, or ``None`` if it is not conversation."""
     kind = block.get("type")
     if kind == "tool_result":
         body = block.get("content")
-        text, cut = _clip(
+        text, cut = clip(
             body if isinstance(body, str) else json.dumps(body, ensure_ascii=False),
             MAX_RESULT_CHARS,
         )
@@ -746,7 +706,7 @@ def _user_block(block: dict[str, Any], uuid: str, ts: str, *, meta: bool) -> Tra
             failed=block.get("is_error") is True,
         )
     if kind == "text" and not meta:
-        text, cut = _clip(str(block.get("text", "")), MAX_NOTE_CHARS)
+        text, cut = clip(str(block.get("text", "")), MAX_NOTE_CHARS)
         if text:
             return TranscriptTurn(
                 uuid=uuid, speaker=Speaker.system, text=text, ts=ts, truncated=cut
@@ -754,18 +714,18 @@ def _user_block(block: dict[str, Any], uuid: str, ts: str, *, meta: bool) -> Tra
     return None
 
 
-def _assistant_record(record: dict[str, Any], uuid: str, ts: str) -> TranscriptTurn | None:
+def _assistant_record(record: JsonObject, uuid: str, ts: str) -> TranscriptTurn | None:
     """An assistant record: prose, or one collapsed tool call."""
-    for block in _blocks(record.get("message", {}).get("content")):
+    for block in _blocks(_content(record)):
         btype = block.get("type")
         if btype == "text":
-            text, cut = _clip(str(block.get("text", "")), MAX_PROSE_CHARS)
+            text, cut = clip(str(block.get("text", "")), MAX_PROSE_CHARS)
             if not text:
                 return None
             return TranscriptTurn(uuid=uuid, speaker=Speaker.agent, text=text, ts=ts, truncated=cut)
         if btype == "tool_use":
             params = block.get("input")
-            text, cut = _tool_summary(params)
+            text, cut = tool_summary(params)
             return TranscriptTurn(
                 uuid=uuid,
                 speaker=Speaker.tool,
@@ -777,14 +737,12 @@ def _assistant_record(record: dict[str, Any], uuid: str, ts: str) -> TranscriptT
                 diff=tool_diff(params),
             )
         if btype == "thinking":
-            # Kept out of the chat: 393 of them in the measured file, with
-            # an empty ``thinking`` string and a signature blob. Nothing to
-            # render, and a bubble per record would be 393 empty bubbles.
+            # Measured: an empty `thinking` string and a signature blob, so nothing to render.
             return None
     return None
 
 
-def _claude_turn(record: dict[str, Any]) -> TranscriptTurn | None:
+def _claude_turn(record: JsonObject) -> TranscriptTurn | None:
     """One Claude Code JSONL record as a chat turn, or ``None`` to drop it."""
     kind = record.get("type")
     if kind in _SKIP_TYPES:
@@ -794,11 +752,12 @@ def _claude_turn(record: dict[str, Any]) -> TranscriptTurn | None:
         return None
     if not isinstance(record.get("message"), dict):
         return None
-    ts = record.get("timestamp") if isinstance(record.get("timestamp"), str) else ""
+    stamp = record.get("timestamp")
+    ts = stamp if isinstance(stamp, str) else ""
     if kind == "user":
-        return _user_record(record, uuid, ts or "")
+        return _user_record(record, uuid, ts)
     if kind == "assistant":
-        return _assistant_record(record, uuid, ts or "")
+        return _assistant_record(record, uuid, ts)
     return None
 
 
@@ -880,8 +839,7 @@ class ClaudeAdapter:
         if path is None:
             return TranscriptPage(state=HistoryState.absent)
         if expect and expect != path.stem:
-            # THE OTHER HALF OF THE CURSOR GUARD: a `before` offset is
-            # CLAMPED rather than refused, which is worse than refusing it.
+            # A `before` offset into another file would be clamped, not refused, so drop it.
             page = read_page(path, limit=limit, before=None, parse=_claude_turn)
             return page.model_copy(update={"reset": True, "moved": True})
         return read_page(path, limit=limit, before=before, parse=_claude_turn)
@@ -900,9 +858,7 @@ class ClaudeAdapter:
         if path is None:
             return TranscriptPage(state=HistoryState.absent)
         if expect and expect != path.stem:
-            # A held cursor is a promise about ONE file, and the lineage moved
-            # under this one. Reading at that offset would splice two threads
-            # together, so the cursor is dropped and the chat says so.
+            # A held cursor is a promise about one file; reading it here would splice two threads.
             page = read_since(path, after=_ANOTHER_FILE, limit=limit)
             return page.model_copy(update={"moved": True})
         return read_since(path, after=after, limit=limit, parse=_claude_turn)
@@ -932,10 +888,9 @@ _ADAPTERS: Final[dict[str, TranscriptAdapter]] = {}
 def _registry() -> dict[str, TranscriptAdapter]:
     """The adapters, built on first use."""
     if not _ADAPTERS:
-        # Imported here rather than at the top: an adapter speaks this module's
-        # vocabulary, so importing one from the top would be a cycle.
-        from herdr_pwa.engine.hermes import HermesAdapter
-        from herdr_pwa.engine.opencode import OpencodeAdapter
+        # The adapters import this module, so importing them at the top would be a cycle.
+        from herdr_pwa.engine.hermes import HermesAdapter  # noqa: PLC0415
+        from herdr_pwa.engine.opencode import OpencodeAdapter  # noqa: PLC0415
 
         _ADAPTERS["claude"] = ClaudeAdapter()
         _ADAPTERS["opencode"] = OpencodeAdapter()
@@ -948,7 +903,7 @@ def adapter_for(agent_kind: str | None) -> TranscriptAdapter | None:
     return _registry().get((agent_kind or "").strip().lower())
 
 
-def history(
+def history(  # noqa: PLR0913
     session: SessionId | str,
     *,
     agent_kind: str | None = "claude",
@@ -974,121 +929,92 @@ def history(
             else adapter.page(text, roots=roots, limit=limit, before=before, expect=log)
         )
     except OSError:
-        # The history was found and then could not be read: a permission change,
-        # a vanished mount, a real I/O error. Distinct from "there is none", and
-        # the view says so rather than showing a quiet conversation.
+        # Found and then unreadable is not "there is none"; the view must not show a quiet chat.
         return TranscriptPage(state=HistoryState.unreadable)
     return page.model_copy(update={"turns": fold_tool_results(page.turns)})
 
 
-# ---------------------------------------------------------------------------
 # What it cost: the usage tally
-# ---------------------------------------------------------------------------
 
 
 class ModelRef(NamedTuple):
     """One model that answered, and the provider that served it."""
 
     model: str = ""
-
     provider: str = ""
 
 
 class SessionUsage(BaseModel):
     """What one session has spent, summed over every log its thread has lived in."""
 
-    messages: int = Field(default=0, description="Distinct assistant MESSAGES, not records.")
-    input_tokens: int = Field(default=0, description="Fresh prompt, never cached.")
-    output_tokens: int = Field(default=0, description="Everything the model generated.")
-    thinking_tokens: int = Field(default=0, description="The part of output that was reasoning.")
-    cache_creation_tokens: int = Field(default=0, description="Written into the cache.")
-    cache_read_tokens: int = Field(
-        default=0,
-        description=(
-            "Read back OUT of the cache. Measured at 200 000x input on a real "
-            "session, so it is the figure a naive sum leaves out and the reason "
-            "this model reports four numbers rather than one."
-        ),
-    )
-    context_tokens: int = Field(
-        default=0,
-        description=(
-            "The whole prompt of the NEWEST message -- fresh, cached and "
-            "cache-written together. How full the window is now, not a total."
-        ),
-    )
-    models: list[ModelRef] = Field(
-        default_factory=list,
-        description=(
-            "Which models answered, first seen first, each with the provider "
-            "that served it -- opencode can be pointed at several."
-        ),
-    )
-    cost: float = Field(
-        default=0.0,
-        description=(
-            "Money, in the currency the provider recorded, and only where the "
-            "provider records it. opencode does, per message; Claude "
-            "Code does not, and a price table this app would have to keep "
-            "current is a worse answer than a gap. Zero means UNKNOWN."
-        ),
-    )
-    logs: int = Field(default=0, description="How many files the tally covers.")
-    partial: bool = Field(
-        default=False,
-        description="A byte budget stopped the read; the sums are floors.",
-    )
-    state: HistoryState = Field(default=HistoryState.absent)
+    # Distinct assistant messages, not records.
+    messages: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    thinking_tokens: int = 0
+    cache_creation_tokens: int = 0
+    # Measured at 200 000x input on a real session: the figure a naive sum leaves out.
+    cache_read_tokens: int = 0
+    # The newest message's whole prompt: how full the window is now, not a total.
+    context_tokens: int = 0
+    models: list[ModelRef] = Field(default_factory=list)
+    # Only where the provider records it; a price table kept here would be worse than a gap. Zero is unknown.
+    cost: float = 0.0
+    logs: int = 0
+    # A byte budget stopped the read, so the sums are floors.
+    partial: bool = False
+    state: HistoryState = HistoryState.absent
 
 
 _SYNTHETIC_MODEL: Final = "<synthetic>"
 
 
-def _usage_of(record: dict[str, Any]) -> tuple[str, dict[str, Any], str] | None:
+def _usage_of(record: JsonObject) -> tuple[str, JsonObject, str] | None:
     """An assistant record's ``(message id, usage, model)``, or ``None``."""
     if record.get("type") != "assistant":
         return None
-    message = record.get("message")
-    if not isinstance(message, dict):
+    message = as_object(record.get("message"))
+    if message is None:
         return None
-    usage = message.get("usage")
+    usage = as_object(message.get("usage"))
     identifier = message.get("id")
-    if not isinstance(usage, dict) or not isinstance(identifier, str) or not identifier:
+    if usage is None or not isinstance(identifier, str) or not identifier:
         return None
-    model = message.get("model") if isinstance(message.get("model"), str) else ""
+    named = message.get("model")
+    model = named if isinstance(named, str) else ""
     if model == _SYNTHETIC_MODEL:
         return None
-    return identifier, usage, str(model)
+    return identifier, usage, model
 
 
-def _count(usage: dict[str, Any], key: str) -> int:
+def _count(usage: JsonObject, key: str) -> int:
     """One usage field as a non-negative int, whatever the provider actually wrote."""
     value = usage.get(key)
     return value if isinstance(value, int) and value > 0 else 0
 
 
-def _add_usage(tally: SessionUsage, usage: dict[str, Any], model: str) -> None:
+def _add_usage(tally: SessionUsage, usage: JsonObject, model: str) -> None:
     """Fold one message's usage into *tally*, in place."""
-    details = usage.get("output_tokens_details")
+    details = as_object(usage.get("output_tokens_details"))
     tally.messages += 1
     tally.input_tokens += _count(usage, "input_tokens")
     tally.output_tokens += _count(usage, "output_tokens")
     tally.cache_creation_tokens += _count(usage, "cache_creation_input_tokens")
     tally.cache_read_tokens += _count(usage, "cache_read_input_tokens")
-    if isinstance(details, dict):
+    if details is not None:
         tally.thinking_tokens += _count(details, "thinking_tokens")
     if model:
         # Claude Code answers from one provider, so the reference carries none.
-        _remember(tally, ModelRef(model))
+        remember(tally, ModelRef(model))
 
 
-def _remember(tally: SessionUsage, ref: ModelRef) -> None:
+def remember(tally: SessionUsage, ref: ModelRef) -> None:
     """Record *ref* as having answered, once, keeping first-seen order."""
     if ref.model and ref not in tally.models:
         tally.models.append(ref)
 
 
-def _prompt_size(usage: dict[str, Any]) -> int:
+def _prompt_size(usage: JsonObject) -> int:
     """Everything that went UP with one message: fresh, cache-written, cache-read."""
     return (
         _count(usage, "input_tokens")
@@ -1101,30 +1027,31 @@ def _tally_log(
     path: Path, tally: SessionUsage, seen: set[str], budget: int, *, newest: bool
 ) -> int:
     """Add *path*'s messages to *tally*; return the bytes it did not spend."""
-    # A message is written as several RECORDS, all carrying the same id and the
-    # same usage byte for byte, so summing records nearly doubles the answer:
-    # the id set is the whole correctness of this function.
     with path.open("rb") as handle:
         for raw in handle:
             budget -= len(raw)
             if budget < 0:
                 tally.partial = True
                 return 0
-            if b'"usage"' not in raw:
-                continue
-            found = _usage_of(_loads(raw))
-            if found is None:
-                continue
-            identifier, usage, model = found
-            if newest:
-                # Forward through the newest log, so the last one to land here
-                # is the newest message there is: that is the live window.
-                tally.context_tokens = _prompt_size(usage)
-            if identifier in seen:
-                continue
-            seen.add(identifier)
-            _add_usage(tally, usage, model)
+            if b'"usage"' in raw:
+                _tally_line(raw, tally, seen, newest=newest)
     return budget
+
+
+def _tally_line(raw: bytes, tally: SessionUsage, seen: set[str], *, newest: bool) -> None:
+    """Add one record's message to *tally*, unless its id was already counted."""
+    found = _usage_of(_loads(raw))
+    if found is None:
+        return
+    identifier, usage, model = found
+    if newest:
+        # Read forward, so the last message to land here is the live window.
+        tally.context_tokens = _prompt_size(usage)
+    # One message is several records carrying identical usage; summing records nearly doubles it.
+    if identifier in seen:
+        return
+    seen.add(identifier)
+    _add_usage(tally, usage, model)
 
 
 def _ancestors(path: Path) -> list[Path]:

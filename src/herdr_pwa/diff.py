@@ -1,12 +1,11 @@
 """A file change in the Chat tab, computed here and drawn by templates/diff.html."""
 
-from __future__ import annotations
-
 from difflib import unified_diff
-from typing import Any, Final
+from typing import Final
 
 from pydantic import BaseModel, Field
 
+from herdr_pwa.jsontypes import JsonObject, as_array, as_object
 
 MAX_DIFF_LINES: Final = 60
 
@@ -47,7 +46,7 @@ class FileDiff(BaseModel):
     whole: bool = Field(default=False, description="A write: the file's new contents.")
 
 
-def _first(params: dict[str, Any], keys: tuple[str, ...]) -> str | None:
+def _first(params: JsonObject, keys: tuple[str, ...]) -> str | None:
     """The first of *keys* present in *params* whose value is a string."""
     for key in keys:
         value = params.get(key)
@@ -56,14 +55,14 @@ def _first(params: dict[str, Any], keys: tuple[str, ...]) -> str | None:
     return None
 
 
-def _pairs(params: dict[str, Any]) -> tuple[list[tuple[str, str]], bool]:
+def _pairs(params: JsonObject) -> tuple[list[tuple[str, str]], bool]:
     """Every (old, new) this call changes, and whether it is a whole-file write."""
     edits = params.get("edits")
     if isinstance(edits, list):
         found = [
             (old, new)
-            for edit in edits
-            if isinstance(edit, dict)
+            for edit in map(as_object, as_array(edits))
+            if edit is not None
             and (old := _first(edit, _OLD_KEYS)) is not None
             and (new := _first(edit, _NEW_KEYS)) is not None
         ]
@@ -79,7 +78,7 @@ def _pairs(params: dict[str, Any]) -> tuple[list[tuple[str, str]], bool]:
 
 
 def _clip_row(text: str) -> tuple[str, bool]:
-    """*text* at its width budget. Never wrapped --,."""
+    """*text* cut at its width budget; a diff row is never wrapped."""
     if len(text) <= MAX_DIFF_COLS:
         return text, False
     return text[:MAX_DIFF_COLS], True
@@ -98,20 +97,26 @@ def _rows(pairs: list[tuple[str, str]]) -> tuple[list[DiffLine], int, int, bool]
     for old, new in pairs:
         before, after = _split(old), _split(new)
         if max(len(before), len(after)) > MAX_DIFF_INPUT_LINES:
-            # Not diffed at all: SequenceMatcher over two very large files is
-            # the one place this can cost a phone request real time, and the
-            # counts alone still answer "how big was that".
+            # Not diffed: SequenceMatcher over two huge files costs a phone request real time.
             counted = True
             added += len(after)
             removed += len(before)
             continue
-        for raw in _unified(before, after):
-            kind, text = _classify(raw)
-            added += 1 if kind == _ADD else 0
-            removed += 1 if kind == _DEL else 0
-            body, cut = _clip_row(text)
-            rows.append(DiffLine(kind=kind, text=body, clipped=cut))
+        pair_rows = _pair_rows(before, after)
+        added += sum(row.kind == _ADD for row in pair_rows)
+        removed += sum(row.kind == _DEL for row in pair_rows)
+        rows.extend(pair_rows)
     return rows, added, removed, counted
+
+
+def _pair_rows(before: list[str], after: list[str]) -> list[DiffLine]:
+    """One pair's unified diff as clipped rows."""
+    rows: list[DiffLine] = []
+    for raw in _unified(before, after):
+        kind, text = _classify(raw)
+        body, cut = _clip_row(text)
+        rows.append(DiffLine(kind=kind, text=body, clipped=cut))
+    return rows
 
 
 def _unified(before: list[str], after: list[str]) -> list[str]:
@@ -132,12 +137,11 @@ def _classify(raw: str) -> tuple[str, str]:
 
 def tool_diff(params: object) -> FileDiff | None:
     """What *params* changes, or ``None`` if this call changes no file."""
-    # Decided by the ARGUMENTS and never by the tool's name: Edit, MultiEdit,
-    # Write and opencode's camel-cased equivalents all reach this the same way,
-    # and a harness that adds a fifth spelling of "edit" needs no branch here.
-    if not isinstance(params, dict):
+    # Decided by the arguments, never the tool name, so a new spelling of "edit" needs no branch.
+    args = as_object(params)
+    if args is None:
         return None
-    pairs, whole = _pairs(params)
+    pairs, whole = _pairs(args)
     if not pairs:
         return None
     rows, added, removed, counted = _rows(pairs)
@@ -150,6 +154,6 @@ def tool_diff(params: object) -> FileDiff | None:
         removed=removed,
         clipped=len(kept) < len(rows),
         counted=counted,
-        every=params.get("replace_all") is True,
+        every=args.get("replace_all") is True,
         whole=whole,
     )
