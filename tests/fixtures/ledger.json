@@ -1,0 +1,5749 @@
+{
+  "herd": {
+    "snapshot.example": {
+      "agents": {
+        "3ec8bcb4-8fd5-46a5-9f6d-ada27a5c3048": {
+          "effective_status": "idle",
+          "feed_key": [
+            3,
+            -12,
+            3,
+            "w654c7902e43791:pA"
+          ],
+          "prompt": null,
+          "status": "idle",
+          "target": "w654c7902e43791:pA"
+        },
+        "5b609dba-d756-493a-a3fc-b4e09bf0a183": {
+          "effective_status": "idle",
+          "feed_key": [
+            3,
+            -13,
+            1,
+            "w652ae557d5b9c1:p2"
+          ],
+          "prompt": null,
+          "status": "idle",
+          "target": "w652ae557d5b9c1:p2"
+        },
+        "6ae1e031-ddb4-4684-ab07-68073f7fec47": {
+          "effective_status": "working",
+          "feed_key": [
+            2,
+            -31,
+            4,
+            "w1:p3"
+          ],
+          "prompt": null,
+          "status": "working",
+          "target": "w1:p3"
+        },
+        "6f5c4c0d-38a8-41dc-b3b9-3daaf50ffcf4": {
+          "effective_status": "idle",
+          "feed_key": [
+            3,
+            -11,
+            4,
+            "w1:p1"
+          ],
+          "prompt": null,
+          "status": "idle",
+          "target": "w1:p1"
+        },
+        "a36eed14-ff20-48e5-9b50-b8b846cbf977": {
+          "effective_status": "idle",
+          "feed_key": [
+            3,
+            0,
+            5,
+            "w2:p1"
+          ],
+          "prompt": null,
+          "status": "idle",
+          "target": "w2:p1"
+        },
+        "c7242542-f9ce-4b05-ae32-f20806015262": {
+          "effective_status": "idle",
+          "feed_key": [
+            3,
+            -14,
+            2,
+            "w4:p1"
+          ],
+          "prompt": null,
+          "status": "idle",
+          "target": "w4:p1"
+        }
+      },
+      "cadence": 5,
+      "counts": {
+        "blocked": 0,
+        "done": 0,
+        "idle": 5,
+        "unknown": 0,
+        "working": 1
+      },
+      "freshness": [
+        {
+          "age": null,
+          "error": null,
+          "result": {
+            "age": null,
+            "age_label": "",
+            "condition": "live",
+            "degraded": false,
+            "disconnected": false,
+            "failure": "",
+            "stale": false
+          },
+          "taken_at": null
+        },
+        {
+          "age": null,
+          "error": "TimeoutError",
+          "result": {
+            "age": null,
+            "age_label": "",
+            "condition": "degraded",
+            "degraded": true,
+            "disconnected": false,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": null
+        },
+        {
+          "age": 0.0,
+          "error": null,
+          "result": {
+            "age": 0.0,
+            "age_label": "0s ago",
+            "condition": "live",
+            "degraded": false,
+            "disconnected": false,
+            "failure": "",
+            "stale": false
+          },
+          "taken_at": 1790000000.0
+        },
+        {
+          "age": 0.0,
+          "error": "TimeoutError",
+          "result": {
+            "age": 0.0,
+            "age_label": "0s ago",
+            "condition": "degraded",
+            "degraded": true,
+            "disconnected": false,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": 1790000000.0
+        },
+        {
+          "age": 1.0,
+          "error": null,
+          "result": {
+            "age": 1.0,
+            "age_label": "1s ago",
+            "condition": "live",
+            "degraded": false,
+            "disconnected": false,
+            "failure": "",
+            "stale": false
+          },
+          "taken_at": 1789999999.0
+        },
+        {
+          "age": 1.0,
+          "error": "TimeoutError",
+          "result": {
+            "age": 1.0,
+            "age_label": "1s ago",
+            "condition": "degraded",
+            "degraded": true,
+            "disconnected": false,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": 1789999999.0
+        },
+        {
+          "age": 14.0,
+          "error": null,
+          "result": {
+            "age": 14.0,
+            "age_label": "14s ago",
+            "condition": "live",
+            "degraded": false,
+            "disconnected": false,
+            "failure": "",
+            "stale": false
+          },
+          "taken_at": 1789999986.0
+        },
+        {
+          "age": 14.0,
+          "error": "TimeoutError",
+          "result": {
+            "age": 14.0,
+            "age_label": "14s ago",
+            "condition": "degraded",
+            "degraded": true,
+            "disconnected": false,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": 1789999986.0
+        },
+        {
+          "age": 15.0,
+          "error": null,
+          "result": {
+            "age": 15.0,
+            "age_label": "15s ago",
+            "condition": "live",
+            "degraded": false,
+            "disconnected": false,
+            "failure": "",
+            "stale": false
+          },
+          "taken_at": 1789999985.0
+        },
+        {
+          "age": 15.0,
+          "error": "TimeoutError",
+          "result": {
+            "age": 15.0,
+            "age_label": "15s ago",
+            "condition": "degraded",
+            "degraded": true,
+            "disconnected": false,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": 1789999985.0
+        },
+        {
+          "age": 16.0,
+          "error": null,
+          "result": {
+            "age": 16.0,
+            "age_label": "16s ago",
+            "condition": "stale",
+            "degraded": false,
+            "disconnected": false,
+            "failure": "",
+            "stale": true
+          },
+          "taken_at": 1789999984.0
+        },
+        {
+          "age": 16.0,
+          "error": "TimeoutError",
+          "result": {
+            "age": 16.0,
+            "age_label": "16s ago",
+            "condition": "degraded",
+            "degraded": true,
+            "disconnected": false,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": 1789999984.0
+        },
+        {
+          "age": 36.0,
+          "error": null,
+          "result": {
+            "age": 36.0,
+            "age_label": "36s ago",
+            "condition": "stale",
+            "degraded": false,
+            "disconnected": false,
+            "failure": "",
+            "stale": true
+          },
+          "taken_at": 1789999964.0
+        },
+        {
+          "age": 36.0,
+          "error": "TimeoutError",
+          "result": {
+            "age": 36.0,
+            "age_label": "36s ago",
+            "condition": "degraded",
+            "degraded": true,
+            "disconnected": false,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": 1789999964.0
+        },
+        {
+          "age": 37.0,
+          "error": null,
+          "result": {
+            "age": 37.0,
+            "age_label": "37s ago",
+            "condition": "stale",
+            "degraded": false,
+            "disconnected": false,
+            "failure": "",
+            "stale": true
+          },
+          "taken_at": 1789999963.0
+        },
+        {
+          "age": 37.0,
+          "error": "TimeoutError",
+          "result": {
+            "age": 37.0,
+            "age_label": "37s ago",
+            "condition": "degraded",
+            "degraded": true,
+            "disconnected": false,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": 1789999963.0
+        },
+        {
+          "age": 59.5,
+          "error": null,
+          "result": {
+            "age": 59.5,
+            "age_label": "60s ago",
+            "condition": "stale",
+            "degraded": false,
+            "disconnected": false,
+            "failure": "",
+            "stale": true
+          },
+          "taken_at": 1789999940.5
+        },
+        {
+          "age": 59.5,
+          "error": "TimeoutError",
+          "result": {
+            "age": 59.5,
+            "age_label": "60s ago",
+            "condition": "degraded",
+            "degraded": true,
+            "disconnected": false,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": 1789999940.5
+        },
+        {
+          "age": 60.0,
+          "error": null,
+          "result": {
+            "age": 60.0,
+            "age_label": "1m ago",
+            "condition": "stale",
+            "degraded": false,
+            "disconnected": false,
+            "failure": "",
+            "stale": true
+          },
+          "taken_at": 1789999940.0
+        },
+        {
+          "age": 60.0,
+          "error": "TimeoutError",
+          "result": {
+            "age": 60.0,
+            "age_label": "1m ago",
+            "condition": "degraded",
+            "degraded": true,
+            "disconnected": false,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": 1789999940.0
+        },
+        {
+          "age": 61.0,
+          "error": null,
+          "result": {
+            "age": 61.0,
+            "age_label": "1m ago",
+            "condition": "offline",
+            "degraded": false,
+            "disconnected": true,
+            "failure": "",
+            "stale": true
+          },
+          "taken_at": 1789999939.0
+        },
+        {
+          "age": 61.0,
+          "error": "TimeoutError",
+          "result": {
+            "age": 61.0,
+            "age_label": "1m ago",
+            "condition": "offline",
+            "degraded": true,
+            "disconnected": true,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": 1789999939.0
+        },
+        {
+          "age": 600.0,
+          "error": null,
+          "result": {
+            "age": 600.0,
+            "age_label": "10m ago",
+            "condition": "offline",
+            "degraded": false,
+            "disconnected": true,
+            "failure": "",
+            "stale": true
+          },
+          "taken_at": 1789999400.0
+        },
+        {
+          "age": 600.0,
+          "error": "TimeoutError",
+          "result": {
+            "age": 600.0,
+            "age_label": "10m ago",
+            "condition": "offline",
+            "degraded": true,
+            "disconnected": true,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": 1789999400.0
+        },
+        {
+          "age": 7200.0,
+          "error": null,
+          "result": {
+            "age": 7200.0,
+            "age_label": "2h ago",
+            "condition": "offline",
+            "degraded": false,
+            "disconnected": true,
+            "failure": "",
+            "stale": true
+          },
+          "taken_at": 1789992800.0
+        },
+        {
+          "age": 7200.0,
+          "error": "TimeoutError",
+          "result": {
+            "age": 7200.0,
+            "age_label": "2h ago",
+            "condition": "offline",
+            "degraded": true,
+            "disconnected": true,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": 1789992800.0
+        }
+      ],
+      "input": {
+        "prompts": {},
+        "snapshot": "tests/fixtures/snapshot.example.json",
+        "status_overrides": {},
+        "unread": null
+      },
+      "order": [
+        "6ae1e031-ddb4-4684-ab07-68073f7fec47",
+        "c7242542-f9ce-4b05-ae32-f20806015262",
+        "5b609dba-d756-493a-a3fc-b4e09bf0a183",
+        "3ec8bcb4-8fd5-46a5-9f6d-ada27a5c3048",
+        "6f5c4c0d-38a8-41dc-b3b9-3daaf50ffcf4",
+        "a36eed14-ff20-48e5-9b50-b8b846cbf977"
+      ],
+      "sections": [
+        {
+          "count": 0,
+          "key": "blocked",
+          "label": "Needs you",
+          "sessions": []
+        },
+        {
+          "count": 1,
+          "key": "working",
+          "label": "Working",
+          "sessions": [
+            "6ae1e031-ddb4-4684-ab07-68073f7fec47"
+          ]
+        },
+        {
+          "count": 5,
+          "key": "idle",
+          "label": "Idle",
+          "sessions": [
+            "c7242542-f9ce-4b05-ae32-f20806015262",
+            "5b609dba-d756-493a-a3fc-b4e09bf0a183",
+            "3ec8bcb4-8fd5-46a5-9f6d-ada27a5c3048",
+            "6f5c4c0d-38a8-41dc-b3b9-3daaf50ffcf4",
+            "a36eed14-ff20-48e5-9b50-b8b846cbf977"
+          ]
+        }
+      ]
+    },
+    "snapshot.example+blocked": {
+      "agents": {
+        "3ec8bcb4-8fd5-46a5-9f6d-ada27a5c3048": {
+          "answer_digits": [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ],
+          "answer_hints": [
+            "esc"
+          ],
+          "effective_status": "blocked",
+          "feed_key": [
+            0,
+            -12,
+            3,
+            "w654c7902e43791:pA"
+          ],
+          "prompt": "tests/fixtures/capture-blocked-askuserquestion-menu/detection.txt",
+          "rows_answer": true,
+          "status": "blocked",
+          "target": "w654c7902e43791:pA"
+        },
+        "5b609dba-d756-493a-a3fc-b4e09bf0a183": {
+          "answer_digits": [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6"
+          ],
+          "answer_hints": [
+            "enter",
+            "up",
+            "down",
+            "esc"
+          ],
+          "effective_status": "blocked",
+          "feed_key": [
+            0,
+            -13,
+            1,
+            "w652ae557d5b9c1:p2"
+          ],
+          "prompt": "tests/fixtures/capture-blocked-multiselect-checklist/detection.txt",
+          "rows_answer": false,
+          "status": "blocked",
+          "target": "w652ae557d5b9c1:p2"
+        },
+        "6ae1e031-ddb4-4684-ab07-68073f7fec47": {
+          "effective_status": "working",
+          "feed_key": [
+            2,
+            -31,
+            4,
+            "w1:p3"
+          ],
+          "prompt": null,
+          "status": "working",
+          "target": "w1:p3"
+        },
+        "6f5c4c0d-38a8-41dc-b3b9-3daaf50ffcf4": {
+          "effective_status": "done",
+          "feed_key": [
+            1,
+            -11,
+            4,
+            "w1:p1"
+          ],
+          "prompt": null,
+          "status": "done",
+          "target": "w1:p1"
+        },
+        "a36eed14-ff20-48e5-9b50-b8b846cbf977": {
+          "effective_status": "idle",
+          "feed_key": [
+            3,
+            0,
+            5,
+            "w2:p1"
+          ],
+          "prompt": null,
+          "status": "idle",
+          "target": "w2:p1"
+        },
+        "c7242542-f9ce-4b05-ae32-f20806015262": {
+          "answer_digits": [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ],
+          "answer_hints": [],
+          "effective_status": "blocked",
+          "feed_key": [
+            0,
+            -14,
+            2,
+            "w4:p1"
+          ],
+          "prompt": "tests/fixtures/hermes/blocked-approval.txt",
+          "rows_answer": true,
+          "status": "blocked",
+          "target": "w4:p1"
+        }
+      },
+      "cadence": 5,
+      "counts": {
+        "blocked": 3,
+        "done": 1,
+        "idle": 1,
+        "unknown": 0,
+        "working": 1
+      },
+      "freshness": [
+        {
+          "age": null,
+          "error": null,
+          "result": {
+            "age": null,
+            "age_label": "",
+            "condition": "live",
+            "degraded": false,
+            "disconnected": false,
+            "failure": "",
+            "stale": false
+          },
+          "taken_at": null
+        },
+        {
+          "age": null,
+          "error": "TimeoutError",
+          "result": {
+            "age": null,
+            "age_label": "",
+            "condition": "degraded",
+            "degraded": true,
+            "disconnected": false,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": null
+        },
+        {
+          "age": 0.0,
+          "error": null,
+          "result": {
+            "age": 0.0,
+            "age_label": "0s ago",
+            "condition": "live",
+            "degraded": false,
+            "disconnected": false,
+            "failure": "",
+            "stale": false
+          },
+          "taken_at": 1790000000.0
+        },
+        {
+          "age": 0.0,
+          "error": "TimeoutError",
+          "result": {
+            "age": 0.0,
+            "age_label": "0s ago",
+            "condition": "degraded",
+            "degraded": true,
+            "disconnected": false,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": 1790000000.0
+        },
+        {
+          "age": 1.0,
+          "error": null,
+          "result": {
+            "age": 1.0,
+            "age_label": "1s ago",
+            "condition": "live",
+            "degraded": false,
+            "disconnected": false,
+            "failure": "",
+            "stale": false
+          },
+          "taken_at": 1789999999.0
+        },
+        {
+          "age": 1.0,
+          "error": "TimeoutError",
+          "result": {
+            "age": 1.0,
+            "age_label": "1s ago",
+            "condition": "degraded",
+            "degraded": true,
+            "disconnected": false,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": 1789999999.0
+        },
+        {
+          "age": 14.0,
+          "error": null,
+          "result": {
+            "age": 14.0,
+            "age_label": "14s ago",
+            "condition": "live",
+            "degraded": false,
+            "disconnected": false,
+            "failure": "",
+            "stale": false
+          },
+          "taken_at": 1789999986.0
+        },
+        {
+          "age": 14.0,
+          "error": "TimeoutError",
+          "result": {
+            "age": 14.0,
+            "age_label": "14s ago",
+            "condition": "degraded",
+            "degraded": true,
+            "disconnected": false,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": 1789999986.0
+        },
+        {
+          "age": 15.0,
+          "error": null,
+          "result": {
+            "age": 15.0,
+            "age_label": "15s ago",
+            "condition": "live",
+            "degraded": false,
+            "disconnected": false,
+            "failure": "",
+            "stale": false
+          },
+          "taken_at": 1789999985.0
+        },
+        {
+          "age": 15.0,
+          "error": "TimeoutError",
+          "result": {
+            "age": 15.0,
+            "age_label": "15s ago",
+            "condition": "degraded",
+            "degraded": true,
+            "disconnected": false,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": 1789999985.0
+        },
+        {
+          "age": 16.0,
+          "error": null,
+          "result": {
+            "age": 16.0,
+            "age_label": "16s ago",
+            "condition": "stale",
+            "degraded": false,
+            "disconnected": false,
+            "failure": "",
+            "stale": true
+          },
+          "taken_at": 1789999984.0
+        },
+        {
+          "age": 16.0,
+          "error": "TimeoutError",
+          "result": {
+            "age": 16.0,
+            "age_label": "16s ago",
+            "condition": "degraded",
+            "degraded": true,
+            "disconnected": false,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": 1789999984.0
+        },
+        {
+          "age": 36.0,
+          "error": null,
+          "result": {
+            "age": 36.0,
+            "age_label": "36s ago",
+            "condition": "stale",
+            "degraded": false,
+            "disconnected": false,
+            "failure": "",
+            "stale": true
+          },
+          "taken_at": 1789999964.0
+        },
+        {
+          "age": 36.0,
+          "error": "TimeoutError",
+          "result": {
+            "age": 36.0,
+            "age_label": "36s ago",
+            "condition": "degraded",
+            "degraded": true,
+            "disconnected": false,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": 1789999964.0
+        },
+        {
+          "age": 37.0,
+          "error": null,
+          "result": {
+            "age": 37.0,
+            "age_label": "37s ago",
+            "condition": "stale",
+            "degraded": false,
+            "disconnected": false,
+            "failure": "",
+            "stale": true
+          },
+          "taken_at": 1789999963.0
+        },
+        {
+          "age": 37.0,
+          "error": "TimeoutError",
+          "result": {
+            "age": 37.0,
+            "age_label": "37s ago",
+            "condition": "degraded",
+            "degraded": true,
+            "disconnected": false,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": 1789999963.0
+        },
+        {
+          "age": 59.5,
+          "error": null,
+          "result": {
+            "age": 59.5,
+            "age_label": "60s ago",
+            "condition": "stale",
+            "degraded": false,
+            "disconnected": false,
+            "failure": "",
+            "stale": true
+          },
+          "taken_at": 1789999940.5
+        },
+        {
+          "age": 59.5,
+          "error": "TimeoutError",
+          "result": {
+            "age": 59.5,
+            "age_label": "60s ago",
+            "condition": "degraded",
+            "degraded": true,
+            "disconnected": false,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": 1789999940.5
+        },
+        {
+          "age": 60.0,
+          "error": null,
+          "result": {
+            "age": 60.0,
+            "age_label": "1m ago",
+            "condition": "stale",
+            "degraded": false,
+            "disconnected": false,
+            "failure": "",
+            "stale": true
+          },
+          "taken_at": 1789999940.0
+        },
+        {
+          "age": 60.0,
+          "error": "TimeoutError",
+          "result": {
+            "age": 60.0,
+            "age_label": "1m ago",
+            "condition": "degraded",
+            "degraded": true,
+            "disconnected": false,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": 1789999940.0
+        },
+        {
+          "age": 61.0,
+          "error": null,
+          "result": {
+            "age": 61.0,
+            "age_label": "1m ago",
+            "condition": "offline",
+            "degraded": false,
+            "disconnected": true,
+            "failure": "",
+            "stale": true
+          },
+          "taken_at": 1789999939.0
+        },
+        {
+          "age": 61.0,
+          "error": "TimeoutError",
+          "result": {
+            "age": 61.0,
+            "age_label": "1m ago",
+            "condition": "offline",
+            "degraded": true,
+            "disconnected": true,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": 1789999939.0
+        },
+        {
+          "age": 600.0,
+          "error": null,
+          "result": {
+            "age": 600.0,
+            "age_label": "10m ago",
+            "condition": "offline",
+            "degraded": false,
+            "disconnected": true,
+            "failure": "",
+            "stale": true
+          },
+          "taken_at": 1789999400.0
+        },
+        {
+          "age": 600.0,
+          "error": "TimeoutError",
+          "result": {
+            "age": 600.0,
+            "age_label": "10m ago",
+            "condition": "offline",
+            "degraded": true,
+            "disconnected": true,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": 1789999400.0
+        },
+        {
+          "age": 7200.0,
+          "error": null,
+          "result": {
+            "age": 7200.0,
+            "age_label": "2h ago",
+            "condition": "offline",
+            "degraded": false,
+            "disconnected": true,
+            "failure": "",
+            "stale": true
+          },
+          "taken_at": 1789992800.0
+        },
+        {
+          "age": 7200.0,
+          "error": "TimeoutError",
+          "result": {
+            "age": 7200.0,
+            "age_label": "2h ago",
+            "condition": "offline",
+            "degraded": true,
+            "disconnected": true,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": 1789992800.0
+        }
+      ],
+      "input": {
+        "prompts": {
+          "3ec8bcb4-8fd5-46a5-9f6d-ada27a5c3048": "tests/fixtures/capture-blocked-askuserquestion-menu/detection.txt",
+          "5b609dba-d756-493a-a3fc-b4e09bf0a183": "tests/fixtures/capture-blocked-multiselect-checklist/detection.txt",
+          "c7242542-f9ce-4b05-ae32-f20806015262": "tests/fixtures/hermes/blocked-approval.txt"
+        },
+        "snapshot": "tests/fixtures/snapshot.example.json",
+        "status_overrides": {
+          "w1:p1": "done",
+          "w4:p1": "blocked",
+          "w652ae557d5b9c1:p2": "blocked",
+          "w654c7902e43791:pA": "blocked"
+        },
+        "unread": null
+      },
+      "order": [
+        "c7242542-f9ce-4b05-ae32-f20806015262",
+        "5b609dba-d756-493a-a3fc-b4e09bf0a183",
+        "3ec8bcb4-8fd5-46a5-9f6d-ada27a5c3048",
+        "6f5c4c0d-38a8-41dc-b3b9-3daaf50ffcf4",
+        "6ae1e031-ddb4-4684-ab07-68073f7fec47",
+        "a36eed14-ff20-48e5-9b50-b8b846cbf977"
+      ],
+      "sections": [
+        {
+          "count": 3,
+          "key": "blocked",
+          "label": "Needs you",
+          "sessions": [
+            "c7242542-f9ce-4b05-ae32-f20806015262",
+            "5b609dba-d756-493a-a3fc-b4e09bf0a183",
+            "3ec8bcb4-8fd5-46a5-9f6d-ada27a5c3048"
+          ]
+        },
+        {
+          "count": 1,
+          "key": "done",
+          "label": "Finished",
+          "sessions": [
+            "6f5c4c0d-38a8-41dc-b3b9-3daaf50ffcf4"
+          ]
+        },
+        {
+          "count": 1,
+          "key": "working",
+          "label": "Working",
+          "sessions": [
+            "6ae1e031-ddb4-4684-ab07-68073f7fec47"
+          ]
+        },
+        {
+          "count": 1,
+          "key": "idle",
+          "label": "Idle",
+          "sessions": [
+            "a36eed14-ff20-48e5-9b50-b8b846cbf977"
+          ]
+        }
+      ]
+    },
+    "snapshot.example+blocked+read": {
+      "agents": {
+        "3ec8bcb4-8fd5-46a5-9f6d-ada27a5c3048": {
+          "answer_digits": [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ],
+          "answer_hints": [
+            "esc"
+          ],
+          "effective_status": "blocked",
+          "feed_key": [
+            0,
+            -12,
+            3,
+            "w654c7902e43791:pA"
+          ],
+          "prompt": "tests/fixtures/capture-blocked-askuserquestion-menu/detection.txt",
+          "rows_answer": true,
+          "status": "blocked",
+          "target": "w654c7902e43791:pA"
+        },
+        "5b609dba-d756-493a-a3fc-b4e09bf0a183": {
+          "answer_digits": [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6"
+          ],
+          "answer_hints": [
+            "enter",
+            "up",
+            "down",
+            "esc"
+          ],
+          "effective_status": "blocked",
+          "feed_key": [
+            0,
+            -13,
+            1,
+            "w652ae557d5b9c1:p2"
+          ],
+          "prompt": "tests/fixtures/capture-blocked-multiselect-checklist/detection.txt",
+          "rows_answer": false,
+          "status": "blocked",
+          "target": "w652ae557d5b9c1:p2"
+        },
+        "6ae1e031-ddb4-4684-ab07-68073f7fec47": {
+          "effective_status": "working",
+          "feed_key": [
+            2,
+            -31,
+            4,
+            "w1:p3"
+          ],
+          "prompt": null,
+          "status": "working",
+          "target": "w1:p3"
+        },
+        "6f5c4c0d-38a8-41dc-b3b9-3daaf50ffcf4": {
+          "effective_status": "idle",
+          "feed_key": [
+            3,
+            -11,
+            4,
+            "w1:p1"
+          ],
+          "prompt": null,
+          "status": "done",
+          "target": "w1:p1"
+        },
+        "a36eed14-ff20-48e5-9b50-b8b846cbf977": {
+          "effective_status": "idle",
+          "feed_key": [
+            3,
+            0,
+            5,
+            "w2:p1"
+          ],
+          "prompt": null,
+          "status": "idle",
+          "target": "w2:p1"
+        },
+        "c7242542-f9ce-4b05-ae32-f20806015262": {
+          "answer_digits": [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ],
+          "answer_hints": [],
+          "effective_status": "blocked",
+          "feed_key": [
+            0,
+            -14,
+            2,
+            "w4:p1"
+          ],
+          "prompt": "tests/fixtures/hermes/blocked-approval.txt",
+          "rows_answer": true,
+          "status": "blocked",
+          "target": "w4:p1"
+        }
+      },
+      "cadence": 5,
+      "counts": {
+        "blocked": 3,
+        "done": 0,
+        "idle": 2,
+        "unknown": 0,
+        "working": 1
+      },
+      "freshness": [
+        {
+          "age": null,
+          "error": null,
+          "result": {
+            "age": null,
+            "age_label": "",
+            "condition": "live",
+            "degraded": false,
+            "disconnected": false,
+            "failure": "",
+            "stale": false
+          },
+          "taken_at": null
+        },
+        {
+          "age": null,
+          "error": "TimeoutError",
+          "result": {
+            "age": null,
+            "age_label": "",
+            "condition": "degraded",
+            "degraded": true,
+            "disconnected": false,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": null
+        },
+        {
+          "age": 0.0,
+          "error": null,
+          "result": {
+            "age": 0.0,
+            "age_label": "0s ago",
+            "condition": "live",
+            "degraded": false,
+            "disconnected": false,
+            "failure": "",
+            "stale": false
+          },
+          "taken_at": 1790000000.0
+        },
+        {
+          "age": 0.0,
+          "error": "TimeoutError",
+          "result": {
+            "age": 0.0,
+            "age_label": "0s ago",
+            "condition": "degraded",
+            "degraded": true,
+            "disconnected": false,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": 1790000000.0
+        },
+        {
+          "age": 1.0,
+          "error": null,
+          "result": {
+            "age": 1.0,
+            "age_label": "1s ago",
+            "condition": "live",
+            "degraded": false,
+            "disconnected": false,
+            "failure": "",
+            "stale": false
+          },
+          "taken_at": 1789999999.0
+        },
+        {
+          "age": 1.0,
+          "error": "TimeoutError",
+          "result": {
+            "age": 1.0,
+            "age_label": "1s ago",
+            "condition": "degraded",
+            "degraded": true,
+            "disconnected": false,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": 1789999999.0
+        },
+        {
+          "age": 14.0,
+          "error": null,
+          "result": {
+            "age": 14.0,
+            "age_label": "14s ago",
+            "condition": "live",
+            "degraded": false,
+            "disconnected": false,
+            "failure": "",
+            "stale": false
+          },
+          "taken_at": 1789999986.0
+        },
+        {
+          "age": 14.0,
+          "error": "TimeoutError",
+          "result": {
+            "age": 14.0,
+            "age_label": "14s ago",
+            "condition": "degraded",
+            "degraded": true,
+            "disconnected": false,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": 1789999986.0
+        },
+        {
+          "age": 15.0,
+          "error": null,
+          "result": {
+            "age": 15.0,
+            "age_label": "15s ago",
+            "condition": "live",
+            "degraded": false,
+            "disconnected": false,
+            "failure": "",
+            "stale": false
+          },
+          "taken_at": 1789999985.0
+        },
+        {
+          "age": 15.0,
+          "error": "TimeoutError",
+          "result": {
+            "age": 15.0,
+            "age_label": "15s ago",
+            "condition": "degraded",
+            "degraded": true,
+            "disconnected": false,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": 1789999985.0
+        },
+        {
+          "age": 16.0,
+          "error": null,
+          "result": {
+            "age": 16.0,
+            "age_label": "16s ago",
+            "condition": "stale",
+            "degraded": false,
+            "disconnected": false,
+            "failure": "",
+            "stale": true
+          },
+          "taken_at": 1789999984.0
+        },
+        {
+          "age": 16.0,
+          "error": "TimeoutError",
+          "result": {
+            "age": 16.0,
+            "age_label": "16s ago",
+            "condition": "degraded",
+            "degraded": true,
+            "disconnected": false,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": 1789999984.0
+        },
+        {
+          "age": 36.0,
+          "error": null,
+          "result": {
+            "age": 36.0,
+            "age_label": "36s ago",
+            "condition": "stale",
+            "degraded": false,
+            "disconnected": false,
+            "failure": "",
+            "stale": true
+          },
+          "taken_at": 1789999964.0
+        },
+        {
+          "age": 36.0,
+          "error": "TimeoutError",
+          "result": {
+            "age": 36.0,
+            "age_label": "36s ago",
+            "condition": "degraded",
+            "degraded": true,
+            "disconnected": false,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": 1789999964.0
+        },
+        {
+          "age": 37.0,
+          "error": null,
+          "result": {
+            "age": 37.0,
+            "age_label": "37s ago",
+            "condition": "stale",
+            "degraded": false,
+            "disconnected": false,
+            "failure": "",
+            "stale": true
+          },
+          "taken_at": 1789999963.0
+        },
+        {
+          "age": 37.0,
+          "error": "TimeoutError",
+          "result": {
+            "age": 37.0,
+            "age_label": "37s ago",
+            "condition": "degraded",
+            "degraded": true,
+            "disconnected": false,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": 1789999963.0
+        },
+        {
+          "age": 59.5,
+          "error": null,
+          "result": {
+            "age": 59.5,
+            "age_label": "60s ago",
+            "condition": "stale",
+            "degraded": false,
+            "disconnected": false,
+            "failure": "",
+            "stale": true
+          },
+          "taken_at": 1789999940.5
+        },
+        {
+          "age": 59.5,
+          "error": "TimeoutError",
+          "result": {
+            "age": 59.5,
+            "age_label": "60s ago",
+            "condition": "degraded",
+            "degraded": true,
+            "disconnected": false,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": 1789999940.5
+        },
+        {
+          "age": 60.0,
+          "error": null,
+          "result": {
+            "age": 60.0,
+            "age_label": "1m ago",
+            "condition": "stale",
+            "degraded": false,
+            "disconnected": false,
+            "failure": "",
+            "stale": true
+          },
+          "taken_at": 1789999940.0
+        },
+        {
+          "age": 60.0,
+          "error": "TimeoutError",
+          "result": {
+            "age": 60.0,
+            "age_label": "1m ago",
+            "condition": "degraded",
+            "degraded": true,
+            "disconnected": false,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": 1789999940.0
+        },
+        {
+          "age": 61.0,
+          "error": null,
+          "result": {
+            "age": 61.0,
+            "age_label": "1m ago",
+            "condition": "offline",
+            "degraded": false,
+            "disconnected": true,
+            "failure": "",
+            "stale": true
+          },
+          "taken_at": 1789999939.0
+        },
+        {
+          "age": 61.0,
+          "error": "TimeoutError",
+          "result": {
+            "age": 61.0,
+            "age_label": "1m ago",
+            "condition": "offline",
+            "degraded": true,
+            "disconnected": true,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": 1789999939.0
+        },
+        {
+          "age": 600.0,
+          "error": null,
+          "result": {
+            "age": 600.0,
+            "age_label": "10m ago",
+            "condition": "offline",
+            "degraded": false,
+            "disconnected": true,
+            "failure": "",
+            "stale": true
+          },
+          "taken_at": 1789999400.0
+        },
+        {
+          "age": 600.0,
+          "error": "TimeoutError",
+          "result": {
+            "age": 600.0,
+            "age_label": "10m ago",
+            "condition": "offline",
+            "degraded": true,
+            "disconnected": true,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": 1789999400.0
+        },
+        {
+          "age": 7200.0,
+          "error": null,
+          "result": {
+            "age": 7200.0,
+            "age_label": "2h ago",
+            "condition": "offline",
+            "degraded": false,
+            "disconnected": true,
+            "failure": "",
+            "stale": true
+          },
+          "taken_at": 1789992800.0
+        },
+        {
+          "age": 7200.0,
+          "error": "TimeoutError",
+          "result": {
+            "age": 7200.0,
+            "age_label": "2h ago",
+            "condition": "offline",
+            "degraded": true,
+            "disconnected": true,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": 1789992800.0
+        }
+      ],
+      "input": {
+        "prompts": {
+          "3ec8bcb4-8fd5-46a5-9f6d-ada27a5c3048": "tests/fixtures/capture-blocked-askuserquestion-menu/detection.txt",
+          "5b609dba-d756-493a-a3fc-b4e09bf0a183": "tests/fixtures/capture-blocked-multiselect-checklist/detection.txt",
+          "c7242542-f9ce-4b05-ae32-f20806015262": "tests/fixtures/hermes/blocked-approval.txt"
+        },
+        "snapshot": "tests/fixtures/snapshot.example.json",
+        "status_overrides": {
+          "w1:p1": "done",
+          "w4:p1": "blocked",
+          "w652ae557d5b9c1:p2": "blocked",
+          "w654c7902e43791:pA": "blocked"
+        },
+        "unread": {
+          "6f5c4c0d-38a8-41dc-b3b9-3daaf50ffcf4": false
+        }
+      },
+      "order": [
+        "c7242542-f9ce-4b05-ae32-f20806015262",
+        "5b609dba-d756-493a-a3fc-b4e09bf0a183",
+        "3ec8bcb4-8fd5-46a5-9f6d-ada27a5c3048",
+        "6ae1e031-ddb4-4684-ab07-68073f7fec47",
+        "6f5c4c0d-38a8-41dc-b3b9-3daaf50ffcf4",
+        "a36eed14-ff20-48e5-9b50-b8b846cbf977"
+      ],
+      "sections": [
+        {
+          "count": 3,
+          "key": "blocked",
+          "label": "Needs you",
+          "sessions": [
+            "c7242542-f9ce-4b05-ae32-f20806015262",
+            "5b609dba-d756-493a-a3fc-b4e09bf0a183",
+            "3ec8bcb4-8fd5-46a5-9f6d-ada27a5c3048"
+          ]
+        },
+        {
+          "count": 1,
+          "key": "working",
+          "label": "Working",
+          "sessions": [
+            "6ae1e031-ddb4-4684-ab07-68073f7fec47"
+          ]
+        },
+        {
+          "count": 2,
+          "key": "idle",
+          "label": "Idle",
+          "sessions": [
+            "6f5c4c0d-38a8-41dc-b3b9-3daaf50ffcf4",
+            "a36eed14-ff20-48e5-9b50-b8b846cbf977"
+          ]
+        }
+      ]
+    },
+    "snapshot.example+blocked+unread": {
+      "agents": {
+        "3ec8bcb4-8fd5-46a5-9f6d-ada27a5c3048": {
+          "answer_digits": [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ],
+          "answer_hints": [
+            "esc"
+          ],
+          "effective_status": "blocked",
+          "feed_key": [
+            0,
+            -12,
+            3,
+            "w654c7902e43791:pA"
+          ],
+          "prompt": "tests/fixtures/capture-blocked-askuserquestion-menu/detection.txt",
+          "rows_answer": true,
+          "status": "blocked",
+          "target": "w654c7902e43791:pA"
+        },
+        "5b609dba-d756-493a-a3fc-b4e09bf0a183": {
+          "answer_digits": [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6"
+          ],
+          "answer_hints": [
+            "enter",
+            "up",
+            "down",
+            "esc"
+          ],
+          "effective_status": "blocked",
+          "feed_key": [
+            0,
+            -13,
+            1,
+            "w652ae557d5b9c1:p2"
+          ],
+          "prompt": "tests/fixtures/capture-blocked-multiselect-checklist/detection.txt",
+          "rows_answer": false,
+          "status": "blocked",
+          "target": "w652ae557d5b9c1:p2"
+        },
+        "6ae1e031-ddb4-4684-ab07-68073f7fec47": {
+          "effective_status": "working",
+          "feed_key": [
+            2,
+            -31,
+            4,
+            "w1:p3"
+          ],
+          "prompt": null,
+          "status": "working",
+          "target": "w1:p3"
+        },
+        "6f5c4c0d-38a8-41dc-b3b9-3daaf50ffcf4": {
+          "effective_status": "done",
+          "feed_key": [
+            1,
+            -11,
+            4,
+            "w1:p1"
+          ],
+          "prompt": null,
+          "status": "done",
+          "target": "w1:p1"
+        },
+        "a36eed14-ff20-48e5-9b50-b8b846cbf977": {
+          "effective_status": "idle",
+          "feed_key": [
+            3,
+            0,
+            5,
+            "w2:p1"
+          ],
+          "prompt": null,
+          "status": "idle",
+          "target": "w2:p1"
+        },
+        "c7242542-f9ce-4b05-ae32-f20806015262": {
+          "answer_digits": [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ],
+          "answer_hints": [],
+          "effective_status": "blocked",
+          "feed_key": [
+            0,
+            -14,
+            2,
+            "w4:p1"
+          ],
+          "prompt": "tests/fixtures/hermes/blocked-approval.txt",
+          "rows_answer": true,
+          "status": "blocked",
+          "target": "w4:p1"
+        }
+      },
+      "cadence": 5,
+      "counts": {
+        "blocked": 3,
+        "done": 1,
+        "idle": 1,
+        "unknown": 0,
+        "working": 1
+      },
+      "freshness": [
+        {
+          "age": null,
+          "error": null,
+          "result": {
+            "age": null,
+            "age_label": "",
+            "condition": "live",
+            "degraded": false,
+            "disconnected": false,
+            "failure": "",
+            "stale": false
+          },
+          "taken_at": null
+        },
+        {
+          "age": null,
+          "error": "TimeoutError",
+          "result": {
+            "age": null,
+            "age_label": "",
+            "condition": "degraded",
+            "degraded": true,
+            "disconnected": false,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": null
+        },
+        {
+          "age": 0.0,
+          "error": null,
+          "result": {
+            "age": 0.0,
+            "age_label": "0s ago",
+            "condition": "live",
+            "degraded": false,
+            "disconnected": false,
+            "failure": "",
+            "stale": false
+          },
+          "taken_at": 1790000000.0
+        },
+        {
+          "age": 0.0,
+          "error": "TimeoutError",
+          "result": {
+            "age": 0.0,
+            "age_label": "0s ago",
+            "condition": "degraded",
+            "degraded": true,
+            "disconnected": false,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": 1790000000.0
+        },
+        {
+          "age": 1.0,
+          "error": null,
+          "result": {
+            "age": 1.0,
+            "age_label": "1s ago",
+            "condition": "live",
+            "degraded": false,
+            "disconnected": false,
+            "failure": "",
+            "stale": false
+          },
+          "taken_at": 1789999999.0
+        },
+        {
+          "age": 1.0,
+          "error": "TimeoutError",
+          "result": {
+            "age": 1.0,
+            "age_label": "1s ago",
+            "condition": "degraded",
+            "degraded": true,
+            "disconnected": false,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": 1789999999.0
+        },
+        {
+          "age": 14.0,
+          "error": null,
+          "result": {
+            "age": 14.0,
+            "age_label": "14s ago",
+            "condition": "live",
+            "degraded": false,
+            "disconnected": false,
+            "failure": "",
+            "stale": false
+          },
+          "taken_at": 1789999986.0
+        },
+        {
+          "age": 14.0,
+          "error": "TimeoutError",
+          "result": {
+            "age": 14.0,
+            "age_label": "14s ago",
+            "condition": "degraded",
+            "degraded": true,
+            "disconnected": false,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": 1789999986.0
+        },
+        {
+          "age": 15.0,
+          "error": null,
+          "result": {
+            "age": 15.0,
+            "age_label": "15s ago",
+            "condition": "live",
+            "degraded": false,
+            "disconnected": false,
+            "failure": "",
+            "stale": false
+          },
+          "taken_at": 1789999985.0
+        },
+        {
+          "age": 15.0,
+          "error": "TimeoutError",
+          "result": {
+            "age": 15.0,
+            "age_label": "15s ago",
+            "condition": "degraded",
+            "degraded": true,
+            "disconnected": false,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": 1789999985.0
+        },
+        {
+          "age": 16.0,
+          "error": null,
+          "result": {
+            "age": 16.0,
+            "age_label": "16s ago",
+            "condition": "stale",
+            "degraded": false,
+            "disconnected": false,
+            "failure": "",
+            "stale": true
+          },
+          "taken_at": 1789999984.0
+        },
+        {
+          "age": 16.0,
+          "error": "TimeoutError",
+          "result": {
+            "age": 16.0,
+            "age_label": "16s ago",
+            "condition": "degraded",
+            "degraded": true,
+            "disconnected": false,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": 1789999984.0
+        },
+        {
+          "age": 36.0,
+          "error": null,
+          "result": {
+            "age": 36.0,
+            "age_label": "36s ago",
+            "condition": "stale",
+            "degraded": false,
+            "disconnected": false,
+            "failure": "",
+            "stale": true
+          },
+          "taken_at": 1789999964.0
+        },
+        {
+          "age": 36.0,
+          "error": "TimeoutError",
+          "result": {
+            "age": 36.0,
+            "age_label": "36s ago",
+            "condition": "degraded",
+            "degraded": true,
+            "disconnected": false,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": 1789999964.0
+        },
+        {
+          "age": 37.0,
+          "error": null,
+          "result": {
+            "age": 37.0,
+            "age_label": "37s ago",
+            "condition": "stale",
+            "degraded": false,
+            "disconnected": false,
+            "failure": "",
+            "stale": true
+          },
+          "taken_at": 1789999963.0
+        },
+        {
+          "age": 37.0,
+          "error": "TimeoutError",
+          "result": {
+            "age": 37.0,
+            "age_label": "37s ago",
+            "condition": "degraded",
+            "degraded": true,
+            "disconnected": false,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": 1789999963.0
+        },
+        {
+          "age": 59.5,
+          "error": null,
+          "result": {
+            "age": 59.5,
+            "age_label": "60s ago",
+            "condition": "stale",
+            "degraded": false,
+            "disconnected": false,
+            "failure": "",
+            "stale": true
+          },
+          "taken_at": 1789999940.5
+        },
+        {
+          "age": 59.5,
+          "error": "TimeoutError",
+          "result": {
+            "age": 59.5,
+            "age_label": "60s ago",
+            "condition": "degraded",
+            "degraded": true,
+            "disconnected": false,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": 1789999940.5
+        },
+        {
+          "age": 60.0,
+          "error": null,
+          "result": {
+            "age": 60.0,
+            "age_label": "1m ago",
+            "condition": "stale",
+            "degraded": false,
+            "disconnected": false,
+            "failure": "",
+            "stale": true
+          },
+          "taken_at": 1789999940.0
+        },
+        {
+          "age": 60.0,
+          "error": "TimeoutError",
+          "result": {
+            "age": 60.0,
+            "age_label": "1m ago",
+            "condition": "degraded",
+            "degraded": true,
+            "disconnected": false,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": 1789999940.0
+        },
+        {
+          "age": 61.0,
+          "error": null,
+          "result": {
+            "age": 61.0,
+            "age_label": "1m ago",
+            "condition": "offline",
+            "degraded": false,
+            "disconnected": true,
+            "failure": "",
+            "stale": true
+          },
+          "taken_at": 1789999939.0
+        },
+        {
+          "age": 61.0,
+          "error": "TimeoutError",
+          "result": {
+            "age": 61.0,
+            "age_label": "1m ago",
+            "condition": "offline",
+            "degraded": true,
+            "disconnected": true,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": 1789999939.0
+        },
+        {
+          "age": 600.0,
+          "error": null,
+          "result": {
+            "age": 600.0,
+            "age_label": "10m ago",
+            "condition": "offline",
+            "degraded": false,
+            "disconnected": true,
+            "failure": "",
+            "stale": true
+          },
+          "taken_at": 1789999400.0
+        },
+        {
+          "age": 600.0,
+          "error": "TimeoutError",
+          "result": {
+            "age": 600.0,
+            "age_label": "10m ago",
+            "condition": "offline",
+            "degraded": true,
+            "disconnected": true,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": 1789999400.0
+        },
+        {
+          "age": 7200.0,
+          "error": null,
+          "result": {
+            "age": 7200.0,
+            "age_label": "2h ago",
+            "condition": "offline",
+            "degraded": false,
+            "disconnected": true,
+            "failure": "",
+            "stale": true
+          },
+          "taken_at": 1789992800.0
+        },
+        {
+          "age": 7200.0,
+          "error": "TimeoutError",
+          "result": {
+            "age": 7200.0,
+            "age_label": "2h ago",
+            "condition": "offline",
+            "degraded": true,
+            "disconnected": true,
+            "failure": "TimeoutError",
+            "stale": true
+          },
+          "taken_at": 1789992800.0
+        }
+      ],
+      "input": {
+        "prompts": {
+          "3ec8bcb4-8fd5-46a5-9f6d-ada27a5c3048": "tests/fixtures/capture-blocked-askuserquestion-menu/detection.txt",
+          "5b609dba-d756-493a-a3fc-b4e09bf0a183": "tests/fixtures/capture-blocked-multiselect-checklist/detection.txt",
+          "c7242542-f9ce-4b05-ae32-f20806015262": "tests/fixtures/hermes/blocked-approval.txt"
+        },
+        "snapshot": "tests/fixtures/snapshot.example.json",
+        "status_overrides": {
+          "w1:p1": "done",
+          "w4:p1": "blocked",
+          "w652ae557d5b9c1:p2": "blocked",
+          "w654c7902e43791:pA": "blocked"
+        },
+        "unread": {
+          "6f5c4c0d-38a8-41dc-b3b9-3daaf50ffcf4": true
+        }
+      },
+      "order": [
+        "c7242542-f9ce-4b05-ae32-f20806015262",
+        "5b609dba-d756-493a-a3fc-b4e09bf0a183",
+        "3ec8bcb4-8fd5-46a5-9f6d-ada27a5c3048",
+        "6f5c4c0d-38a8-41dc-b3b9-3daaf50ffcf4",
+        "6ae1e031-ddb4-4684-ab07-68073f7fec47",
+        "a36eed14-ff20-48e5-9b50-b8b846cbf977"
+      ],
+      "sections": [
+        {
+          "count": 3,
+          "key": "blocked",
+          "label": "Needs you",
+          "sessions": [
+            "c7242542-f9ce-4b05-ae32-f20806015262",
+            "5b609dba-d756-493a-a3fc-b4e09bf0a183",
+            "3ec8bcb4-8fd5-46a5-9f6d-ada27a5c3048"
+          ]
+        },
+        {
+          "count": 1,
+          "key": "done",
+          "label": "Finished",
+          "sessions": [
+            "6f5c4c0d-38a8-41dc-b3b9-3daaf50ffcf4"
+          ]
+        },
+        {
+          "count": 1,
+          "key": "working",
+          "label": "Working",
+          "sessions": [
+            "6ae1e031-ddb4-4684-ab07-68073f7fec47"
+          ]
+        },
+        {
+          "count": 1,
+          "key": "idle",
+          "label": "Idle",
+          "sessions": [
+            "a36eed14-ff20-48e5-9b50-b8b846cbf977"
+          ]
+        }
+      ]
+    }
+  },
+  "meta": {
+    "constants": {
+      "CURSOR_KEYS": [
+        "down",
+        "enter",
+        "up"
+      ],
+      "DISCONNECTED_AFTER": 60,
+      "IDLE_CADENCE": 12,
+      "MAX_TAPPABLE_OPTION": 9,
+      "SECTIONS": [
+        [
+          "blocked",
+          "Needs you"
+        ],
+        [
+          "done",
+          "Finished"
+        ],
+        [
+          "working",
+          "Working"
+        ],
+        [
+          "idle",
+          "Idle"
+        ],
+        [
+          "unknown",
+          "Unknown"
+        ]
+      ],
+      "TAPPABLE_SHAPES": [
+        "multi-select",
+        "single-choice"
+      ],
+      "URGENCY": {
+        "blocked": 0,
+        "done": 1,
+        "idle": 3,
+        "unknown": 4,
+        "working": 2
+      },
+      "WORKING_CADENCE": 5
+    },
+    "foreign_sources": {
+      "collie": {
+        "captures": "web/src/fixtures/panes",
+        "commit": "2031ed7508703a9b8b6703ed07d8eeaf9f608468",
+        "glob": "*.txt"
+      }
+    },
+    "now": 1790000000.0,
+    "pruned": "Rows whose input is not in this repo (an AGPL corpus never shipped, and collie screens never vendored) were removed; every remaining verdict is as recorded.",
+    "rehashed": "Input hashes were re-pinned after a privacy scrub replaced or rewrote captures; no verdict changed.",
+    "verdict_fields": [
+      "shape",
+      "options",
+      "digits",
+      "rows_answer",
+      "hints",
+      "ticked",
+      "checkable",
+      "steps"
+    ]
+  },
+  "screens": {
+    "foreign/collie/claude--done.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "3e3d2526498fd679fb198edadfa0c3b31316c33cff83cb9c95918305b6691485"
+      },
+      "render": {
+        "answer_hints": [],
+        "asked": false,
+        "corroborated": false,
+        "drew_rows": false,
+        "is_choice": false,
+        "numbers": [],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [],
+        "hints": [],
+        "options": 0,
+        "rows_answer": false,
+        "shape": "none",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "foreign/collie/claude--draft-footer-empty.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "248da9ebeea7460609b496cc5726474a18c4e74970d9782a496afad2bb5d0f36"
+      },
+      "render": {
+        "answer_hints": [],
+        "asked": false,
+        "corroborated": false,
+        "drew_rows": false,
+        "is_choice": false,
+        "numbers": [],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [],
+        "hints": [],
+        "options": 0,
+        "rows_answer": false,
+        "shape": "none",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "foreign/collie/claude--draft-footer-single.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "f112694139512268500eb70f61e2ee3c4777747feb5d22a71910dac3935eb4ba"
+      },
+      "render": {
+        "answer_hints": [],
+        "asked": false,
+        "corroborated": false,
+        "drew_rows": false,
+        "is_choice": false,
+        "numbers": [],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [],
+        "hints": [],
+        "options": 0,
+        "rows_answer": false,
+        "shape": "none",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "foreign/collie/claude--draft-footer-wrapped.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "1773eb430cfd6ed8d8a0353d5f0e8bdf850a7a186f842285dbead1f8d5e60ffb"
+      },
+      "render": {
+        "answer_hints": [],
+        "asked": false,
+        "corroborated": false,
+        "drew_rows": false,
+        "is_choice": false,
+        "numbers": [],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [],
+        "hints": [],
+        "options": 0,
+        "rows_answer": false,
+        "shape": "none",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "foreign/collie/claude--draft-paste-placeholder.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "3965e38e055bc79ada009d33f36ea394cbbcedc7f7deaeea8505260b32a7c67e"
+      },
+      "render": {
+        "answer_hints": [],
+        "asked": false,
+        "corroborated": false,
+        "drew_rows": false,
+        "is_choice": false,
+        "numbers": [],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [],
+        "hints": [],
+        "options": 0,
+        "rows_answer": false,
+        "shape": "none",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "foreign/collie/claude--draft-paste-split-partial.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "ff1b936e8f0810795748ec16ab88e96fd008038e48df673de27c4b6898d47e96"
+      },
+      "render": {
+        "answer_hints": [],
+        "asked": false,
+        "corroborated": false,
+        "drew_rows": false,
+        "is_choice": false,
+        "numbers": [],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [],
+        "hints": [],
+        "options": 0,
+        "rows_answer": false,
+        "shape": "none",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "foreign/collie/claude--draft-paste-split-tail.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "7e45bf0068f6dbd26185e2a06141b9ac06fd8db8e1d5fd964eab9775d1aa8a06"
+      },
+      "render": {
+        "answer_hints": [],
+        "asked": false,
+        "corroborated": false,
+        "drew_rows": false,
+        "is_choice": false,
+        "numbers": [],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [],
+        "hints": [],
+        "options": 0,
+        "rows_answer": false,
+        "shape": "none",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "foreign/collie/claude--draft-wrapped.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "fa34dcebd5ef68d2f4a916a4856b0d7ea4706f00d2c32be3ead3333481984085"
+      },
+      "render": {
+        "answer_hints": [],
+        "asked": false,
+        "corroborated": false,
+        "drew_rows": false,
+        "is_choice": false,
+        "numbers": [],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [],
+        "hints": [],
+        "options": 0,
+        "rows_answer": false,
+        "shape": "none",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "foreign/collie/claude--fresh-idle.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "7fad01e60bf5399122e2a3ef64244464570a529ab65399990dc2e4b4906158ca"
+      },
+      "render": {
+        "answer_hints": [],
+        "asked": false,
+        "corroborated": false,
+        "drew_rows": false,
+        "is_choice": false,
+        "numbers": [],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [],
+        "hints": [],
+        "options": 0,
+        "rows_answer": false,
+        "shape": "none",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "foreign/collie/claude--menu-model-picker-dismissed.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "efc54d96bac9537948e20b3f776eeca514ccb3ec640425046e97a1f84ea2928c"
+      },
+      "render": {
+        "answer_hints": [],
+        "asked": false,
+        "corroborated": false,
+        "drew_rows": false,
+        "is_choice": false,
+        "numbers": [],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [],
+        "hints": [],
+        "options": 0,
+        "rows_answer": false,
+        "shape": "none",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "foreign/collie/claude--menu-model-picker-moved.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "13facf59c73f6f2ab3a1c707d4da74177b894c23f0637e7374b795248a1923a0"
+      },
+      "render": {
+        "answer_hints": [
+          "enter",
+          "esc"
+        ],
+        "asked": false,
+        "corroborated": false,
+        "drew_rows": false,
+        "is_choice": false,
+        "numbers": [],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [],
+        "hints": [
+          "enter",
+          "esc"
+        ],
+        "options": 0,
+        "rows_answer": false,
+        "shape": "unknown",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "foreign/collie/claude--menu-model-picker.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "cccb3d60eac5d6765319d06c19756618a946aa36a6a5e531a8a0c2364aa1bf42"
+      },
+      "render": {
+        "answer_hints": [
+          "enter",
+          "esc"
+        ],
+        "asked": false,
+        "corroborated": false,
+        "drew_rows": false,
+        "is_choice": false,
+        "numbers": [],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [],
+        "hints": [
+          "enter",
+          "esc"
+        ],
+        "options": 0,
+        "rows_answer": false,
+        "shape": "unknown",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "foreign/collie/claude--permission-bash.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "c1a333501deb757a3cbb44c043cc38314b0308552b8fdb34c9db7a131cfa922f"
+      },
+      "render": {
+        "answer_hints": [
+          "esc",
+          "tab",
+          "ctrl-e"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3
+        ],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [
+          "1",
+          "2",
+          "3"
+        ],
+        "hints": [
+          "esc",
+          "tab",
+          "ctrl-e"
+        ],
+        "options": 3,
+        "rows_answer": true,
+        "shape": "single-choice",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "foreign/collie/claude--permission-edit.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "d557e8acd2ceced1112806e6865177c90ce869f485fc8a40c97f5e76b3c9cb80"
+      },
+      "render": {
+        "answer_hints": [
+          "esc",
+          "tab"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3
+        ],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [
+          "1",
+          "2",
+          "3"
+        ],
+        "hints": [
+          "esc",
+          "tab"
+        ],
+        "options": 3,
+        "rows_answer": true,
+        "shape": "single-choice",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "foreign/collie/claude--plan-approval--feedback-focused.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "8a1205c2eed9a23e81ffe390884058095ecd9c8609831270eb34f25810b42ec6"
+      },
+      "render": {
+        "answer_hints": [
+          "ctrl-g"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "hints": [
+          "ctrl-g"
+        ],
+        "options": 4,
+        "rows_answer": true,
+        "shape": "single-choice",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "foreign/collie/claude--plan-approval--feedback-typed.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "6bead30ea5ddc77d6dee02b7b06a1aaf48b6f2e5968d45c78e79c0422d3d8736"
+      },
+      "render": {
+        "answer_hints": [
+          "ctrl-g"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "hints": [
+          "ctrl-g"
+        ],
+        "options": 4,
+        "rows_answer": true,
+        "shape": "single-choice",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "foreign/collie/claude--plan-approval--feedback-wrapped.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "f4c4e6dae9a4123dc9aacca047284a75c41c8a2cc0cf82c9e4bbb0adace9f706"
+      },
+      "render": {
+        "answer_hints": [
+          "ctrl-g"
+        ],
+        "asked": true,
+        "corroborated": false,
+        "drew_rows": false,
+        "is_choice": false,
+        "numbers": [],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [],
+        "hints": [
+          "ctrl-g"
+        ],
+        "options": 0,
+        "rows_answer": false,
+        "shape": "unknown",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "foreign/collie/claude--plan-approval--numbered-body.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "d27cd0f5e26f610645844fc754852d4c777be159fc67ecc5d0a117582ccd1153"
+      },
+      "render": {
+        "answer_hints": [
+          "ctrl-g"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "hints": [
+          "ctrl-g"
+        ],
+        "options": 4,
+        "rows_answer": true,
+        "shape": "single-choice",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "foreign/collie/claude--plan-approval--three-row-focused.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "f40da79f92cf494351f6905d40a55a6f481f4ab48f4bf0713e875acf788150da"
+      },
+      "render": {
+        "answer_hints": [
+          "ctrl-g"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3
+        ],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [
+          "1",
+          "2",
+          "3"
+        ],
+        "hints": [
+          "ctrl-g"
+        ],
+        "options": 3,
+        "rows_answer": true,
+        "shape": "single-choice",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "foreign/collie/claude--plan-approval--three-row-typed-focused.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "261878067bd3847692386a3188b27e60b9b6a6067d7ce91c90cef5e7e2386bf5"
+      },
+      "render": {
+        "answer_hints": [
+          "ctrl-g"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3
+        ],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [
+          "1",
+          "2",
+          "3"
+        ],
+        "hints": [
+          "ctrl-g"
+        ],
+        "options": 3,
+        "rows_answer": true,
+        "shape": "single-choice",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "foreign/collie/claude--plan-approval--three-row.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "7f1bf25b01e0912147202f2e23498187e0b736ae5be6a9fd066b93910ca3f6f5"
+      },
+      "render": {
+        "answer_hints": [
+          "ctrl-g"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3
+        ],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [
+          "1",
+          "2",
+          "3"
+        ],
+        "hints": [
+          "ctrl-g"
+        ],
+        "options": 3,
+        "rows_answer": true,
+        "shape": "single-choice",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "foreign/collie/claude--plan-approval.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "a3a9d6e4032ed3110f256431a7714be7321ca1127fb31fec2afe5f4fbadcbe4b"
+      },
+      "render": {
+        "answer_hints": [
+          "ctrl-g"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "hints": [
+          "ctrl-g"
+        ],
+        "options": 4,
+        "rows_answer": true,
+        "shape": "single-choice",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "foreign/collie/claude--rename-resolved.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "71271980b0fbeb4bd6977bc58b9fd6464f53163d2bf9b74318aa3e2b1e1266ac"
+      },
+      "render": {
+        "answer_hints": [],
+        "asked": false,
+        "corroborated": false,
+        "drew_rows": false,
+        "is_choice": false,
+        "numbers": [],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [],
+        "hints": [],
+        "options": 0,
+        "rows_answer": false,
+        "shape": "none",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "foreign/collie/claude--select-menu.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "30d9b91ae3ceec54181033e69d21c3caf0c796061fe9ee986acb5a929c5c0eb1"
+      },
+      "render": {
+        "answer_hints": [
+          "esc"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5"
+        ],
+        "hints": [
+          "enter",
+          "up",
+          "down",
+          "esc"
+        ],
+        "options": 5,
+        "rows_answer": true,
+        "shape": "single-choice",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "foreign/collie/claude--select-multi.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "c46db3bd3ae36e81663251583fb25f5da5886b0a8847861fef0152e79bfcab13"
+      },
+      "render": {
+        "answer_hints": [
+          "enter",
+          "tab",
+          "up",
+          "down"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5"
+        ],
+        "hints": [
+          "enter",
+          "tab",
+          "up",
+          "down"
+        ],
+        "options": 5,
+        "rows_answer": false,
+        "shape": "single-choice",
+        "steps": [
+          1,
+          3
+        ],
+        "ticked": []
+      }
+    },
+    "foreign/collie/claude--select-multiselect-checked.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "b91442f89af36a0c76c2fa6fbc43bf0ed8b9535a2105fbafa7c93c2b64780032"
+      },
+      "render": {
+        "answer_hints": [
+          "enter",
+          "up",
+          "down",
+          "esc"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "rows_toggle": true
+      },
+      "verdict": {
+        "checkable": 5,
+        "digits": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6"
+        ],
+        "hints": [
+          "enter",
+          "up",
+          "down",
+          "esc"
+        ],
+        "options": 6,
+        "rows_answer": false,
+        "shape": "multi-select",
+        "steps": [
+          1,
+          1
+        ],
+        "ticked": [
+          1,
+          2
+        ]
+      }
+    },
+    "foreign/collie/claude--select-multiselect-review.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "97e3d3a0db7e497a714d80dbbc430e41edf0a40252ea76ef8bb48d25ca92a28e"
+      },
+      "render": {
+        "answer_hints": [],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2
+        ],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [
+          "1",
+          "2"
+        ],
+        "hints": [],
+        "options": 2,
+        "rows_answer": false,
+        "shape": "single-choice",
+        "steps": [
+          0,
+          1
+        ],
+        "ticked": []
+      }
+    },
+    "foreign/collie/claude--select-multiselect-single.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "36b2e35b2e8ab993d7bbffcde9f823f2710986800d826142bd9115bb1ba9175a"
+      },
+      "render": {
+        "answer_hints": [
+          "enter",
+          "up",
+          "down",
+          "esc"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "rows_toggle": true
+      },
+      "verdict": {
+        "checkable": 5,
+        "digits": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6"
+        ],
+        "hints": [
+          "enter",
+          "up",
+          "down",
+          "esc"
+        ],
+        "options": 6,
+        "rows_answer": false,
+        "shape": "multi-select",
+        "steps": [
+          0,
+          1
+        ],
+        "ticked": []
+      }
+    },
+    "foreign/collie/claude--select-preview-note-attached.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "cb63785388a7219f809dc53021180044dbcf8ca62c5fc7eaa08861541db691c4"
+      },
+      "render": {
+        "answer_hints": [
+          "enter",
+          "up",
+          "down",
+          "esc"
+        ],
+        "asked": false,
+        "corroborated": false,
+        "drew_rows": false,
+        "is_choice": false,
+        "numbers": [],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [],
+        "hints": [
+          "enter",
+          "up",
+          "down",
+          "esc"
+        ],
+        "options": 0,
+        "rows_answer": false,
+        "shape": "unknown",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "foreign/collie/claude--select-preview-note-input.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "2fc81ff9416926eb4961c8cfcd58c1e8be1a6bb6662a81cbca509c76e0f4f91e"
+      },
+      "render": {
+        "answer_hints": [
+          "enter",
+          "up",
+          "down",
+          "ctrl-g"
+        ],
+        "asked": false,
+        "corroborated": false,
+        "drew_rows": false,
+        "is_choice": false,
+        "numbers": [],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [],
+        "hints": [
+          "enter",
+          "up",
+          "down",
+          "ctrl-g"
+        ],
+        "options": 0,
+        "rows_answer": false,
+        "shape": "unknown",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "foreign/collie/claude--select-preview.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "8c8bc14c89c7ec40161d028efbe0a59ed805c05b4a0b96904ff8b71b9a646d00"
+      },
+      "render": {
+        "answer_hints": [
+          "enter",
+          "up",
+          "down",
+          "esc"
+        ],
+        "asked": false,
+        "corroborated": false,
+        "drew_rows": false,
+        "is_choice": false,
+        "numbers": [],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [],
+        "hints": [
+          "enter",
+          "up",
+          "down",
+          "esc"
+        ],
+        "options": 0,
+        "rows_answer": false,
+        "shape": "unknown",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "foreign/collie/claude--send-inflight.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "ab1514367ddc2940aabe72735ca379899c06feda4d418244fac244c66d32ca96"
+      },
+      "render": {
+        "answer_hints": [],
+        "asked": false,
+        "corroborated": false,
+        "drew_rows": false,
+        "is_choice": false,
+        "numbers": [],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [],
+        "hints": [],
+        "options": 0,
+        "rows_answer": false,
+        "shape": "none",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "foreign/collie/claude--trust-prompt.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "a3f088cf3a6435a210519a46de27f1f3a8a70f3ee4f56ac5e7494aeee6af10a2"
+      },
+      "render": {
+        "answer_hints": [
+          "esc"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2
+        ],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [
+          "1",
+          "2"
+        ],
+        "hints": [
+          "enter",
+          "esc"
+        ],
+        "options": 2,
+        "rows_answer": true,
+        "shape": "single-choice",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "foreign/collie/claude--wizard-multiselect-checked.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "97b7ec36aac0ae6ab2b35f3fee3ee1d7a171745f1596f3533919290923857e06"
+      },
+      "render": {
+        "answer_hints": [
+          "enter",
+          "tab",
+          "up",
+          "down"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "rows_toggle": true
+      },
+      "verdict": {
+        "checkable": 5,
+        "digits": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6"
+        ],
+        "hints": [
+          "enter",
+          "tab",
+          "up",
+          "down"
+        ],
+        "options": 6,
+        "rows_answer": false,
+        "shape": "multi-select",
+        "steps": [
+          1,
+          2
+        ],
+        "ticked": [
+          0,
+          2
+        ]
+      }
+    },
+    "foreign/collie/claude--wizard-multiselect-final.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "c0f379ecd51694c7bb0fd6d6df8eb94d0c213f7e1cfd391db7fc00c5ae2ecc63"
+      },
+      "render": {
+        "answer_hints": [
+          "enter",
+          "tab",
+          "up",
+          "down"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "rows_toggle": true
+      },
+      "verdict": {
+        "checkable": 4,
+        "digits": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5"
+        ],
+        "hints": [
+          "enter",
+          "tab",
+          "up",
+          "down"
+        ],
+        "options": 5,
+        "rows_answer": false,
+        "shape": "multi-select",
+        "steps": [
+          1,
+          2
+        ],
+        "ticked": []
+      }
+    },
+    "foreign/collie/claude--wizard-multiselect-pointer-next.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "5a78623f39e22d5edab65174716ad2979b63340d1d48b44111532ed090fb2999"
+      },
+      "render": {
+        "answer_hints": [
+          "enter",
+          "tab",
+          "up",
+          "down"
+        ],
+        "asked": false,
+        "corroborated": false,
+        "drew_rows": false,
+        "is_choice": false,
+        "numbers": [],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [],
+        "hints": [
+          "enter",
+          "tab",
+          "up",
+          "down"
+        ],
+        "options": 0,
+        "rows_answer": false,
+        "shape": "unknown",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "foreign/collie/claude--wizard-multiselect-q1.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "f1ffe68b90dd816261e1c0ccf1d197f26f872bc8b5460ad914ed8456f01a5887"
+      },
+      "render": {
+        "answer_hints": [
+          "enter",
+          "tab",
+          "up",
+          "down"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "rows_toggle": true
+      },
+      "verdict": {
+        "checkable": 5,
+        "digits": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6"
+        ],
+        "hints": [
+          "enter",
+          "tab",
+          "up",
+          "down"
+        ],
+        "options": 6,
+        "rows_answer": false,
+        "shape": "multi-select",
+        "steps": [
+          0,
+          2
+        ],
+        "ticked": []
+      }
+    },
+    "foreign/collie/claude--wizard-preview-note-attached.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "c6961df16c9d471347b4ce38e931b6137f126f519d652d6825ed5bbb21df31df"
+      },
+      "render": {
+        "answer_hints": [
+          "enter",
+          "up",
+          "down",
+          "tab"
+        ],
+        "asked": false,
+        "corroborated": false,
+        "drew_rows": false,
+        "is_choice": false,
+        "numbers": [],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [],
+        "hints": [
+          "enter",
+          "up",
+          "down",
+          "tab"
+        ],
+        "options": 0,
+        "rows_answer": false,
+        "shape": "unknown",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "foreign/collie/claude--wizard-preview-q1.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "11c1a85218fdb3700059ff67c527607e316eda460761036bd6e9b25ad172ff14"
+      },
+      "render": {
+        "answer_hints": [
+          "enter",
+          "up",
+          "down",
+          "tab"
+        ],
+        "asked": false,
+        "corroborated": false,
+        "drew_rows": false,
+        "is_choice": false,
+        "numbers": [],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [],
+        "hints": [
+          "enter",
+          "up",
+          "down",
+          "tab"
+        ],
+        "options": 0,
+        "rows_answer": false,
+        "shape": "unknown",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "foreign/collie/claude--wizard-preview-wrapped-label.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "57d068c0dfd37ce825f96bf9f4924b4484446b0826bc406f9f523245e297c223"
+      },
+      "render": {
+        "answer_hints": [
+          "enter",
+          "up",
+          "down",
+          "tab"
+        ],
+        "asked": false,
+        "corroborated": false,
+        "drew_rows": false,
+        "is_choice": false,
+        "numbers": [],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [],
+        "hints": [
+          "enter",
+          "up",
+          "down",
+          "tab"
+        ],
+        "options": 0,
+        "rows_answer": false,
+        "shape": "unknown",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "foreign/collie/claude--wizard-q1-revisit.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "79a2a57064a79c9686dd25bab32a1bf7b09aa3b96ed506f88538ad826739a186"
+      },
+      "render": {
+        "answer_hints": [
+          "enter",
+          "tab",
+          "up",
+          "down"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5"
+        ],
+        "hints": [
+          "enter",
+          "tab",
+          "up",
+          "down"
+        ],
+        "options": 5,
+        "rows_answer": false,
+        "shape": "single-choice",
+        "steps": [
+          1,
+          3
+        ],
+        "ticked": []
+      }
+    },
+    "foreign/collie/claude--wizard-q1.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "99c7cf4f6b776e519e08806c17b93f53823829c08dca95b14d8d5ae070244cc5"
+      },
+      "render": {
+        "answer_hints": [
+          "enter",
+          "tab",
+          "up",
+          "down"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5"
+        ],
+        "hints": [
+          "enter",
+          "tab",
+          "up",
+          "down"
+        ],
+        "options": 5,
+        "rows_answer": false,
+        "shape": "single-choice",
+        "steps": [
+          0,
+          3
+        ],
+        "ticked": []
+      }
+    },
+    "foreign/collie/claude--wizard-q2.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "640dddb25e578cf4c02ad90628c5a124d7fef837708a5439c7c8a05bc70721f7"
+      },
+      "render": {
+        "answer_hints": [
+          "enter",
+          "tab",
+          "up",
+          "down"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5"
+        ],
+        "hints": [
+          "enter",
+          "tab",
+          "up",
+          "down"
+        ],
+        "options": 5,
+        "rows_answer": false,
+        "shape": "single-choice",
+        "steps": [
+          1,
+          3
+        ],
+        "ticked": []
+      }
+    },
+    "foreign/collie/claude--wizard-submit-unanswered.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "3d6cf55f8c73bec2ccbe88ca4f8aff8914d5e879b344d5165643e1220ee9af5d"
+      },
+      "render": {
+        "answer_hints": [],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2
+        ],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [
+          "1",
+          "2"
+        ],
+        "hints": [],
+        "options": 2,
+        "rows_answer": false,
+        "shape": "single-choice",
+        "steps": [
+          0,
+          3
+        ],
+        "ticked": []
+      }
+    },
+    "foreign/collie/claude--wizard-submit.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "f20621982a84db745f98f871472fb9b0961e92f927a4e623e87535ea1a33fa2d"
+      },
+      "render": {
+        "answer_hints": [],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2
+        ],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [
+          "1",
+          "2"
+        ],
+        "hints": [],
+        "options": 2,
+        "rows_answer": false,
+        "shape": "single-choice",
+        "steps": [
+          3,
+          3
+        ],
+        "ticked": []
+      }
+    },
+    "foreign/collie/claude--working.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "e01a95e2e0bb92e100f0c2b991f97fafb3e002f0ae4f1f697a31da83f12c02e3"
+      },
+      "render": {
+        "answer_hints": [],
+        "asked": false,
+        "corroborated": false,
+        "drew_rows": false,
+        "is_choice": false,
+        "numbers": [],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [],
+        "hints": [],
+        "options": 0,
+        "rows_answer": false,
+        "shape": "none",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "tests/fixtures/ansi/claude-blocked-bash-permission.ansi": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "3767fb0a02de8759dc3975d3832fe82438b89ebbcb9e19b48fe4b6c126d2079f"
+      },
+      "render": {
+        "answer_hints": [
+          "esc",
+          "tab",
+          "ctrl-e"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3
+        ],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [
+          "1",
+          "2",
+          "3"
+        ],
+        "hints": [
+          "esc",
+          "tab",
+          "ctrl-e"
+        ],
+        "options": 3,
+        "rows_answer": true,
+        "shape": "single-choice",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "tests/fixtures/ansi/claude-blocked-bash-permission.detection.ansi": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "dca8413e00ade5887782f406b07b819299f4c0ed8c29b1ca8fb19ce944960aa4"
+      },
+      "render": {
+        "answer_hints": [
+          "esc",
+          "tab",
+          "ctrl-e"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3
+        ],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [
+          "1",
+          "2",
+          "3"
+        ],
+        "hints": [
+          "esc",
+          "tab",
+          "ctrl-e"
+        ],
+        "options": 3,
+        "rows_answer": true,
+        "shape": "single-choice",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "tests/fixtures/ansi/claude-idle-welcome.ansi": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "2e1ce55984552604b6a2604df19eaca011e609a37dbadeda7803890aac55b788"
+      },
+      "render": {
+        "answer_hints": [],
+        "asked": false,
+        "corroborated": false,
+        "drew_rows": false,
+        "is_choice": false,
+        "numbers": [],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [],
+        "hints": [],
+        "options": 0,
+        "rows_answer": false,
+        "shape": "none",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "tests/fixtures/capture-blocked-askuserquestion-menu/detection.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "read_text",
+        "sha256": "8372867a046d709bcae9b2f78c52dfd836f6f0dd9277108c6ea200ccb1a4ecf1"
+      },
+      "render": {
+        "answer_hints": [
+          "esc"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5"
+        ],
+        "hints": [
+          "enter",
+          "up",
+          "down",
+          "esc"
+        ],
+        "options": 5,
+        "rows_answer": true,
+        "shape": "single-choice",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "tests/fixtures/capture-blocked-askuserquestion-menu/recent-unwrapped.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "read_text",
+        "sha256": "f51cfa690e09ccc6e2655613595c754d5f7b352ea3ae1552861d51f50f388463"
+      },
+      "render": {
+        "answer_hints": [
+          "esc"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5"
+        ],
+        "hints": [
+          "enter",
+          "up",
+          "down",
+          "esc"
+        ],
+        "options": 5,
+        "rows_answer": true,
+        "shape": "single-choice",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "tests/fixtures/capture-blocked-askuserquestion-menu/recent.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "read_text",
+        "sha256": "892c78a1f67980663eb224b2808e28ad95181d006269d65b83681d07afd69bdb"
+      },
+      "render": {
+        "answer_hints": [
+          "esc"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5"
+        ],
+        "hints": [
+          "enter",
+          "up",
+          "down",
+          "esc"
+        ],
+        "options": 5,
+        "rows_answer": true,
+        "shape": "single-choice",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "tests/fixtures/capture-blocked-askuserquestion-menu/visible.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "read_text",
+        "sha256": "8372867a046d709bcae9b2f78c52dfd836f6f0dd9277108c6ea200ccb1a4ecf1"
+      },
+      "render": {
+        "answer_hints": [
+          "esc"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5"
+        ],
+        "hints": [
+          "enter",
+          "up",
+          "down",
+          "esc"
+        ],
+        "options": 5,
+        "rows_answer": true,
+        "shape": "single-choice",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "tests/fixtures/capture-blocked-askuserquestion-wrapped/detection.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "read_text",
+        "sha256": "e889ae90b3adbe0219efd6551570663c718801892d832dd4151d54531402cea3"
+      },
+      "render": {
+        "answer_hints": [
+          "enter",
+          "up",
+          "down",
+          "esc"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [],
+        "hints": [
+          "enter",
+          "up",
+          "down",
+          "esc"
+        ],
+        "options": 6,
+        "rows_answer": false,
+        "shape": "single-choice",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "tests/fixtures/capture-blocked-askuserquestion-wrapped/recent-unwrapped.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "read_text",
+        "sha256": "dc17382bfce44e66e17adcc6634653d105e95a62bf9727b0272e00b928cee9b3"
+      },
+      "render": {
+        "answer_hints": [
+          "enter",
+          "up",
+          "down",
+          "esc"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [],
+        "hints": [
+          "enter",
+          "up",
+          "down",
+          "esc"
+        ],
+        "options": 6,
+        "rows_answer": false,
+        "shape": "single-choice",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "tests/fixtures/capture-blocked-askuserquestion-wrapped/recent.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "read_text",
+        "sha256": "bb69021463530ae560524f8252988b90a6ba9ac27dc8961d820dc2371018c345"
+      },
+      "render": {
+        "answer_hints": [
+          "enter",
+          "up",
+          "down",
+          "esc"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [],
+        "hints": [
+          "enter",
+          "up",
+          "down",
+          "esc"
+        ],
+        "options": 6,
+        "rows_answer": false,
+        "shape": "single-choice",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "tests/fixtures/capture-blocked-askuserquestion-wrapped/visible.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "read_text",
+        "sha256": "e889ae90b3adbe0219efd6551570663c718801892d832dd4151d54531402cea3"
+      },
+      "render": {
+        "answer_hints": [
+          "enter",
+          "up",
+          "down",
+          "esc"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [],
+        "hints": [
+          "enter",
+          "up",
+          "down",
+          "esc"
+        ],
+        "options": 6,
+        "rows_answer": false,
+        "shape": "single-choice",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "tests/fixtures/capture-blocked-multiselect-checklist/detection.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "read_text",
+        "sha256": "73b641f98a2808ec4e39db7ef00731680ce27e20af7513e8978b3c39eccfe229"
+      },
+      "render": {
+        "answer_hints": [
+          "enter",
+          "up",
+          "down",
+          "esc"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "rows_toggle": true
+      },
+      "verdict": {
+        "checkable": 5,
+        "digits": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6"
+        ],
+        "hints": [
+          "enter",
+          "up",
+          "down",
+          "esc"
+        ],
+        "options": 6,
+        "rows_answer": false,
+        "shape": "multi-select",
+        "steps": [
+          1,
+          1
+        ],
+        "ticked": [
+          2
+        ]
+      }
+    },
+    "tests/fixtures/capture-blocked-multiselect-checklist/recent-unwrapped.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "read_text",
+        "sha256": "e7992722ced2f3d95ab192a2d70b8c628e636a8ea8990be1de568d7d4fe4f71f"
+      },
+      "render": {
+        "answer_hints": [
+          "enter",
+          "up",
+          "down",
+          "esc"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "rows_toggle": true
+      },
+      "verdict": {
+        "checkable": 5,
+        "digits": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6"
+        ],
+        "hints": [
+          "enter",
+          "up",
+          "down",
+          "esc"
+        ],
+        "options": 6,
+        "rows_answer": false,
+        "shape": "multi-select",
+        "steps": [
+          1,
+          1
+        ],
+        "ticked": [
+          2
+        ]
+      }
+    },
+    "tests/fixtures/capture-blocked-multiselect-checklist/recent.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "read_text",
+        "sha256": "93eeebafb2ffa96c2bd5624ac5cd93de8a966f6eb082645eb1083892033cf0e0"
+      },
+      "render": {
+        "answer_hints": [
+          "enter",
+          "up",
+          "down",
+          "esc"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "rows_toggle": true
+      },
+      "verdict": {
+        "checkable": 5,
+        "digits": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6"
+        ],
+        "hints": [
+          "enter",
+          "up",
+          "down",
+          "esc"
+        ],
+        "options": 6,
+        "rows_answer": false,
+        "shape": "multi-select",
+        "steps": [
+          1,
+          1
+        ],
+        "ticked": [
+          2
+        ]
+      }
+    },
+    "tests/fixtures/capture-blocked-multiselect-checklist/visible.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "read_text",
+        "sha256": "73b641f98a2808ec4e39db7ef00731680ce27e20af7513e8978b3c39eccfe229"
+      },
+      "render": {
+        "answer_hints": [
+          "enter",
+          "up",
+          "down",
+          "esc"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "rows_toggle": true
+      },
+      "verdict": {
+        "checkable": 5,
+        "digits": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6"
+        ],
+        "hints": [
+          "enter",
+          "up",
+          "down",
+          "esc"
+        ],
+        "options": 6,
+        "rows_answer": false,
+        "shape": "multi-select",
+        "steps": [
+          1,
+          1
+        ],
+        "ticked": [
+          2
+        ]
+      }
+    },
+    "tests/fixtures/capture-blocked-permission-prompt-wrapped/detection.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "read_text",
+        "sha256": "efba6997f4afdb2b3b3158044edaac4d58793666c34dd6b183f7393137db460a"
+      },
+      "render": {
+        "answer_hints": [
+          "esc",
+          "tab",
+          "ctrl-e"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3
+        ],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [],
+        "hints": [
+          "esc",
+          "tab",
+          "ctrl-e"
+        ],
+        "options": 3,
+        "rows_answer": false,
+        "shape": "single-choice",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "tests/fixtures/capture-blocked-permission-prompt-wrapped/recent-unwrapped.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "read_text",
+        "sha256": "3e95df99d5bfbd034b03914a840e6f1ecfcb376aa8a8055197e4b6375c4bc2ce"
+      },
+      "render": {
+        "answer_hints": [
+          "esc",
+          "tab",
+          "ctrl-e"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3
+        ],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [],
+        "hints": [
+          "esc",
+          "tab",
+          "ctrl-e"
+        ],
+        "options": 3,
+        "rows_answer": false,
+        "shape": "single-choice",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "tests/fixtures/capture-blocked-permission-prompt-wrapped/recent.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "read_text",
+        "sha256": "27e88b2710d4e9db048daaf4f100179910e0e4d7a81dd2e6e2f9a6814a496ae9"
+      },
+      "render": {
+        "answer_hints": [
+          "esc",
+          "tab",
+          "ctrl-e"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3
+        ],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [],
+        "hints": [
+          "esc",
+          "tab",
+          "ctrl-e"
+        ],
+        "options": 3,
+        "rows_answer": false,
+        "shape": "single-choice",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "tests/fixtures/capture-blocked-permission-prompt-wrapped/visible.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "read_text",
+        "sha256": "efba6997f4afdb2b3b3158044edaac4d58793666c34dd6b183f7393137db460a"
+      },
+      "render": {
+        "answer_hints": [
+          "esc",
+          "tab",
+          "ctrl-e"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3
+        ],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [],
+        "hints": [
+          "esc",
+          "tab",
+          "ctrl-e"
+        ],
+        "options": 3,
+        "rows_answer": false,
+        "shape": "single-choice",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "tests/fixtures/capture-blocked-permission-prompt/detection.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "read_text",
+        "sha256": "677d33e289931621367ef914535a6c27ab45fdc24ee59270c27d7237291427a7"
+      },
+      "render": {
+        "answer_hints": [
+          "esc",
+          "tab",
+          "ctrl-e"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3
+        ],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [
+          "1",
+          "2",
+          "3"
+        ],
+        "hints": [
+          "esc",
+          "tab",
+          "ctrl-e"
+        ],
+        "options": 3,
+        "rows_answer": true,
+        "shape": "single-choice",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "tests/fixtures/capture-blocked-permission-prompt/recent-unwrapped.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "read_text",
+        "sha256": "be9fbb07f50974915c98b7e063a75e8c34f5bf3abc0e2cb101aa10143cafc5ea"
+      },
+      "render": {
+        "answer_hints": [
+          "esc",
+          "tab",
+          "ctrl-e"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3
+        ],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [
+          "1",
+          "2",
+          "3"
+        ],
+        "hints": [
+          "esc",
+          "tab",
+          "ctrl-e"
+        ],
+        "options": 3,
+        "rows_answer": true,
+        "shape": "single-choice",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "tests/fixtures/capture-blocked-permission-prompt/recent.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "read_text",
+        "sha256": "fca133c19a5e2eadebe8d257bc5c2ba5451c11929ccff45a50b0b7cc0531abe0"
+      },
+      "render": {
+        "answer_hints": [
+          "esc",
+          "tab",
+          "ctrl-e"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3
+        ],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [
+          "1",
+          "2",
+          "3"
+        ],
+        "hints": [
+          "esc",
+          "tab",
+          "ctrl-e"
+        ],
+        "options": 3,
+        "rows_answer": true,
+        "shape": "single-choice",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "tests/fixtures/capture-blocked-permission-prompt/visible.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "read_text",
+        "sha256": "677d33e289931621367ef914535a6c27ab45fdc24ee59270c27d7237291427a7"
+      },
+      "render": {
+        "answer_hints": [
+          "esc",
+          "tab",
+          "ctrl-e"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3
+        ],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [
+          "1",
+          "2",
+          "3"
+        ],
+        "hints": [
+          "esc",
+          "tab",
+          "ctrl-e"
+        ],
+        "options": 3,
+        "rows_answer": true,
+        "shape": "single-choice",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "tests/fixtures/capture-blocked-permission-write/detection.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "read_text",
+        "sha256": "b0ffd430c267e9edcdde8989b1dc4229d962710f1c4e344fc5eab927b3c8f081"
+      },
+      "render": {
+        "answer_hints": [
+          "esc",
+          "tab"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3
+        ],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [
+          "1",
+          "2",
+          "3"
+        ],
+        "hints": [
+          "esc",
+          "tab"
+        ],
+        "options": 3,
+        "rows_answer": true,
+        "shape": "single-choice",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "tests/fixtures/capture-blocked-permission-write/recent-unwrapped.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "read_text",
+        "sha256": "c20866219d3690513fb830ad4aea5ce923670d59c935140e8172deab83b8b9d6"
+      },
+      "render": {
+        "answer_hints": [
+          "esc",
+          "tab"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3
+        ],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [
+          "1",
+          "2",
+          "3"
+        ],
+        "hints": [
+          "esc",
+          "tab"
+        ],
+        "options": 3,
+        "rows_answer": true,
+        "shape": "single-choice",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "tests/fixtures/capture-blocked-permission-write/recent.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "read_text",
+        "sha256": "55c5900b03aa98eb26f2961b350aabf3b9ecd6a25f42ff63df46df0dd6d73615"
+      },
+      "render": {
+        "answer_hints": [
+          "esc",
+          "tab"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3
+        ],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [
+          "1",
+          "2",
+          "3"
+        ],
+        "hints": [
+          "esc",
+          "tab"
+        ],
+        "options": 3,
+        "rows_answer": true,
+        "shape": "single-choice",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "tests/fixtures/capture-blocked-permission-write/visible.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "read_text",
+        "sha256": "b0ffd430c267e9edcdde8989b1dc4229d962710f1c4e344fc5eab927b3c8f081"
+      },
+      "render": {
+        "answer_hints": [
+          "esc",
+          "tab"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3
+        ],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [
+          "1",
+          "2",
+          "3"
+        ],
+        "hints": [
+          "esc",
+          "tab"
+        ],
+        "options": 3,
+        "rows_answer": true,
+        "shape": "single-choice",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "tests/fixtures/capture-blocked-plan-approval/detection.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "read_text",
+        "sha256": "fbe3fd677c82acf7bf995a0e64c85f09fa9f4d1b541af35710fa8271850e9f80"
+      },
+      "render": {
+        "answer_hints": [
+          "ctrl-g"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3
+        ],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [
+          "1",
+          "2",
+          "3"
+        ],
+        "hints": [
+          "ctrl-g"
+        ],
+        "options": 3,
+        "rows_answer": true,
+        "shape": "single-choice",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "tests/fixtures/capture-blocked-plan-approval/recent-unwrapped.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "read_text",
+        "sha256": "81f8e832a37876bbe160d0ad547f1f01b39368d68d3236588929748fe985cc1a"
+      },
+      "render": {
+        "answer_hints": [
+          "ctrl-g"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3
+        ],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [
+          "1",
+          "2",
+          "3"
+        ],
+        "hints": [
+          "ctrl-g"
+        ],
+        "options": 3,
+        "rows_answer": true,
+        "shape": "single-choice",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "tests/fixtures/capture-blocked-plan-approval/recent.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "read_text",
+        "sha256": "8f8563929bc58ddbc5c0c559868b0d9f5efbfda2b807cc90adb8c346b2e3f04a"
+      },
+      "render": {
+        "answer_hints": [
+          "ctrl-g"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3
+        ],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [
+          "1",
+          "2",
+          "3"
+        ],
+        "hints": [
+          "ctrl-g"
+        ],
+        "options": 3,
+        "rows_answer": true,
+        "shape": "single-choice",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "tests/fixtures/capture-blocked-plan-approval/visible.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "read_text",
+        "sha256": "fbe3fd677c82acf7bf995a0e64c85f09fa9f4d1b541af35710fa8271850e9f80"
+      },
+      "render": {
+        "answer_hints": [
+          "ctrl-g"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3
+        ],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [
+          "1",
+          "2",
+          "3"
+        ],
+        "hints": [
+          "ctrl-g"
+        ],
+        "options": 3,
+        "rows_answer": true,
+        "shape": "single-choice",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "tests/fixtures/capture-blocked-trust-folder/detection.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "read_text",
+        "sha256": "ac64345ae92f64826fcfc1c828ddad3f4d7eee57caccfa5c23b8541a7ec54a2c"
+      },
+      "render": {
+        "answer_hints": [
+          "esc"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2
+        ],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [
+          "1",
+          "2"
+        ],
+        "hints": [
+          "enter",
+          "esc"
+        ],
+        "options": 2,
+        "rows_answer": true,
+        "shape": "single-choice",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "tests/fixtures/capture-blocked-trust-folder/recent-unwrapped.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "read_text",
+        "sha256": "562071c3cb67db9d1c10077c5b67e9e7c015ad4585f39bc06fad05f50961a37b"
+      },
+      "render": {
+        "answer_hints": [
+          "esc"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2
+        ],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [
+          "1",
+          "2"
+        ],
+        "hints": [
+          "enter",
+          "esc"
+        ],
+        "options": 2,
+        "rows_answer": true,
+        "shape": "single-choice",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "tests/fixtures/capture-blocked-trust-folder/recent.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "read_text",
+        "sha256": "5da0caa3b33e7a55c4998e070db95749ab598407a9801df33421f68ab1e204f9"
+      },
+      "render": {
+        "answer_hints": [
+          "esc"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2
+        ],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [
+          "1",
+          "2"
+        ],
+        "hints": [
+          "enter",
+          "esc"
+        ],
+        "options": 2,
+        "rows_answer": true,
+        "shape": "single-choice",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "tests/fixtures/capture-blocked-trust-folder/visible.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "read_text",
+        "sha256": "ac64345ae92f64826fcfc1c828ddad3f4d7eee57caccfa5c23b8541a7ec54a2c"
+      },
+      "render": {
+        "answer_hints": [
+          "esc"
+        ],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2
+        ],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [
+          "1",
+          "2"
+        ],
+        "hints": [
+          "enter",
+          "esc"
+        ],
+        "options": 2,
+        "rows_answer": true,
+        "shape": "single-choice",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "tests/fixtures/capture-idle-claude-prompt/detection.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "read_text",
+        "sha256": "2a614dc7ef42e06069306183f7389beee492a80fb2cdc99d4feb150f48312ac6"
+      },
+      "render": {
+        "answer_hints": [],
+        "asked": false,
+        "corroborated": false,
+        "drew_rows": false,
+        "is_choice": false,
+        "numbers": [],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [],
+        "hints": [],
+        "options": 0,
+        "rows_answer": false,
+        "shape": "none",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "tests/fixtures/capture-idle-claude-prompt/recent-unwrapped.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "read_text",
+        "sha256": "ee0a79d4f90184b6881da08a8d314b7e658e6ed73ebc987d3909bd65f74f3e2d"
+      },
+      "render": {
+        "answer_hints": [],
+        "asked": false,
+        "corroborated": false,
+        "drew_rows": false,
+        "is_choice": false,
+        "numbers": [],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [],
+        "hints": [],
+        "options": 0,
+        "rows_answer": false,
+        "shape": "none",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "tests/fixtures/capture-idle-claude-prompt/recent.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "read_text",
+        "sha256": "32c68ef19873f6b911fe8db93d4843a1f13178591eb0dbeb1ed8610a05fe1124"
+      },
+      "render": {
+        "answer_hints": [],
+        "asked": false,
+        "corroborated": false,
+        "drew_rows": false,
+        "is_choice": false,
+        "numbers": [],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [],
+        "hints": [],
+        "options": 0,
+        "rows_answer": false,
+        "shape": "none",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "tests/fixtures/capture-idle-claude-prompt/visible.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "read_text",
+        "sha256": "2a614dc7ef42e06069306183f7389beee492a80fb2cdc99d4feb150f48312ac6"
+      },
+      "render": {
+        "answer_hints": [],
+        "asked": false,
+        "corroborated": false,
+        "drew_rows": false,
+        "is_choice": false,
+        "numbers": [],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [],
+        "hints": [],
+        "options": 0,
+        "rows_answer": false,
+        "shape": "none",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "tests/fixtures/capture-idle-numbered-recap/detection.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "read_text",
+        "sha256": "9a7e803835a221c4c9344d354b38a5ad8b8606f38fba4acc38467e875a5d9e7a"
+      },
+      "render": {
+        "answer_hints": [],
+        "asked": false,
+        "corroborated": false,
+        "drew_rows": false,
+        "is_choice": false,
+        "numbers": [],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [],
+        "hints": [],
+        "options": 0,
+        "rows_answer": false,
+        "shape": "none",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "tests/fixtures/capture-idle-numbered-recap/recent-unwrapped.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "read_text",
+        "sha256": "a75497f82c95dfadb79afd654440f507775280f3ce6288586ed2f52df0b8604b"
+      },
+      "render": {
+        "answer_hints": [],
+        "asked": false,
+        "corroborated": false,
+        "drew_rows": false,
+        "is_choice": false,
+        "numbers": [],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [],
+        "hints": [],
+        "options": 0,
+        "rows_answer": false,
+        "shape": "none",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "tests/fixtures/capture-idle-numbered-recap/recent.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "read_text",
+        "sha256": "b1bdb1e0c88bccc7c31b706b13e275bde56804835410cfeef32af7584dc8fb18"
+      },
+      "render": {
+        "answer_hints": [],
+        "asked": false,
+        "corroborated": false,
+        "drew_rows": false,
+        "is_choice": false,
+        "numbers": [],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [],
+        "hints": [],
+        "options": 0,
+        "rows_answer": false,
+        "shape": "none",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "tests/fixtures/capture-idle-numbered-recap/visible.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "read_text",
+        "sha256": "9a7e803835a221c4c9344d354b38a5ad8b8606f38fba4acc38467e875a5d9e7a"
+      },
+      "render": {
+        "answer_hints": [],
+        "asked": false,
+        "corroborated": false,
+        "drew_rows": false,
+        "is_choice": false,
+        "numbers": [],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [],
+        "hints": [],
+        "options": 0,
+        "rows_answer": false,
+        "shape": "none",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "tests/fixtures/capture-working-claude/detection.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "read_text",
+        "sha256": "1d3d0c4850701152898a92a9b66421bfbfbc5e373048599ed3956395e8a8c898"
+      },
+      "render": {
+        "answer_hints": [],
+        "asked": false,
+        "corroborated": false,
+        "drew_rows": false,
+        "is_choice": false,
+        "numbers": [],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [],
+        "hints": [],
+        "options": 0,
+        "rows_answer": false,
+        "shape": "none",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "tests/fixtures/capture-working-claude/recent-unwrapped.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "read_text",
+        "sha256": "96510b4630d09c08b272fd318d8973529e4e735d61f1a4a4150f6caee0ecc66b"
+      },
+      "render": {
+        "answer_hints": [],
+        "asked": false,
+        "corroborated": false,
+        "drew_rows": false,
+        "is_choice": false,
+        "numbers": [],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [],
+        "hints": [],
+        "options": 0,
+        "rows_answer": false,
+        "shape": "none",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "tests/fixtures/capture-working-claude/recent.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "read_text",
+        "sha256": "8eae2e49cc13af59776c2dd5776caccdfe006d72f226bebf70c39dd91a1ef6f7"
+      },
+      "render": {
+        "answer_hints": [],
+        "asked": false,
+        "corroborated": false,
+        "drew_rows": false,
+        "is_choice": false,
+        "numbers": [],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [],
+        "hints": [],
+        "options": 0,
+        "rows_answer": false,
+        "shape": "none",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "tests/fixtures/capture-working-claude/visible.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "read_text",
+        "sha256": "1d3d0c4850701152898a92a9b66421bfbfbc5e373048599ed3956395e8a8c898"
+      },
+      "render": {
+        "answer_hints": [],
+        "asked": false,
+        "corroborated": false,
+        "drew_rows": false,
+        "is_choice": false,
+        "numbers": [],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [],
+        "hints": [],
+        "options": 0,
+        "rows_answer": false,
+        "shape": "none",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "tests/fixtures/hermes/blocked-approval.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "read_text",
+        "sha256": "b13044af511bd361ce8398f6e29f205651cb8d4f57a1fd2fdbffdafeb3a4e76d"
+      },
+      "render": {
+        "answer_hints": [],
+        "asked": false,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5"
+        ],
+        "hints": [
+          "up",
+          "down",
+          "enter"
+        ],
+        "options": 5,
+        "rows_answer": true,
+        "shape": "single-choice",
+        "steps": null,
+        "ticked": []
+      }
+    },
+    "tests/fixtures/hermes/blocked-clarify.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "read_text",
+        "sha256": "209f1561b50cd79d6534ac6ac281b8184fac5f9ef5be28f132a072a39d7aa2f7"
+      },
+      "render": {
+        "answer_hints": [],
+        "asked": true,
+        "corroborated": true,
+        "drew_rows": true,
+        "is_choice": true,
+        "numbers": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "rows_toggle": false
+      },
+      "verdict": {
+        "checkable": 0,
+        "digits": [
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "hints": [
+          "up",
+          "down",
+          "enter"
+        ],
+        "options": 4,
+        "rows_answer": true,
+        "shape": "single-choice",
+        "steps": null,
+        "ticked": []
+      }
+    }
+  }
+}

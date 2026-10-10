@@ -1,0 +1,1891 @@
+{
+  "captures": {
+    "collie/claude--done.txt": {
+      "checkable": 0,
+      "class": "nothing-is-asked",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "collie/claude--draft-footer-empty.txt": {
+      "checkable": 0,
+      "class": "nothing-is-asked",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "collie/claude--draft-footer-single.txt": {
+      "checkable": 0,
+      "class": "nothing-is-asked",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "collie/claude--draft-footer-wrapped.txt": {
+      "checkable": 0,
+      "class": "nothing-is-asked",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "collie/claude--draft-paste-placeholder.txt": {
+      "checkable": 0,
+      "class": "nothing-is-asked",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "collie/claude--draft-paste-split-partial.txt": {
+      "checkable": 0,
+      "class": "nothing-is-asked",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "collie/claude--draft-paste-split-tail.txt": {
+      "checkable": 0,
+      "class": "nothing-is-asked",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "collie/claude--draft-wrapped.txt": {
+      "checkable": 0,
+      "class": "nothing-is-asked",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "collie/claude--fresh-idle.txt": {
+      "checkable": 0,
+      "class": "nothing-is-asked",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "collie/claude--menu-model-picker-dismissed.txt": {
+      "checkable": 0,
+      "class": "nothing-is-asked",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "collie/claude--menu-model-picker-moved.txt": {
+      "checkable": 0,
+      "class": "generic-picker-refused",
+      "digits": [],
+      "hints": [
+        "enter",
+        "esc"
+      ],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "unknown",
+      "steps": null,
+      "ticked": []
+    },
+    "collie/claude--menu-model-picker.txt": {
+      "checkable": 0,
+      "class": "generic-picker-refused",
+      "digits": [],
+      "hints": [
+        "enter",
+        "esc"
+      ],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "unknown",
+      "steps": null,
+      "ticked": []
+    },
+    "collie/claude--permission-bash.txt": {
+      "checkable": 0,
+      "class": "read-and-answerable",
+      "digits": [
+        "1",
+        "2",
+        "3"
+      ],
+      "hints": [
+        "esc",
+        "tab",
+        "ctrl-e"
+      ],
+      "options": 3,
+      "rows_answer": true,
+      "screen_steps": null,
+      "shape": "single-choice",
+      "steps": null,
+      "ticked": []
+    },
+    "collie/claude--permission-edit.txt": {
+      "checkable": 0,
+      "class": "read-and-answerable",
+      "digits": [
+        "1",
+        "2",
+        "3"
+      ],
+      "hints": [
+        "esc",
+        "tab"
+      ],
+      "options": 3,
+      "rows_answer": true,
+      "screen_steps": null,
+      "shape": "single-choice",
+      "steps": null,
+      "ticked": []
+    },
+    "collie/claude--plan-approval--feedback-focused.txt": {
+      "checkable": 0,
+      "class": "plan-approval-read",
+      "digits": [
+        "1",
+        "2",
+        "3",
+        "4"
+      ],
+      "hints": [
+        "ctrl-g"
+      ],
+      "options": 4,
+      "rows_answer": true,
+      "screen_steps": null,
+      "shape": "single-choice",
+      "steps": null,
+      "ticked": []
+    },
+    "collie/claude--plan-approval--feedback-typed.txt": {
+      "checkable": 0,
+      "class": "plan-approval-read",
+      "digits": [
+        "1",
+        "2",
+        "3",
+        "4"
+      ],
+      "hints": [
+        "ctrl-g"
+      ],
+      "options": 4,
+      "rows_answer": true,
+      "screen_steps": null,
+      "shape": "single-choice",
+      "steps": null,
+      "ticked": []
+    },
+    "collie/claude--plan-approval--feedback-wrapped.txt": {
+      "checkable": 0,
+      "class": "plan-approval-label-wrapped",
+      "digits": [],
+      "hints": [
+        "ctrl-g"
+      ],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "unknown",
+      "steps": null,
+      "ticked": []
+    },
+    "collie/claude--plan-approval--numbered-body.txt": {
+      "checkable": 0,
+      "class": "plan-approval-read",
+      "digits": [
+        "1",
+        "2",
+        "3",
+        "4"
+      ],
+      "hints": [
+        "ctrl-g"
+      ],
+      "options": 4,
+      "rows_answer": true,
+      "screen_steps": null,
+      "shape": "single-choice",
+      "steps": null,
+      "ticked": []
+    },
+    "collie/claude--plan-approval--three-row-focused.txt": {
+      "checkable": 0,
+      "class": "plan-approval-read",
+      "digits": [
+        "1",
+        "2",
+        "3"
+      ],
+      "hints": [
+        "ctrl-g"
+      ],
+      "options": 3,
+      "rows_answer": true,
+      "screen_steps": null,
+      "shape": "single-choice",
+      "steps": null,
+      "ticked": []
+    },
+    "collie/claude--plan-approval--three-row-typed-focused.txt": {
+      "checkable": 0,
+      "class": "plan-approval-read",
+      "digits": [
+        "1",
+        "2",
+        "3"
+      ],
+      "hints": [
+        "ctrl-g"
+      ],
+      "options": 3,
+      "rows_answer": true,
+      "screen_steps": null,
+      "shape": "single-choice",
+      "steps": null,
+      "ticked": []
+    },
+    "collie/claude--plan-approval--three-row.txt": {
+      "checkable": 0,
+      "class": "plan-approval-read",
+      "digits": [
+        "1",
+        "2",
+        "3"
+      ],
+      "hints": [
+        "ctrl-g"
+      ],
+      "options": 3,
+      "rows_answer": true,
+      "screen_steps": null,
+      "shape": "single-choice",
+      "steps": null,
+      "ticked": []
+    },
+    "collie/claude--plan-approval.txt": {
+      "checkable": 0,
+      "class": "plan-approval-read",
+      "digits": [
+        "1",
+        "2",
+        "3",
+        "4"
+      ],
+      "hints": [
+        "ctrl-g"
+      ],
+      "options": 4,
+      "rows_answer": true,
+      "screen_steps": null,
+      "shape": "single-choice",
+      "steps": null,
+      "ticked": []
+    },
+    "collie/claude--rename-resolved.txt": {
+      "checkable": 0,
+      "class": "nothing-is-asked",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "collie/claude--select-menu.txt": {
+      "checkable": 0,
+      "class": "read-and-answerable",
+      "digits": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "hints": [
+        "enter",
+        "up",
+        "down",
+        "esc"
+      ],
+      "options": 5,
+      "rows_answer": true,
+      "screen_steps": null,
+      "shape": "single-choice",
+      "steps": null,
+      "ticked": []
+    },
+    "collie/claude--select-multi.txt": {
+      "checkable": 0,
+      "class": "wizard-step",
+      "digits": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "hints": [
+        "enter",
+        "tab",
+        "up",
+        "down"
+      ],
+      "options": 5,
+      "rows_answer": false,
+      "screen_steps": 3,
+      "shape": "single-choice",
+      "steps": [
+        1,
+        3
+      ],
+      "ticked": []
+    },
+    "collie/claude--select-multiselect-checked.txt": {
+      "checkable": 5,
+      "class": "wizard-checklist",
+      "digits": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6"
+      ],
+      "hints": [
+        "enter",
+        "up",
+        "down",
+        "esc"
+      ],
+      "options": 6,
+      "rows_answer": false,
+      "screen_steps": 1,
+      "shape": "multi-select",
+      "steps": [
+        1,
+        1
+      ],
+      "ticked": [
+        1,
+        2
+      ]
+    },
+    "collie/claude--select-multiselect-review.txt": {
+      "checkable": 0,
+      "class": "wizard-step",
+      "digits": [
+        "1",
+        "2"
+      ],
+      "hints": [],
+      "options": 2,
+      "rows_answer": false,
+      "screen_steps": 1,
+      "shape": "single-choice",
+      "steps": [
+        0,
+        1
+      ],
+      "ticked": []
+    },
+    "collie/claude--select-multiselect-single.txt": {
+      "checkable": 5,
+      "class": "wizard-checklist",
+      "digits": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6"
+      ],
+      "hints": [
+        "enter",
+        "up",
+        "down",
+        "esc"
+      ],
+      "options": 6,
+      "rows_answer": false,
+      "screen_steps": 1,
+      "shape": "multi-select",
+      "steps": [
+        0,
+        1
+      ],
+      "ticked": []
+    },
+    "collie/claude--select-preview-note-attached.txt": {
+      "checkable": 0,
+      "class": "live-menu-unclaimed",
+      "digits": [],
+      "hints": [
+        "enter",
+        "up",
+        "down",
+        "esc"
+      ],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "unknown",
+      "steps": null,
+      "ticked": []
+    },
+    "collie/claude--select-preview-note-input.txt": {
+      "checkable": 0,
+      "class": "live-menu-unclaimed",
+      "digits": [],
+      "hints": [
+        "enter",
+        "up",
+        "down",
+        "ctrl-g"
+      ],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "unknown",
+      "steps": null,
+      "ticked": []
+    },
+    "collie/claude--select-preview.txt": {
+      "checkable": 0,
+      "class": "live-menu-unclaimed",
+      "digits": [],
+      "hints": [
+        "enter",
+        "up",
+        "down",
+        "esc"
+      ],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "unknown",
+      "steps": null,
+      "ticked": []
+    },
+    "collie/claude--send-inflight.txt": {
+      "checkable": 0,
+      "class": "nothing-is-asked",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "collie/claude--trust-prompt.txt": {
+      "checkable": 0,
+      "class": "read-and-answerable",
+      "digits": [
+        "1",
+        "2"
+      ],
+      "hints": [
+        "enter",
+        "esc"
+      ],
+      "options": 2,
+      "rows_answer": true,
+      "screen_steps": null,
+      "shape": "single-choice",
+      "steps": null,
+      "ticked": []
+    },
+    "collie/claude--wizard-multiselect-checked.txt": {
+      "checkable": 5,
+      "class": "wizard-checklist",
+      "digits": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6"
+      ],
+      "hints": [
+        "enter",
+        "tab",
+        "up",
+        "down"
+      ],
+      "options": 6,
+      "rows_answer": false,
+      "screen_steps": 2,
+      "shape": "multi-select",
+      "steps": [
+        1,
+        2
+      ],
+      "ticked": [
+        0,
+        2
+      ]
+    },
+    "collie/claude--wizard-multiselect-final.txt": {
+      "checkable": 4,
+      "class": "wizard-checklist",
+      "digits": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "hints": [
+        "enter",
+        "tab",
+        "up",
+        "down"
+      ],
+      "options": 5,
+      "rows_answer": false,
+      "screen_steps": 2,
+      "shape": "multi-select",
+      "steps": [
+        1,
+        2
+      ],
+      "ticked": []
+    },
+    "collie/claude--wizard-multiselect-pointer-next.txt": {
+      "checkable": 0,
+      "class": "wizard-strip-unseen",
+      "digits": [],
+      "hints": [
+        "enter",
+        "tab",
+        "up",
+        "down"
+      ],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": 2,
+      "shape": "unknown",
+      "steps": null,
+      "ticked": [],
+      "xfail_steps": "The strip is on the screen and `_STEPPER_RE` matches it, but `_stepper` searches only from `_dialog_start` downwards and with no numbered run that anchor lands BELOW the strip (measured: strip at line 19, dialog start 37). So the steps are lost for a second reason, on the harness we do model."
+    },
+    "collie/claude--wizard-multiselect-q1.txt": {
+      "checkable": 5,
+      "class": "wizard-checklist",
+      "digits": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6"
+      ],
+      "hints": [
+        "enter",
+        "tab",
+        "up",
+        "down"
+      ],
+      "options": 6,
+      "rows_answer": false,
+      "screen_steps": 2,
+      "shape": "multi-select",
+      "steps": [
+        0,
+        2
+      ],
+      "ticked": []
+    },
+    "collie/claude--wizard-preview-note-attached.txt": {
+      "checkable": 0,
+      "class": "wizard-strip-unseen",
+      "digits": [],
+      "hints": [
+        "enter",
+        "up",
+        "down",
+        "tab"
+      ],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": 2,
+      "shape": "unknown",
+      "steps": null,
+      "ticked": [],
+      "xfail_steps": "The strip is on the screen and `_STEPPER_RE` matches it, but `_stepper` searches only from `_dialog_start` downwards and with no numbered run that anchor lands BELOW the strip (measured: strip at line 19, dialog start 37). So the steps are lost for a second reason, on the harness we do model."
+    },
+    "collie/claude--wizard-preview-q1.txt": {
+      "checkable": 0,
+      "class": "wizard-strip-unseen",
+      "digits": [],
+      "hints": [
+        "enter",
+        "up",
+        "down",
+        "tab"
+      ],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": 2,
+      "shape": "unknown",
+      "steps": null,
+      "ticked": [],
+      "xfail_steps": "The strip is on the screen and `_STEPPER_RE` matches it, but `_stepper` searches only from `_dialog_start` downwards and with no numbered run that anchor lands BELOW the strip (measured: strip at line 19, dialog start 37). So the steps are lost for a second reason, on the harness we do model."
+    },
+    "collie/claude--wizard-preview-wrapped-label.txt": {
+      "checkable": 0,
+      "class": "wizard-strip-unseen",
+      "digits": [],
+      "hints": [
+        "enter",
+        "up",
+        "down",
+        "tab"
+      ],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": 2,
+      "shape": "unknown",
+      "steps": null,
+      "ticked": [],
+      "xfail_steps": "The strip is on the screen and `_STEPPER_RE` matches it, but `_stepper` searches only from `_dialog_start` downwards and with no numbered run that anchor lands BELOW the strip (measured: strip at line 19, dialog start 37). So the steps are lost for a second reason, on the harness we do model."
+    },
+    "collie/claude--wizard-q1-revisit.txt": {
+      "checkable": 0,
+      "class": "wizard-step",
+      "digits": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "hints": [
+        "enter",
+        "tab",
+        "up",
+        "down"
+      ],
+      "options": 5,
+      "rows_answer": false,
+      "screen_steps": 3,
+      "shape": "single-choice",
+      "steps": [
+        1,
+        3
+      ],
+      "ticked": []
+    },
+    "collie/claude--wizard-q1.txt": {
+      "checkable": 0,
+      "class": "wizard-step",
+      "digits": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "hints": [
+        "enter",
+        "tab",
+        "up",
+        "down"
+      ],
+      "options": 5,
+      "rows_answer": false,
+      "screen_steps": 3,
+      "shape": "single-choice",
+      "steps": [
+        0,
+        3
+      ],
+      "ticked": []
+    },
+    "collie/claude--wizard-q2.txt": {
+      "checkable": 0,
+      "class": "wizard-step",
+      "digits": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "hints": [
+        "enter",
+        "tab",
+        "up",
+        "down"
+      ],
+      "options": 5,
+      "rows_answer": false,
+      "screen_steps": 3,
+      "shape": "single-choice",
+      "steps": [
+        1,
+        3
+      ],
+      "ticked": []
+    },
+    "collie/claude--wizard-submit-unanswered.txt": {
+      "checkable": 0,
+      "class": "wizard-step",
+      "digits": [
+        "1",
+        "2"
+      ],
+      "hints": [],
+      "options": 2,
+      "rows_answer": false,
+      "screen_steps": 3,
+      "shape": "single-choice",
+      "steps": [
+        0,
+        3
+      ],
+      "ticked": []
+    },
+    "collie/claude--wizard-submit.txt": {
+      "checkable": 0,
+      "class": "wizard-step",
+      "digits": [
+        "1",
+        "2"
+      ],
+      "hints": [],
+      "options": 2,
+      "rows_answer": false,
+      "screen_steps": 3,
+      "shape": "single-choice",
+      "steps": [
+        3,
+        3
+      ],
+      "ticked": []
+    },
+    "collie/claude--working.txt": {
+      "checkable": 0,
+      "class": "nothing-is-asked",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "collie/omp--done--tool-result.txt": {
+      "checkable": 0,
+      "class": "nothing-is-asked",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "collie/omp--done.txt": {
+      "checkable": 0,
+      "class": "nothing-is-asked",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "collie/omp--draft-single.txt": {
+      "checkable": 0,
+      "class": "nothing-is-asked",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "collie/omp--draft-wrapped.txt": {
+      "checkable": 0,
+      "class": "nothing-is-asked",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "collie/omp--fresh-idle.txt": {
+      "checkable": 0,
+      "class": "nothing-is-asked",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "collie/omp--menu-dismissed.txt": {
+      "checkable": 0,
+      "class": "nothing-is-asked",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "collie/omp--menu-model-moved.txt": {
+      "checkable": 0,
+      "class": "unnumbered-dialog-missed",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "collie/omp--menu-model.txt": {
+      "checkable": 0,
+      "class": "unnumbered-dialog-missed",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "collie/omp--menu-resume-moved.txt": {
+      "checkable": 0,
+      "class": "unnumbered-dialog-missed",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "collie/omp--menu-resume.txt": {
+      "checkable": 0,
+      "class": "unnumbered-dialog-missed",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "collie/omp--menu-settings-moved.txt": {
+      "checkable": 0,
+      "class": "unnumbered-dialog-missed",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "collie/omp--menu-settings.txt": {
+      "checkable": 0,
+      "class": "unnumbered-dialog-missed",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "collie/omp--select-menu-moved.txt": {
+      "checkable": 0,
+      "class": "unnumbered-dialog-missed",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "collie/omp--select-menu.txt": {
+      "checkable": 0,
+      "class": "unnumbered-dialog-missed",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "collie/omp--select-multi-checked.txt": {
+      "checkable": 0,
+      "class": "unnumbered-dialog-missed",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "collie/omp--select-multi-review.txt": {
+      "checkable": 0,
+      "class": "numbered-question-missed",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "collie/omp--select-multi.txt": {
+      "checkable": 0,
+      "class": "unnumbered-dialog-missed",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "collie/omp--slash-palette--filtered.txt": {
+      "checkable": 0,
+      "class": "unnumbered-dialog-missed",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "collie/omp--slash-palette.txt": {
+      "checkable": 0,
+      "class": "unnumbered-dialog-missed",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "collie/omp--working.txt": {
+      "checkable": 0,
+      "class": "nothing-is-asked",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "relay/claude-multi-select-submit-end.ansi": {
+      "checkable": 0,
+      "class": "wizard-step",
+      "digits": [
+        "1",
+        "2"
+      ],
+      "hints": [],
+      "options": 2,
+      "rows_answer": false,
+      "screen_steps": 1,
+      "shape": "single-choice",
+      "steps": [
+        1,
+        1
+      ],
+      "ticked": []
+    },
+    "relay/claude-multi-select-with-free-text.ansi": {
+      "checkable": 5,
+      "class": "wizard-checklist",
+      "digits": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6"
+      ],
+      "hints": [
+        "enter",
+        "up",
+        "down",
+        "ctrl-g"
+      ],
+      "options": 6,
+      "rows_answer": false,
+      "screen_steps": 1,
+      "shape": "multi-select",
+      "steps": [
+        1,
+        1
+      ],
+      "ticked": [
+        1,
+        2,
+        4
+      ]
+    },
+    "relay/claude-multi-select.ansi": {
+      "checkable": 5,
+      "class": "wizard-checklist",
+      "digits": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6"
+      ],
+      "hints": [
+        "enter",
+        "up",
+        "down",
+        "esc"
+      ],
+      "options": 6,
+      "rows_answer": false,
+      "screen_steps": 1,
+      "shape": "multi-select",
+      "steps": [
+        1,
+        1
+      ],
+      "ticked": [
+        1,
+        2
+      ]
+    },
+    "relay/claude-plan-multi-question.ansi": {
+      "checkable": 0,
+      "class": "wizard-step",
+      "digits": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6"
+      ],
+      "hints": [
+        "enter",
+        "tab",
+        "up",
+        "down"
+      ],
+      "options": 6,
+      "rows_answer": false,
+      "screen_steps": 4,
+      "shape": "single-choice",
+      "steps": [
+        4,
+        4
+      ],
+      "ticked": []
+    },
+    "relay/claude-plan-one-question-notes.ansi": {
+      "checkable": 0,
+      "class": "read-and-answerable",
+      "digits": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6"
+      ],
+      "hints": [
+        "enter",
+        "up",
+        "down",
+        "ctrl-g"
+      ],
+      "options": 6,
+      "rows_answer": true,
+      "screen_steps": null,
+      "shape": "single-choice",
+      "steps": null,
+      "ticked": []
+    },
+    "relay/claude-plan-one-question.ansi": {
+      "checkable": 0,
+      "class": "read-and-answerable",
+      "digits": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6"
+      ],
+      "hints": [
+        "enter",
+        "up",
+        "down",
+        "esc"
+      ],
+      "options": 6,
+      "rows_answer": true,
+      "screen_steps": null,
+      "shape": "single-choice",
+      "steps": null,
+      "ticked": []
+    },
+    "relay/claude-plan-submit-answers.ansi": {
+      "checkable": 0,
+      "class": "wizard-step",
+      "digits": [
+        "1",
+        "2"
+      ],
+      "hints": [],
+      "options": 2,
+      "rows_answer": false,
+      "screen_steps": 4,
+      "shape": "single-choice",
+      "steps": [
+        4,
+        4
+      ],
+      "ticked": []
+    },
+    "relay/claude-single-approval.ansi": {
+      "checkable": 0,
+      "class": "read-and-answerable",
+      "digits": [
+        "1",
+        "2",
+        "3"
+      ],
+      "hints": [
+        "esc",
+        "tab"
+      ],
+      "options": 3,
+      "rows_answer": true,
+      "screen_steps": null,
+      "shape": "single-choice",
+      "steps": null,
+      "ticked": []
+    },
+    "relay/claude-single-question.ansi": {
+      "checkable": 0,
+      "class": "read-and-answerable",
+      "digits": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6"
+      ],
+      "hints": [
+        "enter",
+        "up",
+        "down",
+        "esc"
+      ],
+      "options": 6,
+      "rows_answer": true,
+      "screen_steps": null,
+      "shape": "single-choice",
+      "steps": null,
+      "ticked": []
+    },
+    "relay/claude-stale-note.ansi": {
+      "checkable": 0,
+      "class": "wizard-step",
+      "digits": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6"
+      ],
+      "hints": [
+        "enter",
+        "tab",
+        "up",
+        "down"
+      ],
+      "options": 6,
+      "rows_answer": false,
+      "screen_steps": 4,
+      "shape": "single-choice",
+      "steps": [
+        4,
+        4
+      ],
+      "ticked": []
+    },
+    "relay/claude-wrapped-question.ansi": {
+      "checkable": 0,
+      "class": "wizard-step",
+      "digits": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6"
+      ],
+      "hints": [
+        "enter",
+        "tab",
+        "up",
+        "down"
+      ],
+      "options": 6,
+      "rows_answer": false,
+      "screen_steps": 4,
+      "shape": "single-choice",
+      "steps": [
+        4,
+        4
+      ],
+      "ticked": []
+    },
+    "relay/claude-wrapped-review.ansi": {
+      "checkable": 0,
+      "class": "wizard-step",
+      "digits": [
+        "1",
+        "2"
+      ],
+      "hints": [],
+      "options": 2,
+      "rows_answer": false,
+      "screen_steps": 4,
+      "shape": "single-choice",
+      "steps": [
+        4,
+        4
+      ],
+      "ticked": []
+    },
+    "relay/codex-final-approval.ansi": {
+      "checkable": 0,
+      "class": "plan-approval-missed",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "relay/codex-first-question.ansi": {
+      "checkable": 0,
+      "class": "live-menu-unclaimed",
+      "digits": [],
+      "hints": [
+        "tab",
+        "enter",
+        "left",
+        "right"
+      ],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": 3,
+      "shape": "unknown",
+      "steps": null,
+      "ticked": [],
+      "xfail_steps": "The screen names 3 question steps and we see none. qoder draws its stepper as `A > B > C > Submit`, codex as a `Question N/M` counter; `_STEPPER_RE` knows only claude's `<-...->` strip. Per the earned-shape rule, an unrecognised stepper must degrade to NOT claiming that a tap ends the question."
+    },
+    "relay/codex-first-question_with_notes.ansi": {
+      "checkable": 0,
+      "class": "live-menu-unclaimed",
+      "digits": [],
+      "hints": [
+        "tab",
+        "esc",
+        "enter"
+      ],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": 3,
+      "shape": "unknown",
+      "steps": null,
+      "ticked": [],
+      "xfail_steps": "The screen names 3 question steps and we see none. qoder draws its stepper as `A > B > C > Submit`, codex as a `Question N/M` counter; `_STEPPER_RE` knows only claude's `<-...->` strip. Per the earned-shape rule, an unrecognised stepper must degrade to NOT claiming that a tap ends the question."
+    },
+    "relay/codex-follow-up-question.ansi": {
+      "checkable": 0,
+      "class": "numbered-question-missed",
+      "digits": [],
+      "hints": [
+        "tab",
+        "enter",
+        "esc"
+      ],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": 1,
+      "shape": "unknown",
+      "steps": null,
+      "ticked": [],
+      "xfail_steps": "The screen names 1 question steps and we see none. qoder draws its stepper as `A > B > C > Submit`, codex as a `Question N/M` counter; `_STEPPER_RE` knows only claude's `<-...->` strip. Per the earned-shape rule, an unrecognised stepper must degrade to NOT claiming that a tap ends the question."
+    },
+    "relay/codex-implement-plan.ansi": {
+      "checkable": 0,
+      "class": "plan-approval-missed",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "relay/codex-middle-question.ansi": {
+      "checkable": 0,
+      "class": "live-menu-unclaimed",
+      "digits": [],
+      "hints": [
+        "tab",
+        "enter",
+        "left",
+        "right"
+      ],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": 2,
+      "shape": "unknown",
+      "steps": null,
+      "ticked": [],
+      "xfail_steps": "The screen names 2 question steps and we see none. qoder draws its stepper as `A > B > C > Submit`, codex as a `Question N/M` counter; `_STEPPER_RE` knows only claude's `<-...->` strip. Per the earned-shape rule, an unrecognised stepper must degrade to NOT claiming that a tap ends the question."
+    },
+    "relay/codex-single-question.ansi": {
+      "checkable": 0,
+      "class": "live-menu-unclaimed",
+      "digits": [],
+      "hints": [
+        "tab",
+        "enter",
+        "esc"
+      ],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": 1,
+      "shape": "unknown",
+      "steps": null,
+      "ticked": [],
+      "xfail_steps": "The screen names 1 question steps and we see none. qoder draws its stepper as `A > B > C > Submit`, codex as a `Question N/M` counter; `_STEPPER_RE` knows only claude's `<-...->` strip. Per the earned-shape rule, an unrecognised stepper must degrade to NOT claiming that a tap ends the question."
+    },
+    "relay/omp-copy-button-review.ansi": {
+      "checkable": 0,
+      "class": "nothing-is-asked",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "relay/omp-note-question.ansi": {
+      "checkable": 0,
+      "class": "unnumbered-dialog-missed",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "relay/omp-partial-ask.ansi": {
+      "checkable": 0,
+      "class": "unnumbered-dialog-missed",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "relay/omp-plan-approval.ansi": {
+      "checkable": 0,
+      "class": "plan-approval-missed",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "relay/opencode-many-questions-confirm.ansi": {
+      "checkable": 0,
+      "class": "unnumbered-dialog-missed",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "relay/opencode-many-questions.ansi": {
+      "checkable": 0,
+      "class": "unnumbered-dialog-missed",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "relay/opencode-questions-multiple-choice-with-free-text-before-text.ansi": {
+      "checkable": 0,
+      "class": "unnumbered-dialog-missed",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "relay/opencode-questions-multiple-choice-with-free-text-edited.ansi": {
+      "checkable": 0,
+      "class": "unnumbered-dialog-missed",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "relay/opencode-questions-multiple-choice-with-free-text.ansi": {
+      "checkable": 0,
+      "class": "unnumbered-dialog-missed",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "relay/opencode-questions-with-free-text.ansi": {
+      "checkable": 0,
+      "class": "unnumbered-dialog-missed",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "relay/opencode-questions-with-multiple-choice-answers-confirm.ansi": {
+      "checkable": 0,
+      "class": "unnumbered-dialog-missed",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "relay/opencode-questions-with-multiple-choice-answers.ansi": {
+      "checkable": 0,
+      "class": "unnumbered-dialog-missed",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "relay/opencode-single-question.ansi": {
+      "checkable": 0,
+      "class": "unnumbered-dialog-missed",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "relay/qodercli-accept-reject-plan.ansi": {
+      "checkable": 0,
+      "class": "numbered-question-missed",
+      "digits": [],
+      "hints": [
+        "ctrl-x"
+      ],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "unknown",
+      "steps": null,
+      "ticked": []
+    },
+    "relay/qodercli-add-directory.ansi": {
+      "checkable": 0,
+      "class": "unnumbered-dialog-missed",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "relay/qodercli-allow-deny.ansi": {
+      "checkable": 0,
+      "class": "read-and-answerable-marker-only",
+      "digits": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "hints": [],
+      "options": 5,
+      "rows_answer": true,
+      "screen_steps": null,
+      "shape": "single-choice",
+      "steps": null,
+      "ticked": []
+    },
+    "relay/qodercli-approval.ansi": {
+      "checkable": 0,
+      "class": "unnumbered-dialog-missed",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "relay/qodercli-first-question-multi-question.ansi": {
+      "checkable": 5,
+      "class": "checklist",
+      "digits": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7"
+      ],
+      "hints": [],
+      "options": 7,
+      "rows_answer": false,
+      "screen_steps": 4,
+      "shape": "multi-select",
+      "steps": null,
+      "ticked": [
+        1,
+        2
+      ],
+      "xfail_steps": "The screen names 4 question steps and we see none. qoder draws its stepper as `A > B > C > Submit`, codex as a `Question N/M` counter; `_STEPPER_RE` knows only claude's `<-...->` strip. Per the earned-shape rule, an unrecognised stepper must degrade to NOT claiming that a tap ends the question."
+    },
+    "relay/qodercli-multi-questions-and-notes.ansi": {
+      "checkable": 0,
+      "class": "numbered-question-missed",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": 4,
+      "shape": "none",
+      "steps": null,
+      "ticked": [],
+      "xfail_steps": "The screen names 4 question steps and we see none. qoder draws its stepper as `A > B > C > Submit`, codex as a `Question N/M` counter; `_STEPPER_RE` knows only claude's `<-...->` strip. Per the earned-shape rule, an unrecognised stepper must degrade to NOT claiming that a tap ends the question."
+    },
+    "relay/qodercli-permission-required.ansi": {
+      "checkable": 0,
+      "class": "read-and-answerable-marker-only",
+      "digits": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "hints": [],
+      "options": 5,
+      "rows_answer": true,
+      "screen_steps": null,
+      "shape": "single-choice",
+      "steps": null,
+      "ticked": []
+    },
+    "relay/qodercli-permission-required2.ansi": {
+      "checkable": 0,
+      "class": "read-and-answerable-marker-only",
+      "digits": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "hints": [],
+      "options": 5,
+      "rows_answer": true,
+      "screen_steps": null,
+      "shape": "single-choice",
+      "steps": null,
+      "ticked": []
+    },
+    "relay/qodercli-repo-summary-no-second-thinking.ansi": {
+      "checkable": 0,
+      "class": "numbered-recap",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "relay/qodercli-repo-summary.ansi": {
+      "checkable": 0,
+      "class": "numbered-recap",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "relay/qodercli-second-question-single.ansi": {
+      "checkable": 0,
+      "class": "step-claimed-as-the-whole-question",
+      "digits": [
+        "1",
+        "2",
+        "3",
+        "4"
+      ],
+      "hints": [],
+      "options": 4,
+      "rows_answer": true,
+      "screen_steps": 4,
+      "shape": "single-choice",
+      "steps": null,
+      "ticked": [],
+      "why": "WRONG, and the one row in this corpus that reaches a thumb. We say tapping a row ENDS the question. It is question 2 of 4: qoder draws its stepper as `A > B > C > Submit` and `_STEPPER_RE` only knows claude's arrow-and-checkbox strip, so `rows_answer` never consults it. Upstream's own golden table records this fixture as index 2, total 4. This is the multi-step defect surviving on another harness; teaching the parser that stepper is the fix, and `test_a_row_does_not_end_a_question_with_more_steps_behind_it` carries the xfail.",
+      "xfail_rows_answer": "We claim a tap ends this question and the screen says it is question 2 of 4. Strict, so the day the parser learns qoder's stepper this row goes red as an XPASS -- delete both xfails and rewrite the `why`.",
+      "xfail_steps": "The screen names 4 question steps and we see none. qoder draws its stepper as `A > B > C > Submit`, codex as a `Question N/M` counter; `_STEPPER_RE` knows only claude's `<-...->` strip. Per the earned-shape rule, an unrecognised stepper must degrade to NOT claiming that a tap ends the question."
+    },
+    "relay/qodercli-select-option.ansi": {
+      "checkable": 0,
+      "class": "unnumbered-dialog-missed",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "relay/qodercli-single-question-with-text.ansi": {
+      "checkable": 0,
+      "class": "numbered-question-missed",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": null,
+      "shape": "none",
+      "steps": null,
+      "ticked": []
+    },
+    "relay/qodercli-single-question.ansi": {
+      "checkable": 0,
+      "class": "read-and-answerable-marker-only",
+      "digits": [
+        "1",
+        "2",
+        "3",
+        "4"
+      ],
+      "hints": [],
+      "options": 4,
+      "rows_answer": true,
+      "screen_steps": null,
+      "shape": "single-choice",
+      "steps": null,
+      "ticked": []
+    },
+    "relay/qodercli-submit-answers.ansi": {
+      "checkable": 0,
+      "class": "unnumbered-dialog-missed",
+      "digits": [],
+      "hints": [],
+      "options": 0,
+      "rows_answer": false,
+      "screen_steps": 4,
+      "shape": "none",
+      "steps": null,
+      "ticked": [],
+      "xfail_steps": "The screen names 4 question steps and we see none. qoder draws its stepper as `A > B > C > Submit`, codex as a `Question N/M` counter; `_STEPPER_RE` knows only claude's `<-...->` strip. Per the earned-shape rule, an unrecognised stepper must degrade to NOT claiming that a tap ends the question."
+    },
+    "relay/qodercli-yes-no.ansi": {
+      "checkable": 0,
+      "class": "read-and-answerable",
+      "digits": [
+        "1",
+        "2"
+      ],
+      "hints": [
+        "esc"
+      ],
+      "options": 2,
+      "rows_answer": true,
+      "screen_steps": null,
+      "shape": "single-choice",
+      "steps": null,
+      "ticked": []
+    }
+  },
+  "classes": {
+    "checklist": "A checklist: rows toggle, they do not answer. Digits offered, `rows_answer` False. The checklist shape the parser reads, measured here against another project's bytes rather than ours.",
+    "generic-picker-refused": "The screen collie live-probed for `.adr/0009`: a digit pressed here set the model AND PERSISTED it as the default for every future session, announced nowhere. We are non-tappable today by ACCIDENT of layout, not by construction -- an effort line between the last option and the footer drops the run before `_shape` is asked (prior-art-pass2 section 1.1). `digits` becoming non-empty here is the worst regression this file can catch. Now that a shape is earned, this must be UNKNOWN because it failed a test.",
+    "live-menu-unclaimed": "A live menu whose shape we decline to claim: hints read, no options, no digits. Fail-closed and correct. Offering a digit here without the positive corroboration the parser asks for is a regression, not a feature.",
+    "nothing-is-asked": "Nothing is being asked -- idle, drafting, working, or a finished recap. `none` is the right answer, and these rows are NEGATIVE pins: a shape claimed on one of them is a question we invented out of a transcript.",
+    "numbered-question-missed": "WRONG: a live numbered question whose options we do not read. The run is on the screen; a per-option description line sits between the rows and after the last of them, so our trailing-contiguity requirement is not met. Since the parser reads the footer these at least reach UNKNOWN with hints -- the screen admits it could not be read and offers the Pane tab -- instead of `none`, which said nothing was being asked. A grammar for unnumbered rows is the fix. Edit the row when it moves.",
+    "numbered-recap": "Negative, and the sharpest kind. A finished turn whose tail is a numbered suggestion list, on a harness we have never seen. Turning a recap into tap targets is the defect already fixed in our own corpus; this is the same shape in someone else's bytes.",
+    "plan-approval-label-wrapped": "The same screen, refused, and refused for a reason that is nothing to do with the footer: one option's label is too long for the pane and wraps onto a continuation line BELOW the last numbered row, so the run is no longer trailing. UNKNOWN with the footer read is the honest end state -- the screen says it could not be read and the user gets the Pane tab -- and it is strictly better than the `none` this used to be, which claimed nothing was being asked. Claiming three rows here while silently dropping a truncated fourth is the half-read screen the wrapped-label rule draws the line against.",
+    "plan-approval-missed": "WRONG, and known: a plan approval whose rows carry NO DIGIT anywhere -- they are drawn as focus-marked lines inside box edges -- so there is no numbered run for any of this to apply to. Reading the footer moved the claude dialect of this screen and could not move this one, because the defect is the unnumbered grammar rather than the footer. A grammar for unnumbered rows is the fix.",
+    "plan-approval-read": "ExitPlanMode, READ, and this class replaces the worst row set in the file. Every one of these parsed shape=none: a textbook numbered run under `Would you like to proceed?`, and we did not believe there was a question there at all -- on a phone, the failure on the screen the user meets most. Two lines did it and either alone was fatal, both of them `<key> to <verb>` chrome whose verb was not on `_FOOTER_RE`'s closed list: the sub-line under the last option, and the editor footer. Recognising chrome by its KEY instead makes them inert and the run trailing again. Note what is NOT loosened: the shape is still earned, by the cursor marker on a row and by the question the run sits under, so these rows say single-choice because they passed the earned-shape tests, not because they were left over.",
+    "read-and-answerable": "Read and answerable, and the pin runs the other way: a numbered run we claim as single-choice, digits offered, tapping a row ends the question. If one of these stops parsing we have silently lost a screen we could answer.",
+    "read-and-answerable-marker-only": "Read and answerable -- and note the empty `hints`: the only corroboration is a marker on a run row, no footer at all. That is exactly the thin evidence the earned-shape rule is about.",
+    "step-claimed-as-the-whole-question": "The one class in this file that is dangerous rather than merely incomplete: a numbered run we claim as single-choice AND tell the user answers the question, on a screen whose own strip says there are more steps behind it. The multi-step defect, alive on a harness whose stepper dialect the grammar does not know. Carries an xfail; see the row's `why`.",
+    "unnumbered-dialog-missed": "WRONG, and known: a blocked agent we report as NOT BLOCKED. The options are drawn with radio or checkbox glyphs inside box edges with no digit anywhere, and the footer is verb-first rather than `<key> to <verb>`, so we extract neither options nor hints (prior-art-pass2 section 4.1). A status lie, not a rendering gap. A grammar for unnumbered rows is the fix.",
+    "wizard-checklist": "A checklist that is also a wizard step: rows toggle rather than answer, AND there is a strip above the dialog. Both reasons for `rows_answer` False hold at once, which is why these rows are their own class rather than either parent.",
+    "wizard-step": "A wizard STEP, not a question. The digits are honest -- a row is addressed absolutely regardless of the cursor -- but `rows_answer` must stay False, because the tap ends one step of several and the stepper strip above the dialog says so.",
+    "wizard-strip-unseen": "A claude wizard screen whose strip we do NOT see, so the only thing keeping the row honest is that we claimed no shape either. See this row's `xfail`."
+  }
+}

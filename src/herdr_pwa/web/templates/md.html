@@ -1,0 +1,2 @@
+{# Tags come only from markdown.TAGS; every string is autoescaped text. #}
+{% macro md(nodes) %}{% for n in nodes %}{% if not n.tag %}{{ n.text }}{% elif n.tag == "pre" %}<pre><code>{{ n.text }}</code></pre>{% elif n.tag == "code" and n.text %}<code>{{ n.text }}</code>{% elif n.tag == "a" %}<a href="{{ n.href }}" rel="noopener noreferrer" target="_blank">{{ md(n.children) }}</a>{% elif n.tag in ("hr", "br") %}<{{ n.tag }}>{% else %}<{{ n.tag }}>{{ md(n.children) }}</{{ n.tag }}>{% endif %}{% endfor %}{% endmacro %}
