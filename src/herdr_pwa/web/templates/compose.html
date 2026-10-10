@@ -1,21 +1,21 @@
+{% import "_ui.html" as ui %}
 {% set base = "/agent/" ~ (agent.session|urlencode) %}
 <form id="composer" class="composer" method="post" action="{{ base }}/prompt"
       hx-post="{{ base }}/prompt" hx-target="this" hx-swap="outerHTML"
       hx-disabled-elt="find button" data-hp-composer>
   {% include "_notice.html" %}
   {% if sent is defined %}
-  <p class="banner {{ 'banner--sent' if sent.verified else 'banner--held' }}" role="status" data-hp-sent>
+  {% call ui.banner("sent" if sent.verified else "held", sent=true) %}
     {% if sent.verified %}Sent, and it is on the pane.{% else %}Sent, unverified: the pane did not show it. Read the Pane tab before sending it again.{% endif %}
     {% if sent.no_echo %}<span class="banner__why">{{ sent.no_echo }}</span>{% endif %}
-  </p>
+  {% endcall %}
   {% endif %}
   <input type="hidden" name="target" value="{{ agent.target }}">
   <input type="hidden" name="screen" value="{{ screen }}">
   {% if refused is defined and refused.held %}<input type="hidden" name="confirm" value="1">{% endif %}
-  <label class="field">
-    <span class="field__label">Prompt</span>
+  {% call ui.field("Prompt") %}
     <textarea name="text" rows="3" maxlength="4000" data-hp-draft="{{ agent.session }}"
               {% if sent is defined and sent.no_echo %}data-hp-forget{% endif %}>{{ text }}</textarea>
-  </label>
-  <button class="button" type="submit">{{ 'Send it anyway' if refused is defined and refused.held else 'Send' }}</button>
+  {% endcall %}
+  {{ ui.button('Send it anyway' if refused is defined and refused.held else 'Send') }}
 </form>

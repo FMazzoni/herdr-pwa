@@ -1,12 +1,13 @@
 {% extends "base.html" %}
 {% from "_nav.html" import replace, sheet %}
+{% import "_ui.html" as ui %}
 {% block title %}{{ agent.title or agent.agent or agent.target }} &mdash; herdr{% endblock %}
 {% block topbar %}<a class="leave" href="/" {{ replace() }}>&larr;</a><span class="topbar__title">{{ agent.title or agent.agent or agent.target }}</span>{% endblock %}
 {% block body %}
 {% set base = "/agent/" ~ (agent.session|urlencode) %}
 <main class="agent" data-hp-seen="{{ agent.session }}">
   <p class="agent__meta">
-    <span class="dot dot--{{ agent.status.value }}" aria-hidden="true"></span>
+    {{ ui.dot(agent.status.value) }}
     <span class="agent__status">{{ agent.status.value }}</span>
     {% if agent.agent %}<span>{{ agent.agent }}</span>{% endif %}
     {% if agent.workspace %}<span>{{ agent.workspace }}</span>{% endif %}

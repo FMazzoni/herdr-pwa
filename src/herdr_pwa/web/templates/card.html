@@ -1,11 +1,7 @@
+{% import "_ui.html" as ui %}
 {% set title = card_title(row) %}
-<li class="card card--{{ row.effective_status.value }}">
-  {% if row.session %}<a class="card__link" href="/agent/{{ row.session|urlencode }}">{% else %}<div class="card__link">{% endif %}
-    <span class="card__top">
-      <span class="dot dot--{{ row.effective_status.value }}" aria-hidden="true"></span>
-      <span class="card__title">{{ title or row.harness or row.target }}</span>
-      <span class="card__status">{{ row.effective_status.value }}</span>
-    </span>
+{% call ui.card(row.effective_status.value, href=("/agent/" ~ (row.session|urlencode)) if row.session else none) %}
+    {{ ui.card_top(row.effective_status.value, title or row.harness or row.target) }}
     <span class="card__meta">
       {% if title and row.harness %}<span class="card__harness">{{ row.harness }}</span>{% endif %}
       {% if row.workspace %}<span class="card__ws">{{ row.workspace }}</span>{% endif %}
@@ -19,5 +15,4 @@
     </span>
     {% endif %}
     {% endif %}
-  {% if row.session %}</a>{% else %}</div>{% endif %}
-</li>
+{% endcall %}

@@ -1,14 +1,15 @@
 {% extends "base.html" %}
 {% from "_nav.html" import replace, sheet %}
+{% import "_ui.html" as ui %}
 {% block title %}Close workspace &mdash; herdr{% endblock %}
 {% block body %}
 <main class="agent">
   {% include "_notice.html" %}
   {% if cost %}
-  <h2 class="group__head"><span class="group__label">Close {{ cost.workspace.label or cost.workspace.workspace_id }}</span><span class="group__n">{{ cost.total }}</span></h2>
+  {{ ui.section_head("Close " ~ (cost.workspace.label or cost.workspace.workspace_id), cost.total) }}
   {% if cost.total %}
   <p>{{ cost.reason }}</p>
-  <ul class="cards">{% for agent in cost.agents %}<li class="card card--{{ agent.status.value }}"><span class="card__link">{{ agent.title or agent.agent }} &middot; {{ agent.status.value }} &middot; {{ agent.target }}</span></li>{% endfor %}</ul>
+  <ul class="cards">{% for agent in cost.agents %}{% call ui.card(agent.status.value, inner="span") %}{{ agent.title or agent.agent }} &middot; {{ agent.status.value }} &middot; {{ agent.target }}{% endcall %}{% endfor %}</ul>
   {% else %}
   <p>It holds no agents.</p>
   {% endif %}
@@ -17,9 +18,9 @@
     {% if armed %}
     <input type="hidden" name="armed" value="1">
     <input type="hidden" name="saw" value="{{ cost.total }}">
-    <button class="button button--danger" type="submit">Yes, end all {{ cost.total }}</button>
+    {{ ui.button("Yes, end all " ~ cost.total, "danger") }}
     {% else %}
-    <button class="button button--danger" type="submit">Close workspace</button>
+    {{ ui.button("Close workspace", "danger") }}
     {% endif %}
   </form>
   {% endif %}

@@ -1,25 +1,26 @@
 {% extends "base.html" %}
 {% from "_nav.html" import replace, sheet %}
+{% import "_ui.html" as ui %}
 {% block title %}New agent &mdash; herdr{% endblock %}
 {% block body %}
 <main class="agent">
-  <h2 class="group__head"><span class="group__label">New agent</span></h2>
+  {{ ui.section_head("New agent") }}
   {% include "_notice.html" %}
   <form class="form" {{ sheet("/new") }}>
-    <label class="field"><span class="field__label">Name</span><input name="name" value="{{ values.get('name', '') }}" maxlength="32" required></label>
-    <label class="field"><span class="field__label">Kind</span>
+    {% call ui.field("Name") %}<input name="name" value="{{ values.get('name', '') }}" maxlength="32" required>{% endcall %}
+    {% call ui.field("Kind") %}
       <select name="kind">{% for kind in kinds %}<option value="{{ kind }}"{% if kind == values.get('kind') %} selected{% endif %}>{{ kind }}</option>{% endfor %}</select>
-    </label>
+    {% endcall %}
     <p class="field__note">opencode is started with bash set to ask, so it stops and asks you rather than running every command unasked.</p>
-    <label class="field"><span class="field__label">Model (optional)</span><input name="model" value="{{ values.get('model', '') }}" list="models"></label>
+    {% call ui.field("Model (optional)") %}<input name="model" value="{{ values.get('model', '') }}" list="models">{% endcall %}
     <datalist id="models">{% for kind, names in models.items() %}{% for name in names %}<option value="{{ name }}">{{ kind }}</option>{% endfor %}{% endfor %}</datalist>
     <p class="field__note">Only claude offers a model choice here; the others start on their own default.</p>
-    <label class="field"><span class="field__label">Workspace</span>
+    {% call ui.field("Workspace") %}
       <select name="workspace">{% for ws in workspaces %}<option value="{{ ws.workspace_id }}"{% if ws.workspace_id == values.get('workspace') %} selected{% endif %}>{{ ws.label or ws.workspace_id }}</option>{% endfor %}</select>
-    </label>
-    <label class="field"><span class="field__label">Directory</span><input name="cwd" value="{{ values.get('cwd', '') }}" list="cwds" required></label>
+    {% endcall %}
+    {% call ui.field("Directory") %}<input name="cwd" value="{{ values.get('cwd', '') }}" list="cwds" required>{% endcall %}
     <datalist id="cwds">{% for cwd in cwds %}<option value="{{ cwd }}"></option>{% endfor %}</datalist>
-    <button class="button" type="submit">Start</button>
+    {{ ui.button("Start") }}
   </form>
 </main>
 {% endblock %}
