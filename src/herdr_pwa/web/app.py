@@ -24,6 +24,7 @@ from herdr_pwa.web.routers import (
     compose,
     devreport,
     feed,
+    files,
     manage,
     push,
     shell,
@@ -101,7 +102,14 @@ def create_app(
         return {"status": "ok"}
 
     _static_route(app, assets)
-    for build in (feed.build, agent.build, workspace.build, compose.build, manage.build):
+    for build in (
+        feed.build,
+        agent.build,
+        workspace.build,
+        compose.build,
+        manage.build,
+        files.build,
+    ):
         app.include_router(build(web))
     app.include_router(push.build(web, pushing))
     app.include_router(shell.build(web, assets))

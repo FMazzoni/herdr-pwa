@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% from "_nav.html" import replace %}
+{% import "_ui.html" as ui %}
+{% block title %}Files &mdash; herdr{% endblock %}
+{% block brand %}{% endblock %}
+{% block topbar %}<a class="leave topbar__back" href="/" aria-label="Back to herd" {{ replace() }}>&lsaquo; Herd</a><span class="topbar__title">files</span>{% endblock %}
+{% block body %}
+<main class="feed-host">
+  {{ ui.section_head("Repositories", roots|length) }}
+  {% if roots %}
+  <ul class="cards">
+    {% for r in roots %}
+    {% set st = statuses[r.id] %}
+    {% call ui.card("working" if st.changes else "idle", href="/files/" ~ r.id) %}
+        <span class="card__top"><span class="card__title">{{ r.label }}</span><span class="card__status">{{ st.changes|length }} changed</span></span>
+        <span class="card__meta">
+          <span>{{ st.branch or "no branch" }}</span>
+          <span>{{ r.sessions|length }} agent{{ "" if r.sessions|length == 1 else "s" }}</span>
+        </span>
+    {% endcall %}
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="empty">No agent is working in a git repository right now.</p>
+  {% endif %}
+</main>
+{% endblock %}

@@ -1,0 +1,28 @@
+{# The explorer's repeated pieces: a change badge, a row in a list of paths, the path above a page. #}
+{% from "_nav.html" import replace %}
+{% set BADGES = {"modified": "M", "added": "A", "new": "+", "deleted": "D", "renamed": "R", "conflict": "!"} %}
+
+{# A change's letter in a box, its kind said in words for VoiceOver. #}
+{% macro badge(kind) %}<span class="fbadge fbadge--{{ kind }}" aria-hidden="true">{{ BADGES.get(kind, "M") }}</span><span class="sr-only">{{ kind }}:</span>{% endmacro %}
+
+{# A path in a list: a 44px link whose name ellipsizes, its folder under it, a note at the end. #}
+{% macro row(href, name, dir="", aside="", kind=none, folder=false) -%}
+<li><a class="frow{% if folder %} frow--dir{% endif %}" href="{{ href }}" {{ replace() }}>
+  {%- if kind %}{{ badge(kind) }}{% else %}<span class="fbadge fbadge--{{ 'dir' if folder else 'file' }}" aria-hidden="true">{{ "\u25B8" if folder else "" }}</span>{% endif -%}
+  <span class="frow__text"><span class="frow__name">{{ name }}{% if folder %}/{% endif %}</span>{% if dir %}<span class="frow__dir">{{ dir }}</span>{% endif %}</span>
+  {%- if aside %}<span class="frow__aside">{{ aside }}</span>{% endif -%}
+</a></li>
+{%- endmacro %}
+
+{# Where a page is: the root, then each folder, each a link back to that folder's listing. #}
+{% macro crumbs(nav, root, rel, here=none) -%}
+<nav class="crumbs" aria-label="Path"><a href="{{ nav.href('tree') }}" {{ replace() }}>{{ root.label }}</a>
+  {%- for name, href in nav.crumbs(rel) %}<span class="crumbs__sep" aria-hidden="true">/</span><a href="{{ href }}" {{ replace() }}>{{ name }}</a>{% endfor -%}
+  {%- if here %}<span class="crumbs__sep" aria-hidden="true">/</span><span class="crumbs__here" aria-current="page">{{ here }}</span>{% endif -%}
+</nav>
+{%- endmacro %}
+
+{# Numbered lines of code: number and text side by side, wrapped, in chunks laid out on demand. #}
+{% macro line(n, runs, cut=0, at=0, kind="") -%}
+<span class="src__n{% if kind %} src__n--{{ kind }}{% endif %}{% if n and n == at %} src__n--at{% endif %}"{% if n and not kind %} id="L{{ n }}"{% endif %}{% if n and n == at %} data-hp-at{% endif %} aria-hidden="true">{{ n or "" }}</span><code class="src__code{% if kind %} src__code--{{ kind }}{% endif %}{% if n and n == at %} src__code--at{% endif %}">{% for run in runs %}{% if run.tag %}<span class="{{ run.cls }}">{{ run.text }}</span>{% else %}{{ run.text }}{% endif %}{% endfor %}{% if cut %}<span class="src__cut"> &hellip; {{ "{:,}".format(cut) }} more characters</span>{% endif %}</code>
+{%- endmacro %}

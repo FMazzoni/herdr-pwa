@@ -46,7 +46,10 @@ def test_the_worker_names_no_route_that_renders_agent_state() -> None:
     # The one /agent/ in the file builds a tap target; it is never a cache key or a precache entry.
     assert source.count("/agent/") == 1
     assert '"/agent/" + text' in source
-    assert not [path for path in precache_paths() if path.startswith(("/agent", "/feed", "/push"))]
+    assert "/files" not in source
+    assert not [
+        path for path in precache_paths() if path.startswith(("/agent", "/feed", "/push", "/files"))
+    ]
 
 
 def test_the_only_cache_write_is_behind_the_allow_list_and_a_200() -> None:
@@ -96,6 +99,10 @@ def test_the_running_worker_never_answers_for_agent_state_and_never_stores_a_doc
     assert intercepted is not None
     for probe in ("feed", "chat", "pane", "pushKey", "postToFeed", "crossOrigin"):
         assert intercepted[probe] is False, probe
+    # A file's contents are never the worker's to answer: not a watch, an image or a search.
+    for probe in ("fileWatch", "fileImage", "fileFind"):
+        assert intercepted[probe] is False, probe
+    assert seen["fileNavBody"] == "body-of:/files/0123456789ab/file?path=a.py"
     for probe in ("stampedAsset", "unstampedAsset", "manifest", "document", "agentPage"):
         assert intercepted[probe] is True, probe
     assert seen["cachedDocumentKeys"] == []

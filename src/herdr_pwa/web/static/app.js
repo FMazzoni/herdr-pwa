@@ -917,6 +917,20 @@
     );
   });
 
+  /* ---- Files: a file opens on the line it was asked for ----
+   * Centred, so the lines around it are read with it; its chunk is laid out on the way. Again
+   * once loaded, since the browser's own jump to the #L anchor lands it under the bar. */
+  var fileAt = document.querySelector(".src [data-hp-at]");
+  function centreFileAt() {
+    fileAt.scrollIntoView({ block: "center" });
+  }
+  if (fileAt) {
+    centreFileAt();
+    window.addEventListener("load", function () {
+      window.setTimeout(centreFileAt, 0);
+    }, { once: true });
+  }
+
   /* ---- Seen: a finish the phone has shown is not news ---- */
 
   var seenHost = document.querySelector("[data-hp-seen]");

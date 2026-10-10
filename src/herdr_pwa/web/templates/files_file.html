@@ -1,0 +1,50 @@
+{% extends "files_base.html" %}
+{% from "md.html" import md %}
+{% block title %}{{ file.name }} &mdash; herdr{% endblock %}
+{% macro pager() %}
+{% set last = file.lines[-1].n if file.lines else file.first %}
+<nav class="pager" aria-label="Pages">
+  {% if file.page > 0 %}<a class="button pager__go" href="{{ nav.href('file', rel, line=(file.page - 1) * page_lines + 1) }}" {{ replace() }}>&lsaquo; Earlier</a>{% endif %}
+  <span class="pager__where">Lines {{ "{:,}".format(file.first) }}&ndash;{{ "{:,}".format(last) }}, page {{ file.page + 1 }} of {{ file.pages }}</span>
+  {% if file.page + 1 < file.pages %}<a class="button pager__go" href="{{ nav.href('file', rel, line=(file.page + 1) * page_lines + 1) }}" {{ replace() }}>Later &rsaquo;</a>{% endif %}
+</nav>
+{% endmacro %}
+{% block content %}
+{% set change = status.of(rel) %}
+{% set folder = rel.rpartition("/")[0] %}
+{{ f.crumbs(nav, root, folder, here=file.name) }}
+<p class="files__meta">
+  <span>{{ size(file.size) }}</span>
+  {%- if file.kind in ("code", "paged") and file.lines %}<span class="files__fact">{{ "{:,}".format(file.lines[-1].n) if file.kind == "code" else "paged" }}{{ " lines" if file.kind == "code" else "" }}</span>{% endif %}
+  {%- if file.language %}<span class="files__fact">{{ file.language }}</span>{% endif %}
+  {%- if change %}<span class="files__fact"><a class="files__change" href="{{ nav.href('diff', rel) }}" {{ replace() }}>{{ change.kind }}: see the change</a></span>{% endif -%}
+</p>
+{% if file.note %}{{ ui.banner("unsure", what=file.note) }}{% endif %}
+{% if file.kind == "secret" %}
+{% call ui.banner("held", what="This file may hold secrets", why="Its name is one secrets are kept under, so nothing in it was read.") %}{% endcall %}
+<p class="files__toggle"><a class="button" href="{{ nav.href('file', rel, reveal=1, line=at) }}" {{ replace() }}>Show it anyway</a></p>
+{% elif file.kind == "empty" %}
+<p class="empty">This file is empty.</p>
+{% elif file.kind == "binary" %}
+<p class="empty">A binary file of {{ size(file.size) }}; there is no text to show.</p>
+{% elif file.kind == "too_large" %}
+<p class="empty">At {{ size(file.size) }} this file is too large to show on a phone.</p>
+{% elif file.kind == "image" %}
+<img class="fileimg" src="{{ nav.href('raw', rel) }}" alt="{{ file.name }}">
+{% elif file.kind == "markdown" %}
+<div class="prose filemd">{{ md(file.prose) }}</div>
+<p class="files__toggle"><a href="{{ nav.href('file', rel, source=1) }}" {{ replace() }}>Show the source</a></p>
+{% else %}
+{% if file.kind == "paged" %}{{ pager() }}{% endif %}
+{# The pane's own switch and its remembered choice: unwrapped, a line keeps its indentation. #}
+<p class="agent__columns files__columns" hidden><button type="button" class="button button--toggle" data-hp-columns aria-pressed="false">Keep the columns</button></p>
+{% if source %}<p class="files__toggle"><a href="{{ nav.href('file', rel) }}" {{ replace() }}>Show it rendered</a></p>{% endif %}
+<div class="src" role="region" aria-label="{{ file.name }}">
+  {%- for chunk in file.chunks %}<div class="src__chunk">{% for l in chunk %}{{ f.line(l.n, l.runs, l.cut, at) }}{% endfor %}</div>{% endfor -%}
+</div>
+{% if file.kind == "paged" %}{{ pager() }}{% endif %}
+{% endif %}
+{% if file.kind not in ("secret", "too_large") %}
+{% with version = file.version, now = file.version %}{% include "files_watch.html" %}{% endwith %}
+{% endif %}
+{% endblock %}

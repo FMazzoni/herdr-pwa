@@ -257,3 +257,48 @@ def test_shell_variables_stay_text(text: str) -> None:
 def test_single_dollar_math_that_reads_as_math_renders(source: str) -> None:
     (paragraph,) = render_tree(f"so {source} holds")
     assert "math" in {n.tag for n in _walk(paragraph.children)}
+
+
+def _refs(text: str) -> list[str]:
+    return [n.href for n in _walk(render_tree(text)) if n.cls == "file-ref"]
+
+
+@pytest.mark.parametrize(
+    ("text", "refs"),
+    [
+        ("see src/app/server.py:42 next", ["path=src%2Fapp%2Fserver.py&line=42"]),
+        ("in `util.py:7` and README.md:3.", ["path=util.py&line=7", "path=README.md&line=3"]),
+        ("at ./tests/test_x.py:10:5, then", ["path=.%2Ftests%2Ftest_x.py&line=10"]),
+        ("at /home/me/p/a.rs:9 now", ["path=%2Fhome%2Fme%2Fp%2Fa.rs&line=9"]),
+        ("lines a.py:10-20 here", ["path=a.py&line=10"]),
+        ("example.com:443 and v1.2:3 and 10.0.0.1:80", []),
+        ("https://e.x/src/a.py:3 is a URL", []),
+        ("[a.py:3](https://e.x) is a link", []),
+        ("a.py:0 has no line zero, a.py:12x is not a line", []),
+        ("server.py with no line", []),
+        ("```\nsrc/a.py:3\n```", []),
+    ],
+)
+def test_a_path_and_line_becomes_a_reference_to_the_file(text: str, refs: list[str]) -> None:
+    assert _refs(text) == refs
+
+
+def test_a_file_reference_links_only_under_the_route_it_is_given() -> None:
+    nodes = render_tree("open src/app/server.py:42 now")
+    pages = Pages(Assets.load())
+    plain = pages.env.from_string('{% from "md.html" import md %}{{ md(nodes) }}')
+    linked = pages.env.from_string(
+        '{% from "md.html" import md %}{{ md(nodes, files="/agent/s/files") }}'
+    )
+    assert plain.render(nodes=nodes) == "<p>open src/app/server.py:42 now</p>"
+    assert linked.render(nodes=nodes) == (
+        '<p>open <a class="file-ref" href="/agent/s/files?path=src%2Fapp%2Fserver.py&amp;line=42" '
+        "data-hp-replace>src/app/server.py:42</a> now</p>"
+    )
+
+
+def test_every_other_link_is_still_http() -> None:
+    nodes = _walk(render_tree("see a/b.py:3 and https://e.x and `c/d.py:4`"))
+    links = [n.href for n in nodes if n.tag == "a" and n.cls != "file-ref"]
+    assert links == ["https://e.x"]
+    assert {n.cls for n in nodes if n.tag == "a"} == {"", "file-ref"}

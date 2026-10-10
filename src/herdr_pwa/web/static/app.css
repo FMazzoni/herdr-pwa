@@ -130,6 +130,14 @@
   --cell-min: 3em;
   /* A task list's box, drawn at the size of the text beside it. */
   --task-box: 0.95em;
+
+  /* The file explorer. A change's letter sits in a box this size, beside the path. */
+  --fbadge: 1.6rem;
+  /* What a chunk of file lines is guessed to take before it is laid out: CHUNK_LINES in view.py. */
+  --src-chunk: 400lh;
+  /* A diff's added and removed rows, tinted from --working and --blocked on --pane-ground. */
+  --diff-add: #10261F;
+  --diff-del: #2B1714;
 }
 
 * { box-sizing: border-box; }
@@ -327,7 +335,8 @@ html { -webkit-tap-highlight-color: transparent; }
 .agent__meta--line { flex-wrap: nowrap; overflow-wrap: normal; }
 .agent__facts { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .agent__fact::before { content: "\00B7"; margin: 0 var(--space-4); }
-.agent__meta--line .agent__end { justify-content: flex-end; padding-left: var(--space-8); }
+.agent__meta--line .agent__end { justify-content: flex-end; padding-left: var(--space-10); }
+.agent__files { display: inline-flex; align-items: center; min-height: var(--tap); padding-left: var(--space-8); }
 
 /* Chat | Pane as one segmented control at the top bar's far edge. Each half is a full 44px
    target; the control is drawn smaller inside them, so the bar is no taller than its links. */
@@ -402,17 +411,17 @@ html { -webkit-tap-highlight-color: transparent; }
 .prose .code__lang { min-width: 0; overflow: hidden; color: var(--ink-3); font: var(--text-small) var(--mono); white-space: nowrap; text-overflow: ellipsis; }
 .prose .code__copy { flex: none; min-width: var(--tap); min-height: var(--tap); padding: 0 var(--space-6); border: 0; background: transparent; color: var(--accent); font: var(--text-meta) var(--sans); cursor: pointer; -webkit-touch-callout: none; }
 .prose .code__copy:active { color: var(--ink); }
-.prose .tok-keyword { color: var(--code-keyword); }
-.prose .tok-string { color: var(--code-string); }
-.prose .tok-comment { color: var(--code-comment); font-style: italic; }
-.prose .tok-number { color: var(--code-number); }
-.prose .tok-function { color: var(--code-function); }
-.prose .tok-type { color: var(--code-type); }
-.prose .tok-builtin { color: var(--code-builtin); }
-.prose .tok-constant { color: var(--code-constant); }
-.prose .tok-variable { color: var(--code-variable); }
-.prose .tok-inserted { color: var(--code-inserted); }
-.prose .tok-deleted { color: var(--code-deleted); }
+.prose .tok-keyword, .src .tok-keyword { color: var(--code-keyword); }
+.prose .tok-string, .src .tok-string { color: var(--code-string); }
+.prose .tok-comment, .src .tok-comment { color: var(--code-comment); font-style: italic; }
+.prose .tok-number, .src .tok-number { color: var(--code-number); }
+.prose .tok-function, .src .tok-function { color: var(--code-function); }
+.prose .tok-type, .src .tok-type { color: var(--code-type); }
+.prose .tok-builtin, .src .tok-builtin { color: var(--code-builtin); }
+.prose .tok-constant, .src .tok-constant { color: var(--code-constant); }
+.prose .tok-variable, .src .tok-variable { color: var(--code-variable); }
+.prose .tok-inserted, .src .tok-inserted { color: var(--code-inserted); }
+.prose .tok-deleted, .src .tok-deleted { color: var(--code-deleted); }
 /* Display math is centred and scrolls sideways inside its own box when it is wider than the turn. */
 .prose .math-block { overflow-x: auto; overflow-y: hidden; margin: var(--space-6) 0; padding: var(--space-2) 0; }
 .prose math { font-size: 1.1em; }
@@ -673,6 +682,97 @@ textarea { resize: vertical; min-height: 4.5em; }
 .is-sending .leave { pointer-events: none; opacity: 0.4; }
 /* Text links that act are thumb targets too. */
 .actions a, a.leave, main > p > a:only-child { display: inline-flex; align-items: center; min-height: var(--tap); min-width: var(--tap); }
+
+/* ---- The file explorer ----
+   Changes, Files and Find share the top bar's segmented control; a file reads as wrapped,
+   numbered lines, laid out a chunk at a time, so a long file costs only what is on screen. */
+.tabs--3 { grid-template-columns: repeat(3, auto); }
+.tabs--3 .tab__label { padding: 0 var(--space-4); }
+/* Three segments and a worded back link do not fit a narrow bar at a large Text Size: the word
+   goes, the arrow and its accessible name stay. In em, so the break moves with the text. */
+.topbar:has(.tabs--3) { container-type: inline-size; }
+@container (width < 16em) {
+  .topbar__word { display: none; }
+}
+.files__title { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-body); font-weight: 600; }
+.files__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--space-5); min-height: var(--tap); margin: 0 0 var(--space-4); font-size: var(--text-small); color: var(--ink-3); }
+.files__meta > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.files__branch { color: var(--ink-2); font-family: var(--mono); }
+/* Inline-block, so a link's underline does not run under the dot before it. */
+.files__fact::before { content: "\00B7"; display: inline-block; margin-right: var(--space-5); color: var(--ink-3); }
+.files__change { display: inline-flex; align-items: center; min-height: var(--tap); }
+.files__note { margin: var(--space-4) 0; color: var(--ink-3); font-size: var(--text-meta); }
+.files__toggle { margin: var(--space-6) 0; font-size: var(--text-meta); }
+.files__toggle a { display: inline-flex; align-items: center; min-height: var(--tap); }
+.files__toggle a.button { text-decoration: none; }
+
+/* The path above a page: each folder a 44px link, wrapping rather than scrolling sideways. */
+/* Every folder gets the same padding, so the slashes sit evenly however short a name is; the
+   44px hit area is drawn by each link's ::after, centred on its word. */
+.crumbs { display: flex; flex-wrap: wrap; align-items: center; margin: 0 0 var(--space-2); font-size: var(--text-meta); overflow-wrap: anywhere; }
+.crumbs a { position: relative; display: inline-flex; align-items: center; min-height: var(--tap); padding: 0 var(--space-3); }
+.crumbs a::after { content: ""; position: absolute; top: 50%; left: 50%; width: max(100%, var(--tap)); height: var(--tap); transform: translate(-50%, -50%); }
+.crumbs > a:first-child { padding-left: 0; }
+.crumbs__here { padding-left: var(--space-3); }
+.crumbs__sep { color: var(--ink-3); }
+.crumbs__here { min-width: 0; font-weight: 600; }
+.fbadge--dir { font-family: var(--sans); }
+
+.flist { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); border-top: var(--line-1) solid var(--rule); }
+.flist > li { border-bottom: var(--line-1) solid var(--rule); }
+.frow { display: grid; grid-template-columns: var(--fbadge) minmax(0, 1fr) auto; align-items: center; gap: 0 var(--space-5); min-height: var(--tap); padding: var(--space-3) var(--space-2); color: var(--ink); text-decoration: none; -webkit-touch-callout: none; }
+.frow:active { background: var(--surface); }
+.frow__text { display: grid; grid-template-columns: minmax(0, 1fr); }
+.frow__name, .frow__dir { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.frow--dir .frow__name { font-weight: 600; }
+.frow__dir { font-size: var(--text-small); color: var(--ink-3); }
+.frow__aside { font-size: var(--text-small); color: var(--ink-3); white-space: nowrap; }
+.fbadge { display: grid; place-content: center; width: var(--fbadge); height: var(--fbadge); border: var(--line-1) solid var(--rule); border-radius: var(--radius-1); color: var(--ink-3); font: 600 var(--text-small)/1 var(--mono); }
+.fbadge--file { border-color: transparent; }
+.fbadge--dir { color: var(--accent); }
+.fbadge--modified { color: var(--unknown); border-color: var(--unknown); }
+.fbadge--added, .fbadge--new { color: var(--working); border-color: var(--working); }
+.fbadge--deleted, .fbadge--conflict { color: var(--blocked); border-color: var(--blocked); }
+.fbadge--renamed { color: var(--accent); border-color: var(--accent); }
+
+/* A file: a number column and the text, wrapped, so a line reflows to the phone instead of
+   panning sideways. A chunk off screen is not laid out until it scrolls near. */
+.src { margin: var(--space-4) 0; padding: var(--space-4) 0; background: var(--pane-ground); border-radius: var(--radius-2); font: var(--text-small)/1.45 var(--mono); color: var(--ansi-white); }
+.src__chunk { display: grid; grid-template-columns: max-content minmax(0, 1fr); content-visibility: auto; contain-intrinsic-size: auto var(--src-chunk); }
+.src--diff .src__chunk { content-visibility: visible; }
+.src__n { padding: 0 var(--space-4) 0 var(--space-5); color: var(--ink-3); text-align: right; font-variant-numeric: tabular-nums; -webkit-user-select: none; user-select: none; scroll-margin-top: calc(env(safe-area-inset-top) + var(--tap) + var(--space-10)); }
+.src__code { min-height: 1.45em; padding-right: var(--space-5); font: inherit; white-space: pre-wrap; overflow-wrap: anywhere; tab-size: 4; }
+.src__n--at, .src__code--at { background: var(--surface-2); }
+/* Keep the columns, as on the Pane: each line unwrapped at its own indentation, the box
+   scrolling sideways inside the gutter, the line numbers held at its left edge. */
+.files__columns { margin: 0 0 calc(-1 * var(--space-4)); }
+.is-columns .src { overflow-x: auto; }
+.is-columns .src__chunk { grid-template-columns: max-content max-content; width: max-content; min-width: 100%; }
+.is-columns .src__code { white-space: pre; overflow-wrap: normal; }
+.is-columns .src__n { position: sticky; left: 0; z-index: 1; background: var(--pane-ground); }
+.is-columns .src__n--at { background: var(--surface-2); }
+.src__n--at { color: var(--accent); }
+.src__cut { color: var(--ink-3); font-style: italic; }
+.src__hunk { grid-column: 1 / -1; margin: var(--space-3) 0; padding: var(--space-2) var(--space-5); background: var(--surface); color: var(--ink-3); overflow-wrap: anywhere; }
+.src__hunk:first-child { margin-top: 0; }
+.src__n--add, .src__code--add { background: var(--diff-add); }
+.src__n--del, .src__code--del { background: var(--diff-del); }
+.src__code--add { color: var(--code-inserted); }
+.src__code--del { color: var(--code-deleted); }
+.src__code--add::before { content: "+"; }
+.src__code--del::before { content: "\2212"; }
+.src__code--same::before { content: "\00A0"; }
+
+.pager { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-4); margin: var(--space-4) 0; font-size: var(--text-meta); color: var(--ink-2); }
+.pager__where { flex: 1 1 auto; min-width: 0; text-align: center; }
+.pager__go { display: inline-flex; align-items: center; text-decoration: none; }
+.fileimg { display: block; max-width: 100%; height: auto; margin: var(--space-6) auto; border-radius: var(--radius-2); background: var(--surface); }
+.filemd { margin: var(--space-6) 0; overflow-wrap: anywhere; }
+/* Said where the thumb is, at the bottom of the screen, without moving what is being read. */
+.filewatch { position: sticky; bottom: calc(env(safe-area-inset-bottom) + var(--space-4)); z-index: 1; }
+.filewatch .banner { margin: var(--space-6) 0 0; }
+.findform { margin-top: 0; }
+.findform input { width: 100%; }
 
 /* Asked for in Settings > Accessibility > Motion: nothing slides or fades, nothing scrolls smoothly. */
 @media (prefers-reduced-motion: reduce) {

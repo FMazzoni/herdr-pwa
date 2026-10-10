@@ -1,0 +1,23 @@
+{% extends "files_base.html" %}
+{% block title %}Find &mdash; {{ root.label }} &mdash; herdr{% endblock %}
+{% block content %}
+{% set action = "/files/" ~ root.id ~ "/find" %}
+<form class="form findform" method="get" action="{{ action }}" role="search">
+  {% if nav.back %}<input type="hidden" name="from" value="{{ nav.back }}">{% endif %}
+  {% call ui.field("Go to file") %}<input type="search" name="q" value="{{ q }}" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="search" placeholder="part of a name or path" hx-get="{{ action }}" hx-trigger="input changed delay:300ms, search" hx-target="#find-results" hx-select="#find-results" hx-swap="outerHTML" hx-include="closest form">{% endcall %}
+</form>
+<div id="find-results">
+  {% if q %}
+  <p class="files__note">{% if found.total > found.paths|length %}The best {{ found.paths|length }} of {{ found.total }} matches.{% elif found.total %}{{ found.total }} match{{ "" if found.total == 1 else "es" }}.{% else %}No file matches &ldquo;{{ q }}&rdquo;.{% endif %}</p>
+  {% if found.paths %}
+  <ul class="flist">
+    {% for path in found.paths %}
+    {% set parts = path.rpartition("/") %}
+    {% set change = status.of(path) %}
+    {{ f.row(nav.href("file", path), parts[2], dir=parts[0], kind=change.kind if change else none) }}
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% endif %}
+</div>
+{% endblock %}

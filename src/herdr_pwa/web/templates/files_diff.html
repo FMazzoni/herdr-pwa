@@ -1,0 +1,29 @@
+{% extends "files_base.html" %}
+{% block title %}{{ rel.rpartition("/")[2] }} changes &mdash; herdr{% endblock %}
+{% block content %}
+{% set parts = rel.rpartition("/") %}
+{{ f.crumbs(nav, root, parts[0], here=parts[2]) }}
+<p class="files__meta">
+  {%- if change %}<span>{{ change.kind }}</span>{% else %}<span>unchanged</span>{% endif -%}
+  {%- if not change or change.kind != "deleted" %}<span class="files__fact"><a class="files__change" href="{{ nav.href('file', rel, line=diff.first_changed if diff else 0) }}" {{ replace() }}>open the file</a></span>{% endif -%}
+</p>
+{% if gated %}
+{% call ui.banner("held", what="This file may hold secrets", why="Its name is one secrets are kept under, so its change was not read.") %}{% endcall %}
+<p class="files__toggle"><a class="button" href="{{ nav.href('diff', rel, reveal=1) }}" {{ replace() }}>Show it anyway</a></p>
+{% elif diff.note %}
+<p class="empty">{{ diff.note }}</p>
+{% elif not diff.lines %}
+<p class="empty">No change against the last commit.</p>
+{% else %}
+<div class="src src--diff" role="region" aria-label="Change to {{ parts[2] }}">
+  <div class="src__chunk">
+  {%- for d in diff.lines %}
+  {%- if d.kind == "hunk" %}<span class="src__hunk">{{ d.text }}{% if not d.text %}&middot;&middot;&middot;{% endif %}</span>
+  {%- else %}<span class="src__n src__n--{{ d.kind }}" aria-hidden="true">{{ d.new or d.old }}</span><code class="src__code src__code--{{ d.kind }}"><span class="sr-only">{{ {"add": "added: ", "del": "removed: ", "same": ""}[d.kind] }}</span>{{ d.text }}{% if d.cut %}<span class="src__cut"> &hellip; {{ "{:,}".format(d.cut) }} more characters</span>{% endif %}</code>
+  {%- endif %}
+  {%- endfor -%}
+  </div>
+</div>
+{% if diff.more %}<p class="files__note">{{ "{:,}".format(diff.more) }} more lines are not shown.</p>{% endif %}
+{% endif %}
+{% endblock %}

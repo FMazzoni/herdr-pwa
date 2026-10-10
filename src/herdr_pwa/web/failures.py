@@ -20,6 +20,8 @@ from herdr_pwa.engine.transport import (
     ProtocolMismatch,
     TargetNotFound,
 )
+from herdr_pwa.files.reader import NotReadable, OutsideRoot
+from herdr_pwa.files.roots import UnknownRoot
 from herdr_pwa.web.render import Pages
 from herdr_pwa.writes.refusal import Refused
 
@@ -58,6 +60,18 @@ FAILURES: Final[tuple[tuple[type[Exception], Failure], ...]] = (
     (
         AgentGone,
         Failure(404, "agent gone", "This agent is not in the herd any more."),
+    ),
+    (
+        UnknownRoot,
+        Failure(404, "no such repository", "No agent is working in that repository now."),
+    ),
+    (
+        OutsideRoot,
+        Failure(403, "outside the repository", "That path leads outside the repository."),
+    ),
+    (
+        NotReadable,
+        Failure(404, "not found", "Nothing readable is at that path."),
     ),
     (
         TargetNotFound,

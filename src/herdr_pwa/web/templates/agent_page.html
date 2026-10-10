@@ -24,6 +24,8 @@
       {%- if agent.workspace %}<span class="agent__fact">{{ agent.workspace }}</span>{% endif -%}
       <span class="agent__fact">{{ agent.target }}</span>
     </span>
+    {# The files the agent stands in; End keeps the far edge, apart from it. #}
+    <a class="leave agent__files" href="{{ base }}/files" {{ replace() }}>Files</a>
     <a class="leave agent__end" href="{{ base }}/close" {{ replace() }}>End</a>
   </p>
   {% if first %}{{ ui.banner(first.kind, first.what, first.why or none) }}{% endif %}

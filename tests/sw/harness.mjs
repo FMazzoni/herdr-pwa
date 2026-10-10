@@ -212,6 +212,9 @@ const probes = {
   manifest: req("/manifest.webmanifest"),
   crossOrigin: new FakeRequest("https://evil.example/x.css"),
   postToFeed: req("/feed", "POST"),
+  fileWatch: req("/files/0123456789ab/watch?path=a.py&v=1"),
+  fileImage: req("/files/0123456789ab/raw?path=logo.png"),
+  fileFind: req("/files/0123456789ab/find?q=a"),
 };
 const intercepted = {};
 for (const [name, request] of Object.entries(probes)) {
@@ -222,9 +225,13 @@ for (const [name, request] of Object.entries(probes)) {
 /* --- a navigation is passed through and NEVER stored -------------------- */
 const onlineNav = await dispatch("fetch", makeEvent(nav("/")));
 const onlineNavBody = (await onlineNav.response).body;
-const cachedDocumentKeys = [...(await shell()).keys()].filter(
-  (k) => new URL(k).pathname === "/" || new URL(k).pathname.startsWith("/agent/"),
-);
+/* A file is the repository's contents: opened, it passes through and is never kept either. */
+const fileNav = await dispatch("fetch", makeEvent(nav("/files/0123456789ab/file?path=a.py")));
+const fileNavBody = (await fileNav.response).body;
+const cachedDocumentKeys = [...(await shell()).keys()].filter((k) => {
+  const path = new URL(k).pathname;
+  return path === "/" || path.startsWith("/agent/") || path.startsWith("/files");
+});
 
 /* --- the cache.put is inside waitUntil, not fire-and-forget ------------- */
 const assetEvent = await dispatch("fetch", makeEvent(req("/static/app.css?v=1")));
@@ -421,6 +428,7 @@ console.log(JSON.stringify({
   precached,
   installCacheModes,
   intercepted,
+  fileNavBody,
   onlineNavBody,
   cachedDocumentKeys,
   cachePutIsAwaited,

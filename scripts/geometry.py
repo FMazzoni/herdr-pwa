@@ -60,6 +60,11 @@ SCROLL_ALLOWED: dict[str, str] = {
         "the terminal mirror with Keep the columns on: the toggle asks for the terminal's own "
         "line breaks, so the pane scrolls inside its box, which starts inside the gutter"
     ),
+    ".is-columns .src": (
+        "a file with Keep the columns on: the toggle asks for each line at its own "
+        "indentation, unwrapped, so the file scrolls inside its box, which starts inside the "
+        "gutter, with its line numbers held at the left edge"
+    ),
     ".prose .table-scroll": (
         "a table in agent prose wider than the turn: its cells wrap only between words, so a "
         "table of many columns scrolls inside its own box, which starts inside the turn"
@@ -80,6 +85,11 @@ SCROLL_ALLOWED: dict[str, str] = {
 }
 
 TAP_ALLOWED: dict[str, str] = {
+    ".crumbs a": (
+        "a folder in the path above a file: a short name like src is narrower than 44px, so "
+        "its 44px hit area is drawn by its own ::after, centred on the word; padding the box "
+        "to 44px instead spaced the slashes unevenly"
+    ),
     "label input[type=checkbox]": (
         "a checkbox inside its own label: tapping anywhere on the label toggles it, and the "
         "label row is held to 44px, so the drawn box can stay the size iOS draws one"

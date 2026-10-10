@@ -1,0 +1,9 @@
+{% import "_ui.html" as ui %}
+{% from "_nav.html" import replace %}
+{% set url = nav.href("watch", rel, v=version) %}
+{# Polled at the feed's quiet cadence; it says so when the file moved, and never redraws the file. #}
+<div id="file-watch" class="filewatch" data-hp-poll="{{ url }}" hx-get="{{ url }}" hx-target="this" hx-swap="outerHTML" hx-trigger="every {{ cadence }}s">
+  {% if now != version %}
+  {% call ui.banner("stale", what="Changed on disk" if now else "Gone from disk", why="since this page was drawn") %}{% if now %}<a class="banner__go" href="{{ nav.href('file', rel) }}" {{ replace() }}>Reload</a>{% endif %}{% endcall %}
+  {% endif %}
+</div>
