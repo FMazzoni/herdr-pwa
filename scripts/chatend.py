@@ -3,17 +3,23 @@ lines while the reader is at the end, and leaves a reader who scrolled up where 
 agent that is asking opens at the top instead, with its question on the first screen. A tool's
 result the reader opened stays open across a poll, and the page does not move under them. A
 burst of tool calls lands folded, its failure in plain sight, and a fold the reader opened
-stays open while calls are added to it."""
+stays open while calls are added to it.
 
+The chat is paged by messages and live over an event stream: a tool-heavy transcript opens on
+twenty messages, "Load earlier" lands the page above without moving the reader, one change is
+one refresh, and a lost stream falls back to polling and then recovers."""
+
+import json
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
 from firefox import Marionette, phone_window
-from starlette.types import ASGIApp
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from herdr_pwa.jsontypes import JsonObject
+from herdr_pwa.web.events import Hub
 from tests.catalogue import (
     AGENT,
     BLOCKED,
@@ -25,6 +31,7 @@ from tests.catalogue import (
     long_chat,
     long_pane,
     runner,
+    tool_heavy_chat,
 )
 from tests.webfakes import (
     READ,
@@ -380,6 +387,232 @@ def burst(driver: Marionette, base: str, tab: Tab, _rig: Rig, home: Path) -> lis
     return problems + _fold_problems(tab.name, after, opened=True)
 
 
+# Paging and the event stream.
+
+PAGE_MESSAGES = 20
+# The rig's stream: a quick watcher, and a fallback poll short enough to see inside a walk.
+LIVE_SETTINGS: dict[str, object] = {"events_interval": 0.2, "events_fallback": 2}
+# Longer than one fallback poll: a page that polls while its stream is up shows here.
+QUIET_SECONDS = 3.0
+# How long a second refresh would take to land after the first.
+SECOND_SECONDS = 1.5
+OUTAGE_SECONDS = 6.0
+# Three fallback polls fit in the outage; two leave room for the drop to be noticed.
+MIN_FALLBACK_POLLS = 2
+RECONNECT_SECONDS = 25.0
+
+COUNT_CHAT = r"""
+window.__hpChat = 0;
+if (!window.__hpCounting) {
+  window.__hpCounting = true;
+  document.addEventListener("htmx:afterRequest", (event) => {
+    const path = (event.detail.pathInfo && event.detail.pathInfo.requestPath) || "";
+    if (path.indexOf("/chat") !== -1) window.__hpChat += 1;
+  });
+}
+return true;
+"""
+READ_COUNT = "return window.__hpChat || 0;"
+# The first message wholly in view under the top bar, how many there are, and whether the
+# reader is at the end as well as at the top.
+EARLIER = r"""
+const busy = document.querySelector(".htmx-request, .htmx-swapping, .htmx-settling");
+if (busy || document.readyState !== "complete") return null;
+const under = document.querySelector(".topbar").getBoundingClientRect().bottom;
+const all = [...document.querySelectorAll("#agent-view article.turn[data-hp-key]")];
+const first = all.find((a) => a.getBoundingClientRect().top >= under);
+const [key] = arguments;
+const held = key ? all.find((a) => a.getAttribute("data-hp-key") === key) : first;
+const units = document.querySelectorAll("#agent-view .turn");
+const last = units[units.length - 1];
+const dock = document.getElementById("composer").getBoundingClientRect().top;
+return {
+  count: all.length,
+  key: held ? held.getAttribute("data-hp-key") : null,
+  top: held ? held.getBoundingClientRect().top : null,
+  atEnd: !!last && last.getBoundingClientRect().bottom <= dock + 120,
+  more: !!document.querySelector(".chat__earlier-button"),
+};
+"""
+
+
+def _hub(rig: Rig) -> Hub:
+    hub = getattr(rig.http.app, "state").events  # noqa: B009
+    if not isinstance(hub, Hub):
+        raise TypeError("the app carries no event hub")
+    return hub
+
+
+def _until(done: Callable[[], bool], seconds: float = WAIT_SECONDS) -> bool:
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        if done():
+            return True
+        time.sleep(0.1)
+    return False
+
+
+def _append(home: Path, text: str, uuid: str) -> str:
+    """Append one agent reply to the transcript, the way the agent writes it."""
+    log = next((home / "transcripts").rglob(f"{WORKING_SESSION}.jsonl"))
+    with log.open("a") as handle:
+        handle.write(json.dumps(assistant_says(text, uuid=uuid)) + "\n")
+    return text
+
+
+def _count(driver: Marionette) -> int:
+    found = driver.script(READ_COUNT)
+    return int(found) if isinstance(found, int | float) else -1
+
+
+def _open_live(driver: Marionette, base: str, tab: Tab, rig: Rig) -> list[str]:
+    driver.send("WebDriver:Navigate", {"url": base + tab.state.path})
+    if not _wait_for(driver, tab.newest):
+        return [f"{tab.name}: never drew its newest turn"]
+    if not _until(lambda: _hub(rig).listeners >= 1):
+        return [f"{tab.name}: the page never opened its event stream"]
+    time.sleep(SETTLE_SECONDS)
+    driver.script(COUNT_CHAT)
+    return []
+
+
+def twenty(driver: Marionette, base: str, tab: Tab, _rig: Rig, _home: Path) -> list[str]:
+    """A tool-heavy transcript opens on twenty messages, with a way to the page above."""
+    driver.send("WebDriver:Navigate", {"url": base + tab.state.path})
+    if not _wait_for(driver, tab.newest):
+        return [f"{tab.name}: never drew its newest turn"]
+    seen = driver.script(EARLIER, "")
+    if not isinstance(seen, dict):
+        return [f"{tab.name}: never settled"]
+    problems: list[str] = []
+    if seen.get("count") != PAGE_MESSAGES:
+        problems.append(f"{tab.name}: opened on {seen.get('count')} messages, not {PAGE_MESSAGES}")
+    if not seen.get("more"):
+        problems.append(f"{tab.name}: offers no way to the earlier messages")
+    return problems
+
+
+def earlier(driver: Marionette, base: str, tab: Tab, _rig: Rig, _home: Path) -> list[str]:
+    """Load earlier lands a page above the reader, who stays on the message they were reading,
+    even when the page was short enough that the reader was also at the end."""
+    driver.send("WebDriver:Navigate", {"url": base + tab.state.path})
+    if not _wait_for(driver, tab.newest):
+        return [f"{tab.name}: never drew its newest turn"]
+    driver.script("window.scrollTo(0, 0);")
+    time.sleep(SETTLE_SECONDS)
+    before = driver.script(EARLIER, "")
+    if not isinstance(before, dict) or not before.get("key") or not before.get("more"):
+        return [f"{tab.name}: no message in view under a Load earlier button"]
+    if not before.get("atEnd"):
+        return [f"{tab.name}: the first page is not at its end, so following it proves nothing"]
+    driver.script(_click_earlier())
+    key = str(before.get("key"))
+    grown: dict[str, object] = {}
+
+    def landed() -> bool:
+        nonlocal grown
+        found = driver.script(EARLIER, key)
+        grown = found if isinstance(found, dict) else {}
+        return int(str(grown.get("count") or 0)) > int(str(before.get("count") or 0))
+
+    if not _until(landed):
+        return [f"{tab.name}: Load earlier never landed a page"]
+    time.sleep(SETTLE_SECONDS)
+    after = driver.script(EARLIER, key)
+    after = after if isinstance(after, dict) else {}
+    problems: list[str] = []
+    want = 2 * int(str(before.get("count")))
+    if after.get("count") != want:
+        problems.append(
+            f"{tab.name}: Load earlier showed {after.get('count')} messages, not {want}"
+        )
+    start, end = _num(before, "top"), _num(after, "top")
+    if not abs(end - start) <= DRIFT:
+        problems.append(
+            f"{tab.name}: Load earlier moved the message being read from {start:.0f}px to {end:.0f}px"
+        )
+    return problems
+
+
+def _click_earlier() -> str:
+    return 'document.querySelector(".chat__earlier-button").click(); return true;'
+
+
+def refreshed_once(driver: Marionette, base: str, tab: Tab, rig: Rig, home: Path) -> list[str]:
+    """A live page does not poll, and one change to the transcript is exactly one refresh."""
+    problems = _open_live(driver, base, tab, rig)
+    if problems:
+        return problems
+    time.sleep(QUIET_SECONDS)
+    if _count(driver):
+        problems.append(
+            f"{tab.name}: a live page fetched its chat {_count(driver)}x with no change"
+        )
+    driver.script(COUNT_CHAT)
+    newest = _append(home, "Event reply one.", "ev1")
+    if not _wait_for(driver, newest):
+        return [*problems, f"{tab.name}: the change never reached the page"]
+    time.sleep(SECOND_SECONDS)
+    if _count(driver) != 1:
+        problems.append(f"{tab.name}: one change made {_count(driver)} chat refreshes, not 1")
+    return problems
+
+
+def _refusing(app: ASGIApp) -> ASGIApp:
+    """``app``, with its event stream down."""
+
+    async def down(scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http" and scope["path"] == "/events":
+            await send({"type": "http.response.start", "status": 503, "headers": []})
+            await send({"type": "http.response.body", "body": b""})
+            return
+        await app(scope, receive, send)
+
+    return down
+
+
+def falls_back(
+    mount: Callable[[ASGIApp], None],
+) -> Callable[[Marionette, str, Tab, Rig, Path], list[str]]:
+    """The stream-loss walk, able to take the stream down by remounting the app."""
+
+    def walk(driver: Marionette, base: str, tab: Tab, rig: Rig, home: Path) -> list[str]:
+        """With the stream gone the page polls; once it is back the polling stops."""
+        problems = _open_live(driver, base, tab, rig)
+        if problems:
+            return problems
+        hub = _hub(rig)
+        mount(_refusing(rig.http.app))
+        hub.drop_all()
+        time.sleep(OUTAGE_SECONDS)
+        if _count(driver) < MIN_FALLBACK_POLLS:
+            problems.append(f"{tab.name}: with the stream down the page polled {_count(driver)}x")
+        newest = _append(home, "Polled reply one.", "pl1")
+        if not _wait_for(driver, newest):
+            problems.append(f"{tab.name}: a change never arrived while the stream was down")
+        mount(rig.http.app)
+        if not _until(lambda: hub.listeners >= 1, RECONNECT_SECONDS):
+            return [*problems, f"{tab.name}: the stream never came back"]
+        time.sleep(SECOND_SECONDS)
+        driver.script(COUNT_CHAT)
+        time.sleep(QUIET_SECONDS)
+        if _count(driver):
+            problems.append(
+                f"{tab.name}: still polling ({_count(driver)}x) after the stream came back"
+            )
+        newest = _append(home, "Recovered reply one.", "rc1")
+        if not _wait_for(driver, newest):
+            return [*problems, f"{tab.name}: the recovered stream never brought a change"]
+        time.sleep(SECOND_SECONDS)
+        if _count(driver) != 1:
+            problems.append(
+                f"{tab.name}: after recovery one change made {_count(driver)} refreshes"
+            )
+        return problems
+
+    return walk
+
+
 def _tabs() -> tuple[tuple[Tab, Callable[[Marionette, str, Tab, Rig, Path], list[str]]], ...]:
     blocked = runner(lambda: herd(**BLOCKED), long_pane(LINES) + capture(MENU))
     chat = State("chat", f"{AGENT}?tab=chat", "", runner(snapshot_frame), long_chat(TURNS))
@@ -390,7 +623,21 @@ def _tabs() -> tuple[tuple[Tab, Callable[[Marionette, str, Tab, Rig, Path], list
     last_line = f"step {LINES - 1:03d}"
     tool = State("tool result", chat.path, "", runner(snapshot_frame), _tool_chat(TURNS))
     folds = State("tool burst", chat.path, "", runner(snapshot_frame), _burst_chat(BURST))
+    heavy = State("tool heavy", chat.path, "", runner(snapshot_frame), tool_heavy_chat())
+    short = State(
+        "short page",
+        chat.path,
+        "",
+        runner(snapshot_frame),
+        tool_heavy_chat(),
+        settings={"chat_messages": 3},
+    )
+    live = State("live chat", chat.path, "", runner(snapshot_frame), long_chat(TURNS))
+    live = State(live.name, live.path, "", live.replies, live.transcript, settings=LIVE_SETTINGS)
     return (
+        (Tab("twenty messages", heavy, "tool calls", _say), twenty),
+        (Tab("load earlier", short, "tool calls", _say), earlier),
+        (Tab("one refresh", live, last_reply, _say), refreshed_once),
         (Tab("tool burst", folds, "Reply after the burst", _say), burst),
         (Tab("tool result", tool, "Reply after the tests", _say), kept_open),
         (Tab("chat end", chat, last_reply, _say), follow),
@@ -405,7 +652,16 @@ def run(
 ) -> list[str]:
     """Every walk on a fresh app in its own phone window; empty when each tab keeps its end."""
     problems: list[str] = []
-    for tab, walk in _tabs():
+    chat = State("stream loss", f"{AGENT}?tab=chat", "", runner(snapshot_frame), long_chat(TURNS))
+    lost = State(chat.name, chat.path, "", chat.replies, chat.transcript, settings=LIVE_SETTINGS)
+    walks = [
+        *_tabs(),
+        (
+            Tab("stream loss", lost, f"Reply {TURNS - 1}:", _say),
+            falls_back(mount),
+        ),
+    ]
+    for tab, walk in walks:
         home = scratch / f"end-{tab.name.replace(' ', '-')}"
         home.mkdir(parents=True)
         rig = build(tab.state, home)

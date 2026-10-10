@@ -4,6 +4,7 @@ import argparse
 import logging
 import sys
 from collections.abc import Callable
+from typing import Final
 
 import uvicorn
 
@@ -80,6 +81,10 @@ def pair(
     return 0 if result.served else 1
 
 
+# Under the unit's TimeoutStopSec, so open streams are cut rather than the process killed.
+SHUTDOWN_GRACE: Final = 3
+
+
 def serve(settings: Settings, port: int | None) -> None:
     """Refuse an unsafe assumed login, then serve the app."""
     access = auth.Access(tailnet_login=settings.tailnet_login, assume_login=settings.assume_login)
@@ -87,7 +92,13 @@ def serve(settings: Settings, port: int | None) -> None:
     warning = auth.unpinned_warning(access)
     if warning:
         log.warning(warning)
-    uvicorn.run(create_app(settings), host=settings.host, port=port or settings.port)
+    uvicorn.run(
+        create_app(settings),
+        host=settings.host,
+        port=port or settings.port,
+        # An event stream never ends on its own; without this a restart waits on every phone.
+        timeout_graceful_shutdown=SHUTDOWN_GRACE,
+    )
 
 
 def device_report(

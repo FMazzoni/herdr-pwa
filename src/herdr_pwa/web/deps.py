@@ -12,6 +12,7 @@ from herdr_pwa.engine.cache import CachedValue, SnapshotCache
 from herdr_pwa.engine.client import HerdrClient
 from herdr_pwa.engine.config import EngineSettings
 from herdr_pwa.engine.model import Snapshot
+from herdr_pwa.engine.tail import TailCache
 from herdr_pwa.settings import Settings
 from herdr_pwa.web.failures import PageHidden
 from herdr_pwa.web.render import Pages
@@ -34,6 +35,8 @@ class WebState:
     clock: Callable[[], float] = field(default=time.monotonic)
     # What a write's read-back waits run on; injected so route tests never sleep.
     pacing: Pacing = field(default_factory=Pacing)
+    # The viewed transcripts, held parsed so a refresh reads only what was appended.
+    tails: TailCache = field(default_factory=TailCache)
 
     def snapshot(self) -> CachedValue[Snapshot]:
         """The shared snapshot, fetched only if nobody else is fetching it."""

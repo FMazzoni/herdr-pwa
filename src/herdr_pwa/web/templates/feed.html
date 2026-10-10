@@ -9,7 +9,9 @@
      hx-get="{{ src }}"
      hx-target="this"
      hx-swap="outerHTML"
-     hx-trigger="every {{ herd.cadence }}s, hp:poke from:body">
+     data-hp-topic="feed"
+     {#- The stream says when the herd changed; a runner that is not answering is retried here. #}
+     hx-trigger="{% if f.condition.value != 'live' %}every {{ herd.cadence }}s, {% endif %}hp:stale, hp:poke from:body">
   {% if f.condition.value == "offline" %}
   {% call ui.banner("offline", what="runner offline") %}<span class="banner__why">no contact for over a minute &middot; last seen {{ f.age_label }}</span>{% endcall %}
   {% elif f.condition.value == "degraded" %}

@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Final
 
+from pydantic import JsonValue
+
 from herdr_pwa.engine.transport import EngineUnavailable
 from herdr_pwa.jsontypes import JsonObject, as_object
 from tests.filefakes import make_repo, stand_in
@@ -306,6 +308,41 @@ def long_chat(turns: int = 24) -> list[JsonObject]:
     return records
 
 
+def _tool_record(kind: str, uuid: str, content: JsonValue) -> JsonObject:
+    message: JsonObject = {"role": kind, "content": content}
+    return {"type": kind, "uuid": uuid, "timestamp": "2026-10-10T10:00:00.000Z", "message": message}
+
+
+def tool_heavy_chat(messages: int = 60, calls: int = 6) -> list[JsonObject]:
+    """An agent at work: every message followed by a burst of tool calls and their results."""
+    records: list[JsonObject] = []
+    n = 0
+    for m in range(messages):
+        if m % 5 == 0:
+            records.append(human_says(f"Prompt {m}: keep going on the migration.", uuid=f"h{m}"))
+        else:
+            text = f"Message {m}: the step landed; running the next check."
+            records.append(assistant_says(text, uuid=f"a{m}"))
+        for _ in range(calls):
+            n += 1
+            use: JsonObject = {
+                "type": "tool_use",
+                "id": f"tu{n}",
+                "name": "Bash",
+                "input": {"command": f"pytest -q tests/test_step_{n}.py"},
+            }
+            result: JsonObject = {
+                "type": "tool_result",
+                "tool_use_id": f"tu{n}",
+                "content": f"{n} passed in 0.{n % 10}s",
+            }
+            records += [
+                _tool_record("assistant", f"c{n}", [use]),
+                _tool_record("user", f"r{n}", [result]),
+            ]
+    return records
+
+
 def long_pane(lines: int = 120) -> str:
     """Terminal scrollback several screens tall, numbered so the newest line is easy to find."""
     return "".join(f"\x1b[32m$\x1b[0m step {n:03d}: applied to the cluster\n" for n in range(lines))
@@ -586,6 +623,24 @@ AGENT_PAGE: Final = (
         runner(_stressed),
         long_chat(),
         title="Chat: a transcript several screens tall, opened on its newest turn",
+    ),
+    State(
+        "chat-tools",
+        f"{AGENT}?tab=chat",
+        ".chat .turn--agent",
+        runner(_stressed),
+        tool_heavy_chat(),
+        title="Chat: a tool-heavy transcript, twenty messages with their tool calls between them",
+    ),
+    State(
+        "chat-older",
+        f"{AGENT}?tab=chat",
+        '.chat article[data-hp-key="turn:h20"]',
+        runner(_stressed),
+        tool_heavy_chat(),
+        title="Chat: one earlier page loaded above the newest, the reader's place kept",
+        armed=".chat__earlier-button",
+        act=_click(".chat__earlier-button"),
     ),
     State(
         "chat-markdown",
@@ -1014,6 +1069,7 @@ V2_ONLY: Final = (
     "agent-unreachable",
     "agent-chat-composing",
     "chat-long",
+    "chat-tools",
     "chat-markdown",
     "chat-blocked",
     "pane-long",
@@ -1033,7 +1089,6 @@ NOT_YET: Final[dict[str, str]] = {
     "usage-pushed": "no v2 feature yet: no usage panel",
     "usage-opencode": "no v2 feature yet: no usage panel",
     "usage-unpushed": "no v2 feature yet: no usage panel",
-    "chat-older": "no v2 feature yet: chat has no older-history paging",
     "chat-may-have-moved": "no v2 feature yet: chat has no moved-transcript note",
     "agent-answer-waiting": "no v2 feature yet: the answer region does not collapse",
     "agent-answer-unearned": _SCREEN,

@@ -1,6 +1,7 @@
 /* herdr-pwa: the only hand-written client script. It never builds markup from
- * strings and never evals; htmx trigger filters would need eval, so the server
- * stops a hidden page's polls (HTTP 286) and this script re-arms them. */
+ * strings and never evals. Regions are redrawn when the event stream says they
+ * went stale; htmx trigger filters would need eval, so the server stops a hidden
+ * page's polls (HTTP 286) and this script re-arms them. */
 (function () {
   "use strict";
 
@@ -53,15 +54,54 @@
     return event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
   }
 
+  /* A request still open when a navigation starts keeps this page out of the back-forward cache
+   * (Firefox decides before pagehide), so an open event stream is closed first and the page
+   * leaves a moment later. */
+  var LEAVE_MS = 50;
+
+  function leave(href, replace) {
+    var go = function () {
+      if (replace) {
+        window.location.replace(href);
+      } else {
+        window.location.assign(href);
+      }
+    };
+    if (stream) {
+      closeStream();
+      window.setTimeout(go, LEAVE_MS);
+    } else {
+      go();
+    }
+  }
+
+  // A plain tap on a link to another page of this app, not a new tab, a download or a #jump.
+  function pageLink(event) {
+    var link = event.target && event.target.closest ? event.target.closest("a[href]") : null;
+    if (!link || !plainClick(event) || link.target || link.hasAttribute("download")) {
+      return null;
+    }
+    var here = window.location;
+    if (link.origin !== here.origin || (link.pathname === here.pathname && link.search === here.search && link.hash)) {
+      return null;
+    }
+    return link;
+  }
+
   document.addEventListener("click", function (event) {
-    var link = event.target && event.target.closest ? event.target.closest("a[data-hp-replace]") : null;
-    if (!link || !plainClick(event)) {
+    var link = pageLink(event);
+    if (!link || event.defaultPrevented) {
       return;
     }
-    event.preventDefault();
-    /* Leaving mid-write would hide whether it landed. */
-    if (!document.body.classList.contains("is-sending")) {
-      window.location.replace(link.href);
+    if (link.hasAttribute("data-hp-replace")) {
+      event.preventDefault();
+      /* Leaving mid-write would hide whether it landed. */
+      if (!document.body.classList.contains("is-sending")) {
+        leave(link.href, true);
+      }
+    } else if (stream) {
+      event.preventDefault();
+      leave(link.href, false);
     }
   });
 
@@ -69,7 +109,7 @@
   document.addEventListener("hp:opened", function (event) {
     var where = event.detail && event.detail.where;
     if (typeof where === "string" && where.charAt(0) === "/" && where.charAt(1) !== "/") {
-      window.location.replace(where);
+      leave(where, true);
     }
   });
 
@@ -195,7 +235,176 @@
   document.addEventListener("htmx:timeout", lost);
   document.addEventListener("htmx:responseError", lost);
 
-  document.addEventListener("visibilitychange", rearm);
+  /* ---- Live updates: the server names a stale region, and the region fetches itself ----
+   * One stream per page names the regions on it (data-hp-topic). An event carries only a
+   * topic; the region then asks its own route, so every swap rule in this file still applies.
+   * While the stream is down the regions poll slowly and the stream reconnects with backoff.
+   * iOS drops a hidden page's connection, so the page closes it when hidden and opens it again
+   * on return, with the one refresh rearm() makes. */
+  var FALLBACK_MS = (Number(document.body.getAttribute("data-hp-fallback")) || 20) * 1000;
+  var RETRY_FIRST_MS = 1000;
+  var RETRY_MAX_MS = 30000;
+  var stream = null;
+  var live = false;
+  var retryMs = RETRY_FIRST_MS;
+  var retryTimer = 0;
+  var fallbackTimer = 0;
+  var missed = false;
+
+  function topicNodes() {
+    return document.querySelectorAll("[data-hp-topic]");
+  }
+
+  function streamTopics() {
+    var nodes = topicNodes();
+    var found = [];
+    for (var i = 0; i < nodes.length; i++) {
+      var topic = nodes[i].getAttribute("data-hp-topic");
+      if (topic && found.indexOf(topic) === -1) {
+        found.push(topic);
+      }
+    }
+    return found;
+  }
+
+  // Each region named by the topic (or every region) fetches itself, once.
+  function stale(topic) {
+    if (typeof window.htmx === "undefined") {
+      return;
+    }
+    var nodes = topicNodes();
+    for (var i = 0; i < nodes.length; i++) {
+      if (topic === null || nodes[i].getAttribute("data-hp-topic") === topic) {
+        window.htmx.trigger(nodes[i], "hp:stale");
+      }
+    }
+  }
+
+  function polling(on) {
+    if (on && !fallbackTimer) {
+      fallbackTimer = window.setInterval(function () {
+        if (!document.hidden && !live) {
+          stale(null);
+        }
+      }, FALLBACK_MS);
+    } else if (!on && fallbackTimer) {
+      window.clearInterval(fallbackTimer);
+      fallbackTimer = 0;
+    }
+  }
+
+  function closeStream() {
+    var mine = stream;
+    // Cleared first: aborting fires loadend, which must not read as a lost stream.
+    stream = null;
+    live = false;
+    if (mine) {
+      mine.abort();
+    }
+  }
+
+  function streamOpened() {
+    live = true;
+    retryMs = RETRY_FIRST_MS;
+    polling(false);
+    // Whatever changed while the stream was down was told to nobody.
+    if (missed) {
+      missed = false;
+      stale(null);
+    }
+  }
+
+  function lostStream(mine) {
+    if (stream !== mine) {
+      return;
+    }
+    stream = null;
+    live = false;
+    missed = true;
+    polling(true);
+    if (!document.hidden) {
+      retryTimer = window.setTimeout(connect, retryMs);
+      retryMs = Math.min(retryMs * 2, RETRY_MAX_MS);
+    }
+  }
+
+  // One server-sent event block: only "stale" is acted on, and its data is a topic name.
+  function heard(block) {
+    var kind = "message";
+    var data = "";
+    block.split("\n").forEach(function (line) {
+      if (line.indexOf("event:") === 0) {
+        kind = line.slice(6).trim();
+      } else if (line.indexOf("data:") === 0) {
+        data = line.slice(5).trim();
+      }
+    });
+    if (kind === "stale" && data) {
+      stale(data);
+    }
+  }
+
+  // Each whole event block in what has arrived; the rest waits for the next progress.
+  function heardSoFar(text, from) {
+    var cut = text.indexOf("\n\n", from);
+    while (cut !== -1) {
+      heard(text.slice(from, cut));
+      from = cut + 2;
+      cut = text.indexOf("\n\n", from);
+    }
+    return from;
+  }
+
+  /* The stream is an XMLHttpRequest read as it arrives: no EventSource reconnecting on its own
+   * behind the backoff, and abort() ends it at once when the page leaves (see leave()). */
+  function connect() {
+    window.clearTimeout(retryTimer);
+    retryTimer = 0;
+    if (stream || document.hidden) {
+      return;
+    }
+    var topics = streamTopics();
+    if (!topics.length) {
+      return;
+    }
+    var query = topics.map(function (topic) {
+      return "topic=" + encodeURIComponent(topic);
+    }).join("&");
+    var xhr = new XMLHttpRequest();
+    var mine = { abort: function () { xhr.abort(); } };
+    var read = 0;
+    stream = mine;
+    xhr.open("GET", "/events?" + query);
+    xhr.setRequestHeader("Accept", "text/event-stream");
+    xhr.onreadystatechange = function () {
+      if (stream === mine && xhr.readyState >= 2 && xhr.status === 200 && !live) {
+        streamOpened();
+      }
+    };
+    xhr.onprogress = function () {
+      if (stream === mine && xhr.status === 200) {
+        read = heardSoFar(xhr.responseText, read);
+      }
+    };
+    xhr.onloadend = function () {
+      lostStream(mine);
+    };
+    xhr.send();
+  }
+
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden) {
+      closeStream();
+      return;
+    }
+    // rearm() is the one refresh on return; the reopened stream owes none.
+    missed = false;
+    rearm();
+    connect();
+  });
+  document.addEventListener("DOMContentLoaded", connect);
+  window.addEventListener("pagehide", closeStream);
+
   /* bfcache restore and iOS standalone resume skip visibilitychange. The restored
    * DOM is whatever was on screen when the page was left, so it says so until the
    * re-fetch replaces it. */
@@ -206,7 +415,9 @@
         nodes[i].classList.add("is-stale");
       }
       document.body.classList.remove("is-sending");
+      missed = false;
       rearm();
+      connect();
     }
   });
 
@@ -400,8 +611,8 @@
 
   /* What to hold in place across a swap: the first unit wholly in view under the top bar,
    * else the first still on screen at all, as when one turn is taller than the screen. */
-  function mark() {
-    var units = document.querySelectorAll(ANCHORS);
+  function mark(anchors) {
+    var units = document.querySelectorAll(anchors || ANCHORS);
     var under = barBottom();
     var partly = null;
     for (var i = 0; i < units.length; i++) {
@@ -409,7 +620,7 @@
       if (box.bottom <= 0) {
         continue;
       }
-      var held = { key: unitKey(units[i]), index: i, top: box.top };
+      var held = { key: unitKey(units[i]), index: i, top: box.top, anchors: anchors };
       if (box.top >= under && box.top < window.innerHeight) {
         return held;
       }
@@ -421,7 +632,7 @@
   /* The same unit after the swap: same key, nearest its old place, since both windows drop
    * their oldest as new ones arrive and the feed re-sorts its cards. */
   function hold(held) {
-    var units = document.querySelectorAll(ANCHORS);
+    var units = document.querySelectorAll(held.anchors || ANCHORS);
     var best = -1;
     for (var i = 0; i < units.length; i++) {
       var nearer = best === -1 || Math.abs(i - held.index) < Math.abs(best - held.index);
@@ -438,8 +649,22 @@
     return !!(detail.requestConfig && detail.requestConfig.verb === "get");
   }
 
+  // An earlier page lands above the reader: hold a message, never follow the end.
+  var EARLIER_ANCHORS = "#agent-view article.turn[data-hp-key]";
+
+  function isEarlier(detail) {
+    var elt = detail.requestConfig && detail.requestConfig.elt;
+    return !!(elt && elt.hasAttribute && elt.hasAttribute("data-hp-earlier"));
+  }
+
   document.addEventListener("htmx:beforeSwap", function (event) {
     if (!isRead(event.detail)) {
+      return;
+    }
+    if (isEarlier(event.detail)) {
+      opening = false;
+      swapEnd = false;
+      swapMark = mark(EARLIER_ANCHORS) || mark();
       return;
     }
     // Only the agent view follows its end; the feed is read from the top.

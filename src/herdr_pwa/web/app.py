@@ -17,12 +17,14 @@ from herdr_pwa.settings import Settings
 from herdr_pwa.web import failures
 from herdr_pwa.web.assets import Assets
 from herdr_pwa.web.deps import ClientFactory, WebState
+from herdr_pwa.web.events import Hub, HubConfig
 from herdr_pwa.web.notifier import PushState, open_push
 from herdr_pwa.web.render import Pages
 from herdr_pwa.web.routers import (
     agent,
     compose,
     devreport,
+    events,
     feed,
     files,
     manage,
@@ -49,7 +51,9 @@ def _static_route(app: FastAPI, assets: Assets) -> None:
         return Response(asset.body, media_type=asset.media_type, headers={"Cache-Control": cache})
 
 
-def _lifespan(state: PushState | None) -> Callable[[FastAPI], AbstractAsyncContextManager[None]]:
+def _lifespan(
+    state: PushState | None, hub: Hub
+) -> Callable[[FastAPI], AbstractAsyncContextManager[None]]:
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
         notifier = state.notifier if state is not None else None
@@ -58,6 +62,7 @@ def _lifespan(state: PushState | None) -> Callable[[FastAPI], AbstractAsyncConte
         try:
             yield
         finally:
+            await hub.close()
             if notifier is not None:
                 await notifier.stop()
 
@@ -74,7 +79,7 @@ def create_app(
 ) -> FastAPI:
     """Build the web application around one runner client, one snapshot cache and push."""
     assets = Assets.load()
-    pages = Pages(assets, device_report=settings.device_report)
+    pages = Pages(assets, device_report=settings.device_report, fallback=settings.events_fallback)
     audit = AuditLog(
         settings.state_dir,
         max_bytes=settings.audit_max_bytes,
@@ -94,7 +99,18 @@ def create_app(
     pushing = open_push(
         settings, reader=web.client, cache=web.cache, deliver=deliver, clock=time.time
     )
-    app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=_lifespan(pushing))
+    hub = Hub(
+        web,
+        HubConfig(
+            interval=settings.events_interval,
+            heartbeat=settings.events_heartbeat,
+            max_clients=settings.events_max_clients,
+            lifetime=settings.events_lifetime,
+        ),
+    )
+    app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=_lifespan(pushing, hub))
+    # The gate rigs reach in to drop every stream, to prove a page falls back and recovers.
+    app.state.events = hub
     failures.install(app, pages)
 
     @app.get("/healthz", include_in_schema=False)
@@ -112,6 +128,7 @@ def create_app(
     ):
         app.include_router(build(web))
     app.include_router(push.build(web, pushing))
+    app.include_router(events.build(web, hub))
     app.include_router(shell.build(web, assets))
     # Off means the route does not exist at all, so a stray post is an ordinary 404.
     if settings.device_report:

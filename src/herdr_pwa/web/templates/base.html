@@ -22,7 +22,8 @@
 {% endif %}
 {% block head %}{% endblock %}
 </head>
-<body>
+{# How often a page polls while its event stream is down, in seconds. #}
+<body data-hp-fallback="{{ fallback }}">
 <header class="topbar">
   {% from "_nav.html" import replace %}{% block brand %}<a class="brand" href="/" {{ replace() }}>herdr</a>{% endblock %}
   {% block topbar %}{% endblock %}

@@ -28,7 +28,18 @@ class Settings(BaseSettings):
     snapshot_cache_ttl: float = Field(default=2.0, gt=0)
     # Empty means each harness's own default location.
     transcript_roots: tuple[str, ...] = ()
-    chat_turns: int = Field(default=40, gt=0)
+    # A page of chat counts messages (prompts and agent prose); tool calls ride along inside it.
+    chat_messages: int = Field(default=20, gt=0)
+
+    # The event stream: how often the herd is diffed, how long a quiet stream waits before a
+    # heartbeat keeps the proxy from buffering or closing it, and how many pages may hold one.
+    events_interval: float = Field(default=1.0, gt=0)
+    events_heartbeat: float = Field(default=15.0, gt=0)
+    events_max_clients: int = Field(default=16, gt=0)
+    # A stream is closed after this long and the page reconnects, so no half-open one lingers.
+    events_lifetime: float = Field(default=600.0, gt=0)
+    # How often a page polls while its stream is down.
+    events_fallback: int = Field(default=20, gt=0)
 
     # Empty means any tailnet user may drive every agent; startup warns.
     tailnet_login: str = ""
