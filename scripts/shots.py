@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from geometry import Switch, install, serve  # noqa: E402
+from geometry import HTMX_SETTLED, Switch, install, serve  # noqa: E402
 from playwright.sync_api import (  # noqa: E402
     Browser,
     BrowserContext,
@@ -104,8 +104,10 @@ def drive(page: Page, state: State, url: str) -> None:
     page.goto(url)
     if state.act:
         page.wait_for_selector(state.armed, state="attached", timeout=READY_MS)
+        page.wait_for_function(HTMX_SETTLED, timeout=READY_MS)
         page.evaluate(f"() => {{ {state.act} }}")
     page.wait_for_selector(state.ready, state="attached", timeout=READY_MS)
+    page.wait_for_function(HTMX_SETTLED, timeout=READY_MS)
 
 
 @dataclass(frozen=True)

@@ -63,6 +63,22 @@ TAP_ALLOWED: dict[str, str] = {
 
 TAPPABLE = "a[href], button, summary, input, select, textarea, [role=button], [role=link]"
 
+# True once htmx has wired every hx element it can see and nothing is in flight or settling.
+# A fragment swapped in by hx-trigger="load" is attached a settle delay before htmx processes
+# it, and a tap in that gap posts the bare form natively and lands on the no-JS fallback.
+HTMX_SETTLED = r"""() => {
+  if (document.readyState !== "complete") return false;
+  const busy = ".htmx-request, .htmx-swapping, .htmx-settling, .htmx-added";
+  if (document.querySelector(busy)) return false;
+  if (typeof window.htmx !== "object") return true;
+  const wired = "[hx-get], [hx-post], [hx-put], [hx-patch], [hx-delete], [hx-trigger]";
+  for (const el of document.querySelectorAll(wired)) {
+    const data = el["htmx-internal-data"];
+    if (!data || !data.initHash) return false;
+  }
+  return true;
+}"""
+
 PROBE_LOADED = r"""
 const ready = arguments[0];
 const base = arguments[1];
@@ -79,8 +95,9 @@ return {
   htmx: typeof window.htmx,
   hidden: document.hidden,
   ready: document.querySelector(ready) !== null,
+  settled: (HTMX_SETTLED)(),
 };
-"""
+""".replace("HTMX_SETTLED", HTMX_SETTLED)
 
 # One synchronous script, so no htmx poll can swap the DOM halfway through a measurement.
 PROBE_GEOMETRY = r"""
@@ -188,7 +205,7 @@ def _wait(driver: Marionette, selector: str, base: str) -> dict[str, object]:
     while time.monotonic() < deadline:
         found = driver.script(PROBE_LOADED, selector, base)
         seen = found if isinstance(found, dict) else {}
-        if seen.get("ready") or seen.get("errorPage"):
+        if (seen.get("ready") and seen.get("settled")) or seen.get("errorPage"):
             break
         time.sleep(0.2)
     return seen
@@ -198,7 +215,7 @@ def _loaded(driver: Marionette, state: State, base: str) -> list[str]:
     """Wait for the state's proof element, tapping first if it needs one, then judge the page."""
     if state.act:
         seen = _wait(driver, state.armed, base)
-        if not seen.get("ready"):
+        if not (seen.get("ready") and seen.get("settled")):
             return _load_problems(seen, state.armed, scripted=True)
         driver.script(state.act)
     seen = _wait(driver, state.ready, base)
@@ -227,6 +244,8 @@ def _load_problems(seen: dict[str, object], ready: str, *, scripted: bool) -> li
         problems.append("document.hidden: every poll would stop on HTTP 286")
     if not seen.get("ready"):
         problems.append(f"{ready} never appeared within {READY_SECONDS:.0f}s")
+    elif not seen.get("settled"):
+        problems.append(f"htmx never settled within {READY_SECONDS:.0f}s")
     return problems
 
 
