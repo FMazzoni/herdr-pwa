@@ -111,8 +111,8 @@
   /* An option row's numeral column, and how many lines its label runs before it is cut. */
   --option-n: 1.65rem;
   --option-lines: 3;
-  /* A flex share so large that an item gives up its width before its neighbours give any. */
-  --shrink-first: 1000;
+  /* The least of a card's workspace that stays on the line before the line wraps instead. */
+  --ws-min: 3ch;
 
   /* Code in chat prose: one colour per kind of token, drawn from the terminal palette. */
   --code-keyword: var(--ansi-magenta);
@@ -291,10 +291,13 @@ html { -webkit-tap-highlight-color: transparent; }
 .card__title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
 .card__status { font-size: var(--text-small); color: var(--ink-3); }
 .card__meta { display: flex; gap: var(--space-5); min-width: 0; font-size: var(--text-small); color: var(--ink-3); }
-/* One line: the workspace ellipsizes rather than wraps; the harness and the short pane id give
-   way only once it is gone, which takes the largest Text Size. */
+/* One line where it fits: only the workspace ellipsizes. The kind and pane id keep their whole
+   width; when they and --ws-min no longer fit, the line wraps rather than cutting them. */
+.card__meta { flex-wrap: wrap; }
 .card__meta > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.card__ws { flex-shrink: var(--shrink-first); }
+.card__harness, .card__pane { flex: none; max-width: 100%; }
+/* A zero basis keeps it on the line; max-content stops it growing past its own name. */
+.card__ws { flex: 1 1 0; min-width: var(--ws-min); max-width: max-content; }
 .agent__meta > * { min-width: 0; }
 .card__pane { font-family: var(--mono); }
 .card__question { color: var(--ink); font-size: var(--text-meta); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; line-clamp: 4; overflow: hidden; }
@@ -308,6 +311,8 @@ html { -webkit-tap-highlight-color: transparent; }
 .dot--working { background: var(--working); }
 .dot--idle { background: var(--idle); }
 .dot--done { background: var(--done); }
+/* Not a herdr state: an answer took the question away and herdr has not reported since. */
+.dot--updating { background: var(--ink-3); }
 
 /* Drill-in. */
 .agent__meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-5); margin: 0 0 var(--space-5); font-size: var(--text-small); color: var(--ink-3); overflow-wrap: anywhere; }
@@ -635,7 +640,8 @@ textarea { resize: vertical; min-height: 4.5em; }
   .keys__stop--armed { grid-template-columns: minmax(0, 1fr); }
 }
 
-/* The composer, docked above the home indicator, and above the keyboard when it is open. */
+/* The composer, docked above the home indicator, and above the keyboard when it is open.
+   Its side padding is .agent's column: a centred --page-max box with the gutters inside it. */
 .composer {
   position: fixed;
   left: 0;
@@ -646,9 +652,9 @@ textarea { resize: vertical; min-height: 4.5em; }
   gap: var(--space-4);
   padding:
     var(--space-4)
-    max(var(--gutter-right), calc((100% - var(--page-max)) / 2 + var(--space-8)))
+    calc((100% - min(100%, var(--page-max))) / 2 + var(--gutter-right))
     calc(var(--space-4) + env(safe-area-inset-bottom))
-    max(var(--gutter-left), calc((100% - var(--page-max)) / 2 + var(--space-8)));
+    calc((100% - min(100%, var(--page-max))) / 2 + var(--gutter-left));
   background: var(--surface);
   border-top: var(--line-1) solid var(--rule);
 }

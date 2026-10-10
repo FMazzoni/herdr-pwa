@@ -2,6 +2,9 @@
 {% from "_nav.html" import replace, sheet %}
 {% import "_ui.html" as ui %}
 {% block title %}New agent &mdash; herdr{% endblock %}
+{# The back arrow is the way home here, as on an agent's page. #}
+{% block brand %}{% endblock %}
+{% block topbar %}<a class="leave topbar__back" href="/" aria-label="Back to herd" {{ replace() }}>&lsaquo; Herd</a><span class="topbar__title">new agent</span>{% endblock %}
 {% block body %}
 <main class="agent">
   {{ ui.section_head("New agent") }}
@@ -20,7 +23,10 @@
     {% endcall %}
     {% call ui.field("Directory") %}<input name="cwd" value="{{ values.get('cwd', '') }}" list="cwds" required>{% endcall %}
     <datalist id="cwds">{% for cwd in cwds %}<option value="{{ cwd }}"></option>{% endfor %}</datalist>
-    {{ ui.button("Start") }}
+    {% call ui.field("First prompt (optional)") %}<textarea name="prompt" rows="3" maxlength="4000">{{ values.get('prompt', '') }}</textarea>{% endcall %}
+    <p class="field__note">Typed once the agent is listening. opencode and hermes only name themselves once prompted, so a prompt here opens them straight on their page.</p>
+    {% if refused is defined and refused.held %}<input type="hidden" name="confirm" value="1">{% endif %}
+    {{ ui.button("Start it anyway" if refused is defined and refused.held else "Start") }}
   </form>
 </main>
 {% endblock %}

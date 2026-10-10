@@ -7,6 +7,7 @@
 <main class="agent">
   {{ ui.section_head((agent.title if agent else "Starting") ~ " at " ~ pane) }}
   {% include "_notice.html" %}
+  {% if first is defined and first %}{{ ui.banner(first.kind, first.what, first.why or none) }}{% endif %}
   {% if sent is defined %}{% call ui.banner("sent") %}Delivered to {{ pane }}.{% endcall %}{% endif %}
   {% if agent %}
   <p class="agent__meta">{{ ui.dot(agent.status.value) }}<span>{{ agent.status.value }}</span><span>{{ agent.agent }}</span></p>

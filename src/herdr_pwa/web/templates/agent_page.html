@@ -7,7 +7,7 @@
 {% block brand %}{% endblock %}
 {# Chat | Pane sits in the bar that never scrolls away: both tabs open at their newest line,
    a long scroll below wherever the switch would otherwise be. #}
-{% block topbar %}<a class="leave topbar__back" href="/" aria-label="Back to herd" {{ replace() }}>&lsaquo; Herd</a>{{ ui.dot(agent.status.value) }}
+{% block topbar %}<a class="leave topbar__back" href="/" aria-label="Back to herd" {{ replace() }}>&lsaquo; Herd</a>{{ ui.dot(agent.status.value, id="agent-dot") }}
   <nav class="tabs" aria-label="View">
     {%- for name in tabs %}
     <a class="tab{% if name == tab %} tab--on{% endif %}" href="{{ base }}?tab={{ name }}" {{ replace() }}{% if name == tab %} aria-current="page"{% endif %}><span class="tab__label">{{ name|capitalize }}</span></a>
@@ -19,13 +19,14 @@
   <p class="agent__meta agent__meta--line">
     <span class="agent__facts">
       {#- No whitespace between facts: the separator's own margins space them evenly. -#}
-      <span class="agent__status">{{ agent.status.value }}</span>
+      <span class="agent__status" id="agent-status">{{ agent.status.value }}</span>
       {%- if agent.agent %}<span class="agent__fact">{{ agent.agent }}</span>{% endif %}
       {%- if agent.workspace %}<span class="agent__fact">{{ agent.workspace }}</span>{% endif -%}
       <span class="agent__fact">{{ agent.target }}</span>
     </span>
     <a class="leave agent__end" href="{{ base }}/close" {{ replace() }}>End</a>
   </p>
+  {% if first %}{{ ui.banner(first.kind, first.what, first.why or none) }}{% endif %}
   <div class="agent__answer" hx-get="{{ base }}/answer" hx-trigger="load" hx-swap="outerHTML"></div>
   {% if tab == "pane" %}
   {# app.js shows it and remembers the choice; without script the pane just wraps. #}

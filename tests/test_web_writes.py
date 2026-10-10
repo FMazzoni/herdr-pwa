@@ -4,6 +4,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from herdr_pwa.audit import records
@@ -376,3 +377,106 @@ def test_a_key_that_left_the_question_up_says_so_and_does_not_claim_an_answer(
     assert "Sent option 1, but the question is still showing." in response.text
     assert "Answered." not in response.text
     assert len(w.herd.writes("agent.send_keys")) == 1, "an unconfirmed key is never re-sent"
+
+
+def _on_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *kinds: str) -> None:
+    # The form offers only harnesses on PATH, so the test puts stand-ins there.
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    for kind in kinds:
+        stand_in = bin_dir / kind
+        _ = stand_in.write_text("#!/bin/sh\n")
+        stand_in.chmod(0o700)
+    monkeypatch.setenv("PATH", str(bin_dir))
+
+
+def test_the_new_agent_form_has_a_way_back_and_a_first_prompt(tmp_path: Path) -> None:
+    herd = FakeHerd()
+    herd.add_workspace("w1")
+    page = web(tmp_path, herd).http.get("/new").text
+    assert 'aria-label="Back to herd"' in page
+    assert 'href="/"' in page
+    assert 'name="prompt"' in page
+
+
+def test_a_destructive_first_prompt_holds_the_form_and_creates_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _on_path(tmp_path, monkeypatch, "claude")
+    herd = FakeHerd()
+    herd.add_workspace("w1")
+    w = web(tmp_path, herd)
+    data = {
+        "name": "probe",
+        "kind": "claude",
+        "workspace": "w1",
+        "cwd": str(tmp_path),
+        "prompt": "git push --force",
+    }
+    response = w.http.post("/new", data=data, headers=ORIGIN)
+    assert response.status_code == 200
+    assert "git push --force" in response.text
+    assert 'name="confirm" value="1"' in response.text
+    assert "Start it anyway" in response.text
+    assert herd.writes("tab.create") == []
+
+
+def test_a_first_prompt_that_was_not_typed_is_said_on_the_page_it_opens(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _on_path(tmp_path, monkeypatch, "claude")
+    herd = FakeHerd()
+    herd.add_workspace("w1")
+    herd.started_session = S1
+    # The new pane never reports it is listening, so the prompt is not typed.
+    w = web(tmp_path, herd)
+    data = {"name": "probe", "kind": "claude", "workspace": "w1", "cwd": str(tmp_path)}
+    response = w.http.post(
+        "/new", data={**data, "prompt": "hello"}, headers=ORIGIN, follow_redirects=False
+    )
+    assert response.status_code == 303
+    assert response.headers["location"] == f"/agent/{S1}?first=not_ready"
+    assert herd.writes("agent.prompt") == []
+    page = w.http.get(response.headers["location"]).text
+    assert "Started, but your first prompt was not sent." in page
+    assert "not accepting input" in page
+
+
+def test_an_unknown_first_code_says_nothing(tmp_path: Path) -> None:
+    w = idle(tmp_path)
+    page = w.http.get(f"/agent/{S1}?first=%3Cscript%3E").text
+    assert "first prompt" not in page
+
+
+def test_an_answer_redraws_the_status_from_a_fresh_read(tmp_path: Path) -> None:
+    w = blocked(tmp_path)
+
+    def answered(herd: FakeHerd, _params: object) -> None:
+        herd.agents[P3]["agent_status"] = "working"
+
+    w.herd.after["agent.send_keys"] = answered
+    response = w.http.post(
+        f"/agent/{S1}/keys", data={"key": "1", "screen": FINGERPRINT}, headers=ORIGIN
+    )
+    assert "Answered." in response.text
+    assert 'id="agent-status" hx-swap-oob="true">working<' in response.text
+    assert 'class="dot dot--working" id="agent-dot" hx-swap-oob="true"' in response.text
+
+
+def test_an_answer_herdr_has_not_caught_up_with_says_updating(tmp_path: Path) -> None:
+    w = blocked(tmp_path)
+
+    def answered(herd: FakeHerd, _params: object) -> None:
+        # agent.get has moved on and the snapshot has not caught up with it yet.
+        herd.holders[P3] = {**herd.agents[P3], "agent_status": "working"}
+
+    w.herd.after["agent.send_keys"] = answered
+    response = w.http.post(
+        f"/agent/{S1}/keys", data={"key": "1", "screen": FINGERPRINT}, headers=ORIGIN
+    )
+    assert "Answered." in response.text
+    assert 'id="agent-status" hx-swap-oob="true">updating<' in response.text
+    assert "dot--updating" in response.text
+    # A poll redraws no status: each extra swapped element is another afterSwap for app.js.
+    poll = w.http.get(f"/agent/{S1}/answer").text
+    assert "hx-swap-oob" not in poll

@@ -12,6 +12,7 @@ from herdr_pwa.web.chat import chat_view
 from herdr_pwa.web.deps import WebState, hidden_tick, viewer_guard
 from herdr_pwa.web.herd import find_agent
 from herdr_pwa.web.naming import page_title
+from herdr_pwa.web.writing import first_note
 
 TABS: Final = ("chat", "pane")
 LIVE_CADENCE: Final = 3
@@ -30,12 +31,18 @@ def build(web: WebState) -> APIRouter:
 
     @router.get("")
     def agent_page(  # pyright: ignore[reportUnusedFunction]
-        session: str, tab: str = "chat"
+        session: str, tab: str = "chat", first: str = ""
     ) -> HTMLResponse:
         agent = find_agent(web, session)
         chosen = tab if tab in TABS else TABS[0]
         heading = page_title(agent.title, agent.agent, agent.target)
-        context = {"agent": agent, "tab": chosen, "tabs": TABS, "heading": heading}
+        context = {
+            "agent": agent,
+            "tab": chosen,
+            "tabs": TABS,
+            "heading": heading,
+            "first": first_note(first),
+        }
         return web.pages.page("agent_page.html", context)
 
     @router.get("/chat", dependencies=[Depends(hidden_tick)])

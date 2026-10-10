@@ -1,5 +1,6 @@
 """Starting and ending agents, workspaces, and the one failure table."""
 
+import dataclasses
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,8 @@ from herdr_pwa.engine.transport import (
     RequestTooLarge,
     TargetNotFound,
 )
+from herdr_pwa.jsontypes import JsonObject
+from herdr_pwa.writes.guard import MAX_PROMPT_CHARS
 from herdr_pwa.writes.lifecycle import (
     OPENCODE_ASK,
     AgentEnded,
@@ -23,6 +26,7 @@ from herdr_pwa.writes.lifecycle import (
     end_agent,
     start_agent,
 )
+from herdr_pwa.writes.prompt import SETTLED_LOOKS, PromptSent
 from herdr_pwa.writes.refusal import FAILURES, Refusal, Refused, refusal_for
 from herdr_pwa.writes.workspaces import (
     WorkspaceCloseAsk,
@@ -31,7 +35,7 @@ from herdr_pwa.writes.workspaces import (
     create_workspace,
     rename_workspace,
 )
-from tests._fake_herd import P3, S1, S2, FakeHerd, Rig, rig
+from tests._fake_herd import P3, S1, S2, SETTLED, FakeHerd, Rig, capture, rig
 
 NEW = "a1b2c3d4-0000-4000-8000-000000000001"
 
@@ -48,9 +52,8 @@ def start_rig(tmp_path: Path) -> Rig:
 
 
 def ask(tmp_path: Path, kind: str = "claude", model: str = "", **extra: str) -> StartRequest:
-    fields = {"name": "Probe One", "kind": kind, "workspace_id": "w1", "cwd": str(tmp_path)}
-    fields.update(extra)
-    return StartRequest(model=model, **fields)
+    base = StartRequest(name="Probe One", kind=kind, workspace_id="w1", cwd=str(tmp_path))
+    return dataclasses.replace(base, model=model, **extra)
 
 
 def refused(result: object) -> Refused:
@@ -226,3 +229,85 @@ def test_engine_failures_map_onto_refusals(exc: EngineError, refusal: Refusal) -
 def test_names_are_folded_to_what_the_runner_takes() -> None:
     assert agent_name("  My Probe  ") == "my-probe"
     assert agent_name("123") == ""
+
+
+# The new-agent form's first prompt.
+
+NEW_PANE = "w1:p9"
+
+
+def listening_rig(tmp_path: Path, *, session: str = NEW) -> Rig:
+    r = start_rig(tmp_path)
+    r.herd.started_session = session
+
+    def listening(herd: FakeHerd, _params: JsonObject) -> None:
+        herd.agents[NEW_PANE].update(interactive_ready=True, launch_pending=False)
+
+    def echoed(herd: FakeHerd, params: JsonObject) -> None:
+        herd.screens[NEW_PANE] = [SETTLED + f"> {params['text']}\n"]
+
+    r.herd.after["agent.start"] = listening
+    r.herd.after["agent.prompt"] = echoed
+    r.herd.screens[NEW_PANE] = ["drawing", SETTLED]
+    return r
+
+
+def test_a_first_prompt_is_typed_once_the_new_agent_is_listening(tmp_path: Path) -> None:
+    r = listening_rig(tmp_path)
+    result = start_agent(r.writer, ask(tmp_path, prompt="fix the build"), which=everywhere)
+    assert isinstance(result, AgentStarted)
+    assert isinstance(result.first, PromptSent)
+    assert result.first.verified
+    [typed] = r.herd.writes("agent.prompt")
+    assert typed["text"] == "fix the build"
+    # Typed only after three identical reads of a ready pane, never at the half-drawn one.
+    reads = [p for name, p in r.herd.calls if name == "agent.read"]
+    assert len(reads) >= SETTLED_LOOKS
+
+
+def test_a_late_identity_agent_is_prompted_by_address(tmp_path: Path) -> None:
+    r = listening_rig(tmp_path, session="")
+    result = start_agent(r.writer, ask(tmp_path, "hermes", prompt="hi"), which=everywhere)
+    assert isinstance(result, AgentStarted)
+    assert isinstance(result.first, PromptSent)
+    [typed] = r.herd.writes("agent.prompt")
+    assert "session" not in typed or not typed["session"]
+
+
+def test_a_blank_first_prompt_sends_nothing(tmp_path: Path) -> None:
+    r = listening_rig(tmp_path)
+    result = start_agent(r.writer, ask(tmp_path, prompt="   "), which=everywhere)
+    assert isinstance(result, AgentStarted)
+    assert result.first is None
+    assert r.herd.writes("agent.prompt") == []
+
+
+def test_a_destructive_first_prompt_is_held_before_anything_is_created(tmp_path: Path) -> None:
+    r = listening_rig(tmp_path)
+    held = refused(start_agent(r.writer, ask(tmp_path, prompt="rm -rf build"), which=everywhere))
+    assert held.refusal is Refusal.CONFIRM
+    assert "rm with a recursive flag" in held.reason
+    assert r.herd.writes("tab.create") == []
+    confirmed = dataclasses.replace(ask(tmp_path, prompt="rm -rf build"), confirmed=True)
+    result = start_agent(r.writer, confirmed, which=everywhere)
+    assert isinstance(result, AgentStarted)
+    assert isinstance(result.first, PromptSent)
+
+
+def test_an_oversized_first_prompt_creates_nothing(tmp_path: Path) -> None:
+    r = listening_rig(tmp_path)
+    text = "x" * (MAX_PROMPT_CHARS + 1)
+    result = refused(start_agent(r.writer, ask(tmp_path, prompt=text), which=everywhere))
+    assert result.refusal is Refusal.TOO_LONG
+    assert r.herd.writes("tab.create") == []
+
+
+def test_a_first_prompt_at_a_question_is_not_typed_but_the_agent_stays(tmp_path: Path) -> None:
+    r = listening_rig(tmp_path)
+    r.herd.screens[NEW_PANE] = [capture("capture-blocked-trust-folder", "visible")]
+    result = start_agent(r.writer, ask(tmp_path, prompt="hello"), which=everywhere)
+    assert isinstance(result, AgentStarted)
+    assert isinstance(result.first, Refused)
+    assert result.first.refusal is Refusal.QUESTION_SHOWING
+    assert r.herd.writes("agent.prompt") == []
+    assert r.herd.writes("pane.close") == []

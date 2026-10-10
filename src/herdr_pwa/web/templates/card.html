@@ -16,7 +16,7 @@
     {% endif %}
     {% if row.answer and row.answer.options %}
     <span class="card__options">
-      {% for option in row.answer.options %}<span class="card__option">{{ option.number }}. {{ option.label }}</span>{% endfor %}
+      {% for option in row.answer.options %}<span class="card__option">{{ option.number }}. {{ card_text(option.label) }}</span>{% endfor %}
     </span>
     {% endif %}
 {% endcall %}

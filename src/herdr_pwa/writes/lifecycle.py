@@ -13,7 +13,9 @@ from herdr_pwa.audit import CLOSE, START, Write
 from herdr_pwa.engine.client import HerdrClient, StartedAgent
 from herdr_pwa.engine.model import AgentStatus, PaneId, SessionId, as_pane_id
 from herdr_pwa.engine.transport import EngineError
+from herdr_pwa.writes.guard import destructive_reason, unsendable
 from herdr_pwa.writes.outcome import Pacing
+from herdr_pwa.writes.prompt import PromptSent, send_opening_prompt
 from herdr_pwa.writes.refusal import Refusal, Refused, refusal_for
 from herdr_pwa.writes.resolve import Writer, agent_now, attempt, snapshot_now
 
@@ -63,6 +65,10 @@ class StartRequest:
     workspace_id: str
     cwd: str
     model: str = ""
+    # Typed once the agent listens; blank sends nothing.
+    prompt: str = ""
+    # The destructive-prompt confirm, given against this form before anything was created.
+    confirmed: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,6 +78,8 @@ class AgentStarted:
     pane: PaneId
     session: SessionId
     ready: bool
+    # What became of the form's first prompt; ``None`` when it carried none.
+    first: PromptSent | Refused | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -134,6 +142,16 @@ def _form_refusal(request: StartRequest, kinds: tuple[str, ...]) -> Refusal | No
     return next((refusal for failed, refusal in checks if failed), None)
 
 
+def _prompt_refusal(request: StartRequest) -> Refused | None:
+    # Checked before anything is created, so a prompt that cannot go never leaves a half-start.
+    if not request.prompt.strip():
+        return None
+    if unsendable(request.prompt) is False:
+        return Refused(Refusal.TOO_LONG, "created")
+    reason = "" if request.confirmed else destructive_reason(request.prompt)
+    return Refused(Refusal.CONFIRM, "created", reason=reason) if reason else None
+
+
 def _abandon(client: HerdrClient, pane: str) -> None:
     # The one close by bare pane id: a pane this same request created a moment ago.
     try:
@@ -179,8 +197,9 @@ def start_agent(
 ) -> AgentStarted | Refused:
     """Start one agent in a new tab of a workspace that exists now, or say why not."""
     refusal = _form_refusal(request, offered_kinds(which))
-    if refusal is not None:
-        return Refused(refusal, "created")
+    held = Refused(refusal, "created") if refusal is not None else _prompt_refusal(request)
+    if held is not None:
+        return held
     snap = snapshot_now(writer.client, verb="created")
     if isinstance(snap, Refused):
         return snap
@@ -199,8 +218,19 @@ def start_agent(
             entry.outcome(f"refused:{started.refusal.value}")
             return started
         entry.outcome(f"started:{started.pane}")
+    return _opened(writer, started, request.prompt)
+
+
+def _opened(writer: Writer, started: StartedAgent, prompt: str) -> AgentStarted:
     settled = _await_session(writer.client, started, writer.pacing)
-    return AgentStarted(as_pane_id(settled.pane), SessionId(settled.session), settled.ready)
+    first = None
+    if prompt.strip():
+        first = send_opening_prompt(writer, as_pane_id(settled.pane), prompt)
+        # A late-identity harness opens its session on its first prompt, so look for it again.
+        settled = _await_session(writer.client, settled, writer.pacing)
+    return AgentStarted(
+        as_pane_id(settled.pane), SessionId(settled.session), settled.ready, first=first
+    )
 
 
 def _still_there(client: HerdrClient, session: SessionId) -> bool:

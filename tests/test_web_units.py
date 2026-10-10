@@ -2,6 +2,7 @@
 
 import dataclasses
 from pathlib import Path
+from typing import Final
 
 import pytest
 
@@ -106,6 +107,64 @@ def test_card_question_never_prints_a_bare_prompt_glyph() -> None:
     rule = "\u2500" * 40
     assert card_question(_asking(f"{rule}\n\u276f \n{rule}\n")) == ""
     assert card_question(_row("t")) == ""
+
+
+# The four sources each capture was read from; explain.txt is herdr's reasoning, not a screen.
+_READS: Final = ("detection.txt", "visible.txt", "recent.txt", "recent-unwrapped.txt")
+
+
+def _reads(pattern: str) -> list[Path]:
+    return sorted(p for p in FIXTURES.glob(pattern) if p.name in _READS)
+
+
+def _named(path: Path) -> str:
+    return f"{path.parent.name}/{path.name}"
+
+
+# Every real blocked screen in the corpus, in every source it was read from.
+_ASKING_CAPTURES: Final = (
+    *_reads("capture-blocked-*/*.txt"),
+    *sorted(FIXTURES.glob("ansi/claude-blocked-*.ansi")),
+    *sorted(FIXTURES.glob("hermes/blocked-*.txt")),
+)
+# Screens that ask nothing: the parser's fallback on them is scrollback or the status line.
+_SILENT_SCREENS: Final = (
+    FIXTURES / "rig" / "blocked-build-scrollback.ansi",
+    *_reads("capture-idle-*/*.txt"),
+    *_reads("capture-working-*/*.txt"),
+    FIXTURES / "ansi" / "claude-idle-welcome.ansi",
+)
+
+
+@pytest.mark.parametrize("path", _ASKING_CAPTURES, ids=_named)
+def test_card_question_keeps_every_real_question(path: Path) -> None:
+    question = card_question(_asking(path.read_text()))
+    assert question
+    assert not any(ord(c) < 0x20 and c != "\n" for c in question), question
+
+
+def test_the_corpus_holds_every_blocked_capture() -> None:
+    blocked = list(FIXTURES.glob("capture-blocked-*/"))
+    assert len(_ASKING_CAPTURES) == len(_READS) * len(blocked) + 2 + 2
+
+
+@pytest.mark.parametrize("path", _SILENT_SCREENS, ids=_named)
+def test_card_question_never_promotes_scrollback(path: Path) -> None:
+    assert card_question(_asking(path.read_text())) == ""
+
+
+def test_card_question_drops_escapes_from_a_question() -> None:
+    screen = "\x1b]0;title\x07\x1b[1mDo you want to \x1b[32mdeploy\x1b[0m?\x07\n"
+    assert card_question(_asking(screen)) == "Do you want to deploy?"
+
+
+@pytest.mark.parametrize("asked", ["Enter passphrase for key:", "Allow edits to app.py", "Proceed"])
+def test_card_question_keeps_a_prompt_with_no_question_mark(asked: str) -> None:
+    assert card_question(_asking(f"build ok\n\n{asked}\n")) == asked
+
+
+def test_card_title_drops_control_bytes() -> None:
+    assert card_title(_row("\x1b[1mFix\x1b[0m the parser\x07")) == "Fix the parser"
 
 
 def test_display_title_strips_only_leading_glyphs() -> None:
