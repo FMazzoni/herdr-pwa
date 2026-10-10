@@ -1,0 +1,32 @@
+line-length = 100
+
+[lint]
+# Families picked for what they catch in agent-written code: ANN (annotation
+# coverage), S (security), TRY (exception antipatterns), ARG (parameters left after
+# a refactor), ERA (commented-out code), PL (pylint subset).
+select = [
+    "E", "W", "F", "I", "N", "UP",
+    "ANN", "S", "B", "A", "C4", "DTZ", "T20",
+    "ISC", "ICN", "PIE", "PT", "RET", "SIM", "TID",
+    "ARG", "PTH", "ERA", "PL", "TRY", "PERF", "RUF",
+]
+ignore = [
+    "E501",    # the formatter owns line length
+    # TRY003 wants a custom exception class for every message: a style opinion.
+    # TRY002 (no bare Exception) stays on, so specific exception types still apply.
+    "TRY003",
+]
+# RUF100 (unused noqa) stays on, so a suppression can't outlive its reason.
+
+[lint.per-file-ignores]
+"tests/**" = [
+    "S101",    # assert is the point of a test
+    "ANN201",  # test functions need no return annotation
+    "PLR2004", # magic values are fine in assertions
+]
+
+[lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[format]
+docstring-code-format = true

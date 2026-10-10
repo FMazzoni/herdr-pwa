@@ -1,0 +1,13 @@
+// pyright parses this file as JSONC: use `//` LINE comments, never a `"//"` KEY.
+{
+  // tests/ is included deliberately: it is the most agent-written, least-read code.
+  "include": ["src", "tests"],
+  "exclude": ["**/__pycache__", ".venv", "**/generated"],
+  "typeCheckingMode": "strict",
+  // `Any` is where type safety drains away, and an agent reaches for it to silence an error.
+  "reportAny": "error",
+  "reportExplicitAny": "error",
+  "reportMissingTypeStubs": false,
+  "venvPath": ".",
+  "venv": ".venv"
+}
