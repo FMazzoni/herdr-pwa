@@ -135,6 +135,8 @@ def build_rig(
         "state_dir": tmp_path / "state",
         "transcript_roots": (str(tmp_path / "transcripts"),),
         "tailscaled_socket": tmp_path / "no-tailscaled.sock",
+        # The background loop is driven by hand in its own tests, never by a request test.
+        "push_notifier": False,
         **overrides,
     }
     settings = Settings.model_validate(fields)

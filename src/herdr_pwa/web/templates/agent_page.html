@@ -3,7 +3,7 @@
 {% block topbar %}<span class="topbar__title">{{ agent.title or agent.agent or agent.target }}</span>{% endblock %}
 {% block body %}
 {% set base = "/agent/" ~ (agent.session|urlencode) %}
-<main class="agent">
+<main class="agent" data-hp-seen="{{ agent.session }}">
   <p class="agent__meta">
     <span class="dot dot--{{ agent.status.value }}" aria-hidden="true"></span>
     <span class="agent__status">{{ agent.status.value }}</span>

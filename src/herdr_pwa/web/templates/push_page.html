@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}alerts &mdash; herdr{% endblock %}
+{% block topbar %}<span class="topbar__title">alerts</span>{% endblock %}
+{% block body %}
+<main class="sheet" id="push-panel"{% if push %} data-hp-push="on"{% endif %}>
+  {% if not push %}
+  <p class="sheet__note sheet__note--warn" role="status">{{ reason }}</p>
+  {% else %}
+  {% if reason %}<p class="sheet__note sheet__note--warn" role="status">Alerts are not being sent: {{ reason }}</p>{% endif %}
+  <section class="sheet__group">
+    <h2 class="sheet__heading">This device</h2>
+    {# The script replaces this text only with what the server confirmed. #}
+    <p class="sheet__state" id="push-state" role="status">Checking this device&hellip;</p>
+    <button type="button" class="sheet__button" id="push-on" hidden>Turn on alerts here</button>
+    <button type="button" class="sheet__button" id="push-off" hidden>Turn off alerts here</button>
+    <p class="sheet__note">{{ devices }} device{{ "" if devices == 1 else "s" }} subscribed on this box. On iPhone, alerts work only from the Home Screen app (iOS 16.4 or later).</p>
+  </section>
+  <section class="sheet__group">
+    <h2 class="sheet__heading">What may interrupt</h2>
+    <label class="sheet__row"><input type="checkbox" id="pref-blocked"{% if policy.blocked %} checked{% endif %}> An agent needs you</label>
+    <label class="sheet__row"><input type="checkbox" id="pref-done"{% if policy.done %} checked{% endif %}> An agent finished</label>
+    <p class="sheet__note">These apply to every subscribed device. Do not disturb holds back finishes only; a blocked agent is always told.</p>
+    <p class="sheet__row">
+      <button type="button" class="sheet__button" data-hp-snooze="3600">Quiet finishes for 1 hour</button>
+      <button type="button" class="sheet__button" data-hp-snooze="0">End quiet</button>
+    </p>
+    <p class="sheet__state" id="snooze-state" role="status">{% if snoozed %}Finishes are quiet for now.{% else %}Not snoozed.{% endif %}</p>
+  </section>
+  {% endif %}
+</main>
+{% endblock %}
