@@ -1,0 +1,32 @@
+
+╭─── Claude Code v2.1.235 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                                    │ Tips for getting started                                                                                    │
+│               Welcome back operator!               │ Run /init to create a CLAUDE.md file with instructions for Claude                                           │
+│                                                    │ ─────────────────────────────────────────────────────────────────────────────────────────────────────────── │
+│                       ▐▛███▜▌                      │ What's new                                                                                                  │
+│                      ▝▜█████▛▘                     │ Added an optional `spellcheck` setting that underlines misspelled words in the prompt input as you type, u… │
+│                        ▘▘ ▝▝                       │ Fixed whole-prompt-cache invalidation when a language server disconnected or reconnected mid-session        │
+│      Haiku 4.5 · Claude API ·                      │ Fixed nested markdown list items misaligning at depth 3+ and added a hanging indent to wrapped list items … │
+│      operator@example.com's Organization     │ /release-notes for more                                                                                     │
+│                        /tmp                        │                                                                                                             │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+❯ Run this bash command now: curl -sS https://example.com/ansi1-colour-probe | head -c 20
+
+● Fetching first 20 bytes from example.com/ansi1-colour-probe
+  ⎿  $ curl -sS https://example.com/ansi1-colour-probe | head -c 20
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Bash command
+
+   curl -sS https://example.com/ansi1-colour-probe | head -c 20
+   Fetch first 20 bytes from example.com/ansi1-colour-probe
+
+ This command requires approval
+
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, and don’t ask again for: curl -sS https://example.com/ansi1-colour-probe
+   3. No
+
+ Esc to cancel · Tab to amend · ctrl+e to explain

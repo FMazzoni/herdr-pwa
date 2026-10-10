@@ -1,0 +1,13 @@
+{
+  "name": "blocked-permission-prompt-wrapped",
+  "target": "w2:pD",
+  "captured_at": "2026-08-20T13:16:12-04:00",
+  "captured_by": "an agent, in a 58-column pane and tab it created for the purpose",
+  "herdr_version": "0.8.0",
+  "protocol": 19,
+  "detection_manifest": {"id": "claude", "version": "2026.08.13.1"},
+  "claude_code_version": "2.1.237",
+  "pane_columns": 58,
+  "agent_status": "blocked",
+  "note": "The same Bash permission shape as capture-blocked-permission-prompt, taken on a 58-column pane so option 2's label SOFT-WRAPS. Manufactured in a pane and tab created for the purpose (w2:t8 / w2:pD, agent wrap-probe) and closed afterwards."
+}

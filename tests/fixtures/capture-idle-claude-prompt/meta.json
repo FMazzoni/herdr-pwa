@@ -1,0 +1,11 @@
+{
+  "name": "idle-claude-prompt",
+  "target": "w4:p1",
+  "captured_at": "2026-08-18T02:05:17-04:00",
+  "captured_by": "built by hand on the layout of a capture from a live agent pane",
+  "herdr_version": "0.8.0",
+  "protocol": 19,
+  "detection_manifest": {"id": "claude", "version": "2026.08.13.1"},
+  "agent_status": "idle",
+  "note": "An idle claude REPL prompt. The layout (a recap, a numbered list with prose after it, the turn's timer, an interrupted-command notice, the empty input box and a two-row statusline) and herdr's rule evaluation over it are from a read-only capture of a live agent's pane that the capturing agent had not started; the transcript text, title, statusline values and cwd are synthetic, and the explain previews are re-cut from the rebuilt screen."
+}

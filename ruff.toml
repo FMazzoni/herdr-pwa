@@ -32,4 +32,6 @@ ignore = [
 ban-relative-imports = "all"
 
 [format]
+# Codegen owns generated/ and writes it at its own width; reformatting makes it stale.
+exclude = ["src/herdr_pwa/engine/generated/**"]
 docstring-code-format = true

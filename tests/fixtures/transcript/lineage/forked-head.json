@@ -1,0 +1,27 @@
+{
+ "cwd": "(redacted for the fixture)",
+ "entrypoint": "cli",
+ "forkedFrom": {
+  "messageUuid": "0000002e-0000-0000-0000-000000000000",
+  "sessionId": "5e550019-0000-0000-0000-000000000000"
+ },
+ "gitBranch": "main",
+ "isSidechain": false,
+ "message": {
+  "content": "<redacted for the fixture>",
+  "role": "user"
+ },
+ "origin": {
+  "kind": "human"
+ },
+ "parentUuid": null,
+ "permissionMode": "default",
+ "promptId": "0000002f-0000-0000-0000-000000000000",
+ "promptSource": "typed",
+ "sessionId": "5e55001b-0000-0000-0000-000000000000",
+ "timestamp": "2026-06-28T23:12:22.376Z",
+ "type": "user",
+ "userType": "external",
+ "uuid": "0000002e-0000-0000-0000-000000000000",
+ "version": "2.1.195"
+}

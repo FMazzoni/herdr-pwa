@@ -1,0 +1,25 @@
+{
+ "compactMetadata": {
+  "trigger": "manual"
+ },
+ "content": "Conversation compacted",
+ "cwd": "(redacted for the fixture)",
+ "entrypoint": "cli",
+ "forkedFrom": {
+  "messageUuid": "0000001f-0000-0000-0000-000000000000",
+  "sessionId": "5e55001a-0000-0000-0000-000000000000"
+ },
+ "gitBranch": "main",
+ "isSidechain": false,
+ "level": "info",
+ "logicalParentUuid": "00000020-0000-0000-0000-000000000000",
+ "parentUuid": null,
+ "sessionId": "5e550009-0000-0000-0000-000000000000",
+ "slug": "elegant-floating-rabin",
+ "subtype": "compact_boundary",
+ "timestamp": "2026-07-19T04:41:24.554Z",
+ "type": "system",
+ "userType": "external",
+ "uuid": "0000001f-0000-0000-0000-000000000000",
+ "version": "2.1.214"
+}

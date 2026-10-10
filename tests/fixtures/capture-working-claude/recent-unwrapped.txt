@@ -1,0 +1,25 @@
+
+  Run the pane reads against the capture corpus → rerun the gate (ruff, basedpyright, complexipy, pytest) → read the geometry shots at 320px → fix what
+  fails → commit. The background agents below are each reading one area and will report what they find.
+
+  Nothing here needs root and nothing touches a live session: every check runs against the throwaway hp-test session or against the fixtures, so the
+  agents in the default session are never read or written.
+
+  I'll report once the background agents are back, with anything that changes the plan above, and leave the judgement calls about the feed's ordering to
+  you when we get there.
+
+✻ Waiting for 5 background agents to finish
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ go ahead
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  herdr-pwa [main] | ctx: 56% | 2h58m | +962/-167                                                                                       Opus 5
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 1 agent
+
+  ● main
+  ◯ general-purpose  Checking command_timeout default in settings.py                                                                   3m 50s · ↓ 94.1k tokens
+  ◯ general-purpose  Verifying vendored htmx.min.js checksums                                                                          2m 47s · ↓ 55.2k tokens
+  ◯ general-purpose  Reading the pairing flow in cli.py                                                                                2m 15s · ↓ 42.0k tokens
+  ◯ general-purpose  Reading model.py's status mapping                                                                                 1m 47s · ↓ 53.1k tokens
+  ◯ general-purpose  Inspecting capture-idle-claude-prompt detection.txt                                                               1m 17s · ↓ 36.8k tokens
+  ⧉  architecture

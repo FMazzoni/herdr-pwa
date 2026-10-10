@@ -1,0 +1,44 @@
+{
+ "compactMetadata": {
+  "cumulativeDroppedTokens": 1558149,
+  "durationMs": 113365,
+  "postTokens": 11498,
+  "preCompactDiscoveredTools": [
+   "(redacted for the fixture)"
+  ],
+  "preTokens": 875621,
+  "preservedMessages": {
+   "allUuids": [
+    "00000016-0000-0000-0000-000000000000",
+    "00000017-0000-0000-0000-000000000000"
+   ],
+   "anchorUuid": "00000018-0000-0000-0000-000000000000",
+   "uuids": [
+    "00000016-0000-0000-0000-000000000000",
+    "00000017-0000-0000-0000-000000000000"
+   ]
+  },
+  "preservedSegment": {
+   "anchorUuid": "00000018-0000-0000-0000-000000000000",
+   "headUuid": "00000016-0000-0000-0000-000000000000",
+   "tailUuid": "00000017-0000-0000-0000-000000000000"
+  },
+  "trigger": "manual"
+ },
+ "content": "(redacted for the fixture)",
+ "cwd": "(redacted for the fixture)",
+ "entrypoint": "cli",
+ "gitBranch": "(redacted for the fixture)",
+ "isSidechain": false,
+ "level": "info",
+ "logicalParentUuid": "00000017-0000-0000-0000-000000000000",
+ "parentUuid": null,
+ "sessionId": "5e550006-0000-0000-0000-000000000000",
+ "sessionKind": "bg",
+ "subtype": "compact_boundary",
+ "timestamp": "2026-08-20T00:58:09.519Z",
+ "type": "system",
+ "userType": "external",
+ "uuid": "00000019-0000-0000-0000-000000000000",
+ "version": "2.1.241"
+}

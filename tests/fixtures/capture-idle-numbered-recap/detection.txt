@@ -1,0 +1,26 @@
+│                                                    │ Tips for getting started                                                                            │
+│               Welcome back operator!               │ Ask Claude to create a new app or clone a repository                                                │
+│                                                    │ ─────────────────────────────────────────────────────────────────────────────────────────────────── │
+│                       ▐▛███▜▌                      │ What's new                                                                                          │
+│                      ▝▜█████▛▘                     │ Added the optional `CLAUDE_CODE_PROJECT_DIR_NAME` environment variable: hosts that give each sessi… │
+│                        ▘▘ ▝▝                       │ Added the `selection:clear` keybinding action, so a key can be bound to clear an in-app text selec… │
+│   Opus 5 with medi… · Claude API ·                 │ Added a GitLab merge request badge to the footer and statusline: repos with a GitLab remote and an… │
+│   operator@example.com's Organization          │ /release-notes for more                                                                             │
+│                /home/user/scratch/work3            │                                                                                                     │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+❯ Reply with EXACTLY a numbered list of the three files you would read first in an unfamiliar Python repo. Numbered 1. 2. 3. No preamble, no trailing
+  sentence, nothing after item 3.
+
+● 1. README.md
+  2. pyproject.toml
+  3. src/<package>/__init__.py
+
+✻ Cooked for 1s
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  herdr-pwa [main] | ctx: 3% | 0m                                                                                                     Opus 5
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← 1 agent

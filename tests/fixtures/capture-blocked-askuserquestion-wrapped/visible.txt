@@ -1,0 +1,45 @@
+│                                                        │
+│                 Welcome back operator!                 │
+│                                                        │
+│                         ▐▛███▛█                        │
+│                        ▝▜██████▀                       │
+│                          ▝▝ ▝▝                         │
+│                                                        │
+│                       Haiku 4.5                        │
+│                       Claude API                       │
+│                          /tmp                          │
+│                                                        │
+╰────────────────────────────────────────────────────────╯
+
+❯ Run this exact command with the Bash tool: curl -sS
+  https://example.com/thing | head -c 20
+
+  Ran 1 shell command
+
+✻ Baked for 58s
+
+❯ Use the AskUserQuestion tool right now to ask me which
+  colour I prefer, with four options whose labels are
+  long sentences of at least eighty characters each.
+──────────────────────────────────────────────────────────
+ ☐ Colour preference
+
+Which colour do you prefer?
+
+❯ 1. I prefer vibrant blues that remind me of clear skies
+     and peaceful ocean waters
+     A cool, refreshing tone
+  2. I enjoy warm golden yellows that create a sense of
+     happiness and positive energy
+     A warm, uplifting tone
+  3. I like calming greens that represent nature and
+     provide a soothing feeling of tranquility
+     A natural, grounding tone
+  4. I prefer deep reds that symbolize passion and energy
+     while creating a bold statement
+     A vibrant, dynamic tone
+  5. Type something.
+──────────────────────────────────────────────────────────
+  6. Chat about this
+
+Enter to select · ↑/↓ to navigate · Esc to cancel

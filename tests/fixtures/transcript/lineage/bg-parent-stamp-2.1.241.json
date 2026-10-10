@@ -1,0 +1,19 @@
+{
+ "cwd": "(redacted for the fixture)",
+ "entrypoint": "cli",
+ "gitBranch": "(redacted for the fixture)",
+ "isCompactSummary": true,
+ "isSidechain": false,
+ "isVisibleInTranscriptOnly": true,
+ "message": "(redacted for the fixture)",
+ "parentUuid": "00000019-0000-0000-0000-000000000000",
+ "promptId": "0000001e-0000-0000-0000-000000000000",
+ "sessionId": "5e550006-0000-0000-0000-000000000000",
+ "sessionKind": "bg",
+ "session_id": "5e550004-0000-0000-0000-000000000000",
+ "timestamp": "2026-08-20T00:58:09.455Z",
+ "type": "user",
+ "userType": "external",
+ "uuid": "00000018-0000-0000-0000-000000000000",
+ "version": "2.1.241"
+}

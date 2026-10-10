@@ -1,0 +1,32 @@
+
+[0m[38;2;215;119;87m╭─── Claude Code [0m[38;2;153;153;153mv2.1.235 [0m[38;2;215;119;87m─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮[0m
+[0m[38;2;215;119;87m│                                                    [0m[2m[38;2;215;119;87m│ [0m[1m[38;2;215;119;87mTips for getting started                                                                                    [0m[38;2;215;119;87m│[0m
+[0m[38;2;215;119;87m│               [0m[1mWelcome back operator!               [0m[2m[38;2;215;119;87m│ [0mRun /init to create a CLAUDE.md file with instructions for Claude                                           [0m[38;2;215;119;87m│[0m
+[0m[38;2;215;119;87m│                                                    [0m[2m[38;2;215;119;87m│ [0m[38;2;215;119;87m─────────────────────────────────────────────────────────────────────────────────────────────────────────── │[0m
+[0m[38;2;215;119;87m│                       ▐[0m[38;2;215;119;87m[48;2;0;0;0m▛███▜[0m[38;2;215;119;87m▌                      [0m[2m[38;2;215;119;87m│ [0m[1m[38;2;215;119;87mWhat's new                                                                                                  [0m[38;2;215;119;87m│[0m
+[0m[38;2;215;119;87m│                      ▝▜[0m[38;2;215;119;87m[48;2;0;0;0m█████[0m[38;2;215;119;87m▛▘                     [0m[2m[38;2;215;119;87m│ [0mAdded an optional `spellcheck` setting that underlines misspelled words in the prompt input as you type, u… [0m[38;2;215;119;87m│[0m
+[0m[38;2;215;119;87m│                        ▘▘ ▝▝                       [0m[2m[38;2;215;119;87m│ [0mFixed whole-prompt-cache invalidation when a language server disconnected or reconnected mid-session        [0m[38;2;215;119;87m│[0m
+[0m[38;2;215;119;87m│      [0m[38;2;153;153;153mHaiku 4.5 · Claude API ·                      [0m[2m[38;2;215;119;87m│ [0mFixed nested markdown list items misaligning at depth 3+ and added a hanging indent to wrapped list items … [0m[38;2;215;119;87m│[0m
+[0m[38;2;215;119;87m│      [0m[38;2;153;153;153moperator@example.com's Organization     [0m[2m[38;2;215;119;87m│ [0m[3m[38;2;153;153;153m/release-notes for more                                                                                     [0m[38;2;215;119;87m│[0m
+[0m[38;2;215;119;87m│                        [0m[38;2;153;153;153m/tmp                        [0m[2m[38;2;215;119;87m│                                                                                                             [0m[38;2;215;119;87m│[0m
+[0m[38;2;215;119;87m╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯[0m
+
+[0m[38;2;80;80;80m[48;2;55;55;55m❯ [0m[38;2;255;255;255m[48;2;55;55;55mRun this bash command now: curl -sS https://example.com/ansi1-colour-probe | head -c 20[0m[48;2;55;55;55m                                                                           [0m
+
+[0m[38;2;153;153;153m● [0mFetching first 20 bytes from example.com/ansi1-colour-probe
+[0m[38;2;153;153;153m  ⎿  $ curl -sS https://example.com/ansi1-colour-probe | head -c 20[0m
+
+[0m[38;2;177;185;249m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[0m
+ [0m[1m[38;2;177;185;249mBash command[0m
+
+   curl -sS https://example.com/ansi1-colour-probe | head -c 20
+   [0m[38;2;153;153;153mFetch first 20 bytes from example.com/ansi1-colour-probe[0m
+
+ This command requires approval
+
+ Do you want to proceed?
+ [0m[38;2;177;185;249m❯ [0m[38;2;153;153;153m1. [0m[38;2;177;185;249mYes[0m
+   [0m[38;2;153;153;153m2. [0mYes, and don’t ask again for: curl -sS https://example.com/ansi1-colour-probe
+   [0m[38;2;153;153;153m3. [0mNo
+
+ [0m[38;2;153;153;153mEsc to cancel · Tab to amend · ctrl+e to explain[0m

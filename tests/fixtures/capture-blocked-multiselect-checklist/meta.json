@@ -1,0 +1,17 @@
+{
+  "name": "blocked-multiselect-checklist",
+  "target": "w1:p3D",
+  "session": "5e550002-0000-0000-0000-000000000000",
+  "captured_at": "2026-08-23T18:41:22.824742+00:00",
+  "captured_by": "the notifier's capture store, promoted by hand",
+  "herdr_version": "0.8.0",
+  "protocol": 19,
+  "detection_manifest": {
+    "id": "claude",
+    "version": "2026.08.21.1"
+  },
+  "agent_status": "blocked",
+  "shape": "ea3c8748119ef5db576de301f776a96b0b727fc2da72de0e1f92e4c45add3aba",
+  "note": "Captured automatically and reviewed by nobody. The pane text is whatever was on a terminal; read it before promoting it.",
+  "promoted_from": "20260823T184122Z-live-blocked-form-ea3c8748119e"
+}

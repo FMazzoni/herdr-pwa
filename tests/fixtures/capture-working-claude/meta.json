@@ -1,0 +1,11 @@
+{
+  "name": "working-claude",
+  "target": "w1:p3",
+  "captured_at": "2026-08-18T02:05:38-04:00",
+  "captured_by": "built by hand on the layout of a capture from a live agent pane",
+  "herdr_version": "0.8.0",
+  "protocol": 19,
+  "detection_manifest": {"id": "claude", "version": "2026.08.13.1"},
+  "agent_status": "working",
+  "note": "claude mid-work (spinner in the OSC title). The layout (prose, a statusline, five background agents) and herdr's rule evaluation over it are from a capture the capturing agent took of its own pane; the transcript text, title, task names and statusline values are synthetic, and the explain previews are re-cut from the rebuilt screen."
+}

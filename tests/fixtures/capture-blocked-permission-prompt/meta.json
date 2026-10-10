@@ -1,0 +1,11 @@
+{
+  "name": "blocked-permission-prompt",
+  "target": "w1:pR",
+  "captured_at": "2026-08-18T02:11:30-04:00",
+  "captured_by": "an agent, in a pane it created for the purpose",
+  "herdr_version": "0.8.0",
+  "protocol": 19,
+  "detection_manifest": {"id": "claude", "version": "2026.08.13.1"},
+  "agent_status": "blocked",
+  "note": "Bash-command permission prompt (y/n shape); manufactured in pane w1:pR, created for the purpose and running claude --permission-mode default"
+}

@@ -1,0 +1,5 @@
+agent: claude
+state: working
+manifest: remote:/home/user/.local/state/herdr/agent-detection/remote/claude.toml 2026.08.13.1
+rule: osc_title_working (region=osc_title priority=1100)
+evidence: "◑ Pane read timings and next steps"

@@ -1,0 +1,93 @@
+{
+ "message": [
+  {
+   "data": "{\"role\":\"user\",\"time\":{\"created\":1792553576224},\"agent\":\"build\",\"model\":{\"providerID\":\"opencode\",\"modelID\":\"big-pickle\"},\"summary\":{\"diffs\":[]}}",
+   "id": "msg_15c84e720001gh0u1Zb53C9vFW",
+   "session_id": "ses_ea37b18fdffeVry1zoM2obT54w",
+   "time_created": 1792553576224,
+   "time_updated": 1792553590422
+  },
+  {
+   "data": "{\"parentID\":\"msg_15c84e720001gh0u1Zb53C9vFW\",\"role\":\"assistant\",\"mode\":\"build\",\"agent\":\"build\",\"path\":{\"cwd\":\"/home/user/scratch/oc-probe\",\"root\":\"/\"},\"cost\":0,\"tokens\":{\"total\":8079,\"input\":250,\"output\":6,\"reasoning\":15,\"cache\":{\"write\":0,\"read\":7808}},\"modelID\":\"big-pickle\",\"providerID\":\"opencode\",\"time\":{\"created\":1792553576251,\"completed\":1792553590405},\"finish\":\"stop\"}",
+   "id": "msg_15c84e73a001C8kXQctCDuluYJ",
+   "session_id": "ses_ea37b18fdffeVry1zoM2obT54w",
+   "time_created": 1792553576251,
+   "time_updated": 1792553590407
+  }
+ ],
+ "part": [
+  {
+   "data": "{\"type\":\"text\",\"text\":\"reply with exactly: roundtrip-probe\"}",
+   "id": "prt_15c84e7230013lashHzdS8wtKQ",
+   "message_id": "msg_15c84e720001gh0u1Zb53C9vFW",
+   "session_id": "ses_ea37b18fdffeVry1zoM2obT54w",
+   "time_created": 1792553576231,
+   "time_updated": 1792553576233
+  },
+  {
+   "data": "{\"type\":\"step-start\"}",
+   "id": "prt_15c851d41001WRoPjrmPUPlisZ",
+   "message_id": "msg_15c84e73a001C8kXQctCDuluYJ",
+   "session_id": "ses_ea37b18fdffeVry1zoM2obT54w",
+   "time_created": 1792553590082,
+   "time_updated": 1792553590085
+  },
+  {
+   "data": "{\"type\":\"reasoning\",\"text\":\"The user wants me to reply with exactly \\\"roundtrip-probe\\\".\",\"time\":{\"start\":1792553590177,\"end\":1792553590321}}",
+   "id": "prt_15c851da1001zuxKh2zjcUV1E0",
+   "message_id": "msg_15c84e73a001C8kXQctCDuluYJ",
+   "session_id": "ses_ea37b18fdffeVry1zoM2obT54w",
+   "time_created": 1792553590177,
+   "time_updated": 1792553590323
+  },
+  {
+   "data": "{\"type\":\"text\",\"text\":\"roundtrip-probe\",\"time\":{\"start\":1792553590324,\"end\":1792553590392}}",
+   "id": "prt_15c851e34001AhlwdTSowMOpTa",
+   "message_id": "msg_15c84e73a001C8kXQctCDuluYJ",
+   "session_id": "ses_ea37b18fdffeVry1zoM2obT54w",
+   "time_created": 1792553590324,
+   "time_updated": 1792553590393
+  },
+  {
+   "data": "{\"reason\":\"stop\",\"type\":\"step-finish\",\"tokens\":{\"total\":8079,\"input\":250,\"output\":6,\"reasoning\":15,\"cache\":{\"write\":0,\"read\":7808}},\"cost\":0}",
+   "id": "prt_15c851e7c0013alohK1tOfQbM3",
+   "message_id": "msg_15c84e73a001C8kXQctCDuluYJ",
+   "session_id": "ses_ea37b18fdffeVry1zoM2obT54w",
+   "time_created": 1792553590397,
+   "time_updated": 1792553590398
+  }
+ ],
+ "session": [
+  {
+   "agent": "build",
+   "cost": 0.0,
+   "directory": "/home/user/scratch/oc-probe",
+   "id": "ses_ea37b18fdffeVry1zoM2obT54w",
+   "metadata": null,
+   "model": "{\"id\":\"big-pickle\",\"providerID\":\"opencode\"}",
+   "parent_id": null,
+   "path": "home/user/scratch/oc-probe",
+   "permission": null,
+   "project_id": "global",
+   "revert": null,
+   "share_url": null,
+   "slug": "lucky-nebula",
+   "summary_additions": 0,
+   "summary_deletions": 0,
+   "summary_diffs": null,
+   "summary_files": 0,
+   "time_archived": null,
+   "time_compacting": null,
+   "time_created": 1792553576194,
+   "time_updated": 1792553590416,
+   "title": "roundtrip-probe",
+   "tokens_cache_read": 7808,
+   "tokens_cache_write": 0,
+   "tokens_input": 250,
+   "tokens_output": 6,
+   "tokens_reasoning": 15,
+   "version": "1.19.3",
+   "workspace_id": null
+  }
+ ]
+}
