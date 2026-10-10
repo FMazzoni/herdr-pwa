@@ -2,13 +2,13 @@
 
 import re
 from enum import StrEnum
-from typing import Self
+from typing import Final, Self
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
 from herdr_pwa.engine.model import PaneId, SessionId, as_pane_id, as_session_id, screen_digest
 
-_OPTION_RE = re.compile(r"^\s*[>❯▸▶‣*\-•]?\s*(\d{1,2})\s*[.):]\s+(?P<label>\S.*?)\s*$")
+OPTION_RE = re.compile(r"^\s*[>\u276f▸▶‣*\-•]?\s*(\d{1,2})\s*[.):]\s+(?P<label>\S.*?)\s*$")
 
 _DIVIDER_RE = re.compile(r"^[\s─━╌╍┄┅┈┉═—=_·•\-]{4,}$")
 
@@ -20,6 +20,8 @@ _FOOTER_RE = re.compile(
 _MAX_CHROME_PARAGRAPHS = 3
 
 _MIN_MENU_OPTIONS = 2
+
+_MIN_CHECKBOX_ROWS = 2
 
 
 _TICKED_BOX = "xX*✔✓"
@@ -58,7 +60,7 @@ _SELECT_VERBS = (
 
 _TOGGLE_VERBS = ("toggle", "check", "uncheck", "deselect", "select all")
 
-_MARKER_RE = re.compile(r"^\s*[>❯▸▶‣]\s")
+_MARKER_RE = re.compile(r"^\s*[>\u276f▸▶‣]\s")
 
 _STEP_TOKEN_RE = re.compile(
     r"(?P<box>[\u2610\u2612\u2611\u2714\u2713])\s*(?P<label>[^\u2610\u2612\u2611\u2714\u2713\u2190\u2192]*)"
@@ -77,7 +79,7 @@ _HINT_RE = re.compile(
     r"^\s*(?P<keys>[^\s].{0,29}?)\s+to\s+(?P<verb>[A-Za-z][A-Za-z0-9 /+-]{0,28}?)\s*$"
 )
 
-_HINT_SPLIT = re.compile(r"\s*[·•|｜]\s*|\s{3,}")
+_HINT_SPLIT = re.compile(r"\s*[·•|\uff5c]\s*|\s{3,}")
 
 _TRAILING_PAREN_RE = re.compile(r"(?<=\S)\s*\([^()]*\)\s*$")
 
@@ -123,9 +125,7 @@ _KEY_ALIASES: dict[str, tuple[str, ...]] = {
     "↓": ("down",),
     "←": ("left",),
     "→": ("right",),
-    # A generic "arrow keys" advertises the VERTICAL pair only. Left/right are
-    # A different affordance -- a row of choices laid out sideways -- and the parser
-    # enables them only where the screen advertises ← or → itself.
+    # "Arrow keys" means the vertical pair; left/right only count where the screen draws them.
     "arrow": ("up", "down"),
     "arrows": ("up", "down"),
     "arrow keys": ("up", "down"),
@@ -137,6 +137,11 @@ _CTRL_RE = re.compile(r"^ctrl[+-]([a-z])$")
 _MAX_HINTS = 4
 
 _MAX_FOOTER_LINES = 3
+
+
+_NO_PANE: Final = PaneId("")
+
+_NO_SESSION: Final = SessionId("")
 
 
 class MenuShape(StrEnum):
@@ -194,7 +199,7 @@ def _keys_in(token: str) -> tuple[str, ...]:
     return tuple(dict.fromkeys(found))
 
 
-def _is_key_hint(line: str) -> bool:
+def is_key_hint(line: str) -> bool:
     """True when a line is the terminal advertising a KEY, not prose."""
     for segment in _HINT_SPLIT.split(line):
         match = _HINT_RE.match(segment.strip(" ()[]"))
@@ -208,13 +213,12 @@ def _is_key_hint(line: str) -> bool:
 
 def _footer_lines(lines: list[str]) -> list[str]:
     """The key-hint footer at the very END of the viewport, and only there."""
+    end = len(lines)
+    while end and not lines[end - 1].strip():
+        end -= 1
     found: list[str] = []
-    for line in reversed(lines):
-        if not line.strip():
-            if found:
-                break
-            continue
-        if _DIVIDER_RE.match(line) or not _is_chrome(line):
+    for line in reversed(lines[:end]):
+        if not line.strip() or _DIVIDER_RE.match(line) or not _is_chrome(line):
             break
         found.append(line)
         if len(found) >= _MAX_FOOTER_LINES:
@@ -238,17 +242,22 @@ def _hints(footer: list[str]) -> tuple[KeyHint, ...]:
     """Parse ``<key> to <verb>`` out of the footer lines, in reading order."""
     found: list[KeyHint] = []
     seen: set[tuple[str, str]] = set()
-    for line in footer:
-        for segment in _segments(line):
-            if (m := _HINT_RE.match(_hint_text(segment))) is None:
-                continue
-            verb = " ".join(m.group("verb").lower().split())
-            for key in _keys_in(m.group("keys")):
-                if (key, verb) in seen:
-                    continue
-                seen.add((key, verb))
-                found.append(KeyHint(key=key, verb=verb))
+    for hint in (hint for line in footer for hint in _line_hints(line)):
+        if (hint.key, hint.verb) not in seen:
+            seen.add((hint.key, hint.verb))
+            found.append(hint)
     return tuple(found[:_MAX_HINTS])
+
+
+def _line_hints(line: str) -> list[KeyHint]:
+    """Every hint one footer line names, duplicates included."""
+    found: list[KeyHint] = []
+    for segment in _segments(line):
+        if (m := _HINT_RE.match(_hint_text(segment))) is None:
+            continue
+        verb = " ".join(m.group("verb").lower().split())
+        found.extend(KeyHint(key=key, verb=verb) for key in _keys_in(m.group("keys")))
+    return found
 
 
 def _is_multi_select(
@@ -262,7 +271,7 @@ def _is_multi_select(
     if run is not None:
         return any(_CHECKBOX_RE.match(label) for _, _, label in run)
     start = _dialog_start(lines, len(lines))
-    return sum(bool(_CHECKBOX_RE.match(line)) for line in lines[start:]) >= 2
+    return sum(bool(_CHECKBOX_RE.match(line)) for line in lines[start:]) >= _MIN_CHECKBOX_ROWS
 
 
 def _corroborated(
@@ -318,9 +327,7 @@ def _stepper(lines: list[str], stop: int) -> Stepper | None:
 def _asks(lines: list[str], stop: int) -> str:
     """The question the DIALOG BOX asks, or ``""`` when it asks none."""
     start = _dialog_start(lines, stop)
-    # With no rule anywhere above it there is no BOX, and "the last few
-    # paragraphs of the viewport" is transcript. Only the paragraph the run sits
-    # directly under can be its question then. Measured on a live /model picker.
+    # With no rule above there is no box, so only the paragraph right above the run can ask.
     window = _MAX_CHROME_PARAGRAPHS + 1 if start else 1
     for paragraph in reversed(_askable(lines, start, stop)[-window:]):
         if "?" in paragraph:
@@ -354,8 +361,7 @@ def _shape(
     """Classify the screen, in the order that fails safe."""
     if _is_multi_select(lines, run, hints):
         return MenuShape.MULTI_SELECT
-    # SINGLE_CHOICE IS EARNED, NOT DEFAULTED TO. Failing the
-    # test means UNKNOWN -- refused because it failed, not because it was odd.
+    # Single-choice is earned, never defaulted to: failing the test means UNKNOWN.
     if run is not None and corroborated and _rows_are_the_answer(lines, run, hints):
         return MenuShape.SINGLE_CHOICE
     if hints:
@@ -371,8 +377,6 @@ class PromptOption(BaseModel):
     number: int
     label: str
     checked: bool | None = None
-
-    # There is deliberately no `key` property here any more.
 
     @property
     def toggles(self) -> bool:
@@ -436,8 +440,7 @@ class BlockedPrompt(BaseModel):
     @property
     def identity(self) -> str:
         """A digest of the QUESTION AS POSED, or ``""`` if nothing was read."""
-        # NO DIALOG, NO IDENTITY -- `question` falls back to
-        # the status line on a screen with no buttons.
+        # No dialog, no identity: `question` falls back to the status line on a screen with no buttons.
         if not (self.drew_rows or self.shape is not MenuShape.NONE or self.asked):
             return ""
         if not (self.question or self.options or self.shape is MenuShape.MULTI_SELECT):
@@ -448,8 +451,7 @@ class BlockedPrompt(BaseModel):
             "\x1e".join(
                 (
                     self.shape.value,
-                    # WHAT IS BEING ASKED ABOUT, not just what is being asked.
-                    # Without it every claude permission prompt is one question.
+                    # Without the body every claude permission prompt is one question.
                     self.body,
                     self.question,
                     "" if step is None else f"{step.answered}/{'\x1d'.join(step.steps)}",
@@ -463,20 +465,19 @@ class BlockedPrompt(BaseModel):
         cls,
         text: str,
         *,
-        target: PaneId = PaneId(""),
-        session: SessionId = SessionId(""),
+        target: PaneId = _NO_PANE,
+        session: SessionId = _NO_SESSION,
     ) -> Self:
         """Split detection output into a question and any numbered options."""
         lines = text.splitlines()
-        # A DRAWN PANEL IS THE SCREEN, and `text` follows it so that `raw` is
-        # still the screen this was read from.
+        # A drawn panel is the screen; `text` follows it so `raw` is still what was read.
         if (panel := _panel_screen(lines)) is not None:
             lines, text = panel, "\n".join(panel)
-        # `found` is the run as READ; `run` is the run as TRUSTED.
+        # `found` is the run as read; `run` is the run as trusted.
         found = _trailing_menu(lines)
         run = found
         hints = _hints(_footer_lines(lines))
-        # NO CURSOR, NO MENU, whatever the footer looks like.
+        # No cursor, no menu, whatever the footer looks like.
         if run is not None and not _focused(lines, run):
             run = None
         corroborated = run is not None and _corroborated(lines, run, hints)
@@ -501,7 +502,7 @@ def _options(run: list[tuple[int, int, str]] | None, shape: MenuShape) -> tuple[
     """The rows of a menu this app is willing to name, with their tick state."""
     if run is None or shape not in (MenuShape.SINGLE_CHOICE, MenuShape.MULTI_SELECT):
         return ()
-    rows = []
+    rows: list[PromptOption] = []
     for _, number, label in run:
         checked, text = _ticked(label)
         rows.append(PromptOption(number=number, label=text, checked=checked))
@@ -559,14 +560,14 @@ def _panel_screen(lines: list[str]) -> list[str] | None:
     if bottom is None:
         return None
     inside = [_unboxed(line) for line in lines[top + 1 : bottom]]
-    if not any(_OPTION_RE.match(line) for line in inside):
+    if not any(OPTION_RE.match(line) for line in inside):
         return None
     return _upto_last_option(inside) + _panel_footer(lines[bottom + 1 :])
 
 
 def _upto_last_option(inside: list[str]) -> list[str]:
     """A panel's rows, cut after its last option row."""
-    last = max(i for i, line in enumerate(inside) if _OPTION_RE.match(line))
+    last = max(i for i, line in enumerate(inside) if OPTION_RE.match(line))
     kept = inside[: last + 1]
     return kept + [line for line in inside[last + 1 :] if _is_inert(line)]
 
@@ -576,33 +577,33 @@ def _trailing_menu(lines: list[str]) -> list[tuple[int, int, str]] | None:
     matches = [
         (i, int(m.group(1)), m.group("label"))
         for i, line in enumerate(lines)
-        if (m := _OPTION_RE.match(line))
+        if (m := OPTION_RE.match(line))
     ]
-    if not matches:
+    # A menu is what the agent waits on now, so only blanks, rules and hints may follow it.
+    if not matches or not all(_is_inert(line) for line in lines[matches[-1][0] + 1 :]):
         return None
-
-    # Nothing but blanks, rules and key hints may follow the last option: a menu
-    # is what the agent is waiting on *now*, so it sits at the end of the view.
-    if any(not _is_inert(line) for line in lines[matches[-1][0] + 1 :]):
+    run = _counted_down(lines, matches)
+    if run is None or len(run) < _MIN_MENU_OPTIONS:
         return None
+    return list(reversed(run))
 
+
+def _counted_down(
+    lines: list[str], matches: list[tuple[int, int, str]]
+) -> list[tuple[int, int, str]] | None:
+    """The options from the last one back to option 1, or ``None`` on a gap or an interloper."""
     run: list[tuple[int, int, str]] = []
     expected = matches[-1][1]
     for entry in reversed(matches):
         if entry[1] != expected:
             return None
-        if run and any(not _is_interleave(line) for line in lines[entry[0] + 1 : run[-1][0]]):
+        if run and not all(_is_interleave(line) for line in lines[entry[0] + 1 : run[-1][0]]):
             return None
         run.append(entry)
         if expected == 1:
-            break
+            return run
         expected -= 1
-    else:
-        return None  # ran out of matches before reaching option 1
-
-    if len(run) < _MIN_MENU_OPTIONS:
-        return None
-    return list(reversed(run))
+    return None
 
 
 def _paragraphs(lines: list[str], start: int, stop: int) -> list[str]:
@@ -623,7 +624,7 @@ def _paragraphs(lines: list[str], start: int, stop: int) -> list[str]:
 
 def _is_chrome(line: str) -> bool:
     """True for a rule or a key-hint footer: furniture the terminal drew, not text."""
-    return bool(_DIVIDER_RE.match(line)) or bool(_FOOTER_RE.search(line)) or _is_key_hint(line)
+    return bool(_DIVIDER_RE.match(line)) or bool(_FOOTER_RE.search(line)) or is_key_hint(line)
 
 
 _MARKER_LEAD = re.compile(r"^[\s\u25cf\u25cb\u2022\u00b7]+")
@@ -647,7 +648,7 @@ def _dialog_start(lines: list[str], stop: int) -> int:
 def _is_option_block(paragraph: str) -> bool:
     """True for a paragraph that is nothing but numbered option rows."""
     rows = paragraph.split("\n")
-    return all(_OPTION_RE.match(row) for row in rows)
+    return all(OPTION_RE.match(row) for row in rows)
 
 
 def _askable(lines: list[str], start: int, stop: int) -> list[str]:
@@ -661,8 +662,7 @@ def _askable(lines: list[str], start: int, stop: int) -> list[str]:
 
 def _question(lines: list[str], stop: int) -> str:
     """The paragraph of ``lines[:stop]`` that is being asked."""
-    # One resolver: what `_earned` tests for is the SAME paragraph this returns,
-    # so a screen can never be called single-choice on a question we then drop.
+    # One resolver, so a screen is never single-choice on a question this then drops.
     if asked := _asks(lines, stop):
         return asked
     fallback = _askable(lines, 0, stop)

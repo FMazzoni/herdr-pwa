@@ -3,12 +3,47 @@
 import hashlib
 import re
 from collections import Counter
+from collections.abc import Iterable, Mapping
 from enum import StrEnum
-from typing import Any, NewType, Self
+from typing import NewType, Self, cast
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field
+from pydantic import BaseModel, ConfigDict, computed_field
 
 from herdr_pwa.protocol import EXPECTED_PROTOCOL as _EXPECTED_PROTOCOL
+
+type _Raw = Mapping[str, object]
+
+
+def _to_int(value: object) -> int:
+    """``int(value)`` for whatever a JSON field holds, failing the way ``int`` would."""
+    if isinstance(value, int | float | str | bytes | bytearray):
+        return int(value)
+    raise TypeError(
+        f"int() argument must be a string or a real number, not {type(value).__name__!r}"
+    )
+
+
+def _records(value: object) -> list[_Raw]:
+    """The objects of a JSON array; anything else in it is a malformed payload."""
+    if not value:
+        return []
+    if not isinstance(value, Iterable):
+        raise TypeError(f"{type(value).__name__!r} object is not iterable")
+    found: list[_Raw] = []
+    for item in cast(Iterable[object], value):
+        if not isinstance(item, Mapping):
+            raise TypeError(f"{type(item).__name__!r} object is not a JSON object")
+        found.append(cast(_Raw, item))
+    return found
+
+
+def _panes(value: object) -> list[_Raw]:
+    """The pane objects of a snapshot, skipping anything that is not one."""
+    if not value:
+        return []
+    if not isinstance(value, Iterable):
+        raise TypeError(f"{type(value).__name__!r} object is not iterable")
+    return [cast(_Raw, p) for p in cast(Iterable[object], value) if isinstance(p, dict)]
 
 
 def screen_digest(screen: str) -> str:
@@ -100,15 +135,19 @@ class Workspace(BaseModel):
     tab_count: int = 0
 
     @classmethod
-    def from_raw(cls, raw: dict[str, Any]) -> Self:
-        return cls(
-            workspace_id=str(raw.get("workspace_id", "")),
-            label=str(raw.get("label") or ""),
-            number=raw.get("number"),
-            status=AgentStatus.coerce(raw.get("agent_status")),
-            focused=bool(raw.get("focused", False)),
-            pane_count=int(raw.get("pane_count") or 0),
-            tab_count=int(raw.get("tab_count") or 0),
+    def from_raw(cls, raw: _Raw) -> Self:
+        """Normalize one snapshot ``workspaces[]`` entry."""
+        # Validated rather than constructed, so `number` is coerced exactly as pydantic would.
+        return cls.model_validate(
+            {
+                "workspace_id": str(raw.get("workspace_id", "")),
+                "label": str(raw.get("label") or ""),
+                "number": raw.get("number"),
+                "status": AgentStatus.coerce(raw.get("agent_status")),
+                "focused": bool(raw.get("focused", False)),
+                "pane_count": _to_int(raw.get("pane_count") or 0),
+                "tab_count": _to_int(raw.get("tab_count") or 0),
+            }
         )
 
 
@@ -122,7 +161,7 @@ def _shorter_title(raw_title: object, stripped: object) -> str:
     return min(candidates, key=len)
 
 
-def _chosen_name(raw: dict[str, Any], pane: dict[str, Any] | None) -> str:
+def _chosen_name(raw: _Raw, pane: _Raw | None) -> str:
     """What to call this pane: the most deliberate name anyone gave it."""
     for text in (
         (pane or {}).get("label"),
@@ -140,7 +179,8 @@ def _coerce_session(raw: object) -> tuple[str, str]:
     if isinstance(raw, str):
         return raw.strip(), ""
     if isinstance(raw, dict):
-        return str(raw.get("value") or "").strip(), str(raw.get("agent") or "")
+        session = cast(_Raw, raw)
+        return str(session.get("value") or "").strip(), str(session.get("agent") or "")
     return "", ""
 
 
@@ -149,34 +189,23 @@ class Agent(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    session: SessionId = Field(
-        description="Provider session id — the stable identity (see SessionId)."
-    )
-    target: PaneId = Field(description="Pane id: the address the runner is driven by (see PaneId).")
-    title: str = Field(
-        default="",
-        description="What to call this pane — the most deliberate name anyone "
-        "gave it (see _chosen_name), glyphs stripped.",
-    )
+    session: SessionId
+    target: PaneId
+    title: str = ""
     status: AgentStatus = AgentStatus.UNKNOWN
-    agent: str = Field(default="", description="Provider kind, e.g. 'claude'.")
+    agent: str = ""
     cwd: str = ""
     foreground_cwd: str = ""
-    workspace: str = Field(default="", description="Workspace label, joined by workspace_id.")
+    workspace: str = ""
     workspace_id: str = ""
     workspace_number: int | None = None
     tab_id: str = ""
-    focused: bool = Field(
-        default=False,
-        description=(
-            "Front pane OF ITS TAB, per herdr — not the one globally focused "
-            "pane, which is Snapshot.focused_pane_id. Several agents carry it."
-        ),
-    )
+    # Front pane of its tab, so several agents carry it; the global one is Snapshot.focused_pane_id.
+    focused: bool = False
     revision: int = 0
     state_change_seq: int = 0
 
-    @computed_field  # type: ignore
+    @computed_field
     @property
     def rank(self) -> int:
         """Urgency rank; lower is more urgent. Templates sort and style on this."""
@@ -204,9 +233,9 @@ class Agent(BaseModel):
     @classmethod
     def from_raw(
         cls,
-        raw: dict[str, Any],
-        workspaces: dict[str, Workspace] | None = None,
-        panes: dict[str, dict[str, Any]] | None = None,
+        raw: _Raw,
+        workspaces: Mapping[str, Workspace] | None = None,
+        panes: Mapping[str, _Raw] | None = None,
     ) -> Self:
         """Normalize one snapshot ``agents[]`` entry, joining workspace and pane."""
         workspace_id = str(raw.get("workspace_id") or "")
@@ -226,8 +255,8 @@ class Agent(BaseModel):
             workspace_number=ws.number if ws else None,
             tab_id=str(raw.get("tab_id") or ""),
             focused=bool(raw.get("focused", False)),
-            revision=int(raw.get("revision") or 0),
-            state_change_seq=int(raw.get("state_change_seq") or 0),
+            revision=_to_int(raw.get("revision") or 0),
+            state_change_seq=_to_int(raw.get("state_change_seq") or 0),
         )
 
 
@@ -246,17 +275,9 @@ class SessionResolution(BaseModel):
 
     session: SessionId
     presence: Presence
-    expected_target: PaneId | None = Field(
-        default=None, description="The address this session was last seen at, if known."
-    )
-    agent: Agent | None = Field(
-        default=None, description="The agent this session resolves to now, if alive."
-    )
-    occupant: Agent | None = Field(
-        default=None,
-        description="Whoever holds ``expected_target`` now — a different agent "
-        "whenever this is set and ``presence`` is not HERE.",
-    )
+    expected_target: PaneId | None = None
+    agent: Agent | None = None
+    occupant: Agent | None = None
 
     @property
     def ok(self) -> bool:
@@ -297,28 +318,29 @@ class Snapshot(BaseModel):
     focused_workspace_id: str | None = None
 
     @classmethod
-    def from_raw(cls, raw: dict[str, Any], *, expected_protocol: int | None = None) -> Self:
+    def from_raw(cls, raw: _Raw, *, expected_protocol: int | None = None) -> Self:
         """Build from the inner ``snapshot`` object of a runner payload."""
-        workspaces = tuple(Workspace.from_raw(w) for w in raw.get("workspaces") or ())
+        workspaces = tuple(Workspace.from_raw(w) for w in _records(raw.get("workspaces")))
         by_id = {w.workspace_id: w for w in workspaces}
-        by_pane = {
-            str(p.get("pane_id") or ""): p for p in raw.get("panes") or () if isinstance(p, dict)
-        }
+        by_pane = {str(p.get("pane_id") or ""): p for p in _panes(raw.get("panes"))}
         agents = sorted(
-            (Agent.from_raw(a, by_id, by_pane) for a in raw.get("agents") or ()),
+            (Agent.from_raw(a, by_id, by_pane) for a in _records(raw.get("agents"))),
             key=lambda a: a.sort_key,
         )
-        return cls(
-            protocol=int(raw.get("protocol") or 0),
-            version=str(raw.get("version") or ""),
-            expected_protocol=(
-                EXPECTED_PROTOCOL if expected_protocol is None else expected_protocol
-            ),
-            agents=tuple(agents),
-            workspaces=workspaces,
-            focused_pane_id=raw.get("focused_pane_id"),
-            focused_tab_id=raw.get("focused_tab_id"),
-            focused_workspace_id=raw.get("focused_workspace_id"),
+        # Validated rather than constructed, so the focus ids are checked exactly as pydantic would.
+        return cls.model_validate(
+            {
+                "protocol": _to_int(raw.get("protocol") or 0),
+                "version": str(raw.get("version") or ""),
+                "expected_protocol": (
+                    EXPECTED_PROTOCOL if expected_protocol is None else expected_protocol
+                ),
+                "agents": tuple(agents),
+                "workspaces": workspaces,
+                "focused_pane_id": raw.get("focused_pane_id"),
+                "focused_tab_id": raw.get("focused_tab_id"),
+                "focused_workspace_id": raw.get("focused_workspace_id"),
+            }
         )
 
     @property

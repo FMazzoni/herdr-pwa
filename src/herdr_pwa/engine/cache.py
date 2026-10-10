@@ -12,7 +12,6 @@ from typing import Final, Protocol, cast
 from herdr_pwa.engine.model import Snapshot
 from herdr_pwa.engine.transport import EngineUnavailable
 
-
 log = logging.getLogger(__name__)
 
 
@@ -37,15 +36,11 @@ class CachedValue[T]:
     """What a reader gets: the value, how old it truly is, and any failure."""
 
     value: T
-
     age: float
-
     error: Exception | None = None
 
 
 type CachedSnapshot = CachedValue[Snapshot]
-"""The snapshot's entry, which is what nearly every caller means.
-"""
 
 
 class _Shelf:
@@ -92,12 +87,13 @@ class SnapshotCache:
         """Build one from *these* settings. The only place the TTL is read."""
         return cls(ttl=settings.snapshot_cache_ttl)
 
+    @property
+    def ttl(self) -> float:
+        """How long a fetched value is served before the next read refetches it."""
+        return self._ttl
+
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
         return f"{type(self).__name__}(ttl={self._ttl!r})"
-
-    # ------------------------------------------------------------------
-    # The one entry point
-    # ------------------------------------------------------------------
 
     def get(self, load: Callable[[], Snapshot], *, max_age: float | None = None) -> CachedSnapshot:
         """The herd snapshot, fetched with `load` only if nobody else is."""
@@ -121,14 +117,8 @@ class SnapshotCache:
         try:
             return cast(CachedValue[T], self._fetch(shelf, load, fetch))
         finally:
-            # Belt and braces: a ``BaseException`` (a shutdown, a cancelled
-            # worker) must not leave followers waiting on a fetch that will
-            # never publish. A no-op once the fetch published normally.
+            # A BaseException (shutdown, cancelled worker) must not strand followers; no-op once published.
             self._abandon(shelf, fetch)
-
-    # ------------------------------------------------------------------
-    # Leader
-    # ------------------------------------------------------------------
 
     def _fetch(
         self, shelf: _Shelf, load: Callable[[], object], fetch: _Fetch
@@ -187,10 +177,6 @@ class SnapshotCache:
         if shelf.in_flight is fetch:
             shelf.in_flight = None
 
-    # ------------------------------------------------------------------
-    # Follower
-    # ------------------------------------------------------------------
-
     def _follow(self, fetch: _Fetch) -> CachedValue[object]:
         """Wait for the leader's fetch and take **its** outcome — never fetch again."""
         fetch.done.wait()
@@ -199,10 +185,6 @@ class SnapshotCache:
         if fetch.error is not None:
             raise fetch.error
         raise EngineUnavailable("the herd could not be read")
-
-    # ------------------------------------------------------------------
-    # State, always read under the lock
-    # ------------------------------------------------------------------
 
     def _entry_locked(self, shelf: _Shelf) -> CachedValue[object] | None:
         """The stored value with its real age, or ``None`` if nothing is stored."""
@@ -224,11 +206,3 @@ class SnapshotCache:
         if max_age is not None and entry.age > max_age:
             return None
         return entry
-
-
-def get_snapshot_cache() -> SnapshotCache:
-    """FastAPI dependency: `cache: SnapshotCache = Depends(get_snapshot_cache)`."""
-    raise RuntimeError(
-        "no per-app cache is installed: build the app with create_app(), which "
-        "registers one, or override this dependency yourself."
-    )
