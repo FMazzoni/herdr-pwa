@@ -265,6 +265,11 @@ def long_chat(turns: int = 24) -> list[JsonObject]:
     return records
 
 
+def long_pane(lines: int = 120) -> str:
+    """Terminal scrollback several screens tall, numbered so the newest line is easy to find."""
+    return "".join(f"\x1b[32m$\x1b[0m step {n:03d}: applied to the cluster\n" for n in range(lines))
+
+
 def runner(frame: Callable[[], JsonObject], screen: str = "") -> Replies:
     """A runner whose snapshot is ``frame()`` and whose every pane shows ``screen``."""
     return lambda: {SNAPSHOT: frame(), READ: read_frame(screen)}
@@ -533,6 +538,21 @@ AGENT_PAGE: Final = (
         runner(_stressed),
         long_chat(),
         title="Chat: a transcript several screens tall, opened on its newest turn",
+    ),
+    State(
+        "chat-blocked",
+        f"{AGENT}?tab=chat",
+        "#answer .answer__question",
+        _blocked_on(MENU),
+        long_chat(),
+        title="Chat: a long transcript under a question, which keeps the first screen",
+    ),
+    State(
+        "pane-long",
+        f"{AGENT}?tab=pane",
+        ".mirror .pane",
+        runner(_stressed, long_pane()),
+        title="Agent page: Pane, scrollback several screens tall, opened on its newest line",
     ),
     State(
         "chat-absent",
@@ -857,6 +877,8 @@ V2_ONLY: Final = (
     "agent-unreachable",
     "agent-chat-composing",
     "chat-long",
+    "chat-blocked",
+    "pane-long",
 )
 
 _RIG: Final = "the rig can answer a key, but no state stages the runner into this outcome yet"

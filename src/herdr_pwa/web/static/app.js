@@ -324,17 +324,22 @@
     }
   });
 
-  /* ---- The chat opens on its newest turn and follows it only while the reader is there ----
-   * Turns read oldest first, so the end of the page is the newest turn, just above the dock.
-   * Whether to follow is decided before each swap, from where the reader is then; a reader
-   * who scrolled up keeps the turn they are reading where it was. */
-  // How far under the dock's top edge the newest turn may end and still count as the end.
+  /* ---- Chat and Pane open on their newest line and follow it only while the reader is there ----
+   * Both read oldest first, so the end of the page is the newest turn or terminal line, just
+   * above the dock. Whether to follow is decided before each swap, from where the reader is
+   * then; a reader who scrolled up keeps what they are reading where it was. A page that opens
+   * on a question stays at the top, where the question is, until the reader moves. */
+  // How far under the dock's top edge the newest line may end and still count as the end.
   var END_SLACK = 120;
   var swapEnd = false;
   var swapMark = null;
+  var opening = true;
 
-  function chatTurns() {
-    return document.querySelectorAll("#agent-view .turn");
+  // A chat turn, or a line of the terminal mirror (its status strip is not scrollback).
+  var READ_UNITS = "#agent-view .turn, #agent-view > .pane:not(.pane--status) > .pane__line";
+
+  function readUnits() {
+    return document.querySelectorAll(READ_UNITS);
   }
 
   function dockTop() {
@@ -343,13 +348,18 @@
   }
 
   function atEnd() {
-    var turns = chatTurns();
+    var turns = readUnits();
     var last = turns[turns.length - 1];
     return !last || last.getBoundingClientRect().bottom <= dockTop() + END_SLACK;
   }
 
+  function asking() {
+    var region = document.getElementById("answer");
+    return !!(region && !region.classList.contains("answer--quiet"));
+  }
+
   function toEnd() {
-    if (chatTurns().length) {
+    if (readUnits().length && !(opening && asking())) {
       window.scrollTo(0, root.scrollHeight);
     }
   }
@@ -358,9 +368,9 @@
     return String(turn.textContent).slice(0, 160);
   }
 
-  /* The first turn still on screen, to hold in place across a swap. */
+  /* The first turn or line still on screen, to hold in place across a swap. */
   function mark() {
-    var turns = chatTurns();
+    var turns = readUnits();
     for (var i = 0; i < turns.length; i++) {
       var box = turns[i].getBoundingClientRect();
       if (box.bottom > 0) {
@@ -370,10 +380,10 @@
     return null;
   }
 
-  /* The same turn after the swap: same text, nearest its old place, since the window of
-   * turns drops the oldest as new ones arrive. */
+  /* The same turn or line after the swap: same text, nearest its old place, since both
+   * windows drop their oldest as new ones arrive. */
   function hold(held) {
-    var turns = chatTurns();
+    var turns = readUnits();
     var best = -1;
     for (var i = 0; i < turns.length; i++) {
       var nearer = best === -1 || Math.abs(i - held.index) < Math.abs(best - held.index);
@@ -402,12 +412,25 @@
     if (!isRead(event.detail)) {
       return;
     }
-    if (swapEnd) {
+    if (opening && asking()) {
+      window.scrollTo(0, 0);
+    } else if (swapEnd) {
       toEnd();
     } else if (swapMark) {
       hold(swapMark);
     }
     swapMark = null;
+    // The page has opened once both the view and the answer region have arrived.
+    if (document.getElementById("answer") && readUnits().length) {
+      opening = false;
+    }
+  });
+
+  function opened() {
+    opening = false;
+  }
+  ["pointerdown", "wheel", "keydown"].forEach(function (name) {
+    document.addEventListener(name, opened, { capture: true, passive: true });
   });
 
   /* Sending is reading the end: the reply lands there. */
