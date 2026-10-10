@@ -1,0 +1,22 @@
+{% extends "files_base.html" %}
+{% block title %}{{ rel or root.label }} &mdash; herdr{% endblock %}
+{% block content %}
+{{ f.crumbs(nav, root, rel) }}
+{% if entries %}
+<ul class="flist">
+  {% for name, folder, bytes in entries %}
+  {% set path = (rel ~ "/" ~ name) if rel else name %}
+  {% if folder %}
+  {% set n = status.under(path) %}
+  {{ f.row(nav.href("tree", path), name, aside=(n ~ " changed") if n else "", folder=true) }}
+  {% else %}
+  {% set change = status.of(path) %}
+  {{ f.row(nav.href("file", path), name, aside=size(bytes), kind=change.kind if change else none) }}
+  {% endif %}
+  {% endfor %}
+</ul>
+{% else %}
+<p class="empty">Nothing to show in this folder.</p>
+{% endif %}
+<p class="files__toggle"><a href="{{ nav.href('tree', rel, all=('' if everything else 1)) }}" {{ replace() }}>{{ "Hide ignored files" if everything else "Show ignored files" }}</a></p>
+{% endblock %}

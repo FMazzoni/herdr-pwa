@@ -7,6 +7,7 @@ from typing import Final
 
 from herdr_pwa.engine.transport import EngineUnavailable
 from herdr_pwa.jsontypes import JsonObject, as_object
+from tests.filefakes import make_repo, stand_in
 from tests.webfakes import (
     AGENT_GET,
     FIXTURES,
@@ -911,7 +912,77 @@ LIFECYCLE: Final = (
     ),
 )
 
-STATES: Final = (*FEED, *AGENT_PAGE, *TAPPED, *ANSWERED, *LIFECYCLE)
+
+def _in_repo(rig: Rig) -> None:
+    """The working agent stands in a fixture repository with a change in flight."""
+    repo = make_repo(rig.settings.state_dir.parent / "demo-service")
+    frame = rig.wire.replies[SNAPSHOT]
+    assert isinstance(frame, dict)
+    stand_in(frame, repo)
+
+
+def _files(name: str, query: str, ready: str, title: str) -> State:
+    path = f"{AGENT}/files" + (f"?{query}" if query else "")
+    return State(name, path, ready, runner(snapshot_frame), prime=_in_repo, title=title)
+
+
+FILE_REFS: Final = (
+    "The 404 branch now logs before it answers: see `src/app/server.py:34`, and the port "
+    "moved to 8088 at src/app/server.py:9. The operator notes are in docs/guide.md:3."
+)
+
+FILES: Final = (
+    State(
+        "files-roots",
+        "/files",
+        "main .cards .card",
+        runner(snapshot_frame),
+        prime=_in_repo,
+        title="Files: every repository an agent is working in",
+    ),
+    _files("files-changes", "", ".files .flist .frow", "Files: what changed, first"),
+    _files(
+        "files-diff",
+        "to=diff&path=src/app/server.py",
+        ".src--diff .src__code--add",
+        "Files: one file's change against the last commit",
+    ),
+    _files("files-tree", "to=tree", ".files .frow--dir", "Files: the tree at the top"),
+    _files("files-tree-folder", "path=src/app", ".files .flist .frow", "Files: one folder"),
+    _files("files-find", "to=find&q=server", "#find-results .frow", "Files: go to file"),
+    _files(
+        "files-code",
+        "path=src/app/server.py&line=34",
+        ".src [data-hp-at]",
+        "Files: highlighted Python, opened at a line",
+    ),
+    _files("files-markdown", "path=docs/guide.md", ".filemd table", "Files: rendered markdown"),
+    _files(
+        "files-paged",
+        "path=logs/big.log&line=1200",
+        ".pager .pager__go",
+        "Files: a large file, paged plain text",
+    ),
+    _files(
+        "files-minified",
+        "path=dist/bundle.min.js",
+        ".src .src__cut",
+        "Files: a minified line, cut",
+    ),
+    _files("files-secret", "path=config/.env", ".banner--held", "Files: the secret-file gate"),
+    _files("files-image", "path=assets/logo.png", ".fileimg", "Files: an image"),
+    State(
+        "chat-file-link",
+        f"{AGENT}?tab=chat",
+        ".chat a.file-ref",
+        runner(snapshot_frame),
+        [assistant_says(FILE_REFS)],
+        prime=_in_repo,
+        title="Chat: a path and line the agent wrote, linked into its files",
+    ),
+)
+
+STATES: Final = (*FEED, *AGENT_PAGE, *TAPPED, *ANSWERED, *LIFECYCLE, *FILES)
 
 # The screens the geometry gate has always held, which every other entry is in addition to.
 GEOMETRY_CORE: Final = (
@@ -936,6 +1007,7 @@ V2_ONLY: Final = (
     "chat-markdown",
     "chat-blocked",
     "pane-long",
+    *(s.name for s in FILES),
 )
 
 _RIG: Final = "the rig can answer a key, but no state stages the runner into this outcome yet"

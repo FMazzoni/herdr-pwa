@@ -4,6 +4,7 @@ import re
 from collections.abc import Callable, Iterable
 from functools import lru_cache
 from typing import Final
+from urllib.parse import urlencode
 
 from linkify_it import LinkifyIt
 from markdown_it import MarkdownIt
@@ -12,7 +13,7 @@ from mdit_py_plugins.dollarmath import dollarmath_plugin
 from mdit_py_plugins.tasklists import tasklists_plugin
 from mdit_py_plugins.texmath import texmath_plugin
 
-from herdr_pwa.web.highlight import TOKEN_CLASSES, highlight
+from herdr_pwa.web.highlight import TOKEN_CLASSES, highlight, language_for
 from herdr_pwa.web.mathml import MATH_TAGS, math_node
 from herdr_pwa.web.mdnode import MdNode
 
@@ -48,7 +49,7 @@ VOID_TAGS: Final = frozenset({"hr", "br"})
 CLASSES: Final = frozenset(
     {
         *("table-scroll", "align-center", "align-right", "cell-whole", "math-block"),
-        *("task", "task-open", "task-done"),
+        *("task", "task-open", "task-done", "file-ref"),
         *TOKEN_CLASSES,
     }
 )
@@ -62,6 +63,56 @@ SHORT_CELL: Final = 24
 _ALIGN: Final = {"text-align:center": "align-center", "text-align:right": "align-right"}
 # The tasklists plugin's checkbox: with raw HTML off, no other inline HTML reaches the tree.
 _TASK_BOX: Final = "task-list-item-checkbox"
+# path:line, as agents and compilers write it: a file with an extension, then a line number,
+# then perhaps a column. Not inside a word or a URL, and not followed by more path.
+FILE_REF: Final = re.compile(
+    r"(?<![\w/.~:@-])((?:\.{1,2}/|/)?(?:[\w.@+-]+/)*[\w@+-][\w.@+-]*\.[A-Za-z][\w]{0,9})"
+    r":([1-9]\d{0,6})(?::\d{1,5})?(?![\w/:])"
+)
+
+
+def _names_a_file(path: str) -> bool:
+    # A folder in it, or a name Pygments knows, so "example.com:443" and "v1.2:3" stay text.
+    return "/" in path or bool(language_for(path.rpartition("/")[2]))
+
+
+def _file_ref(path: str, line: str, children: tuple[MdNode, ...]) -> MdNode:
+    # A query, not a URL: the template puts it under the files route of the agent who wrote it.
+    return MdNode(
+        "a", cls="file-ref", href=urlencode({"path": path, "line": line}), children=children
+    )
+
+
+def _file_refs(text: str) -> list[MdNode]:
+    parts: list[MdNode] = []
+    at = 0
+    for found in FILE_REF.finditer(text):
+        if not _names_a_file(found.group(1)):
+            continue
+        if found.start() > at:
+            parts.append(MdNode(text=text[at : found.start()]))
+        parts.append(_file_ref(found.group(1), found.group(2), (MdNode(text=found.group(0)),)))
+        at = found.end()
+    if at < len(text):
+        parts.append(MdNode(text=text[at:]))
+    return parts
+
+
+def _inline_code(node: SyntaxTreeNode) -> MdNode:
+    code = MdNode("code", text=node.content)
+    found = FILE_REF.fullmatch(node.content.strip())
+    if found is None or not _names_a_file(found.group(1)) or _in_link(node):
+        return code
+    return _file_ref(found.group(1), found.group(2), (code,))
+
+
+def _in_link(node: SyntaxTreeNode) -> bool:
+    parent = node.parent
+    while parent is not None:
+        if parent.type == "link":
+            return True
+        parent = parent.parent
+    return False
 
 
 def _code_block(node: SyntaxTreeNode) -> MdNode:
@@ -92,7 +143,7 @@ def _block_math(node: SyntaxTreeNode) -> MdNode:
 
 
 _LEAVES: Final[dict[str, Callable[[SyntaxTreeNode], MdNode]]] = {
-    "code_inline": lambda node: MdNode("code", text=node.content),
+    "code_inline": _inline_code,
     "fence": _code_block,
     "code_block": _code_block,
     "html_inline": _task_box,
@@ -101,6 +152,12 @@ _LEAVES: Final[dict[str, Callable[[SyntaxTreeNode], MdNode]]] = {
     "math_block": _block_math,
     "math_block_eqno": _block_math,
 }
+
+
+def _text_leaf(node: SyntaxTreeNode) -> list[MdNode]:
+    if node.type != "text" or _in_link(node) or ":" not in node.content:
+        return [MdNode(text=node.content)]
+    return _file_refs(node.content) or [MdNode(text=node.content)]
 
 
 def _leaf(node: SyntaxTreeNode) -> MdNode | None:
@@ -161,6 +218,8 @@ def _element(node: SyntaxTreeNode, children: list[MdNode]) -> list[MdNode]:
 
 
 def _convert(node: SyntaxTreeNode) -> list[MdNode]:
+    if node.type == "text":
+        return _text_leaf(node)
     leaf = _leaf(node)
     if leaf is not None:
         return [leaf]

@@ -30,6 +30,8 @@ OUT = ROOT / ".agents" / "shots"
 READY_MS = 15_000
 # Lets the last poll's swap and the fonts settle before the picture is taken.
 SETTLE_MS = 400
+# WebKit refuses a picture taller than this many device pixels; a long file is cut to fit.
+MAX_SHOT_PX = 32_000
 
 
 @dataclass(frozen=True)
@@ -97,7 +99,14 @@ def snap(page: Page, target: Path) -> list[Path]:
     first = target.with_suffix(".png")
     full = target.with_suffix(".full.png")
     page.screenshot(path=str(first))
-    page.screenshot(path=str(full), full_page=True)
+    tall = int(page.evaluate("() => document.documentElement.scrollHeight"))
+    scale = float(page.evaluate("() => window.devicePixelRatio")) or 1.0
+    width = int(page.evaluate("() => document.documentElement.clientWidth"))
+    if tall * scale <= MAX_SHOT_PX:
+        page.screenshot(path=str(full), full_page=True)
+    else:
+        clip = {"x": 0, "y": 0, "width": width, "height": int(MAX_SHOT_PX / scale)}
+        page.screenshot(path=str(full), full_page=True, clip=clip)  # pyright: ignore[reportArgumentType]
     return [first, full]
 
 

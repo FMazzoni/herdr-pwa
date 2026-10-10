@@ -309,10 +309,11 @@ def test_back_belongs_to_the_herd_in_the_markup(tmp_path: Path) -> None:
     feed = rig.http.get("/").text
     assert 'class="topbar__link" href="/workspaces">' in feed
     assert 'class="topbar__link" href="/push">' in feed
+    assert 'class="topbar__link" href="/files">' in feed
     cards = rig.http.get("/feed", headers=FRAGMENT).text
     assert f'href="/agent/{WORKING_SESSION}">' in cards
     page = rig.http.get(f"/agent/{WORKING_SESSION}").text
-    assert page.count("data-hp-replace") == 4  # leave, End, two tabs
+    assert page.count("data-hp-replace") == 5  # leave, Files, End, two tabs
     assert f'href="/agent/{WORKING_SESSION}?tab=pane" data-hp-replace' in page
 
 

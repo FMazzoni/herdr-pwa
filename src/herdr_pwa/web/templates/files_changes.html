@@ -1,0 +1,15 @@
+{% extends "files_base.html" %}
+{% block content %}
+{# What changed comes first: on a phone the question is what the agent just did. #}
+{{ ui.section_head("Changed", status.changes|length) }}
+{% if status.changes %}
+<ul class="flist">
+  {% for c in status.changes %}
+  {% set parts = c.path.rpartition("/") %}
+  {{ f.row(nav.href("diff", c.path), parts[2], dir=parts[0], aside=c.kind, kind=c.kind) }}
+  {% endfor %}
+</ul>
+{% else %}
+<p class="empty">Nothing has changed: the files match the last commit.</p>
+{% endif %}
+{% endblock %}

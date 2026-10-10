@@ -1,10 +1,11 @@
 """A fenced block's code as runs of text, each tagged with one class from a closed set."""
 
+from collections.abc import Sequence
 from functools import lru_cache
 from typing import Final
 
 from pygments.lexer import Lexer
-from pygments.lexers import find_lexer_class_by_name
+from pygments.lexers import find_lexer_class_by_name, find_lexer_class_for_filename
 from pygments.token import (
     Comment,
     Generic,
@@ -73,10 +74,10 @@ def _run(cls: str, text: str) -> MdNode:
     return MdNode("span", cls=cls, text=text) if cls else MdNode(text=text)
 
 
-def highlight(code: str, language: str) -> tuple[MdNode, ...]:
+def highlight(code: str, language: str, limit: int = HIGHLIGHT_LIMIT) -> tuple[MdNode, ...]:
     """Runs whose text joins back into ``code``, or none for an unknown or absent language."""
     lexer = _lexer(language.lower())
-    if lexer is None or len(code) > HIGHLIGHT_LIMIT:
+    if lexer is None or len(code) > limit:
         return ()
     runs: list[tuple[str, str]] = []
     for kind, text in lexer.get_tokens(code):
@@ -86,3 +87,27 @@ def highlight(code: str, language: str) -> tuple[MdNode, ...]:
         else:
             runs.append((cls, text))
     return tuple(_run(cls, text) for cls, text in runs if text)
+
+
+@lru_cache(maxsize=256)
+def language_for(filename: str) -> str:
+    """The name of the lexer Pygments picks for ``filename``, or "" for none."""
+    try:
+        found = find_lexer_class_for_filename(filename)
+    except ClassNotFound:
+        return ""
+    aliases: Sequence[str] = found.aliases if found is not None else ()
+    return aliases[0] if aliases else ""
+
+
+def split_lines(runs: tuple[MdNode, ...]) -> list[tuple[MdNode, ...]]:
+    """Highlighted runs cut at each newline, one tuple of runs per line of the source."""
+    lines: list[list[MdNode]] = [[]]
+    for run in runs:
+        parts = run.text.split("\n")
+        for index, part in enumerate(parts):
+            if index:
+                lines.append([])
+            if part:
+                lines[-1].append(MdNode(run.tag, cls=run.cls, text=part))
+    return [tuple(line) for line in lines]

@@ -32,7 +32,7 @@
     {#- Who spoke is drawn as a colour and an edge; VoiceOver is told in words. #}
     <span class="sr-only">{{ speakers.get(turn.speaker, turn.speaker) }}:</span>
     {% if turn.speaker == "agent" %}
-    <div class="prose{% if turn.long %} turn__fold{% endif %}">{{ md(turn.prose) }}</div>
+    <div class="prose{% if turn.long %} turn__fold{% endif %}">{{ md(turn.prose, files="/agent/" ~ (agent.session|urlencode) ~ "/files") }}</div>
     {% else %}
     <p class="turn__text{% if turn.long %} turn__fold{% endif %}">{{ turn.text }}</p>
     {% endif %}
