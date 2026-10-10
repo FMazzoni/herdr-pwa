@@ -5,13 +5,15 @@
   {% for turn in chat.turns %}
   <article class="turn turn--{{ turn.speaker }}{% if turn.failed %} turn--failed{% endif %}">
     {% if turn.speaker == "agent" %}
-    <div class="prose">{{ md(turn.prose) }}</div>
+    <div class="prose{% if turn.long %} turn__fold{% endif %}">{{ md(turn.prose) }}</div>
     {% elif turn.speaker == "tool" %}
     <p class="turn__tool"><span class="turn__name">{{ turn.tool }}</span> {{ turn.text }}</p>
     {% if turn.result %}<details class="turn__result"><summary>{% if turn.failed %}failed{% else %}result{% endif %}</summary><pre>{{ turn.result }}</pre></details>{% endif %}
     {% else %}
-    <p class="turn__text">{{ turn.text }}</p>
+    <p class="turn__text{% if turn.long %} turn__fold{% endif %}">{{ turn.text }}</p>
     {% endif %}
+    {# No script: the open details unfolds the text above it through CSS. #}
+    {% if turn.long %}<details class="turn__more"><summary><span class="turn__all">Show all</span><span class="turn__less">Show less</span></summary></details>{% endif %}
     {% if turn.truncated %}<p class="turn__clip">clipped</p>{% endif %}
   </article>
   {% endfor %}

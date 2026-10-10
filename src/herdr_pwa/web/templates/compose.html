@@ -13,9 +13,11 @@
   <input type="hidden" name="target" value="{{ agent.target }}">
   <input type="hidden" name="screen" value="{{ screen }}">
   {% if refused is defined and refused.held %}<input type="hidden" name="confirm" value="1">{% endif %}
-  {% call ui.field("Prompt") %}
-    <textarea name="text" rows="3" maxlength="4000" data-hp-draft="{{ agent.session }}"
-              {% if sent is defined and sent.no_echo %}data-hp-forget{% endif %}>{{ text }}</textarea>
-  {% endcall %}
-  {{ ui.button('Send it anyway' if refused is defined and refused.held else 'Send') }}
+  <div class="composer__row">
+    {% call ui.field("Prompt", quiet=true) %}
+      <textarea name="text" rows="1" maxlength="4000" placeholder="Prompt" data-hp-draft="{{ agent.session }}"
+                {% if sent is defined and sent.no_echo %}data-hp-forget{% endif %}>{{ text }}</textarea>
+    {% endcall %}
+    {{ ui.button('Send it anyway' if refused is defined and refused.held else 'Send') }}
+  </div>
 </form>

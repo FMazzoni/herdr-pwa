@@ -170,6 +170,154 @@
     }
   });
 
+  /* ---- The composer dock ----
+   * The composer is fixed to the bottom. The page reserves the dock's real height, and
+   * while the iOS keyboard is open the dock rides on top of it: the layout viewport keeps
+   * its height there, so the gap under the visual viewport is the keyboard. */
+  var root = document.documentElement;
+  var docking = false;
+
+  function dock() {
+    docking = false;
+    var bar = document.getElementById("composer");
+    if (!bar) {
+      return;
+    }
+    var view = window.visualViewport;
+    var covered = view ? Math.max(0, Math.round(window.innerHeight - view.height - view.offsetTop)) : 0;
+    root.style.setProperty("--kb", covered + "px");
+    root.classList.toggle("is-keyboard", covered > 0);
+    root.style.setProperty("--dock-h", bar.offsetHeight + "px");
+  }
+
+  function redock() {
+    if (!docking) {
+      docking = true;
+      window.requestAnimationFrame(dock);
+    }
+  }
+
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", redock);
+    window.visualViewport.addEventListener("scroll", redock);
+  }
+  window.addEventListener("resize", redock);
+  document.addEventListener("focusin", redock);
+  document.addEventListener("focusout", redock);
+  document.addEventListener("input", redock);
+  document.addEventListener("htmx:afterSettle", redock);
+
+  /* ---- An armed interrupt disarms itself ----
+   * After data-hp-disarm seconds the answer region is fetched afresh, which draws it
+   * unarmed. Never under a thumb: a touch in the last second and a half puts it off,
+   * so a tap meant for the confirm cannot land on whatever replaces it. */
+  var lastTouch = 0;
+  document.addEventListener("pointerdown", function () {
+    lastTouch = Date.now();
+  }, true);
+
+  function disarmLater(node, seconds) {
+    window.setTimeout(function () {
+      var region = node.closest("[data-hp-poll]");
+      if (!node.isConnected || !region || typeof window.htmx === "undefined") {
+        return;
+      }
+      if (Date.now() - lastTouch < 1500 || document.body.classList.contains("is-sending")) {
+        disarmLater(node, 1.5);
+        return;
+      }
+      window.htmx.ajax("GET", region.getAttribute("data-hp-poll"), { target: region, swap: "outerHTML" });
+    }, seconds * 1000);
+  }
+
+  function armTimers(root) {
+    var nodes = root.querySelectorAll ? root.querySelectorAll("[data-hp-disarm]") : [];
+    for (var i = 0; i < nodes.length; i++) {
+      if (!nodes[i].hasAttribute("data-hp-timed")) {
+        nodes[i].setAttribute("data-hp-timed", "");
+        disarmLater(nodes[i], Number(nodes[i].getAttribute("data-hp-disarm")) || 5);
+      }
+    }
+  }
+
+  document.addEventListener("htmx:afterSettle", function () {
+    armTimers(document);
+  });
+
+  /* ---- A folded chat turn the user opened stays open across the Chat tab's polls ---- */
+  var unfolded = [];
+
+  function foldKey(more) {
+    var text = more.previousElementSibling;
+    return text ? String(text.textContent).slice(0, 160) : "";
+  }
+
+  document.addEventListener("htmx:beforeSwap", function (event) {
+    var target = event.detail.target;
+    if (!target || target.id !== "agent-view") {
+      return;
+    }
+    unfolded = [];
+    var open = target.querySelectorAll(".turn__more[open]");
+    for (var i = 0; i < open.length; i++) {
+      unfolded.push(foldKey(open[i]));
+    }
+  });
+
+  document.addEventListener("htmx:afterSwap", function () {
+    if (!unfolded.length) {
+      return;
+    }
+    var folds = document.querySelectorAll("#agent-view .turn__more");
+    for (var i = 0; i < folds.length; i++) {
+      if (unfolded.indexOf(foldKey(folds[i])) !== -1) {
+        folds[i].open = true;
+      }
+    }
+  });
+
+  /* ---- Keep the columns: the pane unwrapped, remembered on this device ---- */
+  var COLUMNS = "hp-columns";
+
+  function local() {
+    try {
+      return window.localStorage;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function showColumns(button, on) {
+    var host = button.closest("main");
+    if (host) {
+      host.classList.toggle("is-columns", on);
+    }
+    button.setAttribute("aria-pressed", on ? "true" : "false");
+  }
+
+  var columnsButton = document.querySelector("[data-hp-columns]");
+  if (columnsButton) {
+    var kept = false;
+    try {
+      kept = !!local() && local().getItem(COLUMNS) === "1";
+    } catch (err) {
+      kept = false;
+    }
+    showColumns(columnsButton, kept);
+    columnsButton.parentNode.hidden = false;
+    columnsButton.addEventListener("click", function () {
+      var on = columnsButton.getAttribute("aria-pressed") !== "true";
+      showColumns(columnsButton, on);
+      try {
+        if (local()) {
+          local().setItem(COLUMNS, on ? "1" : "0");
+        }
+      } catch (err) {
+        /* blocked storage: the choice lasts this page only. */
+      }
+    });
+  }
+
   /* ---- Service worker and the "new build" offer ---- */
 
   var worker = "serviceWorker" in navigator ? navigator.serviceWorker : null;

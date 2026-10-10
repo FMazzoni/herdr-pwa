@@ -1,8 +1,19 @@
 {% import "_ui.html" as ui %}
 {% set base = "/agent/" ~ (agent.session|urlencode) %}
-<section id="answer" class="answer" data-hp-poll="{{ base }}/answer" hx-get="{{ base }}/answer" hx-target="this" hx-swap="outerHTML"
+{% set waiting = decision or agent.status.value == "blocked" %}
+<section id="answer" class="answer{% if not waiting %} answer--quiet{% endif %}" data-hp-poll="{{ base }}/answer" hx-get="{{ base }}/answer" hx-target="this" hx-swap="outerHTML"
          {% if refused is not defined and sent is not defined %}hx-trigger="every {{ cadence }}s, hp:poke from:body"{% else %}hx-trigger="hp:poke from:body"{% endif %}>
+  {% set arming = refused is defined and refused.held and key is defined and key == interrupt %}
   {% include "_notice.html" %}
+  {% if arming %}
+  {# The confirm sits under the banner that asks for it, where the thumb already is. #}
+  {# The way out beside the way through. Keep going sends nothing: it redraws this region.
+     app.js also redraws it after data-hp-disarm seconds, unless a thumb is on it. #}
+  <div class="keys__stop keys__stop--armed" data-hp-disarm="5">
+    <button class="button keys__cancel" type="button" hx-get="{{ base }}/answer" hx-target="#answer" hx-swap="outerHTML">Keep going</button>
+    {{ ui.key_form(base, agent.target, interrupt, "Really interrupt", kind="danger", confirm=true) }}
+  </div>
+  {% endif %}
   {% if sent is defined %}
   {% call ui.banner("sent") %}Sent {{ sent.key }}: {{ sent.outcome.value }} ({{ sent.evidence.value }}).{% endcall %}
   {% endif %}
@@ -17,20 +28,28 @@
     {% endif %}
     {% endfor %}
   </div>
-  {% elif agent.status.value != "blocked" %}
-  <p class="empty">Nothing is waiting on you here.</p>
   {% endif %}
-  <div class="keys keys--pad">
-    {% for hint in hints %}
-    {{ ui.key_form(base, agent.target, hint.key, hint.label, screen=fingerprint) }}
-    {% endfor %}
-    {% for key in pad %}
-    {{ ui.key_form(base, agent.target, key, key|capitalize, screen=fingerprint) }}
-    {% endfor %}
-    {% if refused is defined and refused.held and key is defined and key == interrupt %}
-    {{ ui.key_form(base, agent.target, interrupt, "Really interrupt", kind="danger", confirm=true) }}
+  <div class="answer__keys">
+    {% if hints %}
+    {{ ui.section_head("What this screen says") }}
+    <div class="keys keys--hints">
+      {% for hint in hints %}
+      {{ ui.key_form(base, agent.target, hint.key, hint.label, screen=fingerprint) }}
+      {% endfor %}
+    </div>
     {% else %}
-    {{ ui.key_form(base, agent.target, interrupt, "Ctrl+C", kind="danger") }}
+    {{ ui.section_head("Keys") }}
+    {% endif %}
+    <div class="keys keys--pad">
+      {% for key in pad %}
+      {{ ui.key_form(base, agent.target, key, key|capitalize, screen=fingerprint) }}
+      {% endfor %}
+    </div>
+    {# Last, full width, under a rule: away from Enter, so a stray thumb on the pad never lands here. #}
+    {% if not arming %}
+    <div class="keys__stop">
+      {{ ui.key_form(base, agent.target, interrupt, "Interrupt (Ctrl+C)", kind="danger") }}
+    </div>
     {% endif %}
   </div>
 </section>

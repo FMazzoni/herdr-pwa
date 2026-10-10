@@ -1,25 +1,33 @@
 {% extends "base.html" %}
 {% from "_nav.html" import replace, sheet %}
 {% import "_ui.html" as ui %}
-{% block title %}{{ agent.title or agent.agent or agent.target }} &mdash; herdr{% endblock %}
-{% block topbar %}<a class="leave" href="/" {{ replace() }}>&larr;</a><span class="topbar__title">{{ agent.title or agent.agent or agent.target }}</span>{% endblock %}
+{% block title %}{{ heading }} &mdash; herdr{% endblock %}
+{# The back arrow is the way home here, so the brand gives its room to the title. #}
+{% block brand %}{% endblock %}
+{% block topbar %}<a class="leave topbar__back" href="/" {{ replace() }}>&lsaquo; Herd</a>{{ ui.dot(agent.status.value) }}<span class="topbar__title topbar__title--agent">{{ heading }}</span>{% endblock %}
 {% block body %}
 {% set base = "/agent/" ~ (agent.session|urlencode) %}
-<main class="agent" data-hp-seen="{{ agent.session }}">
-  <p class="agent__meta">
-    {{ ui.dot(agent.status.value) }}
-    <span class="agent__status">{{ agent.status.value }}</span>
-    {% if agent.agent %}<span>{{ agent.agent }}</span>{% endif %}
-    {% if agent.workspace %}<span>{{ agent.workspace }}</span>{% endif %}
-    <span>{{ agent.target }}</span>
+<main class="agent agent--docked" data-hp-seen="{{ agent.session }}">
+  <p class="agent__meta agent__meta--line">
+    <span class="agent__facts">
+      {#- No whitespace between facts: the separator's own margins space them evenly. -#}
+      <span class="agent__status">{{ agent.status.value }}</span>
+      {%- if agent.agent %}<span class="agent__fact">{{ agent.agent }}</span>{% endif %}
+      {%- if agent.workspace %}<span class="agent__fact">{{ agent.workspace }}</span>{% endif -%}
+      <span class="agent__fact">{{ agent.target }}</span>
+    </span>
     <a class="leave agent__end" href="{{ base }}/close" {{ replace() }}>End</a>
   </p>
-  <div hx-get="{{ base }}/answer" hx-trigger="load" hx-swap="outerHTML"></div>
   <nav class="tabs" aria-label="View">
     {% for name in tabs %}
     <a class="tab{% if name == tab %} tab--on{% endif %}" href="{{ base }}?tab={{ name }}" {{ replace() }}{% if name == tab %} aria-current="page"{% endif %}>{{ name|capitalize }}</a>
     {% endfor %}
   </nav>
+  <div class="agent__answer" hx-get="{{ base }}/answer" hx-trigger="load" hx-swap="outerHTML"></div>
+  {% if tab == "pane" %}
+  {# app.js shows it and remembers the choice; without script the pane just wraps. #}
+  <p class="agent__columns" hidden><button type="button" class="button button--toggle" data-hp-columns aria-pressed="false">Keep the columns</button></p>
+  {% endif %}
   <div id="agent-view" data-hp-poll="{{ base }}/{{ tab }}" hx-get="{{ base }}/{{ tab }}" hx-trigger="load" hx-target="this" hx-swap="outerHTML">
     <p class="boot" role="status">Reading&hellip;</p>
   </div>

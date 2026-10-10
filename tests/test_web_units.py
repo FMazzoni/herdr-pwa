@@ -14,9 +14,10 @@ from herdr_pwa.jsontypes import JsonObject
 from herdr_pwa.protocol import EXPECTED_PROTOCOL
 from herdr_pwa.settings import Settings
 from herdr_pwa.web.assets import STATIC_DIR, Assets
+from herdr_pwa.web.chat import is_long
 from herdr_pwa.web.failures import FAILURES, failure_for
 from herdr_pwa.web.markdown import TAGS, MdNode, render_tree
-from herdr_pwa.web.naming import card_title, display_title
+from herdr_pwa.web.naming import card_title, display_title, page_title
 from tests.webfakes import SNAPSHOT, FakeWire, agents_of, snapshot_frame
 
 
@@ -89,6 +90,22 @@ def test_display_title_strips_only_leading_glyphs() -> None:
     assert display_title("✳ ✳ a ✳") == "a ✳"
 
 
+@pytest.mark.parametrize(
+    ("title", "shown"),
+    [
+        ("◐ Estimate Claude model costs", "Estimate Claude model costs"),
+        ("⠋ Fix the parser", "Fix the parser"),
+        ("✳ Fix the parser", "Fix the parser"),
+        ("· Review tickets", "Review tickets"),
+        ("● done · 3 left", "done · 3 left"),
+        ("#12 fix the parser", "#12 fix the parser"),
+        ("", "claude"),
+    ],
+)
+def test_page_title_drops_the_status_glyph_the_dot_already_says(title: str, shown: str) -> None:
+    assert page_title(title, "claude", "w1:p1") == shown
+
+
 def test_failure_rows_never_shadow_a_later_subclass() -> None:
     kinds = [kind for kind, _ in FAILURES]
     for i, kind in enumerate(kinds):
@@ -159,3 +176,10 @@ def test_doctor_fails_on_an_unreachable_runner(tmp_path: Path) -> None:
     code, out = _doctor(tmp_path, FakeWire({SNAPSHOT: EngineUnavailable("down")}))
     assert code == 1
     assert "unreachable" in out
+
+
+def test_a_turn_is_long_past_eight_lines_or_about_eight_lines_of_characters() -> None:
+    assert not is_long("short")
+    assert is_long("x" * 321)
+    assert is_long("line\n" * 8)
+    assert not is_long("line\n" * 7)

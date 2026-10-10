@@ -8,6 +8,8 @@ from herdr_pwa.decisions import AgentRow
 
 # Spinner and status glyphs a harness prefixes its terminal title with.
 _GLYPH_CATEGORIES: Final = frozenset({"So", "Sk"})
+# Bullets are punctuation to Unicode, but a harness draws them as a status mark too.
+_BULLETS: Final = frozenset("·•∙")
 _MAX_GLYPHS: Final = 4
 # A harness's placeholder for a session it has not named yet.
 _UNNAMED: Final = re.compile(r"^new session\s*-\s*\S+$", re.IGNORECASE)
@@ -16,7 +18,7 @@ _LOCATOR: Final = re.compile(r"^[^\s@:]+@[^\s@:]+(?::\S*)?$")
 
 
 def _is_glyph(character: str) -> bool:
-    return unicodedata.category(character) in _GLYPH_CATEGORIES
+    return character in _BULLETS or unicodedata.category(character) in _GLYPH_CATEGORIES
 
 
 def display_title(title: str) -> str:
@@ -31,6 +33,11 @@ def display_title(title: str) -> str:
 
 def _glyphs_only(text: str) -> bool:
     return all(c.isspace() or _is_glyph(c) for c in text)
+
+
+def page_title(title: str, harness: str, target: str) -> str:
+    """What the agent page's top bar calls an agent: its title without the status glyph."""
+    return display_title(title) if title.strip() else harness or target
 
 
 def card_title(row: AgentRow) -> str:

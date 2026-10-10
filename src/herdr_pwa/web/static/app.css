@@ -90,6 +90,14 @@
   /* The glyph that says a card opens something. */
   --chevron: "\203A";
   --sheet-max: 640px;
+
+  /* The agent page's composer dock. app.js measures the dock and the iOS keyboard and
+     overwrites the two px values; these are what the page reserves without script. */
+  --dock-h: 88px;
+  --kb: 0px;
+  --composer-grow: 5.5em;
+  /* How many lines of a long chat turn show before "Show all"; a count, not a length. */
+  --fold-lines: 8;
 }
 
 * { box-sizing: border-box; }
@@ -120,6 +128,9 @@ a { color: var(--accent); }
 .brand, .topbar__link { display: inline-flex; align-items: center; min-height: var(--tap); min-width: var(--tap); }
 .topbar__link { margin-left: auto; color: var(--ink-2); font-size: var(--text-5); }
 .topbar__title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); }
+/* Flush with the gutter: the bar's own padding is the only indent. */
+.topbar__back { justify-content: flex-start; flex: none; text-decoration: none; font-size: var(--text-7); }
+.topbar__title--agent { flex: 1; color: var(--ink); font-weight: 600; }
 
 .feed-host, .agent { padding: var(--space-6) var(--space-8) calc(env(safe-area-inset-bottom) + var(--space-10)); max-width: var(--page-max); margin: 0 auto; }
 .boot, .empty { color: var(--ink-3); font-size: var(--text-6); text-align: center; padding: var(--space-10) var(--space-4); }
@@ -249,9 +260,30 @@ a { color: var(--accent); }
 /* Drill-in. */
 .agent__meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-5); margin: 0 0 var(--space-5); font-size: var(--text-4); color: var(--ink-3); overflow-wrap: anywhere; }
 .agent__status { color: var(--ink); }
-.tabs { display: flex; gap: var(--space-3); margin-bottom: var(--space-6); border-bottom: var(--line-1) solid var(--rule); }
-.tab { display: inline-flex; align-items: center; min-height: var(--tap); padding: 0 var(--space-7); color: var(--ink-2); text-decoration: none; border-bottom: var(--line-2) solid transparent; }
-.tab--on { color: var(--ink); border-bottom-color: var(--accent); }
+
+/* The agent page is one column. The composer is docked to the bottom, so the page reserves
+   its height; a quiet answer (keys, nothing asked) moves below the view, next to the dock. */
+.agent--docked { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-5); padding-top: 0; padding-bottom: calc(var(--dock-h) + var(--space-8)); }
+.agent--docked > *, .agent--docked > .answer { margin: 0; }
+.agent--docked > #agent-view, .agent__columns { order: 1; }
+.agent--docked > .answer--quiet { order: 2; }
+.agent__meta--line { flex-wrap: nowrap; overflow-wrap: normal; }
+.agent__facts { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agent__fact::before { content: "\00B7"; margin: 0 var(--space-4); }
+.agent__meta--line .agent__end { justify-content: flex-end; padding-left: var(--space-8); }
+
+/* Chat | Pane as one segmented control; each half is a full tap target. */
+.tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-1); padding: var(--space-1); background: var(--surface); border: var(--line-1) solid var(--rule); border-radius: var(--radius-2); }
+.tab { display: flex; align-items: center; justify-content: center; min-height: var(--tap); color: var(--ink-2); text-decoration: none; border-radius: var(--radius-1); }
+.tab--on { color: var(--ink); background: var(--surface-2); font-weight: 600; }
+
+/* A quiet switch on the pane's top edge: muted text, no frame, the 44px row is the target. */
+.agent__columns { display: flex; justify-content: flex-end; margin-bottom: calc(-1 * var(--space-5)); }
+.agent__columns[hidden] { display: none; }
+.button.button--toggle { padding-inline: var(--space-2); font-weight: 500; font-size: var(--text-4); color: var(--ink-3); background: transparent; border-color: transparent; }
+.button--toggle::before { content: "\25A1\00A0"; }
+.button.button--toggle[aria-pressed=true] { color: var(--ink-2); }
+.button--toggle[aria-pressed=true]::before { content: "\25A0\00A0"; }
 
 .chat { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-5); }
 .turn { padding: var(--space-5) var(--space-6); border-radius: var(--radius-3); background: var(--surface); overflow-wrap: anywhere; }
@@ -265,6 +297,12 @@ a { color: var(--accent); }
 .turn__result pre, .prose pre { overflow-x: auto; padding: var(--space-4); background: var(--ground); border-radius: var(--radius-1); font: var(--text-4)/1.4 var(--mono); }
 .turn__result summary { min-height: var(--tap); line-height: var(--tap); }
 .turn__clip { margin: var(--space-2) 0 0; color: var(--ink-3); font-size: var(--text-2); }
+/* A long turn folds to a few lines; the open details below it unfolds it, with or without script. */
+.turn__fold { max-height: calc(var(--fold-lines) * 1.45em); overflow: hidden; }
+.turn:has(> .turn__more[open]) > .turn__fold { max-height: none; }
+.turn__more summary { display: flex; align-items: center; min-height: var(--tap); color: var(--accent); font-size: var(--text-5); list-style: none; cursor: pointer; }
+.turn__more summary::-webkit-details-marker { display: none; }
+.turn__more[open] .turn__all, .turn__more:not([open]) .turn__less { display: none; }
 .prose > :first-child { margin-top: 0; }
 .prose > :last-child { margin-bottom: 0; }
 .prose h1, .prose h2, .prose h3, .prose h4, .prose h5, .prose h6 { font-size: var(--text-8); margin: var(--space-6) 0 var(--space-3); }
@@ -287,6 +325,8 @@ a { color: var(--accent); }
 .pane--status { color: var(--ink-3); }
 .pane__line { display: block; min-height: 1.35em; white-space: pre-wrap; overflow-wrap: anywhere; }
 .pane__line--clip { white-space: pre; overflow: hidden; text-overflow: clip; }
+/* Keep the columns: the terminal's own line breaks only, and the pane scrolls inside its box. */
+.is-columns .pane__line { white-space: pre; overflow-wrap: normal; }
 
 .ansi-black { color: var(--ansi-black); }
 .ansi-red { color: var(--ansi-red); }
@@ -352,7 +392,7 @@ a { color: var(--accent); }
 
 .actions { display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-7); font-size: var(--text-5); }
 .agent__end { margin-left: auto; color: var(--blocked); }
-.form, .composer, .answer { display: grid; gap: var(--space-5); margin: var(--space-6) 0; }
+.form, .answer { display: grid; gap: var(--space-5); margin: var(--space-6) 0; }
 .field { display: grid; gap: var(--space-2); }
 .field--check { display: flex; align-items: center; gap: var(--space-4); min-height: var(--tap); }
 .field__label { font-size: var(--text-4); color: var(--ink-3); }
@@ -428,6 +468,39 @@ textarea { resize: vertical; min-height: 4.5em; }
 .keys--pad { display: flex; flex-wrap: wrap; gap: var(--space-3); }
 .answer__question { margin: 0; font-weight: 600; white-space: pre-wrap; }
 .answer__row { margin: 0; color: var(--ink-2); }
+.answer__keys { display: grid; gap: var(--space-4); }
+.answer__keys .group__head { margin: 0; }
+.keys--hints { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+/* The generic keys stay on one line even at 320px: equal columns, however many there are. */
+.answer__keys .keys--pad { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: var(--space-3); }
+.keys--pad .button { width: 100%; min-width: var(--tap); padding-inline: var(--space-2); }
+/* The interrupt sits on its own row, away from Enter, drawn dashed so it never reads as a key. */
+.keys__stop { margin-top: var(--space-4); padding-top: var(--space-6); border-top: var(--line-1) solid var(--rule); }
+.keys__stop--armed { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); margin-top: 0; padding-top: 0; border-top: 0; }
+.keys__cancel { width: 100%; }
+.keys__stop .button--danger { width: 100%; background: transparent; border-style: dashed; }
+
+/* The composer, docked above the home indicator, and above the keyboard when it is open. */
+.composer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: var(--kb);
+  z-index: 2;
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-4) max(var(--space-8), calc((100% - var(--page-max)) / 2 + var(--space-8))) calc(var(--space-4) + env(safe-area-inset-bottom));
+  background: var(--surface);
+  border-top: var(--line-1) solid var(--rule);
+}
+.is-keyboard .composer { padding-bottom: var(--space-4); }
+.composer .banner { margin: 0; }
+.composer__row { display: flex; align-items: end; gap: var(--space-4); }
+.composer__row .field, .composer__row .button { margin: 0; }
+.composer__row .field { flex: 1; min-width: 0; }
+.composer textarea { display: block; width: 100%; min-height: var(--tap); resize: none; background: var(--ground); }
+.composer textarea:focus, .composer textarea:not(:placeholder-shown) { min-height: var(--composer-grow); }
+.field__label--quiet { position: absolute; width: var(--line-1); height: var(--line-1); overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .banner--held { border-left-color: var(--unknown); }
 .banner--sent { border-left-color: var(--done); }
 /* While a write is in flight, leaving would hide whether it landed. */

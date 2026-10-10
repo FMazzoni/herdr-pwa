@@ -48,5 +48,5 @@
     </span>
 {%- endmacro %}
 
-{# A labelled form field; the call block is the control. #}
-{% macro field(label) %}<label class="field"><span class="field__label">{{ label }}</span>{{ caller() }}</label>{% endmacro %}
+{# A labelled form field; the call block is the control. `quiet` keeps the label for a screen reader only. #}
+{% macro field(label, quiet=false) %}<label class="field"><span class="field__label{% if quiet %} field__label--quiet{% endif %}">{{ label }}</span>{{ caller() }}</label>{% endmacro %}
