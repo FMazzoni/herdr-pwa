@@ -23,6 +23,8 @@ WAIT_SECONDS = 15.0
 # Spelled as the templates' urlencode spells it, which is also what location.pathname reports.
 DOOR = f"/starting/{quote(P5)}"
 LOGIN = "backnav@example.com"
+# Chat | Pane lives in the top bar, which never scrolls away; a tap is made where it really is.
+TABS = "header.topbar nav.tabs"
 
 LOCATION = r"""
 const ready = arguments[0];
@@ -162,15 +164,19 @@ def tabs_and_end(walk: Walk) -> None:
     walk.home()
     agent = f"/agent/{S1}"
     walk.click(f'a.card__link[href="{agent}"]')
-    walk.depth(walk.wait(agent, ".tabs"), 1, "opening an agent")
-    walk.click('a.tab[href$="?tab=pane"]')
-    walk.depth(walk.wait(agent, ".tab--on[href$='?tab=pane']", "?tab=pane"), 1, "the Pane tab")
-    walk.click('a.tab[href$="?tab=chat"]')
-    walk.depth(walk.wait(agent, ".tab--on[href$='?tab=chat']", "?tab=chat"), 1, "the Chat tab")
+    walk.depth(walk.wait(agent, TABS), 1, "opening an agent")
+    walk.click(f'{TABS} a.tab[href$="?tab=pane"]')
+    walk.depth(
+        walk.wait(agent, f"{TABS} .tab--on[href$='?tab=pane']", "?tab=pane"), 1, "the Pane tab"
+    )
+    walk.click(f'{TABS} a.tab[href$="?tab=chat"]')
+    walk.depth(
+        walk.wait(agent, f"{TABS} .tab--on[href$='?tab=chat']", "?tab=chat"), 1, "the Chat tab"
+    )
     walk.click("a.agent__end")
     walk.depth(walk.wait(f"{agent}/close", "form[data-hp-sheet]"), 1, "End")
     walk.click('a.leave[href="' + agent + '"]')
-    walk.depth(walk.wait(agent, ".tabs"), 1, "Keep it")
+    walk.depth(walk.wait(agent, TABS), 1, "Keep it")
     landed = walk.back_to_feed("a tab switch")
     if not landed.get("persisted"):
         walk.problems.append(
@@ -201,7 +207,7 @@ def door(walk: Walk, fake: FakeHerd) -> None:
     walk.depth(walk.wait(DOOR, ".banner--sent"), 1, "a key sent from the door")
     fake.put(P5, S2)
     walk.click(f'a[href="{DOOR}"]')
-    walk.depth(walk.wait(f"/agent/{S2}", ".tabs"), 1, "the door opening its agent")
+    walk.depth(walk.wait(f"/agent/{S2}", TABS), 1, "the door opening its agent")
     walk.back_to_feed("the door forwarded")
 
 

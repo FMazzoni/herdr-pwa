@@ -314,3 +314,15 @@ def test_back_belongs_to_the_herd_in_the_markup(tmp_path: Path) -> None:
     page = rig.http.get(f"/agent/{WORKING_SESSION}").text
     assert page.count("data-hp-replace") == 4  # leave, End, two tabs
     assert f'href="/agent/{WORKING_SESSION}?tab=pane" data-hp-replace' in page
+
+
+def test_the_view_switch_lives_in_the_top_bar_and_the_title_scrolls(tmp_path: Path) -> None:
+    rig = build_rig(tmp_path)
+    page = rig.http.get(f"/agent/{WORKING_SESSION}?tab=pane").text
+    bar = page[page.index('<header class="topbar">') : page.index("</header>")]
+    assert '<nav class="tabs" aria-label="View">' in bar
+    assert f'href="/agent/{WORKING_SESSION}?tab=chat" data-hp-replace' in bar
+    assert 'aria-current="page"><span class="tab__label">Pane</span>' in bar
+    main = page[page.index("<main ") :]
+    assert main.index('<h1 class="agent__title">') < main.index('class="agent__meta')
+    assert "<h1" not in bar
