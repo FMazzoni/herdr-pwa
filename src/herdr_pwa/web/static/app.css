@@ -476,7 +476,8 @@ textarea { resize: vertical; min-height: 4.5em; }
 .keys--pad .button { width: 100%; min-width: var(--tap); padding-inline: var(--space-2); }
 /* The interrupt sits on its own row, away from Enter, drawn dashed so it never reads as a key. */
 .keys__stop { margin-top: var(--space-4); padding-top: var(--space-6); border-top: var(--line-1) solid var(--rule); }
-.keys__stop--armed { margin-top: 0; padding-top: 0; border-top: 0; }
+.keys__stop--armed { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); margin-top: 0; padding-top: 0; border-top: 0; }
+.keys__cancel { width: 100%; }
 .keys__stop .button--danger { width: 100%; background: transparent; border-style: dashed; }
 
 /* The composer, docked above the home indicator, and above the keyboard when it is open. */

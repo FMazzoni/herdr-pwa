@@ -7,7 +7,10 @@
   {% include "_notice.html" %}
   {% if arming %}
   {# The confirm sits under the banner that asks for it, where the thumb already is. #}
-  <div class="keys__stop keys__stop--armed">
+  {# The way out beside the way through. Keep going sends nothing: it redraws this region.
+     app.js also redraws it after data-hp-disarm seconds, unless a thumb is on it. #}
+  <div class="keys__stop keys__stop--armed" data-hp-disarm="5">
+    <button class="button keys__cancel" type="button" hx-get="{{ base }}/answer" hx-target="#answer" hx-swap="outerHTML">Keep going</button>
     {{ ui.key_form(base, agent.target, interrupt, "Really interrupt", kind="danger", confirm=true) }}
   </div>
   {% endif %}
