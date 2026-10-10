@@ -12,8 +12,11 @@ import weakref
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from pathlib import Path
 from secrets import token_hex
-from typing import Any, Final, NamedTuple, Protocol, runtime_checkable
+from typing import Final, NamedTuple, Protocol, runtime_checkable
 
+from pydantic import JsonValue
+
+from herdr_pwa.jsontypes import JsonObject, as_object, loads
 
 log = logging.getLogger(__name__)
 
@@ -57,7 +60,7 @@ def _after_fork_in_child() -> None:
     """Re-mint every transport this child inherited, then release the registry."""
     try:
         for wire in list(_LIVE):
-            wire._adopt_fork()
+            wire.adopt_fork()
     finally:
         _REGISTRY_LOCK.release()
 
@@ -67,10 +70,6 @@ os.register_at_fork(
     after_in_parent=_after_fork_in_parent,
     after_in_child=_after_fork_in_child,
 )
-
-
-# The error taxonomy — imported and re-exported by client.py, which is where
-# the rest of the app has always got it from.
 
 
 class EngineError(Exception):
@@ -85,25 +84,25 @@ class EngineError(Exception):
             self.code = code
 
 
-class EngineMisconfigured(EngineError):
+class EngineMisconfigured(EngineError):  # noqa: N818 - the names the rest of the app maps to HTTP statuses
     """This box's configuration will not load, so no client can be built (-> 500)."""
 
     code = "engine_misconfigured"
 
 
-class EngineUnavailable(EngineError):
+class EngineUnavailable(EngineError):  # noqa: N818 - the names the rest of the app maps to HTTP statuses
     """The runner is not running, or its socket is stale or unreachable (-> 503)."""
 
     code = "engine_unavailable"
 
 
-class EngineTimeout(EngineError):
+class EngineTimeout(EngineError):  # noqa: N818 - the names the rest of the app maps to HTTP statuses
     """The runner did not answer inside the timeout (-> 503)."""
 
     code = "engine_timeout"
 
 
-class InvalidRequest(EngineError, ValueError):
+class InvalidRequest(EngineError, ValueError):  # noqa: N818 - the names the rest of the app maps to HTTP statuses
     """The caller asked for something this client cannot send (-> 400)."""
 
     code = "invalid_request"
@@ -120,19 +119,19 @@ class RequestTooLarge(InvalidRequest):
         self.limit = limit
 
 
-class InvalidResponse(EngineError):
+class InvalidResponse(EngineError):  # noqa: N818 - the names the rest of the app maps to HTTP statuses
     """The runner answered something that is not the JSON contract (-> 502)."""
 
     code = "invalid_response"
 
 
-class TargetNotFound(EngineError):
+class TargetNotFound(EngineError):  # noqa: N818 - the names the rest of the app maps to HTTP statuses
     """The addressed agent vanished mid-flight (-> 404)."""
 
     code = "target_not_found"
 
 
-class ProtocolMismatch(EngineError):
+class ProtocolMismatch(EngineError):  # noqa: N818 - the names the rest of the app maps to HTTP statuses
     """The runner speaks an unexpected snapshot protocol, so writes fail closed (-> 409)."""
 
     code = "protocol_mismatch"
@@ -147,10 +146,10 @@ _UNAVAILABLE_CODES: Final = frozenset(
 )
 
 
-def raise_for_error_frame(payload: dict[str, Any]) -> None:
+def raise_for_error_frame(payload: JsonObject) -> None:
     """Map a peer-reported error frame onto the taxonomy, or return."""
-    error = payload.get("error")
-    if not isinstance(error, dict):
+    error = as_object(payload.get("error"))
+    if error is None:
         return
     code = str(error.get("code") or "engine_error")
     message = str(error.get("message") or code)
@@ -180,15 +179,16 @@ def _why_unreachable(path: Path, exc: OSError) -> str:
     return f"could not connect to the runner at {path}: {exc}"
 
 
-def _decode(line: bytes) -> dict[str, Any]:
+def _decode(line: bytes) -> JsonObject:
     """Bytes to object, with both ways of not being one mapped."""
     try:
-        payload: Any = json.loads(line.decode("utf-8", errors="replace"))
+        payload = loads(line.decode("utf-8", errors="replace"))
     except ValueError as exc:
         raise InvalidResponse(f"the runner sent a frame that is not JSON: {line[:200]!r}") from exc
-    if not isinstance(payload, dict):
+    found = as_object(payload)
+    if found is None:
         raise InvalidResponse(f"expected a JSON object, got {type(payload).__name__}")
-    return payload
+    return found
 
 
 # --------------------------------------------------------------------------
@@ -214,11 +214,11 @@ class Transport(Protocol):
     def call(
         self,
         method: str,
-        params: dict[str, Any],
+        params: JsonObject,
         *,
         timeout: float | None = None,
         idempotent: bool = True,
-    ) -> dict[str, Any]:
+    ) -> JsonObject:
         """Issue one request and return its parsed reply object."""
         ...
 
@@ -259,7 +259,7 @@ class SocketTransport:
     def _mint_prefix() -> str:
         return f"herdr-pwa:{os.getpid()}:{token_hex(4)}"
 
-    def _adopt_fork(self) -> None:
+    def adopt_fork(self) -> None:
         """Become this process's own transport: new lock, new ids, no socket."""
         self._lock = threading.Lock()
         self._pid = os.getpid()
@@ -278,17 +278,19 @@ class SocketTransport:
     def call(
         self,
         method: str,
-        params: dict[str, Any],
+        params: JsonObject,
         *,
         timeout: float | None = None,
         idempotent: bool = True,
-    ) -> dict[str, Any]:
+    ) -> JsonObject:
         """Issue one request, return its reply object, raise on anything else."""
+        # One request per connection and no retry, so idempotence changes nothing here.
+        del idempotent
         budget = self.timeout if timeout is None else timeout
         if self._pid != os.getpid():  # forked without the hook running
-            self._adopt_fork()
+            self.adopt_fork()
         with self._lock:
-            payload = self._call_locked(method, params, budget, idempotent)
+            payload = self._call_locked(method, params, budget)
         raise_for_error_frame(payload)
         return payload
 
@@ -299,9 +301,7 @@ class SocketTransport:
 
     # -- the exchange ------------------------------------------------------
 
-    def _call_locked(
-        self, method: str, params: dict[str, Any], budget: float, idempotent: bool
-    ) -> dict[str, Any]:
+    def _call_locked(self, method: str, params: JsonObject, budget: float) -> JsonObject:
         """One exchange, with at most one retry on a connection that was reused."""
         call = _Call(method, self._clock() + budget, budget)
         try:
@@ -310,7 +310,7 @@ class SocketTransport:
             # One request per connection, because that is what herdr speaks.
             self._drop()
 
-    def _exchange(self, params: dict[str, Any], call: _Call) -> dict[str, Any]:
+    def _exchange(self, params: JsonObject, call: _Call) -> JsonObject:
         request_id = f"{self._prefix}:{next(self._ids)}"
         frame = json.dumps(
             {"id": request_id, "method": call.method, "params": params},
@@ -334,7 +334,7 @@ class SocketTransport:
             raise EngineUnavailable(f"{call.method} could not be sent: {exc}") from exc
         return self._receive(sock, request_id, call)
 
-    def _receive(self, sock: socket.socket, request_id: str, call: _Call) -> dict[str, Any]:
+    def _receive(self, sock: socket.socket, request_id: str, call: _Call) -> JsonObject:
         """Read frames until the one addressed to ``request_id`` arrives."""
         for _ in range(MAX_STRAY_FRAMES):
             payload = self._decode(self._read_frame(sock, call))
@@ -363,20 +363,22 @@ class SocketTransport:
                     f"reply to {call.method} exceeded {self.max_frame_bytes} bytes "
                     "with no frame terminator"
                 )
-            self._arm(sock, call)
-            try:
-                chunk = sock.recv(_CHUNK)
-            except TimeoutError as exc:
-                raise EngineTimeout(f"{call.method} did not answer within {call.budget}s") from exc
-            except OSError as exc:
-                raise EngineUnavailable(
-                    f"reading the reply to {call.method} failed: {exc}"
-                ) from exc
-            if not chunk:
-                raise EngineUnavailable(
-                    f"the runner closed the connection while answering {call.method}"
-                )
-            self._buffer += chunk
+            self._buffer += self._recv(sock, call)
+
+    def _recv(self, sock: socket.socket, call: _Call) -> bytes:
+        """One non-empty chunk of the reply, with every failure typed."""
+        self._arm(sock, call)
+        try:
+            chunk = sock.recv(_CHUNK)
+        except TimeoutError as exc:
+            raise EngineTimeout(f"{call.method} did not answer within {call.budget}s") from exc
+        except OSError as exc:
+            raise EngineUnavailable(f"reading the reply to {call.method} failed: {exc}") from exc
+        if not chunk:
+            raise EngineUnavailable(
+                f"the runner closed the connection while answering {call.method}"
+            )
+        return chunk
 
     _decode = staticmethod(_decode)
 
@@ -394,7 +396,7 @@ class SocketTransport:
                 code="engine_unavailable",
             )
         self._check_budget(call, now)
-        sock = self._new_socket(call)
+        sock = self._new_socket()
         try:
             self._arm(sock, call)
             sock.connect(str(self.path))
@@ -415,7 +417,7 @@ class SocketTransport:
         self._buffer = b""
         return sock
 
-    def _new_socket(self, call: _Call) -> socket.socket:
+    def _new_socket(self) -> socket.socket:
         """Create the descriptor, mapping the one failure that is not a connect."""
         try:
             return socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -470,7 +472,7 @@ class EventStream:
         self,
         path: Path | str,
         *,
-        subscriptions: Sequence[Mapping[str, Any]],
+        subscriptions: Sequence[Mapping[str, JsonValue]],
         timeout: float,
         max_frame_bytes: int = MAX_FRAME_BYTES,
     ) -> None:
@@ -503,8 +505,7 @@ class EventStream:
             sock = self._sock
         if sock is None:
             return
-        # A half-shutdown, not a close: the iterating thread still owns the
-        # descriptor and must be the one to close it, or it reads a reused fd.
+        # Shutdown, not close: the iterating thread owns the fd and would otherwise read a reused one.
         try:
             sock.shutdown(socket.SHUT_RDWR)
         except OSError:  # pragma: no cover - already gone
@@ -515,7 +516,7 @@ class EventStream:
         sock = self._sock
         return sock if sock is not None else self._subscribe()
 
-    def __iter__(self) -> Iterator[dict[str, Any]]:
+    def __iter__(self) -> Iterator[JsonObject]:
         """Yield each event frame, subscribing first, until the runner or `close` ends it."""
         sock = self.open()
         try:
@@ -558,8 +559,7 @@ class EventStream:
                 limit=MAX_REQUEST_BYTES,
             )
         sock = self._connect()
-        # Every way this can fail has to give the descriptor back: a refused
-        # subscription is a frame, not a hang-up, so nothing else closes it.
+        # A refused subscription is a frame, not a hang-up, so nothing else gives the fd back.
         try:
             sock.settimeout(self.timeout)
             try:
@@ -570,8 +570,7 @@ class EventStream:
         except BaseException:
             self._drop()
             raise
-        # Events are minutes apart on a quiet herd, so there is no read budget
-        # to arm; `close` is what ends the wait.
+        # Events are minutes apart on a quiet herd; `close` is what ends the wait.
         sock.settimeout(None)
         return sock
 
@@ -580,8 +579,8 @@ class EventStream:
         for _ in range(MAX_STRAY_FRAMES):
             payload = _decode(self._read_frame(sock))
             raise_for_error_frame(payload)
-            result = payload.get("result")
-            if isinstance(result, dict) and result.get("type") == SUBSCRIPTION_STARTED:
+            result = as_object(payload.get("result"))
+            if result is not None and result.get("type") == SUBSCRIPTION_STARTED:
                 return
             log.warning("discarding %r while waiting for the subscription", payload)
         raise InvalidResponse(
@@ -628,21 +627,25 @@ class EventStream:
                 raise InvalidResponse(
                     f"an event frame exceeded {self.max_frame_bytes} bytes with no terminator"
                 )
-            try:
-                chunk = sock.recv(_CHUNK)
-            except TimeoutError as exc:
-                raise EngineTimeout(
-                    f"the runner did not confirm the subscription within {self.timeout}s"
-                ) from exc
-            except OSError as exc:
-                raise EngineUnavailable(f"the event stream failed: {exc}") from exc
-            if not chunk:
-                raise EngineUnavailable(
-                    "the runner closed the event connection"
-                    if not self._closed
-                    else "the event stream was closed"
-                )
-            self._buffer += chunk
+            self._buffer += self._recv(sock)
+
+    def _recv(self, sock: socket.socket) -> bytes:
+        """One non-empty chunk of the stream, with every failure typed."""
+        try:
+            chunk = sock.recv(_CHUNK)
+        except TimeoutError as exc:
+            raise EngineTimeout(
+                f"the runner did not confirm the subscription within {self.timeout}s"
+            ) from exc
+        except OSError as exc:
+            raise EngineUnavailable(f"the event stream failed: {exc}") from exc
+        if not chunk:
+            raise EngineUnavailable(
+                "the runner closed the event connection"
+                if not self._closed
+                else "the event stream was closed"
+            )
+        return chunk
 
     def _drop(self) -> None:
         """Destroy the connection and everything buffered on it."""
