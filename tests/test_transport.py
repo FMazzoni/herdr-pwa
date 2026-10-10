@@ -15,7 +15,6 @@ from collections.abc import Callable, Iterator, Mapping, Sequence
 from pathlib import Path
 
 import pytest
-from _jsonpath import at
 from pydantic import JsonValue
 
 from herdr_pwa.engine.transport import (
@@ -36,6 +35,7 @@ from herdr_pwa.engine.transport import (
     Transport,
 )
 from herdr_pwa.jsontypes import JsonObject, as_object, loads
+from tests._jsonpath import at
 
 SRC = Path(__file__).resolve().parent.parent / "src" / "herdr_pwa"
 

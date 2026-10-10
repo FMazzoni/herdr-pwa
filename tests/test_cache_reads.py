@@ -4,12 +4,12 @@ import threading
 from pathlib import Path
 
 import pytest
-from _cache_support import FollowerGate, TestClock
 
 from herdr_pwa.engine.cache import CachedSnapshot, ReadAbandoned, SnapshotCache
 from herdr_pwa.engine.model import Snapshot
 from herdr_pwa.engine.transport import EngineTimeout, EngineUnavailable
 from herdr_pwa.jsontypes import get_object, loads
+from tests._cache_support import FollowerGate, TestClock
 
 FIXTURE = Path(__file__).parent / "fixtures" / "snapshot.example.json"
 _RAW = get_object(get_object(loads(FIXTURE.read_text()), "result"), "snapshot")
