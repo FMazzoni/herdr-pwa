@@ -69,9 +69,7 @@ def watching() -> tuple[StallWatch, Clock]:
 # ---------------------------------------------------------------------------
 
 
-def test_two_completed_turns_over_a_frozen_record_say_the_record_may_have_moved() -> (
-    None
-):
+def test_two_completed_turns_over_a_frozen_record_say_the_record_may_have_moved() -> None:
     """The measured shape of the bug: ``WWWWDDDD`` with the byte count flat.
 
     A completed turn ALWAYS appends -- an agent cannot finish one without
@@ -102,9 +100,7 @@ def test_two_turns_inside_the_floor_do_not_fire() -> None:
     watch, clock = watching()
     polls = [(500, "working")] * 3 + [(500, "done")]
     polls += [(500, "working")] * 3 + [(500, "done")]
-    assert run(watch, clock, polls, every=1.0) is None, (
-        "eight seconds is not two minutes"
-    )
+    assert run(watch, clock, polls, every=1.0) is None, "eight seconds is not two minutes"
 
 
 def test_a_quiet_agent_never_fires_however_long_it_is_quiet() -> None:
@@ -291,9 +287,7 @@ def test_growth_clears_the_note_on_the_very_next_poll() -> None:
     polls = [(500, "working")] * 3 + [(500, "done")] * 2
     polls += [(500, "working")] * 3 + [(500, "done")] * 2
     assert run(watch, clock, polls, every=40.0) is not None
-    cleared = watch.observe(
-        SESSION, log=LOG, size=900, status="done", state=HistoryState.ok
-    )
+    cleared = watch.observe(SESSION, log=LOG, size=900, status="done", state=HistoryState.ok)
     assert cleared is None
 
 
@@ -310,9 +304,7 @@ def test_growth_resets_the_clock_as_well_as_the_count() -> None:
     quick += [(700, "working")] * 3 + [(700, "done")]
     assert run(watch, clock, quick, every=1.0) is None
     clock.tick(QUIET_SECONDS)
-    late = watch.observe(
-        SESSION, log=LOG, size=700, status="done", state=HistoryState.ok
-    )
+    late = watch.observe(SESSION, log=LOG, size=700, status="done", state=HistoryState.ok)
     assert late is not None, "the two turns still stand; only the floor was pending"
 
 
@@ -322,10 +314,7 @@ def test_a_record_that_SHRANK_is_something_happening_not_nothing() -> None:
     polls = [(9_000, "working")] * 3 + [(9_000, "done")] * 2
     polls += [(9_000, "working")] * 3 + [(9_000, "done")] * 2
     assert run(watch, clock, polls, every=40.0) is not None
-    assert (
-        watch.observe(SESSION, log=LOG, size=40, status="done", state=HistoryState.ok)
-        is None
-    )
+    assert watch.observe(SESSION, log=LOG, size=40, status="done", state=HistoryState.ok) is None
 
 
 def test_a_change_of_file_resets_every_counter() -> None:
@@ -339,9 +328,7 @@ def test_a_change_of_file_resets_every_counter() -> None:
     polls = [(19_000_000, "working")] * 3 + [(19_000_000, "done")] * 2
     polls += [(19_000_000, "working")] * 3 + [(19_000_000, "done")] * 2
     assert run(watch, clock, polls, every=40.0) is not None
-    moved = watch.observe(
-        SESSION, log=OTHER, size=4_000_000, status="done", state=HistoryState.ok
-    )
+    moved = watch.observe(SESSION, log=OTHER, size=4_000_000, status="done", state=HistoryState.ok)
     assert moved is None
 
 
@@ -369,18 +356,14 @@ def test_a_hijacked_pane_is_told_the_record_is_not_moving() -> None:
     """
     watch, clock = watching()
     for size in (18_000, 19_000, 20_000):
-        watch.observe(
-            SESSION, log=LOG, size=size, status="working", state=HistoryState.ok
-        )
+        watch.observe(SESSION, log=LOG, size=size, status="working", state=HistoryState.ok)
         clock.tick(10.0)
 
     note = None
     polls = [(20_732, "working")] * 4 + [(20_732, "done")] * 4
     polls += [(20_732, "working")] * 4 + [(20_732, "done")] * 4
     for size, status in polls:
-        note = watch.observe(
-            PROBE, log=PROBE, size=size, status=status, state=HistoryState.ok
-        )
+        note = watch.observe(PROBE, log=PROBE, size=size, status=status, state=HistoryState.ok)
         clock.tick(10.0)
 
     assert note is not None, "a working agent over a dead probe record says nothing"
@@ -397,9 +380,7 @@ def test_the_hijack_is_not_announced_before_it_has_earned_it() -> None:
     """
     watch, clock = watching()
     run(watch, clock, [(19_000_000, "working")] * 3, every=10.0)
-    swapped = watch.observe(
-        PROBE, log=PROBE, size=20_732, status="working", state=HistoryState.ok
-    )
+    swapped = watch.observe(PROBE, log=PROBE, size=20_732, status="working", state=HistoryState.ok)
     assert swapped is None
     clock.tick(3 * QUIET_SECONDS)
     assert watch.peek(PROBE, state=HistoryState.ok) is None
@@ -419,9 +400,7 @@ def test_a_hijack_into_another_project_root_stays_the_KNOWN_gap() -> None:
     watch, clock = watching()
     for _ in range(20):
         assert (
-            watch.observe(
-                PROBE, log="", size=0, status="working", state=HistoryState.absent
-            )
+            watch.observe(PROBE, log="", size=0, status="working", state=HistoryState.absent)
             is None
         )
         clock.tick(60.0)
@@ -474,10 +453,7 @@ def test_a_suppressed_state_FORGETS_rather_than_merely_staying_quiet() -> None:
     polls += [(0, "working")] * 3 + [(0, "done")] * 2
     run(watch, clock, polls, every=40.0, state=HistoryState.unreadable)
     clock.tick(600)
-    assert (
-        watch.observe(SESSION, log=LOG, size=0, status="done", state=HistoryState.ok)
-        is None
-    )
+    assert watch.observe(SESSION, log=LOG, size=0, status="done", state=HistoryState.ok) is None
 
 
 # ---------------------------------------------------------------------------
@@ -531,9 +507,7 @@ def test_the_ledger_is_bounded() -> None:
 
     watch = StallWatch(clock=Clock())
     for index in range(MAX_ENTRIES + 50):
-        watch.observe(
-            f"s{index}", log="l", size=1, status="idle", state=HistoryState.ok
-        )
+        watch.observe(f"s{index}", log="l", size=1, status="idle", state=HistoryState.ok)
     assert len(watch._watched) == MAX_ENTRIES  # noqa: SLF001 - the point of the test
 
 

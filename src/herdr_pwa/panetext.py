@@ -8,20 +8,6 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import Final
 
-__all__ = [
-    "MAX_RUNS_PER_LINE",
-    "SLOT_CLASSES",
-    "Line",
-    "PaneView",
-    "Run",
-    "cells",
-    "is_clean_prose",
-    "pane_lines",
-    "pane_view",
-    "plain_text",
-    "printed_whole",
-]
-
 
 # --------------------------------------------------------------------------
 # What comes out
@@ -55,8 +41,6 @@ class PaneView:
 
 
 MAX_RUNS_PER_LINE: Final = 96
-"""A pathological stream is mostly escape sequences, so cap what one line may turn into.
-"""
 
 _SLOTS: Final = (
     "black",
@@ -76,19 +60,13 @@ _SLOTS: Final = (
     "bright-cyan",
     "bright-white",
 )
-"""The sixteen colour slots, in ANSI order.
-"""
 
 SLOT_CLASSES: Final = tuple(f"ansi-{name}" for name in _SLOTS)
-"""The class names those slots render as.
-"""
 
 _BOLD: Final = "ansi-b"
 _DIM: Final = "ansi-d"
 _ITALIC: Final = "ansi-i"
 _UNDERLINE: Final = "ansi-u"
-"""Attribute classes, likewise closed.
-"""
 
 
 # --------------------------------------------------------------------------
@@ -96,21 +74,12 @@ _UNDERLINE: Final = "ansi-u"
 # --------------------------------------------------------------------------
 
 _CSI: Final = re.compile(r"\x1b\[([0-9;:<=>?]*)([ -/]*)([@-~])")
-"""CSI: ``ESC [`` params intermediates final.
-"""
 
-_STRING_SEQ: Final = re.compile(
-    r"\x1b[]PX^_](?:[^\x07\x1b]|\x1b(?!\\))*(?:\x07|\x1b\\|\Z)"
-)
-"""The string sequences: OSC, DCS, SOS, PM, APC.
-"""
+_STRING_SEQ: Final = re.compile(r"\x1b[]PX^_](?:[^\x07\x1b]|\x1b(?!\\))*(?:\x07|\x1b\\|\Z)")
 
 _SHORT_ESC: Final = re.compile(r"\x1b[ -/]*[0-~]?")
-"""Two-character escapes (``ESC ( B``, ``ESC =``, ``ESC 7`` ...). Dropped."""
 
 _MAX_SGR_PARAMS: Final = 64
-"""More parameters than this in one SGR and the whole sequence is ignored.
-"""
 
 
 # --------------------------------------------------------------------------
@@ -119,10 +88,8 @@ _MAX_SGR_PARAMS: Final = 64
 
 
 _WIDE: Final = frozenset({"W", "F"})
-"""The East Asian width classes a terminal lays at two cells."""
 
 _ZERO: Final = frozenset({"Mn", "Me", "Cf"})
-"""General categories that take no cell of their own: they hang off the glyph before."""
 
 
 def cells(text: str) -> int:
@@ -140,20 +107,12 @@ def cells(text: str) -> int:
 # --------------------------------------------------------------------------
 
 _FRAME_TRIM: Final = "".join(chr(c) for c in range(0x2500, 0x25A0)) + " \t   "
-"""Box drawing (U+2500-257F) and block elements (U+2580-259F).
-"""
 
 _INNER_RULE: Final = re.compile("[─-╿]{3,}")
-"""A horizontal rule *inside* a line -- which is where herdr's two-column
-welcome box puts them.
-"""
 
 _RULE_LINE_CHARS: Final = frozenset(_FRAME_TRIM + "-_=~·•")
-"""What a whole line may be made of and still count as a rule.
-"""
 
 _RULE_MIN: Final = 4
-"""A line is a rule -- and is dropped whole -- when its visible content is at least this many character"""
 
 
 def _is_rule_line(text: str) -> bool:
@@ -167,34 +126,21 @@ _WS: str = " \t\u00a0"
 _LEAD_FRAME: re.Pattern[str] = re.compile(
     f"^[{re.escape(_WS)}]*(?:[{re.escape(_BOX)}][{re.escape(_WS)}]*)+"
 )
-"""A leading frame: any whitespace, then at least one box character, then any
-whitespace, repeated.
-"""
 
 _TAIL_FRAME: re.Pattern[str] = re.compile(f"[{re.escape(_WS)}{re.escape(_BOX)}]*$")
-"""The trailing frame, plus the plain right-hand padding herdr writes to fill the desktop pane's 158 co"""
 
 _PADDING: re.Pattern[str] = re.compile(f"[{re.escape(_WS)}]{{12,}}")
-"""Column padding *inside* a line.
-"""
 
 
 # --------------------------------------------------------------------------
 # Two questions that look like one. The clip guardrail.
-# @doc: docs/modules/panetext.md
 
 
 _BORDER_GLYPH: Final = "─"
-"""The one glyph an input-box border may be made of.
-"""
 
 _BORDER_MIN_CELLS: Final = 20
-"""How many cells of :data:`_BORDER_GLYPH` make a border.
-"""
 
 _PROMPT_GLYPHS: Final = "❯>"
-"""What may begin the prompt line inside the box.
-"""
 
 
 def _is_box_border(text: str) -> bool:
@@ -203,26 +149,17 @@ def _is_box_border(text: str) -> bool:
     return len(body) >= _BORDER_MIN_CELLS and body.count(_BORDER_GLYPH) == len(body)
 
 
-_WIDE_RULE_CHARS: Final = "".join(
-    sorted(c for c in _RULE_LINE_CHARS if not c.isspace())
-)
-"""The broad alphabet, for the layout question only.
-"""
+_WIDE_RULE_CHARS: Final = "".join(sorted(c for c in _RULE_LINE_CHARS if not c.isspace()))
 
 _WIDE_RULE_RUN: re.Pattern[str] = re.compile(
     f"[{re.escape(_WIDE_RULE_CHARS)}]{{{_BORDER_MIN_CELLS},}}"
 )
-"""A run of separator glyphs long enough that wrapping it produces ragged rows
-rather than a separator.
-"""
 
 _WIDE_RULE_SHARE: Final = 0.75
-"""How much of the row that run has to be.
-"""
 
 
 def _is_wide_rule(text: str) -> bool:
-    """Is this row too wide to wrap nicely: the clip decision, and only that."""
+    """Is this row too wide to wrap nicely --'s clip decision, and only that."""
     body = text.strip()
     match = _WIDE_RULE_RUN.search(body)
     if match is None:
@@ -235,12 +172,8 @@ def _is_wide_rule(text: str) -> bool:
 # --------------------------------------------------------------------------
 
 _STATUS_MAX_ROWS: Final = 8
-"""How many rows below the box's bottom border may be statusline.
-"""
 
 _INPUT_MAX_ROWS: Final = 12
-"""How many rows the input box's interior may be.
-"""
 
 _INPUT_PLACEHOLDERS: Final = frozenset(
     {
@@ -248,14 +181,8 @@ _INPUT_PLACEHOLDERS: Final = frozenset(
         'Try "how does this work?"',
     }
 )
-"""Hint text claude paints on an empty prompt line.
-"""
 
-_PASTED_TOKEN: re.Pattern[str] = re.compile(
-    r"\[Pasted text #\d{1,9} \+\d{1,9} lines?\]"
-)
-"""Claude collapses a long paste to an opaque token on the prompt line.
-"""
+_PASTED_TOKEN: re.Pattern[str] = re.compile(r"\[Pasted text #\d{1,9} \+\d{1,9} lines?\]")
 
 
 def _prompt_body(text: str) -> str | None:
@@ -311,7 +238,7 @@ def _dedent(row: list[Run], gutter: int) -> list[Run]:
 
 
 def _draft(rows: list[list[Run]]) -> tuple[list[list[Run]], bool]:
-    """The stranded draft, and whether Take over is offered."""
+    """The stranded draft, and whether Take over is offered --."""
     if not rows:
         return [], False
     head = plain_text(rows[0])
@@ -398,23 +325,16 @@ def _slot_for_rgb(red: int, green: int, blue: int) -> int:
 
 
 _GREY_CHROMA: Final = 30
-"""Below this max-minus-min a colour is grey, not a hue."""
 
 _GREY_STEPS: Final = (64, 160, 224)
-"""Value thresholds picking black / bright-black / white / bright-white."""
 
 _GREY_SLOTS: Final = (0, 8, 7, 15)
 
 _HUE_SLOTS: Final = (1, 3, 2, 6, 4, 5)
-"""Hue buckets, 60 degrees each, offset so red is centred on 0."""
 
 _BRIGHT_VALUE: Final = 192
-"""At or above this max-channel value a hue takes its bright slot."""
 
 _CUBE: Final = (0, 95, 135, 175, 215, 255)
-"""The 6x6x6 cube's channel levels, and the 24-step grey ramp, both verbatim
-from xterm.
-"""
 
 
 def _slot_for_256(index: int) -> int | None:
@@ -424,9 +344,7 @@ def _slot_for_256(index: int) -> int | None:
         return index
     if index < 232:
         offset = index - 16
-        return _slot_for_rgb(
-            _CUBE[offset // 36], _CUBE[(offset // 6) % 6], _CUBE[offset % 6]
-        )
+        return _slot_for_rgb(_CUBE[offset // 36], _CUBE[(offset // 6) % 6], _CUBE[offset % 6])
     level = 8 + (index - 232) * 10
     return _slot_for_rgb(level, level, level)
 
@@ -483,8 +401,6 @@ _ATTRIBUTE_CODES: Final[dict[int, tuple[str, bool]]] = {
     23: ("italic", False),
     24: ("underline", False),
 }
-"""Codes that set or clear one boolean attribute, and nothing else.
-"""
 
 
 def _basic_slot(code: int) -> int | None:
@@ -539,14 +455,9 @@ def _apply_sgr(style: _Style, raw: str) -> None:
 
 # --------------------------------------------------------------------------
 # The parse. Before proposing a real terminal emulator here, read this:
-# @doc: docs/modules/panetext/no-terminal-emulator.md
 
 
-_DROP: Final = frozenset(
-    chr(c) for c in range(0x20) if c not in (0x09, 0x0A)
-) | frozenset("\x7f")
-"""Control characters that never survive.
-"""
+_DROP: Final = frozenset(chr(c) for c in range(0x20) if c not in (0x09, 0x0A)) | frozenset("\x7f")
 
 
 def _skip_escape(text: str, position: int) -> tuple[int, str | None]:
@@ -634,7 +545,6 @@ def plain_text(runs: list[Run]) -> str:
 
 # --------------------------------------------------------------------------
 # Was this label printed whole, or is it the top half of a wrapped row?
-# @doc: docs/modules/panetext/printed_whole.md
 # --------------------------------------------------------------------------
 
 
@@ -681,7 +591,7 @@ def is_clean_prose(text: str) -> bool:
 
 
 def _strip_decoration(lines: list[list[Run]]) -> list[list[Run]]:
-    """Drop the rules, collapse the frames, keep the text."""
+    """'s transform: drop the rules, collapse the frames, keep the text."""
     kept: list[list[Run]] = []
     for line in lines:
         if _is_rule_line(plain_text(line)):
@@ -706,18 +616,7 @@ def _trim_blank_edges(lines: list[list[Run]]) -> list[list[Run]]:
 
 
 def pane_view(text: str, *, strip: bool = True) -> PaneView:
-    """Turn one raw pane read into what the Pane tab renders.
-
-    Args:
-        text: whatever `agent read` returned, ANSI or not. Text with no escape
-            sequences parses to one unstyled run per line, so this is safe on a
-            `--format text` read and on a detection read.
-        strip: run the decoration transform over the *viewport*. `False` is
-            the column-faithful mode: every character and every column of
-            padding kept, for a TUI table or a piece of ASCII art that only
-            means anything when its columns line up.
-
-    """
+    """Turn one raw pane read into what the Pane tab renders --'s split."""
     lines = _tokenise(text)
     split = _split_chrome(lines)
     body, status, prompt = split if split is not None else (lines, [], [])

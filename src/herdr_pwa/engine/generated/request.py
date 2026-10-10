@@ -437,9 +437,12 @@ class PaneGraphicsSetParams(BaseModel):
     image_width: Annotated[int, Field(ge=0)]
     layer_id: str | None = None
     pane_id: str
-    placement: Annotated[
-        PaneGraphicsPlacementParams | None, Field(validate_default=True)
-    ] = {"grid_cols": 0, "grid_rows": 0, "viewport_col": 0, "viewport_row": 0}
+    placement: Annotated[PaneGraphicsPlacementParams | None, Field(validate_default=True)] = {
+        "grid_cols": 0,
+        "grid_rows": 0,
+        "viewport_col": 0,
+        "viewport_row": 0,
+    }
     z_index: int | None = 0
 
 
@@ -922,9 +925,7 @@ class WorkspaceCreateParams(BaseModel):
     label: str | None = None
     source_workspace_id: Annotated[
         str | None,
-        Field(
-            description="Workspace whose focused pane supplies the `follow` cwd policy."
-        ),
+        Field(description="Workspace whose focused pane supplies the `follow` cwd policy."),
     ] = None
 
 
@@ -1571,17 +1572,9 @@ class TabPaneMoveDestination(BaseModel):
 
 
 class PaneMoveDestination(
-    RootModel[
-        TabPaneMoveDestination
-        | NewTabPaneMoveDestination
-        | NewWorkspacePaneMoveDestination
-    ]
+    RootModel[TabPaneMoveDestination | NewTabPaneMoveDestination | NewWorkspacePaneMoveDestination]
 ):
-    root: (
-        TabPaneMoveDestination
-        | NewTabPaneMoveDestination
-        | NewWorkspacePaneMoveDestination
-    )
+    root: TabPaneMoveDestination | NewTabPaneMoveDestination | NewWorkspacePaneMoveDestination
 
 
 class PaneMoveParams(BaseModel):

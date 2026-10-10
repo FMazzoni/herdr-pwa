@@ -137,8 +137,7 @@ def _handoff(
     if not stamp:
         stamped.pop("session_id", None)
     lines = [
-        json.dumps({"type": "file-history-snapshot", "snapshot": "s" * 1200})
-        for _ in range(lead)
+        json.dumps({"type": "file-history-snapshot", "snapshot": "s" * 1200}) for _ in range(lead)
     ]
     lines = [json.dumps({"sessionId": session, "type": "ai-title"}), *lines]
     lines += [json.dumps(boundary), json.dumps(stamped)]
@@ -169,12 +168,8 @@ def project(tmp_path: Path) -> Path:
 
 
 def test_the_captured_heads_really_carry_a_parent_pointer() -> None:
-    assert FORKED_HEAD["forkedFrom"]["sessionId"] == (
-        "6ae1e031-ddb4-4684-ab07-68073f7fec47"
-    )
-    assert COMPACTED_HEAD["forkedFrom"]["sessionId"] == (
-        "5b609dba-d756-493a-a3fc-b4e09bf0a183"
-    )
+    assert FORKED_HEAD["forkedFrom"]["sessionId"] == ("6ae1e031-ddb4-4684-ab07-68073f7fec47")
+    assert COMPACTED_HEAD["forkedFrom"]["sessionId"] == ("5b609dba-d756-493a-a3fc-b4e09bf0a183")
 
 
 def test_a_compacted_copy_does_not_share_its_parents_first_uuid() -> None:
@@ -200,9 +195,7 @@ def test_the_conversation_is_followed_into_the_copy_it_continued_in(
 ) -> None:
     """The whole point: herdr names ROOT, the talking happened in COPY."""
     _log(project, ROOT, last="2026-08-20T18:12:00.000Z")
-    copy = _log(
-        project, COPY, last="2026-08-20T20:59:00.000Z", records=9, copied_from=ROOT
-    )
+    copy = _log(project, COPY, last="2026-08-20T20:59:00.000Z", records=9, copied_from=ROOT)
     assert locate(ROOT, root=project.parent) == copy
 
 
@@ -210,9 +203,7 @@ def test_a_chain_of_copies_is_followed_to_its_end(project: Path) -> None:
     """Resume, then resume again. Neither hop is the one herdr knows about."""
     _log(project, ROOT, last="2026-08-20T18:12:00.000Z")
     _log(project, COPY, last="2026-08-20T19:30:00.000Z", records=9, copied_from=ROOT)
-    last = _log(
-        project, LATER, last="2026-08-20T20:59:00.000Z", records=14, copied_from=COPY
-    )
+    last = _log(project, LATER, last="2026-08-20T20:59:00.000Z", records=14, copied_from=COPY)
     assert locate(ROOT, root=project.parent) == last
 
 
@@ -283,9 +274,7 @@ def test_mtime_is_not_what_decides_it(project: Path) -> None:
     file is what actually answers "which branch is still being talked in", and
     it is immune to a touch.
     """
-    named = _log(
-        project, ROOT, last="2026-08-18T02:44:39.000Z", records=20, mtime=1_700_000_000
-    )
+    named = _log(project, ROOT, last="2026-08-18T02:44:39.000Z", records=20, mtime=1_700_000_000)
     _log(
         project,
         COPY,
@@ -378,10 +367,7 @@ def test_the_chat_reads_the_copy_the_conversation_is_actually_in(
                     }
                 )
             ]
-            + [
-                json.dumps(_record(COPY, i, "2026-08-20T20:00:00.000Z"))
-                for i in range(9)
-            ]
+            + [json.dumps(_record(COPY, i, "2026-08-20T20:00:00.000Z")) for i in range(9)]
         )
         + "\n",
         encoding="utf-8",
@@ -402,20 +388,14 @@ def test_a_held_cursor_names_the_file_it_was_taken_against(project: Path) -> Non
     rewritten file -- one honest note, then live growth against the right file.
     """
     named = _log(project, ROOT, last="2026-08-20T18:12:00.000Z")
-    copy = _log(
-        project, COPY, last="2026-08-20T20:59:00.000Z", records=9, copied_from=ROOT
-    )
+    copy = _log(project, COPY, last="2026-08-20T20:59:00.000Z", records=9, copied_from=ROOT)
     assert locate(ROOT, root=project.parent, follow=False) == named
-    honoured = history(
-        ROOT, root=project.parent, after=copy.stat().st_size, log=copy.stem
-    )
+    honoured = history(ROOT, root=project.parent, after=copy.stat().st_size, log=copy.stem)
     assert honoured.turns == []
     assert honoured.reset is False
     assert honoured.log == copy.stem
 
-    stale = history(
-        ROOT, root=project.parent, after=named.stat().st_size, log=named.stem
-    )
+    stale = history(ROOT, root=project.parent, after=named.stat().st_size, log=named.stem)
     assert stale.reset is True, "a cursor from another file must never be honoured"
     assert stale.turns == []
     assert stale.end == copy.stat().st_size
@@ -438,20 +418,14 @@ def test_the_SCROLL_BACK_cursor_names_its_file_too(project: Path) -> None:
     its own tail -- and a page that says the cursor was dropped and WHY.
     """
     named = _log(project, ROOT, last="2026-08-20T18:12:00.000Z")
-    copy = _log(
-        project, COPY, last="2026-08-20T20:59:00.000Z", records=60, copied_from=ROOT
-    )
+    copy = _log(project, COPY, last="2026-08-20T20:59:00.000Z", records=60, copied_from=ROOT)
     assert locate(ROOT, root=project.parent) == copy
 
-    honoured = history(
-        ROOT, root=project.parent, before=copy.stat().st_size, log=copy.stem
-    )
+    honoured = history(ROOT, root=project.parent, before=copy.stat().st_size, log=copy.stem)
     assert honoured.reset is False
     assert honoured.moved is False
 
-    stale = history(
-        ROOT, root=project.parent, before=named.stat().st_size, log=named.stem
-    )
+    stale = history(ROOT, root=project.parent, before=named.stat().st_size, log=named.stem)
     assert stale.reset is True, "a cursor from another file must never be honoured"
     assert stale.moved is True, "and the reason is a MOVE, not a rewrite"
     # Its own tail, which is what a first read of this file would have answered.
@@ -529,9 +503,7 @@ def test_a_background_child_is_followed_through_its_session_id_stamp(
 ) -> None:
     """The fix: parent and child, no ``forkedFrom`` anywhere, child is followed."""
     _log(project, ROOT, last="2026-08-20T18:12:00.000Z")
-    child = _handoff(
-        project, COPY, parent=ROOT, last="2026-08-23T01:08:00.000Z", records=9
-    )
+    child = _handoff(project, COPY, parent=ROOT, last="2026-08-23T01:08:00.000Z", records=9)
     assert locate(ROOT, root=project.parent) == child
 
 
@@ -546,9 +518,7 @@ def test_a_background_child_is_followed_even_though_it_is_smaller(
     reachable -- and the corroborator below is what keeps it narrow.
     """
     named = _log(project, ROOT, last="2026-08-20T18:12:00.000Z", records=40, pad=4000)
-    child = _handoff(
-        project, COPY, parent=ROOT, last="2026-08-23T01:08:00.000Z", records=3
-    )
+    child = _handoff(project, COPY, parent=ROOT, last="2026-08-23T01:08:00.000Z", records=3)
     assert child.stat().st_size < named.stat().st_size
     assert locate(ROOT, root=project.parent) == child
 
@@ -618,9 +588,7 @@ def test_a_three_deep_background_lineage_still_resolves(project: Path) -> None:
     """A grandchild's stamp may name the GRANDparent, so the walk is breadth-first."""
     _log(project, ROOT, last="2026-08-20T18:12:00.000Z")
     _handoff(project, COPY, parent=ROOT, last="2026-08-21T00:00:00.000Z", records=9)
-    last = _handoff(
-        project, LATER, parent=COPY, last="2026-08-23T01:08:00.000Z", records=14
-    )
+    last = _handoff(project, LATER, parent=COPY, last="2026-08-23T01:08:00.000Z", records=14)
     assert locate(ROOT, root=project.parent) == last
 
 

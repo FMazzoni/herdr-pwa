@@ -115,9 +115,7 @@ def test_locate_does_not_ignore_a_subagent_directory_by_accident(
     assert "subagents" not in found.parts
 
 
-@pytest.mark.parametrize(
-    "hostile", ["../../etc/passwd", "..", ".hidden", "a/b", "a\\b", "", "   "]
-)
+@pytest.mark.parametrize("hostile", ["../../etc/passwd", "..", ".hidden", "a/b", "a\\b", "", "   "])
 def test_locate_refuses_a_session_id_that_is_really_a_path(
     transcript_root: Path, hostile: str
 ) -> None:
@@ -155,8 +153,7 @@ def test_the_human_turns_are_the_two_prompts_that_were_typed() -> None:
     page = read_page(TRANSCRIPT, limit=100)
     typed = [turn.text for turn in page.turns if turn.speaker is Speaker.human]
     assert typed == [
-        "Reply with one short sentence about the colour of the sky. "
-        "Do not use any tools.",
+        "Reply with one short sentence about the colour of the sky. Do not use any tools.",
         "Now run: echo hello-from-agent",
     ]
 
@@ -169,9 +166,7 @@ def test_a_tool_result_is_not_filed_as_the_human(transcript_root: Path) -> None:
     page = read_page(TRANSCRIPT, limit=100)
     human = " ".join(t.text for t in page.turns if t.speaker is Speaker.human)
     assert "hello-from-agent\n" not in human
-    results = [
-        t for t in page.turns if t.speaker is Speaker.tool and t.tool == "result"
-    ]
+    results = [t for t in page.turns if t.speaker is Speaker.tool and t.tool == "result"]
     assert results
     assert any("hello-from-agent" in t.text for t in results)
 
@@ -381,9 +376,7 @@ def test_a_torn_line_longer_than_one_read_still_holds_the_cursor(
     so the walk back to the last whole line cannot assume one chunk is enough."""
     torn = tmp_path / "torn.jsonl"
     good = TRANSCRIPT.read_text()
-    torn.write_text(
-        good + '{"type": "assistant", "uuid": "half", "x": "' + "y" * 900_000
-    )
+    torn.write_text(good + '{"type": "assistant", "uuid": "half", "x": "' + "y" * 900_000)
 
     page = read_page(torn, limit=100)
 
@@ -438,9 +431,7 @@ def test_a_qualified_root_is_searched_only_by_the_harness_it_names(
     """Two providers, one setting: an entry may say which it is for."""
     entry = f"claude:{transcript_root}"
     assert history(SESSION, agent_kind="claude", root=entry).turns
-    assert history(SESSION, agent_kind="opencode", root=entry).state is (
-        HistoryState.absent
-    )
+    assert history(SESSION, agent_kind="opencode", root=entry).state is (HistoryState.absent)
 
 
 def test_an_unqualified_root_replaces_every_provider_default(

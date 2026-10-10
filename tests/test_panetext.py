@@ -62,8 +62,7 @@ IDLE = ANSI_DIR / "claude-idle-welcome.ansi"
 #: scrollbar, so a reader could not tell it was cut. The tail is the half that
 #: decides the answer.
 CLIPPED_LINE = (
-    "❯ Run this bash command now: "
-    "curl -sS https://example.com/ansi1-colour-probe | head -c 20"
+    "❯ Run this bash command now: curl -sS https://example.com/ansi1-colour-probe | head -c 20"
 )
 
 HOSTILE_MARKUP = '<script>alert(1)</script>"><img src=x onerror=alert(2)>'
@@ -146,12 +145,8 @@ def test_horizontal_rules_are_dropped_and_box_frames_collapsed() -> None:
         assert not (len(body) >= 4 and set(body) <= set("─━═╌╍-_=~ ")), (
             f"a horizontal rule survived: {line!r}"
         )
-        assert not body.startswith(("│", "╭", "╰", "┌", "└")), (
-            f"a frame wall survived: {line!r}"
-        )
-        assert not body.endswith(("│", "╮", "╯", "┐", "┘")), (
-            f"a frame wall survived: {line!r}"
-        )
+        assert not body.startswith(("│", "╭", "╰", "┌", "└")), f"a frame wall survived: {line!r}"
+        assert not body.endswith(("│", "╮", "╯", "┐", "┘")), f"a frame wall survived: {line!r}"
 
 
 def test_the_pane_gets_dramatically_narrower_and_shorter() -> None:
@@ -294,9 +289,7 @@ def test_the_slot_colours_clear_the_contrast_floor_they_claim() -> None:
     ground = re.search(r"--frame:\s*(#[0-9A-Fa-f]{6})", css)
     assert ground is not None
     for slot in SLOT_CLASSES:
-        found = re.search(
-            rf"\.mirror \.{slot}\s*\{{\s*color:\s*var\((--ansi-[a-z-]+)\)", css
-        )
+        found = re.search(rf"\.mirror \.{slot}\s*\{{\s*color:\s*var\((--ansi-[a-z-]+)\)", css)
         assert found is not None, f"{slot} is not painted from a token"
         painted = re.search(rf"{found.group(1)}:\s*(#[0-9A-Fa-f]{{6}})", css)
         assert painted is not None, f"{found.group(1)} is not defined"
@@ -389,9 +382,7 @@ def _oklab(value: str) -> tuple[float, float, float]:
         for c in (int(value[i : i + 2], 16) / 255 for i in (1, 3, 5))
     )
     long = (0.4122214708 * red + 0.5363325363 * green + 0.0514459929 * blue) ** (1 / 3)
-    medium = (0.2119034982 * red + 0.6806995451 * green + 0.1073969566 * blue) ** (
-        1 / 3
-    )
+    medium = (0.2119034982 * red + 0.6806995451 * green + 0.1073969566 * blue) ** (1 / 3)
     short = (0.0883024619 * red + 0.2817188376 * green + 0.6299787005 * blue) ** (1 / 3)
     return (
         0.2104542553 * long + 0.7936177850 * medium - 0.0040720468 * short,
@@ -456,10 +447,7 @@ def test_no_two_agent_states_are_painted_the_same_colour() -> None:
 def _contrast(one: str, two: str) -> float:
     def luminance(value: str) -> float:
         channels = [int(value[i : i + 2], 16) / 255 for i in (1, 3, 5)]
-        linear = [
-            c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
-            for c in channels
-        ]
+        linear = [c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4 for c in channels]
         return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
 
     high, low = sorted((luminance(one), luminance(two)), reverse=True)
@@ -543,15 +531,7 @@ def test_no_angle_bracket_from_the_stream_ever_reaches_the_output(path: Path) ->
     # appended to the end therefore lands in the statusline, which the test
     # below covers; this one is about the viewport, so the viewport is where
     # the payload has to be.
-    raw = (
-        HOSTILE_MARKUP
-        + "\n\x1b[31m"
-        + HOSTILE_MARKUP
-        + "\n"
-        + read(path)
-        + "\n"
-        + HOSTILE_MARKUP
-    )
+    raw = HOSTILE_MARKUP + "\n\x1b[31m" + HOSTILE_MARKUP + "\n" + read(path) + "\n" + HOSTILE_MARKUP
     html = render_mirror(None, text=raw, session="s")
     viewport = html.split('<pre class="mirror"', 1)[1].split("</pre>", 1)[0]
     stripped = re.sub(r"</?span(?: class=\"[a-z0-9_ -]*\")?>", "", viewport)
@@ -737,8 +717,7 @@ def test_the_module_stays_a_leaf() -> None:
     imports = [
         line
         for line in source.splitlines()
-        if line.startswith(("import ", "from "))
-        and not line.startswith("from __future__")
+        if line.startswith(("import ", "from ")) and not line.startswith("from __future__")
     ]
     assert imports and all("herdr_pwa" not in line for line in imports), imports
 
@@ -888,9 +867,7 @@ def test_all_the_statusline_rows_are_promoted_not_just_the_first() -> None:
 def test_the_statusline_is_matched_by_position_and_never_by_content() -> None:
     """A user-configured statusline is arbitrary. Nothing may be assumed about it."""
     view = pane_view("out\n" + box(status=("\U0001f984 whatever anybody configured",)))
-    assert [plain_text(line) for line in view.status] == [
-        "\U0001f984 whatever anybody configured"
-    ]
+    assert [plain_text(line) for line in view.status] == ["\U0001f984 whatever anybody configured"]
 
 
 def test_a_pane_with_no_input_box_comes_back_untouched() -> None:
@@ -1176,9 +1153,7 @@ def _menu(name: str, source: str) -> tuple[str, list[str]]:
 
 @pytest.mark.parametrize("source", CAPTURE_SOURCES)
 @pytest.mark.parametrize("name", sorted(MENU_CAPTURES))
-def test_the_whole_corpus_agrees_about_which_labels_are_whole(
-    name: str, source: str
-) -> None:
+def test_the_whole_corpus_agrees_about_which_labels_are_whole(name: str, source: str) -> None:
     """The false-positive guard, and the reason this is parametrized over everything.
 
     Catching the two wrapped captures is the easy half. The hard half is NOT
@@ -1245,9 +1220,7 @@ def test_a_description_row_is_not_a_continuation_when_the_word_would_have_fit() 
     deliberate second line and the label above it is complete.
     """
     narrow = " 1. I prefer vibrant blues that remind me of clear\n    skies today\n"
-    assert (
-        printed_whole(narrow, "I prefer vibrant blues that remind me of clear") is False
-    )
+    assert printed_whole(narrow, "I prefer vibrant blues that remind me of clear") is False
     wide = (
         " 1. Force-push\n    Force-push the current branch, overwriting history.\n"
         + "-" * 120

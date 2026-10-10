@@ -49,9 +49,7 @@ SESSION = "ses_3fd62ba5bffemIxWVhRda5wgS7"
 SUBAGENT = "ses_3fd74bed6ffeiF11LRsQnRVHWJ"
 
 
-def page(
-    *, limit: int = 40, before: int | None = None, after: int | None = None
-) -> TranscriptPage:
+def page(*, limit: int = 40, before: int | None = None, after: int | None = None) -> TranscriptPage:
     """One page of the captured session, through the door the app uses."""
     return history(
         SESSION,
@@ -90,9 +88,7 @@ def test_the_capture_is_a_normalised_store_not_a_log() -> None:
 
 
 def test_the_capture_covers_every_part_type_the_reader_branches_on() -> None:
-    kinds = {
-        json.loads(p.read_text())["type"] for p in (STORE / "part").rglob("*.json")
-    }
+    kinds = {json.loads(p.read_text())["type"] for p in (STORE / "part").rglob("*.json")}
     assert {"text", "tool", "file", "reasoning", "step-start", "patch"} <= kinds
     states = {
         json.loads(p.read_text())["state"]["status"]
@@ -261,18 +257,14 @@ def test_a_byte_budget_stops_a_page_rather_than_reading_the_store(store: Path) -
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize(
-    "hostile", ["../../etc/passwd", "..", ".hidden", "a/b", "a\\b", "", "   "]
-)
+@pytest.mark.parametrize("hostile", ["../../etc/passwd", "..", ".hidden", "a/b", "a\\b", "", "   "])
 def test_a_session_id_that_is_really_a_path_is_refused(hostile: str) -> None:
     got = history(hostile, agent_kind="opencode", root=STORE)
     assert got.state is HistoryState.absent
     assert got.turns == []
 
 
-def test_a_session_symlinked_out_of_the_root_is_not_followed(
-    store: Path, tmp_path: Path
-) -> None:
+def test_a_session_symlinked_out_of_the_root_is_not_followed(store: Path, tmp_path: Path) -> None:
     """The containment rule, in a store made of directories."""
     outside = tmp_path / "elsewhere" / "message" / "ses_escape"
     outside.mkdir(parents=True)
@@ -324,9 +316,7 @@ def test_the_tally_reports_the_live_window_from_the_newest_message() -> None:
 
 
 def test_the_tally_of_a_harness_with_no_adapter_is_unsupported() -> None:
-    assert usage(SESSION, agent_kind="cursor", root=STORE).state is (
-        HistoryState.unsupported
-    )
+    assert usage(SESSION, agent_kind="cursor", root=STORE).state is (HistoryState.unsupported)
 
 
 def test_a_byte_budget_makes_the_tally_a_floor_rather_than_a_lie(store: Path) -> None:
@@ -397,11 +387,7 @@ def mirrored(rows: dict[str, list[dict[str, object]]]) -> dict[str, list[dict]]:
                     "time_created": stamp,
                     "time_updated": stamp,
                     "data": json.dumps(
-                        {
-                            k: v
-                            for k, v in got.items()
-                            if k not in ("id", "sessionID", "messageID")
-                        }
+                        {k: v for k, v in got.items() if k not in ("id", "sessionID", "messageID")}
                     ),
                 }
             )
@@ -483,9 +469,7 @@ def test_a_root_spelled_either_way_finds_the_frozen_store(tmp_path: Path) -> Non
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(source.read_bytes())
     for root in (tmp_path, tmp_path / "storage"):
-        assert history(SESSION, agent_kind="opencode", root=root).state is (
-            HistoryState.ok
-        )
+        assert history(SESSION, agent_kind="opencode", root=root).state is (HistoryState.ok)
 
 
 def test_the_database_is_opened_through_a_uri_that_cannot_write(
@@ -517,19 +501,13 @@ def test_a_database_that_is_not_opencodes_is_simply_not_history(
     """A schema we do not recognise degrades exactly as a missing store does."""
     with sqlite3.connect(tmp_path / OPENCODE_DB) as db:
         db.execute("create table something_else (id text)")
-    assert history(PROBE, agent_kind="opencode", root=tmp_path).state is (
-        HistoryState.absent
-    )
+    assert history(PROBE, agent_kind="opencode", root=tmp_path).state is (HistoryState.absent)
 
 
 def test_a_file_that_is_not_a_database_at_all_is_not_history(tmp_path: Path) -> None:
     (tmp_path / OPENCODE_DB).write_bytes(b"this is not a database")
-    assert history(PROBE, agent_kind="opencode", root=tmp_path).state is (
-        HistoryState.absent
-    )
-    assert usage(PROBE, agent_kind="opencode", root=tmp_path).state is (
-        HistoryState.absent
-    )
+    assert history(PROBE, agent_kind="opencode", root=tmp_path).state is (HistoryState.absent)
+    assert usage(PROBE, agent_kind="opencode", root=tmp_path).state is (HistoryState.absent)
 
 
 def test_a_session_that_exists_with_no_turns_yet_is_empty_not_absent(
@@ -542,9 +520,7 @@ def test_a_session_that_exists_with_no_turns_yet_is_empty_not_absent(
     got = history(PROBE, agent_kind="opencode", root=tmp_path, limit=100)
     assert got.state is HistoryState.empty
     assert got.turns == []
-    assert usage(PROBE, agent_kind="opencode", root=tmp_path).state is (
-        HistoryState.empty
-    )
+    assert usage(PROBE, agent_kind="opencode", root=tmp_path).state is (HistoryState.empty)
 
 
 # ---------------------------------------------------------------------------
@@ -595,9 +571,7 @@ def test_a_serving_variant_beside_the_model_is_not_shown_as_one(
 
 def test_an_older_model_column_holding_a_bare_name_still_reads(tmp_path: Path) -> None:
     """The column is not JSON in every build that wrote it, and neither is refused."""
-    build(
-        tmp_path / OPENCODE_DB, {"session": [{**ROWS["session"][0], "model": "kimi"}]}
-    )
+    build(tmp_path / OPENCODE_DB, {"session": [{**ROWS["session"][0], "model": "kimi"}]})
     assert OpencodeAdapter().info(PROBE, roots=[tmp_path]).model == ModelRef("kimi")
 
 
@@ -614,9 +588,7 @@ def test_a_store_with_no_model_column_still_answers_its_title(tmp_path: Path) ->
 def test_the_frozen_store_answers_the_title_and_has_no_model() -> None:
     """The old layout keeps the title in its own file and never kept a model."""
     info = OpencodeAdapter().info(SESSION, roots=[STORE])
-    assert info.title == (
-        "Rewrite the testing notes as an opencode skill"
-    )
+    assert info.title == ("Rewrite the testing notes as an opencode skill")
     assert info.model == ModelRef()
 
 
@@ -653,9 +625,7 @@ def test_a_byte_budget_bounds_a_page_out_of_the_database_too(
     database: Path,
 ) -> None:
     whole = OpencodeAdapter().page(SESSION, roots=[database], limit=100)
-    clipped = OpencodeAdapter().page(
-        SESSION, roots=[database], limit=100, max_bytes=2048
-    )
+    clipped = OpencodeAdapter().page(SESSION, roots=[database], limit=100, max_bytes=2048)
     assert clipped.has_more
     assert 0 < len(clipped.turns) < len(whole.turns)
 

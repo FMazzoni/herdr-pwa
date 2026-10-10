@@ -14,42 +14,10 @@ from pydantic import BaseModel, Field
 from herdr_pwa.diff import FileDiff, tool_diff
 from herdr_pwa.engine.model import SessionId
 
-__all__ = [
-    "AGENT_KINDS",
-    "CLAUDE_TRANSCRIPT_ROOT",
-    "MAX_NOTE_CHARS",
-    "MAX_PAGE_BYTES",
-    "MAX_PROSE_CHARS",
-    "MAX_RESULT_CHARS",
-    "MAX_SUMMARY_CHARS",
-    "MAX_USAGE_BYTES",
-    "HistoryState",
-    "ModelRef",
-    "OneRoot",
-    "SessionUsage",
-    "Speaker",
-    "TranscriptAdapter",
-    "TranscriptPage",
-    "TranscriptRoots",
-    "TranscriptTurn",
-    "adapter_for",
-    "fold_tool_results",
-    "history",
-    "locate",
-    "read_page",
-    "read_since",
-    "usage",
-]
 
 CLAUDE_TRANSCRIPT_ROOT: Final = "~/.claude/projects"
-"""Where Claude Code keeps its per-project transcript directories.
-"""
 
 AGENT_KINDS: Final = ("claude", "opencode", "hermes")
-"""Every harness with an adapter, and the prefixes a root entry may carry.
-
-@doc: docs/modules/engine/transcript/AGENT_KINDS.md
-"""
 
 type OneRoot = str | os.PathLike[str]
 """A single transcript root, as a path or as the string an env var carries.
@@ -60,52 +28,26 @@ type TranscriptRoots = OneRoot | Sequence[OneRoot] | None
 """
 
 MAX_PAGE_BYTES: Final = 4 * 1024 * 1024
-"""Never read more than this from disk to answer one page.
-"""
 
 MAX_PROSE_CHARS: Final = 12000
-"""**Prose** -- the model's text, and a person's own prompt.
-"""
 
 MAX_RESULT_CHARS: Final = 2000
-"""**A tool result** -- a gist, deliberately.
-"""
 
 MAX_NOTE_CHARS: Final = 2000
-"""**Injected context** -- an orchestrator notification, a slash command's expansion.
-"""
 
 MAX_SUMMARY_CHARS: Final = 160
-"""How long a collapsed one-liner may be.
-"""
 
 MAX_USAGE_BYTES: Final = 64 * 1024 * 1024
-"""Never read more than this, across the whole lineage, to answer one tally.
-
-@doc: docs/modules/engine/transcript/MAX_USAGE_BYTES.md
-"""
 
 _CHUNK: Final = 256 * 1024
-"""How much of the file one backward step reads.
-"""
 
 _HEAD_BYTES: Final = 64 * 1024
-"""How much of a sibling's HEAD is read to learn what it was copied from.
-"""
 
 _TAIL_BYTES: Final = 64 * 1024
-"""How much of a log's TAIL is read to learn when it last said anything.
-"""
 
 _ANOTHER_FILE: Final = 1 << 62
-"""A cursor past the end of any file, which `read_since` answers with a reset.
-
-@doc: docs/modules/engine/transcript/_ANOTHER_FILE.md
-"""
 
 _MAX_HOPS: Final = 8
-"""How long a chain of copies is followed before it is treated as a loop.
-"""
 
 
 class HistoryState(StrEnum):
@@ -122,16 +64,12 @@ class Speaker(StrEnum):
     """Who a turn is attributed to in the chat."""
 
     human = "human"
-    """A prompt a person actually typed or queued."""
 
     agent = "agent"
-    """Prose or thinking from the model."""
 
     tool = "tool"
-    """A tool call the agent made, and its result."""
 
     system = "system"
-    """Injected context that is neither: notifications, slash commands, meta."""
 
 
 class TranscriptTurn(BaseModel):
@@ -142,9 +80,7 @@ class TranscriptTurn(BaseModel):
     text: str
     ts: str = Field(default="", description="ISO 8601 as the provider wrote it.")
     tool: str = Field(default="", description="Tool name, when speaker is tool.")
-    truncated: bool = Field(
-        default=False, description="text was cut at its kind's cap."
-    )
+    truncated: bool = Field(default=False, description="text was cut at its kind's cap.")
     call: str = Field(
         default="",
         description=(
@@ -156,9 +92,7 @@ class TranscriptTurn(BaseModel):
     result: str = Field(
         default="", description="A folded-in tool result body (see fold_tool_results)."
     )
-    failed: bool = Field(
-        default=False, description="The provider marked the result is_error."
-    )
+    failed: bool = Field(default=False, description="The provider marked the result is_error.")
     result_truncated: bool = Field(default=False, description="result was cut.")
     diff: FileDiff | None = Field(
         default=None,
@@ -232,7 +166,6 @@ class TranscriptPage(BaseModel):
 
 def _for_kind(entry: str, kind: str) -> str:
     """*entry* as it applies to *kind*: unqualified, qualified for it, or empty."""
-    # @doc: docs/modules/engine/transcript.md
     head, sep, rest = entry.partition(":")
     if not sep or head.strip().lower() not in AGENT_KINDS:
         return entry
@@ -246,7 +179,6 @@ def _roots(
     default: Sequence[str] = (CLAUDE_TRANSCRIPT_ROOT,),
 ) -> list[Path]:
     """Every configured transcript root for *kind*, in search order, deduplicated."""
-    # @doc: docs/modules/engine/transcript.md
     if root is None:
         given: Sequence[OneRoot] = list(default)
     elif isinstance(root, (str, os.PathLike)):
@@ -289,10 +221,7 @@ def _head_window(path: Path) -> bytes:
 
 
 def _head_records(window: bytes) -> Iterator[dict[str, Any]]:
-    """Every record *window* holds WHOLE, in order.
-
-    @doc: docs/modules/engine/transcript/_head_records.md
-    """
+    """Every record *window* holds WHOLE, in order."""
     # The trailing fragment is dropped: past the budget it is half a record,
     # and at EOF it is the empty string after the final newline.
     for raw in window.split(b"\n")[:-1]:
@@ -326,13 +255,10 @@ def _forked_from(record: dict[str, Any]) -> str:
 
 
 def _stamped_parent(window: bytes, own: str) -> str:
-    """The first foreign ``session_id`` in *window* -- a BACKGROUND session's stamp.
-
-    @doc: docs/modules/engine/transcript/_stamped_parent.md
-    """
+    """The first foreign ``session_id`` in *window* -- a BACKGROUND session's stamp."""
     # TWO STEPS, the way `_background_handoff` does it: the byte
     # substrings are a cheap PREFILTER, and `sessionKind` is confirmed on a
-    # parsed record. @doc: docs/modules/engine/transcript/_stamped_parent.md
+    # parsed record.
     if b'"session_id"' not in window or b'"bg"' not in window:
         return ""
     stamp = ""
@@ -357,10 +283,7 @@ def _first_stamp(window: bytes, own: str) -> str:
 
 
 def _copied_from(path: Path) -> str:
-    """The session *path*'s thread was COPIED OUT OF, per its own head window.
-
-    @doc: docs/modules/engine/transcript/_copied_from.md
-    """
+    """The session *path*'s thread was COPIED OUT OF, per its own head window."""
     window = _head_window(path)
     head = {}
     for record in _head_records(window):
@@ -380,10 +303,7 @@ def _is_compact(record: dict[str, Any]) -> bool:
 
 
 def _background_handoff(path: Path) -> bool:
-    """Whether *path*'s head declares a compaction AND a background session.
-
-    @doc: docs/modules/engine/transcript/_background_handoff.md
-    """
+    """Whether *path*'s head declares a compaction AND a background session."""
     window = _head_window(path)
     if b'"bg"' not in window:
         return False
@@ -448,11 +368,7 @@ def _descendants(session: str, edges: dict[str, list[Path]]) -> list[Path]:
 
 
 def _follow(named: Path, session: str, base: Path) -> Path:
-    """*named*, or the copy the conversation continued in. Never LESS history.
-
-    @doc: docs/modules/engine/transcript/_follow.md
-    """
-    # @doc: docs/modules/engine/transcript.md
+    """*named*, or the copy the conversation continued in. Never LESS history."""
     newest = _last_timestamp(named)
     try:
         floor = named.stat().st_size
@@ -525,9 +441,7 @@ def locate(
 # ---------------------------------------------------------------------------
 
 
-def _lines_before(
-    path: Path, before: int, budget: int
-) -> tuple[list[tuple[int, bytes]], int]:
+def _lines_before(path: Path, before: int, budget: int) -> tuple[list[tuple[int, bytes]], int]:
     """Whole lines ending at byte *before*, oldest first, each with its offset."""
     start = max(0, before - budget)
     with path.open("rb") as handle:
@@ -536,7 +450,6 @@ def _lines_before(
     if start > 0:
         head, sep, rest = window.partition(b"\n")
         if not sep:
-            # @doc: docs/modules/engine/transcript.md
             return [], start
         start += len(head) + 1
         window = rest
@@ -551,7 +464,6 @@ def _lines_before(
 
 def _complete_end(path: Path, end: int, max_bytes: int = MAX_PAGE_BYTES) -> int:
     """*end*, pulled back to just past the last line that was written WHOLE."""
-    # @doc: docs/modules/engine/transcript.md
     if end <= 0:
         return 0
     with path.open("rb") as handle:
@@ -629,10 +541,8 @@ def read_page(
         frontier = start
         cursor = start
         taken, hit_limit = _take_backwards(lines, parse, turns, limit)
-        # @doc: docs/modules/engine/transcript.md
         cursor = start if taken is None else taken
     if frontier == 0 and not hit_limit:
-        # @doc: docs/modules/engine/transcript.md
         cursor = 0
     turns.reverse()
     return TranscriptPage(
@@ -640,7 +550,6 @@ def read_page(
         cursor=cursor,
         size=size,
         has_more=cursor > 0,
-        # @doc: docs/modules/engine/transcript.md
         end=end,
         state=HistoryState.ok if turns else HistoryState.empty,
         log=path.stem,
@@ -682,7 +591,6 @@ def read_since(
             log=path.stem,
         )
     turns: list[TranscriptTurn] = []
-    # @doc: docs/modules/engine/transcript.md
     end = start
     offset = start
     for raw in window[:tail].split(b"\n"):
@@ -725,12 +633,8 @@ _SKIP_TYPES: Final = frozenset(
         "system",
     }
 )
-"""Record types that carry no conversation.
-"""
 
 _HUMAN_SOURCES: Final = frozenset({"typed", "queued", "pasted"})
-"""``promptSource`` values that mean a person actually said this.
-"""
 
 
 def _is_human(record: dict[str, Any]) -> bool:
@@ -766,8 +670,6 @@ _TOOL_ARGUMENT_KEYS: Final = (
     "prompt",
     "text",
 )
-"""Which of a tool's arguments IDENTIFIES the call, in preference order.
-"""
 
 
 def _one_line(value: object, limit: int = MAX_SUMMARY_CHARS) -> tuple[str, bool]:
@@ -824,9 +726,7 @@ def _user_record(record: dict[str, Any], uuid: str, ts: str) -> TranscriptTurn |
     return None
 
 
-def _user_block(
-    block: dict[str, Any], uuid: str, ts: str, *, meta: bool
-) -> TranscriptTurn | None:
+def _user_block(block: dict[str, Any], uuid: str, ts: str, *, meta: bool) -> TranscriptTurn | None:
     """One content block of a user record, or ``None`` if it is not conversation."""
     kind = block.get("type")
     if kind == "tool_result":
@@ -854,9 +754,7 @@ def _user_block(
     return None
 
 
-def _assistant_record(
-    record: dict[str, Any], uuid: str, ts: str
-) -> TranscriptTurn | None:
+def _assistant_record(record: dict[str, Any], uuid: str, ts: str) -> TranscriptTurn | None:
     """An assistant record: prose, or one collapsed tool call."""
     for block in _blocks(record.get("message", {}).get("content")):
         btype = block.get("type")
@@ -864,9 +762,7 @@ def _assistant_record(
             text, cut = _clip(str(block.get("text", "")), MAX_PROSE_CHARS)
             if not text:
                 return None
-            return TranscriptTurn(
-                uuid=uuid, speaker=Speaker.agent, text=text, ts=ts, truncated=cut
-            )
+            return TranscriptTurn(uuid=uuid, speaker=Speaker.agent, text=text, ts=ts, truncated=cut)
         if btype == "tool_use":
             params = block.get("input")
             text, cut = _tool_summary(params)
@@ -930,13 +826,9 @@ def fold_tool_results(turns: Iterable[TranscriptTurn]) -> list[TranscriptTurn]:
 
 
 class TranscriptAdapter(Protocol):
-    """What a harness must answer for its conversation to reach the Chat tab.
-
-    @doc: docs/modules/engine/transcript/TranscriptAdapter.md
-    """
+    """What a harness must answer for its conversation to reach the Chat tab."""
 
     default_roots: ClassVar[tuple[str, ...]]
-    """Where this provider keeps its history when nothing was configured."""
 
     def page(
         self,
@@ -970,10 +862,7 @@ class TranscriptAdapter(Protocol):
 
 
 class ClaudeAdapter:
-    """Claude Code: one JSONL per session, and the frontier is a BYTE OFFSET.
-
-    @doc: docs/modules/engine/transcript/ClaudeAdapter.md
-    """
+    """Claude Code: one JSONL per session, and the frontier is a BYTE OFFSET."""
 
     default_roots: ClassVar[tuple[str, ...]] = (CLAUDE_TRANSCRIPT_ROOT,)
 
@@ -986,17 +875,13 @@ class ClaudeAdapter:
         before: int | None = None,
         expect: str = "",
     ) -> TranscriptPage:
-        """Up to *limit* turns ending at byte *before*, oldest first.
-
-        @doc: docs/modules/engine/transcript/ClaudeAdapter.page.md
-        """
+        """Up to *limit* turns ending at byte *before*, oldest first."""
         path = self._log(session, roots, follow=True)
         if path is None:
             return TranscriptPage(state=HistoryState.absent)
         if expect and expect != path.stem:
             # THE OTHER HALF OF THE CURSOR GUARD: a `before` offset is
             # CLAMPED rather than refused, which is worse than refusing it.
-            # @doc: docs/modules/engine/transcript/ClaudeAdapter.page.md
             page = read_page(path, limit=limit, before=None, parse=_claude_turn)
             return page.model_copy(update={"reset": True, "moved": True})
         return read_page(path, limit=limit, before=before, parse=_claude_turn)
@@ -1010,10 +895,7 @@ class ClaudeAdapter:
         limit: int = 40,
         expect: str = "",
     ) -> TranscriptPage:
-        """Whatever has been APPENDED past byte *after*, oldest first.
-
-        @doc: docs/modules/engine/transcript/ClaudeAdapter.since.md
-        """
+        """Whatever has been APPENDED past byte *after*, oldest first."""
         path = self._log(session, roots, follow=True)
         if path is None:
             return TranscriptPage(state=HistoryState.absent)
@@ -1028,7 +910,7 @@ class ClaudeAdapter:
     def tally(
         self, session: str, *, roots: Sequence[Path], max_bytes: int = MAX_USAGE_BYTES
     ) -> SessionUsage:
-        """What the session has spent, summed over its whole lineage."""
+        """What *session* has spent, summed over its whole lineage."""
         path = self._log(session, roots, follow=True)
         if path is None:
             return SessionUsage(state=HistoryState.absent)
@@ -1045,10 +927,6 @@ class ClaudeAdapter:
 
 
 _ADAPTERS: Final[dict[str, TranscriptAdapter]] = {}
-"""Adapter registry, keyed on herdr's ``agent`` field.
-
-@doc: docs/modules/engine/transcript/_ADAPTERS.md
-"""
 
 
 def _registry() -> dict[str, TranscriptAdapter]:
@@ -1109,29 +987,20 @@ def history(
 
 
 class ModelRef(NamedTuple):
-    """One model that answered, and the provider that served it.
-
-    @doc: docs/modules/engine/transcript/ModelRef.md
-    """
+    """One model that answered, and the provider that served it."""
 
     model: str = ""
-    """The model id as its own harness spells it, vendor prefix and all."""
 
     provider: str = ""
-    """Who served it, for the harnesses that can be pointed at more than one."""
 
 
 class SessionUsage(BaseModel):
     """What one session has spent, summed over every log its thread has lived in."""
 
-    messages: int = Field(
-        default=0, description="Distinct assistant MESSAGES, not records."
-    )
+    messages: int = Field(default=0, description="Distinct assistant MESSAGES, not records.")
     input_tokens: int = Field(default=0, description="Fresh prompt, never cached.")
     output_tokens: int = Field(default=0, description="Everything the model generated.")
-    thinking_tokens: int = Field(
-        default=0, description="The part of output that was reasoning."
-    )
+    thinking_tokens: int = Field(default=0, description="The part of output that was reasoning.")
     cache_creation_tokens: int = Field(default=0, description="Written into the cache.")
     cache_read_tokens: int = Field(
         default=0,
@@ -1173,10 +1042,6 @@ class SessionUsage(BaseModel):
 
 
 _SYNTHETIC_MODEL: Final = "<synthetic>"
-"""The model name Claude Code writes on a message no API call produced.
-
-@doc: docs/modules/engine/transcript/_SYNTHETIC_MODEL.md
-"""
 
 
 def _usage_of(record: dict[str, Any]) -> tuple[str, dict[str, Any], str] | None:
@@ -1239,7 +1104,6 @@ def _tally_log(
     # A message is written as several RECORDS, all carrying the same id and the
     # same usage byte for byte, so summing records nearly doubles the answer:
     # the id set is the whole correctness of this function.
-    # @doc: docs/modules/engine/transcript/usage.md
     with path.open("rb") as handle:
         for raw in handle:
             budget -= len(raw)
@@ -1265,7 +1129,6 @@ def _tally_log(
 
 def _ancestors(path: Path) -> list[Path]:
     """Every log *path*'s thread was copied out of, newest first."""
-    # @doc: docs/modules/engine/transcript/_ancestors.md
     directory = path.parent
     chain: list[Path] = []
     current = path
@@ -1283,7 +1146,6 @@ def _ancestors(path: Path) -> list[Path]:
 
 def _tally_lineage(path: Path, *, max_bytes: int) -> SessionUsage:
     """Sum *path* and every log its thread was copied out of."""
-    # @doc: docs/modules/engine/transcript/usage.md
     tally = SessionUsage()
     seen: set[str] = set()
     budget = max_bytes
@@ -1304,7 +1166,6 @@ def usage(
     max_bytes: int = MAX_USAGE_BYTES,
 ) -> SessionUsage:
     """What *session* has spent so far, across its whole lineage. Never raises."""
-    # @doc: docs/modules/engine/transcript/usage.md
     kind = (agent_kind or "").strip().lower()
     adapter = adapter_for(kind)
     text = _session_id(session)

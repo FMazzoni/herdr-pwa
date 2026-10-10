@@ -107,9 +107,7 @@ def test_title_uses_the_stripped_variant(raw_snapshot: dict, snap: Snapshot) -> 
     # neither falls back to the raw title nor strips anything itself. The fixture
     # contains one agent whose *stripped* title still carries a "◐" glyph, so a
     # local re-strip would silently disagree with the runner.
-    expected = {
-        a["pane_id"]: a["terminal_title_stripped"] for a in raw_snapshot["agents"]
-    }
+    expected = {a["pane_id"]: a["terminal_title_stripped"] for a in raw_snapshot["agents"]}
     assert {a.target: a.title for a in snap.agents} == expected
     assert any(t.startswith("◐") for t in expected.values())
 
@@ -164,9 +162,7 @@ def test_the_pane_join_is_by_id_not_position() -> None:
 
 def test_the_shared_title_channel_outranks_the_agent_name() -> None:
     """`report-metadata --title` is the later claim, by a human OR an agent."""
-    assert _named(title="what it is doing now", name="job-259").title == (
-        "what it is doing now"
-    )
+    assert _named(title="what it is doing now", name="job-259").title == ("what it is doing now")
 
 
 def test_a_worker_is_called_by_the_name_it_was_dispatched_under() -> None:
@@ -213,9 +209,7 @@ def test_the_title_channel_is_read_from_either_array() -> None:
     assert [a.title for a in snap.agents] == ["PROBE-TITLE"]
 
 
-def test_identity_is_the_session_uuid_not_the_pane(
-    raw_snapshot: dict, snap: Snapshot
-) -> None:
+def test_identity_is_the_session_uuid_not_the_pane(raw_snapshot: dict, snap: Snapshot) -> None:
     sessions = [a.session for a in snap.agents]
     assert all(len(s) == 36 for s in sessions)
     assert len(set(sessions)) == len(sessions)
@@ -223,9 +217,7 @@ def test_identity_is_the_session_uuid_not_the_pane(
     # agent_session.value, byte for byte. The transcript reader uses this string as a filename
     # (~/.claude/projects/*/<session>.jsonl), so any re-casing or prefixing here
     # silently breaks transcript lookup.
-    expected = {
-        a["pane_id"]: a["agent_session"]["value"] for a in raw_snapshot["agents"]
-    }
+    expected = {a["pane_id"]: a["agent_session"]["value"] for a in raw_snapshot["agents"]}
     assert {a.target: a.session for a in snap.agents} == expected
     # ...and never the address.
     assert not any(a.session == a.target for a in snap.agents)
@@ -415,9 +407,7 @@ def test_an_uncorroborated_numbered_run_is_not_a_menu() -> None:
     asked. Only the tap targets go.
     """
     menu = "Run `rm -rf build/`?\n\n1. Yes\n2. No\n"
-    p = BlockedPrompt.parse(
-        menu, target=as_pane_id("w1:p5"), session=as_session_id("abc")
-    )
+    p = BlockedPrompt.parse(menu, target=as_pane_id("w1:p5"), session=as_session_id("abc"))
     assert p.question == "Run `rm -rf build/`?"
     assert p.corroborated is False
     assert p.shape is MenuShape.NONE
@@ -449,9 +439,7 @@ def test_the_same_menu_with_the_footer_a_real_one_carries_does_parse() -> None:
     The earned-shape rule made "what every real capture has" literal: the footer AND the
     marker, which is what all seven `tests/fixtures/capture-blocked-*` draw.
     """
-    menu = (
-        "Run `rm -rf build/`?\n\n❯ 1. Yes\n  2. No\n\nEnter to select · Esc to cancel\n"
-    )
+    menu = "Run `rm -rf build/`?\n\n❯ 1. Yes\n  2. No\n\nEnter to select · Esc to cancel\n"
     p = BlockedPrompt.parse(menu)
     assert p.is_choice is True
     assert p.shape is MenuShape.SINGLE_CHOICE
@@ -796,9 +784,7 @@ def test_a_flattened_agent_session_degrades_instead_of_exploding() -> None:
     A later protocol could flatten ``agent_session`` from {"value": ...} to a
     plain string — the exact drift the protocol guard exists to survive.
     """
-    a = Agent.from_raw(
-        {"pane_id": "w9:p1", "agent_session": "sess-abc", "agent": "claude"}
-    )
+    a = Agent.from_raw({"pane_id": "w9:p1", "agent_session": "sess-abc", "agent": "claude"})
     assert a.session == "sess-abc"
     assert a.agent == "claude"
 
@@ -818,9 +804,7 @@ def test_whitespace_only_session_normalizes_to_empty() -> None:
 # --- normalization: every field, not just the ones that were easy ----------
 
 
-def test_every_agent_in_the_fixture_is_fully_populated(
-    raw_snapshot: dict, snap: Snapshot
-) -> None:
+def test_every_agent_in_the_fixture_is_fully_populated(raw_snapshot: dict, snap: Snapshot) -> None:
     """The count is right and no card would render a hole.
 
     "Six agents came back" is the weakest possible assertion about
@@ -875,9 +859,7 @@ def test_the_whole_workspace_join_is_by_id_not_position(raw_snapshot: dict) -> N
         list(reversed(raw_snapshot["workspaces"])),
     ):
         s = Snapshot.from_raw(dict(raw_snapshot, workspaces=workspaces))
-        assert {
-            a.target: (a.workspace, a.workspace_number) for a in s.agents
-        } == expected
+        assert {a.target: (a.workspace, a.workspace_number) for a in s.agents} == expected
 
 
 def test_an_agent_in_an_unknown_workspace_still_renders(raw_snapshot: dict) -> None:
@@ -1329,9 +1311,7 @@ TRUST_DIALOG = (
 def test_chrome_under_the_question_is_stepped_over() -> None:
     p = BlockedPrompt.parse(TRUST_DIALOG)
     assert p.is_choice is True
-    assert p.question == (
-        "Quick safety check: Is this a project you created or one you trust?"
-    )
+    assert p.question == ("Quick safety check: Is this a project you created or one you trust?")
 
 
 def test_stepping_over_chrome_never_merges_it_into_the_question() -> None:
@@ -1417,12 +1397,7 @@ def test_the_option_marker_class_still_refuses_the_response_bullet() -> None:
 #: a menu. What is left on screen is a single option row.
 OPTION_TAIL = (
     "\n".join(
-        (
-            Path(__file__).parent
-            / "fixtures"
-            / "capture-blocked-permission-prompt"
-            / "detection.txt"
-        )
+        (Path(__file__).parent / "fixtures" / "capture-blocked-permission-prompt" / "detection.txt")
         .read_text(encoding="utf-8")
         .splitlines()[-3:]
     )
@@ -1483,10 +1458,7 @@ def test_the_whole_capture_still_reads_its_real_question() -> None:
     the parser can read properly.
     """
     text = (
-        Path(__file__).parent
-        / "fixtures"
-        / "capture-blocked-permission-prompt"
-        / "detection.txt"
+        Path(__file__).parent / "fixtures" / "capture-blocked-permission-prompt" / "detection.txt"
     ).read_text(encoding="utf-8")
     p = BlockedPrompt.parse(text)
 

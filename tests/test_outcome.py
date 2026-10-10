@@ -183,12 +183,8 @@ def test_an_animating_marker_inside_the_region_still_cannot_move_the_identity():
     """Belt and braces, because the rule bound is not available on every shape:
     the marker is normalised away wherever it falls.
     """
-    lit = BlockedPrompt.parse(
-        "● working on it\n" + BOX_ONLY.format(cmd="ls", desc="List")
-    )
-    dark = BlockedPrompt.parse(
-        "  working on it\n" + BOX_ONLY.format(cmd="ls", desc="List")
-    )
+    lit = BlockedPrompt.parse("● working on it\n" + BOX_ONLY.format(cmd="ls", desc="List"))
+    dark = BlockedPrompt.parse("  working on it\n" + BOX_ONLY.format(cmd="ls", desc="List"))
 
     assert lit.fingerprint != dark.fingerprint, "the premise: the screen moved"
     assert lit.identity == dark.identity
@@ -207,28 +203,17 @@ def test_the_identity_moves_when_an_option_is_edited_under_the_cursor():
 
     assert posed.identity != edited.identity, "an edited option is a moved question"
     assert posed.question == edited.question, (
-        "and the question TEXT is unchanged, which is why the text alone will "
-        "not do as an identity"
+        "and the question TEXT is unchanged, which is why the text alone will not do as an identity"
     )
 
 
 def test_a_toggle_ticking_a_box_is_the_question_moving():
     """On a multi-select, ticking a row IS the effect a key claims."""
     off = BlockedPrompt.parse(
-        " Pick some\n"
-        "\n"
-        " ❯ 1. [ ] alpha\n"
-        "   2. [ ] beta\n"
-        "\n"
-        " Space to toggle · Enter to confirm\n"
+        " Pick some\n\n ❯ 1. [ ] alpha\n   2. [ ] beta\n\n Space to toggle · Enter to confirm\n"
     )
     on = BlockedPrompt.parse(
-        " Pick some\n"
-        "\n"
-        " ❯ 1. [x] alpha\n"
-        "   2. [ ] beta\n"
-        "\n"
-        " Space to toggle · Enter to confirm\n"
+        " Pick some\n\n ❯ 1. [x] alpha\n   2. [ ] beta\n\n Space to toggle · Enter to confirm\n"
     )
 
     assert off.options[0].checked is False, "the premise: this row keeps state"
@@ -483,14 +468,7 @@ def test_an_answering_key_stops_the_moment_its_question_is_not_the_one_on_screen
     assert clock.now == 0, "and it does not spend five seconds finding that out"
 
 
-CHECKLIST = (
-    " Pick some\n"
-    "\n"
-    " ❯ 1. [ ] alpha\n"
-    "   2. [ ] beta\n"
-    "\n"
-    " Space to toggle · Enter to confirm\n"
-)
+CHECKLIST = " Pick some\n\n ❯ 1. [ ] alpha\n   2. [ ] beta\n\n Space to toggle · Enter to confirm\n"
 
 
 def test_a_navigating_key_is_confirmed_by_the_screen_moving_at_all():
@@ -640,8 +618,7 @@ def test_the_only_states_without_a_sentence_are_the_ones_that_never_render():
     assert set(SAYS) >= FROM_A_KEYSTROKE, "a keystroke outcome with no sentence"
     assert (Outcome.PARTIALLY_APPLIED, Evidence.PARTIAL) in SAYS
     assert not (SAYS_NOTHING & set(SAYS)), (
-        "a log-only pair must not also carry a sentence -- if it renders, it is "
-        "not log-only"
+        "a log-only pair must not also carry a sentence -- if it renders, it is not log-only"
     )
 
 

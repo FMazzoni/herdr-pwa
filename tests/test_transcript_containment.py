@@ -104,9 +104,7 @@ def test_the_escape_is_indistinguishable_from_an_absent_file(root: Path, outside
     assert "ssh-rsa" not in page.model_dump_json()
 
 
-def test_a_relative_link_climbing_out_with_dotdot_is_not_followed(
-    root: Path, outside: Path
-):
+def test_a_relative_link_climbing_out_with_dotdot_is_not_followed(root: Path, outside: Path):
     """``..`` inside the link target, not inside the session id -- the session id
     check never sees it."""
     link = root / "-home-someone-repo" / f"{SESSION}.jsonl"

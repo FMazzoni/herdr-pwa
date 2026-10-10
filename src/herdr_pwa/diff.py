@@ -1,7 +1,4 @@
-"""A file change in the Chat tab, computed here and drawn by templates/diff.html.
-
-@doc: docs/modules/diff.md
-"""
+"""A file change in the Chat tab, computed here and drawn by templates/diff.html."""
 
 from __future__ import annotations
 
@@ -10,37 +7,14 @@ from typing import Any, Final
 
 from pydantic import BaseModel, Field
 
-__all__ = [
-    "DIFF_CONTEXT",
-    "MAX_DIFF_COLS",
-    "MAX_DIFF_INPUT_LINES",
-    "MAX_DIFF_LINES",
-    "DiffLine",
-    "FileDiff",
-    "tool_diff",
-]
 
 MAX_DIFF_LINES: Final = 60
-"""How many rows of a change reach the phone before the rest becomes its count.
-
-@doc: docs/modules/diff/MAX_DIFF_LINES.md
-"""
 
 MAX_DIFF_COLS: Final = 300
-"""How wide one row may be before it is clipped, in characters.
-
-@doc: docs/modules/diff/MAX_DIFF_COLS.md
-"""
 
 MAX_DIFF_INPUT_LINES: Final = 4000
-"""Past this on either side the change is COUNTED rather than diffed.
-
-@doc: docs/modules/diff/MAX_DIFF_INPUT_LINES.md
-"""
 
 DIFF_CONTEXT: Final = 2
-"""Unchanged lines kept either side of a change, to orient it.
-"""
 
 _ADD: Final = "add"
 _DEL: Final = "del"
@@ -51,10 +25,6 @@ _OLD_KEYS: Final = ("old_string", "oldString")
 _NEW_KEYS: Final = ("new_string", "newString")
 _PATH_KEYS: Final = ("file_path", "filePath", "notebook_path", "path")
 _WHOLE_KEYS: Final = ("content",)
-"""The argument names the two harnesses spell a change with.
-
-@doc: docs/modules/diff/_OLD_KEYS.md
-"""
 
 
 class DiffLine(BaseModel):
@@ -72,9 +42,7 @@ class FileDiff(BaseModel):
     added: int = 0
     removed: int = 0
     clipped: bool = Field(default=False, description="Rows past the cap were dropped.")
-    counted: bool = Field(
-        default=False, description="Too large to diff; only the counts are real."
-    )
+    counted: bool = Field(default=False, description="Too large to diff; only the counts are real.")
     every: bool = Field(default=False, description="``replace_all``: every occurrence.")
     whole: bool = Field(default=False, description="A write: the file's new contents.")
 
@@ -89,10 +57,7 @@ def _first(params: dict[str, Any], keys: tuple[str, ...]) -> str | None:
 
 
 def _pairs(params: dict[str, Any]) -> tuple[list[tuple[str, str]], bool]:
-    """Every (old, new) this call changes, and whether it is a whole-file write.
-
-    @doc: docs/modules/diff/_pairs.md
-    """
+    """Every (old, new) this call changes, and whether it is a whole-file write."""
     edits = params.get("edits")
     if isinstance(edits, list):
         found = [
@@ -114,7 +79,7 @@ def _pairs(params: dict[str, Any]) -> tuple[list[tuple[str, str]], bool]:
 
 
 def _clip_row(text: str) -> tuple[str, bool]:
-    """*text* at its width budget. Never wrapped."""
+    """*text* at its width budget. Never wrapped --,."""
     if len(text) <= MAX_DIFF_COLS:
         return text, False
     return text[:MAX_DIFF_COLS], True

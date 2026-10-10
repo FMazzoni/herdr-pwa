@@ -121,9 +121,7 @@ class FakeHerdr:
             self.connections += 1
             self.per_connection.append(0)
             index = len(self.per_connection) - 1
-            threading.Thread(
-                target=self._session, args=(conn, index), daemon=True
-            ).start()
+            threading.Thread(target=self._session, args=(conn, index), daemon=True).start()
 
     def _session(self, conn: socket.socket, index: int) -> None:
         buffer = b""
@@ -223,9 +221,7 @@ def test_the_request_is_one_newline_terminated_json_object(
     wire.close()
 
 
-def test_params_are_passed_through_unmangled(
-    server: FakeHerdr, sock_path: Path
-) -> None:
+def test_params_are_passed_through_unmangled(server: FakeHerdr, sock_path: Path) -> None:
     """Named params, so no argv escaping question: dashes, newlines, unicode."""
     wire = transport(sock_path)
     params = {"target": "w1:p3", "text": "--not-a-flag\nsecond line ✳"}
@@ -282,9 +278,7 @@ def test_a_reply_is_matched_to_the_id_that_asked_for_it(
     wire.close()
 
 
-def test_two_transports_never_mint_the_same_id(
-    server: FakeHerdr, sock_path: Path
-) -> None:
+def test_two_transports_never_mint_the_same_id(server: FakeHerdr, sock_path: Path) -> None:
     """Ids are per instance, so two clients on one runner cannot collide."""
     one, two = transport(sock_path), transport(sock_path)
     one.call("agent.list", {})
@@ -554,9 +548,7 @@ def test_a_dribbling_peer_cannot_outlast_the_deadline(
     wire.close()
 
 
-def test_a_timeout_destroys_the_connection(
-    sock_path: Path, request: pytest.FixtureRequest
-) -> None:
+def test_a_timeout_destroys_the_connection(sock_path: Path, request: pytest.FixtureRequest) -> None:
     """Otherwise the late reply is handed to whoever asks next.
 
     The reply to a timed-out ``agent.get`` sitting unread in the pipe would be
@@ -686,9 +678,7 @@ def test_a_forked_child_gets_its_own_ids_and_its_own_connection(
     _, wait_status = os.waitpid(child, 0)
 
     assert os.waitstatus_to_exitcode(wait_status) == 0, "the child could not call"
-    assert child_prefix and child_prefix != wire._prefix, (
-        "the child re-used the parent's id prefix"
-    )
+    assert child_prefix and child_prefix != wire._prefix, "the child re-used the parent's id prefix"
     assert str(os.getpid()) not in child_prefix, "the child kept the parent's pid"
     assert server.connections >= 2, "the child re-used the parent's socket"
 
@@ -806,9 +796,7 @@ def _pad_to(wire: SocketTransport, target: int) -> str:
     return "x" * (target - len(frame))
 
 
-def test_a_request_of_exactly_the_limit_is_sent(
-    server: FakeHerdr, sock_path: Path
-) -> None:
+def test_a_request_of_exactly_the_limit_is_sent(server: FakeHerdr, sock_path: Path) -> None:
     """The boundary is inclusive, because that is where herdr's own is.
 
     Measured against herdr 0.8.0 on 2026-08-20: a request line of exactly
@@ -954,9 +942,7 @@ def test_a_dead_reused_connection_is_transparently_redialled(
     wire.close()
 
 
-def test_a_write_is_never_resent(
-    sock_path: Path, request: pytest.FixtureRequest
-) -> None:
+def test_a_write_is_never_resent(sock_path: Path, request: pytest.FixtureRequest) -> None:
     """``sendall`` can fail after the bytes have landed.
 
     A retried ``agent.prompt`` is a second prompt typed at a real agent, so a
@@ -1057,9 +1043,7 @@ def test_the_backoff_is_bounded_and_a_success_clears_it(
 # --------------------------------------------------------------------------
 
 
-def test_concurrent_callers_each_get_their_own_reply(
-    server: FakeHerdr, sock_path: Path
-) -> None:
+def test_concurrent_callers_each_get_their_own_reply(server: FakeHerdr, sock_path: Path) -> None:
     """FastAPI's threadpool is the expected caller, so this is not academic.
 
     The lock means one request is outstanding at a time; what this proves is
@@ -1081,9 +1065,7 @@ def test_concurrent_callers_each_get_their_own_reply(
     for t in threads:
         t.join(timeout=10)
     assert len(seen) == 16
-    assert all(asked == echoed for asked, echoed in seen), (
-        "a caller got somebody else's reply"
-    )
+    assert all(asked == echoed for asked, echoed in seen), "a caller got somebody else's reply"
     # Sixteen connections, not one: the lock still serialises callers, and the
     # id correlation still has to hold -- what changed is that reuse was never
     # something herdr allowed. The pairing assertion above is the real subject
@@ -1142,9 +1124,7 @@ def hang_up_behaviour(path: Path, timeout: float = 3.0) -> tuple[bool, str]:
     conn.settimeout(timeout)
     try:
         conn.connect(str(path))
-        conn.sendall(
-            _line({"id": "probe-1", "method": "session.snapshot", "params": {}})
-        )
+        conn.sendall(_line({"id": "probe-1", "method": "session.snapshot", "params": {}}))
         buffer = b""
         while b"\n" not in buffer:
             chunk = conn.recv(65536)
@@ -1153,9 +1133,7 @@ def hang_up_behaviour(path: Path, timeout: float = 3.0) -> tuple[bool, str]:
             buffer += chunk
         eof = conn.recv(65536) == b""
         try:
-            conn.sendall(
-                _line({"id": "probe-2", "method": "session.snapshot", "params": {}})
-            )
+            conn.sendall(_line({"id": "probe-2", "method": "session.snapshot", "params": {}}))
         except OSError as exc:
             return eof, type(exc).__name__
         return eof, "accepted"
@@ -1163,9 +1141,7 @@ def hang_up_behaviour(path: Path, timeout: float = 3.0) -> tuple[bool, str]:
         conn.close()
 
 
-def test_the_fake_hangs_up_after_every_reply(
-    server: FakeHerdr, sock_path: Path
-) -> None:
+def test_the_fake_hangs_up_after_every_reply(server: FakeHerdr, sock_path: Path) -> None:
     """The fake's honesty, pinned as a fact rather than left as a comment.
 
     The connection-reuse bug was undetectable for the life of the project because this fake was
@@ -1179,9 +1155,7 @@ def test_the_fake_hangs_up_after_every_reply(
     assert server.per_connection == [1], "one request per connection, no more"
 
 
-def test_a_second_request_on_one_connection_is_refused(
-    server: FakeHerdr, sock_path: Path
-) -> None:
+def test_a_second_request_on_one_connection_is_refused(server: FakeHerdr, sock_path: Path) -> None:
     """The trap, disarmed: a reuse assumption now fails where it is written.
 
     Written as the shortest form of the mistake -- two calls on one socket --
@@ -1202,9 +1176,7 @@ def test_a_second_request_on_one_connection_is_refused(
     assert len(server.requests) == 1, "the second request reached the fake"
 
 
-def test_live_the_runner_hangs_up_exactly_like_the_fake(
-    server: FakeHerdr, sock_path: Path
-) -> None:
+def test_live_the_runner_hangs_up_exactly_like_the_fake(server: FakeHerdr, sock_path: Path) -> None:
     """The one live check in this module: does the fake still lie?
 
     Everything else here is mocked and stays mocked -- fast, deterministic,
@@ -1233,9 +1205,7 @@ def test_live_the_runner_hangs_up_exactly_like_the_fake(
         "connections alive, that is a real finding -- file it, and change the "
         "fake and the transport together, not one without the other."
     )
-    assert mocked == live, (
-        f"the fake has drifted from the runner again: fake={mocked} live={live}"
-    )
+    assert mocked == live, f"the fake has drifted from the runner again: fake={mocked} live={live}"
 
 
 def _line_of(path: Path, size: int, timeout: float = 15.0) -> str:
@@ -1407,9 +1377,7 @@ def streaming(*events: dict[str, Any], then_hang_up: bool = False) -> Handler:
     """A runner that confirms the subscription and then pushes, keeping the connection."""
 
     def handler(request: dict[str, Any], conn: socket.socket) -> None:
-        conn.sendall(
-            _line({"id": request["id"], "result": {"type": "subscription_started"}})
-        )
+        conn.sendall(_line({"id": request["id"], "result": {"type": "subscription_started"}}))
         for event in events:
             conn.sendall(_line(event))
         if then_hang_up:
@@ -1493,9 +1461,7 @@ def test_a_frame_that_is_not_an_event_is_skipped_rather_than_yielded(
     """Only `event` frames are the subscription's; anything else is somebody's reply."""
     serve(
         sock_path,
-        streaming(
-            {"id": "someone-else", "result": {"type": "ok"}}, status("w1:p1", "done")
-        ),
+        streaming({"id": "someone-else", "result": {"type": "ok"}}, status("w1:p1", "done")),
         request,
     )
     with contextlib.closing(stream(sock_path)) as live:

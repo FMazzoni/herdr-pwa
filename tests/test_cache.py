@@ -432,8 +432,7 @@ def test_a_slow_read_does_not_stall_a_request_served_from_cache():
     hit_at, slow_took = asyncio.run(race())
 
     assert slow_took >= SLOW_READ, (
-        f"the slow read only took {slow_took:.3f}s; it never blocked, so this "
-        "test proves nothing"
+        f"the slow read only took {slow_took:.3f}s; it never blocked, so this test proves nothing"
     )
     assert hit_at < HIT_BUDGET, (
         f"a cache hit was answered {hit_at:.3f}s after a {SLOW_READ}s engine "

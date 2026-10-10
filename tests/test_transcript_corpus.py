@@ -139,9 +139,7 @@ def test_every_declared_parent_resolves_to_a_file_that_exists() -> None:
         followed += 1
         if not (path.parent / f"{parent}.jsonl").is_file():
             dangling.append(f"{path.name} -> {parent}")
-    assert not dangling, (
-        f"declared parents that do not resolve: {dangling}\n{WHAT_IT_SAW}"
-    )
+    assert not dangling, f"declared parents that do not resolve: {dangling}\n{WHAT_IT_SAW}"
     assert followed or SEEN, WHAT_IT_SAW
 
 

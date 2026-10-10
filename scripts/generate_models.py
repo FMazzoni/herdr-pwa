@@ -75,9 +75,7 @@ def capture_schema() -> None:
 
 def _pascal(value: str) -> str:
     """``pane.agent_status_changed`` -> ``PaneAgentStatusChanged``."""
-    return "".join(
-        part.capitalize() for part in re.split(r"[^A-Za-z0-9]+", value) if part
-    )
+    return "".join(part.capitalize() for part in re.split(r"[^A-Za-z0-9]+", value) if part)
 
 
 def _name_variants(node: Any, parent: str) -> None:
@@ -236,20 +234,11 @@ def check() -> int:
         generate(fresh)
         stale = []
         names = sorted(
-            {p.name for p in fresh.glob("*.py")}
-            | {p.name for p in OUT_DIR.glob("*.py")}
+            {p.name for p in fresh.glob("*.py")} | {p.name for p in OUT_DIR.glob("*.py")}
         )
         for name in names:
-            want = (
-                (fresh / name).read_text(encoding="utf-8")
-                if (fresh / name).exists()
-                else ""
-            )
-            have = (
-                (OUT_DIR / name).read_text(encoding="utf-8")
-                if (OUT_DIR / name).exists()
-                else ""
-            )
+            want = (fresh / name).read_text(encoding="utf-8") if (fresh / name).exists() else ""
+            have = (OUT_DIR / name).read_text(encoding="utf-8") if (OUT_DIR / name).exists() else ""
             if want != have:
                 stale.append(name)
                 sys.stdout.writelines(
@@ -261,9 +250,7 @@ def check() -> int:
                     )
                 )
     if stale:
-        print(
-            f"\nSTALE: {', '.join(stale)} — run: uv run python scripts/generate_models.py"
-        )
+        print(f"\nSTALE: {', '.join(stale)} — run: uv run python scripts/generate_models.py")
         return 1
     print("generated models are up to date")
     return 0

@@ -146,9 +146,7 @@ def test_capture_is_complete(name: str) -> None:
     for source in SOURCES:
         path = FIXTURES / name / f"{source}.txt"
         assert path.is_file(), f"{name}: missing {source}.txt"
-        assert path.read_text(encoding="utf-8").strip(), (
-            f"{name}: {source}.txt is empty"
-        )
+        assert path.read_text(encoding="utf-8").strip(), f"{name}: {source}.txt is empty"
     for extra in ("explain.txt", "explain.json", "agent-get.json", "meta.json"):
         assert (FIXTURES / name / extra).is_file(), f"{name}: missing {extra}"
 
@@ -208,8 +206,7 @@ MENUS: dict[str, tuple[str, tuple[tuple[int, str], ...]]] = {
             (1, "Yes"),
             (
                 2,
-                "Yes, and don’t ask again for: "
-                "curl -sS https://example.com/demo-permission-probe",
+                "Yes, and don’t ask again for: curl -sS https://example.com/demo-permission-probe",
             ),
             (3, "No"),
         ),
@@ -234,8 +231,7 @@ MENUS: dict[str, tuple[str, tuple[tuple[int, str], ...]]] = {
     # taken on Claude Code 2.1.251, which is what makes it evidence rather than
     # a memory of collie's older tree.
     "capture-blocked-plan-approval": (
-        "Claude has written up a plan and is ready to execute. "
-        "Would you like to proceed?",
+        "Claude has written up a plan and is ready to execute. Would you like to proceed?",
         (
             (1, "Yes, auto-accept edits"),
             (2, "Yes, manually approve edits"),
@@ -327,9 +323,7 @@ CHECKLISTS: dict[str, tuple[str, tuple[tuple[int, str, bool | None], ...]]] = {
 
 @pytest.mark.parametrize("source", SOURCES)
 @pytest.mark.parametrize("name", sorted(CHECKLISTS))
-def test_checklist_captures_parse_to_rows_with_their_tick_state(
-    name: str, source: str
-) -> None:
+def test_checklist_captures_parse_to_rows_with_their_tick_state(name: str, source: str) -> None:
     """A real checklist yields its rows AND what the terminal drew on each.
 
     The description line between every pair of rows is the thing that was
@@ -388,9 +382,7 @@ _LIST_LINE_RE = re.compile(r"^\s*[●>❯*•\-]?\s*(\d{1,2})[.):]\s+\S")
 
 @pytest.mark.parametrize("source", SOURCES)
 @pytest.mark.parametrize("name", NUMBERED_NEGATIVES)
-def test_the_numbered_negatives_still_carry_a_numbered_list(
-    name: str, source: str
-) -> None:
+def test_the_numbered_negatives_still_carry_a_numbered_list(name: str, source: str) -> None:
     """Every capture :data:`NUMBERED_NEGATIVES` names must really carry a 1..n run.
 
     Makes that constant load-bearing instead of documentary, and extends to
@@ -413,9 +405,7 @@ def test_askuserquestion_trailing_affordances_are_not_answers() -> None:
     recorded rather than worked around: the parser only sees the terminal, and
     the terminal genuinely lists five numbered choices.
     """
-    prompt = BlockedPrompt.parse(
-        read("capture-blocked-askuserquestion-menu", "detection")
-    )
+    prompt = BlockedPrompt.parse(read("capture-blocked-askuserquestion-menu", "detection"))
     assert [o.label for o in prompt.options][3:] == [
         "Type something.",
         "Chat about this",
@@ -510,10 +500,7 @@ def test_trust_dialog_chrome_is_skipped_but_not_swallowed() -> None:
     assert "Security guide" not in prompt.question
     assert "read, edit, and execute files here" not in prompt.question
     assert "Security guide" in prompt.raw
-    assert (
-        "Quick safety check: Is this a project you created or one you trust?"
-        in prompt.raw
-    )
+    assert "Quick safety check: Is this a project you created or one you trust?" in prompt.raw
 
 
 # --------------------------------------------------------------------------
@@ -858,9 +845,7 @@ def test_the_anchor_is_the_only_thing_refusing_that_shape() -> None:
     text = read("capture-idle-numbered-recap", "detection").replace(
         "\u25cf 1. README.md", "  1. README.md"
     )
-    numbers = [
-        int(m.group(1)) for line in text.splitlines() if (m := _OPTION_RE.match(line))
-    ]
+    numbers = [int(m.group(1)) for line in text.splitlines() if (m := _OPTION_RE.match(line))]
     assert numbers == [1, 2, 3], (
         "the option run is no longer buildable from this capture, so "
         "test_a_numbered_recap_with_the_terminal_below_it_is_refused would "
@@ -898,9 +883,7 @@ def test_only_blanks_rules_and_key_hints_may_follow_a_real_menu() -> None:
 # What a CARD shows
 # --------------------------------------------------------------------------
 
-BLOCKED_CAPTURES = [
-    p.name for p in capture_dirs() if p.name.startswith("capture-blocked-")
-]
+BLOCKED_CAPTURES = [p.name for p in capture_dirs() if p.name.startswith("capture-blocked-")]
 
 
 @pytest.mark.parametrize("name", BLOCKED_CAPTURES)

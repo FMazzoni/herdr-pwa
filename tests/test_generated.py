@@ -112,9 +112,7 @@ def test_snapshot_capture_agrees_with_the_handwritten_model() -> None:
     assert hand.protocol == parsed.snapshot.protocol
     assert hand.version == parsed.snapshot.version
     assert len(hand.agents) == len(parsed.snapshot.agents)
-    assert {a.target for a in hand.agents} == {
-        a.pane_id for a in parsed.snapshot.agents
-    }
+    assert {a.target for a in hand.agents} == {a.pane_id for a in parsed.snapshot.agents}
     assert {w.workspace_id for w in hand.workspaces} == {
         w.workspace_id for w in parsed.snapshot.workspaces
     }
@@ -200,9 +198,7 @@ def test_every_agent_field_is_either_modelled_or_knowingly_ignored() -> None:
     That failure is the point: it forces a decision on the new field rather
     than letting it arrive unnoticed with the next regeneration.
     """
-    assert set(wire.AgentInfo.model_fields) == (
-        AGENT_FIELDS_MODELLED | AGENT_FIELDS_IGNORED
-    )
+    assert set(wire.AgentInfo.model_fields) == (AGENT_FIELDS_MODELLED | AGENT_FIELDS_IGNORED)
     assert not (AGENT_FIELDS_MODELLED & AGENT_FIELDS_IGNORED)
 
 

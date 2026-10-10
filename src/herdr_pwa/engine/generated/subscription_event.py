@@ -82,9 +82,7 @@ class PaneOutputMatchedEvent(BaseModel):
 
 
 class SubscriptionEventData(
-    RootModel[
-        PaneOutputMatchedEvent | PaneAgentStatusChangedEvent | PaneScrollChangedEvent
-    ]
+    RootModel[PaneOutputMatchedEvent | PaneAgentStatusChangedEvent | PaneScrollChangedEvent]
 ):
     root: PaneOutputMatchedEvent | PaneAgentStatusChangedEvent | PaneScrollChangedEvent
 

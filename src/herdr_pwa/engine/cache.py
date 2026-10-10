@@ -12,14 +12,6 @@ from typing import Final, Protocol, cast
 from herdr_pwa.engine.model import Snapshot
 from herdr_pwa.engine.transport import EngineUnavailable
 
-__all__ = [
-    "CacheSettings",
-    "CachedSnapshot",
-    "CachedValue",
-    "ReadAbandoned",
-    "SnapshotCache",
-    "get_snapshot_cache",
-]
 
 log = logging.getLogger(__name__)
 
@@ -32,12 +24,8 @@ class CacheSettings(Protocol):
 
 
 _CLOCK: Final = time.monotonic
-"""Age is read off a monotonic clock everywhere.
-"""
 
 _SNAPSHOT: Final = "snapshot"
-"""The key the snapshot itself lives under.
-"""
 
 
 class ReadAbandoned(EngineUnavailable):
@@ -49,15 +37,10 @@ class CachedValue[T]:
     """What a reader gets: the value, how old it truly is, and any failure."""
 
     value: T
-    """The most recent value that was fetched successfully."""
 
     age: float
-    """Seconds since `value` was fetched, measured on a monotonic clock.
-    """
 
     error: Exception | None = None
-    """The failure of the *most recent* refresh attempt, when that attempt failed.
-    """
 
 
 type CachedSnapshot = CachedValue[Snapshot]
@@ -75,8 +58,6 @@ class _Shelf:
         self.fetched_at: float = 0.0
         self.error: Exception | None = None
         self.in_flight: _Fetch | None = None
-        """The fetch one thread is performing.
-        """
 
 
 class _Fetch:
@@ -89,9 +70,7 @@ class _Fetch:
         self.entry: CachedValue[object] | None = None
         self.error: Exception | None = None
 
-    def publish(
-        self, entry: CachedValue[object] | None, error: Exception | None
-    ) -> None:
+    def publish(self, entry: CachedValue[object] | None, error: Exception | None) -> None:
         """Record the outcome, then release everyone waiting. In that order."""
         self.entry = entry
         self.error = error
@@ -102,21 +81,10 @@ class SnapshotCache:
     """One shared value per fact per app, refreshed lazily, with misses coalesced."""
 
     def __init__(self, *, ttl: float, clock: Callable[[], float] = _CLOCK) -> None:
-        """Build a cache with its TTL and its clock, both injected.
-
-        Args:
-            ttl: seconds a fetched value is served before the next caller
-                refreshes it. Comes from `UiSettings.snapshot_cache_ttl` -- see
-                `from_settings`, which is how an app builds one.
-            clock: monotonic seconds source. Injected only so a test can age a
-                value without sleeping through it.
-
-        """
+        """Build a cache with its TTL and its clock, both injected."""
         self._ttl = ttl
         self._clock = clock
         self._lock = threading.Lock()
-        """Guards every shelf below, and **is never held across a fetch**.
-        """
         self._shelves: dict[str, _Shelf] = {}
 
     @classmethod
@@ -131,24 +99,14 @@ class SnapshotCache:
     # The one entry point
     # ------------------------------------------------------------------
 
-    def get(
-        self, load: Callable[[], Snapshot], *, max_age: float | None = None
-    ) -> CachedSnapshot:
+    def get(self, load: Callable[[], Snapshot], *, max_age: float | None = None) -> CachedSnapshot:
         """The herd snapshot, fetched with `load` only if nobody else is."""
         return self.read(_SNAPSHOT, load, max_age=max_age)
 
     def read[T](
         self, key: str, load: Callable[[], T], *, max_age: float | None = None
     ) -> CachedValue[T]:
-        """The current value of ``key``, fetching it with ``load`` if nobody is.
-
-        Raises:
-            Exception: whatever ``load`` raised, but only when there is no
-                earlier good value to fall back on. Otherwise the failure is
-                attached to :attr:`CachedValue.error` and the survivor is
-                returned with its real, growing age.
-
-        """
+        """The current value of ``key``, fetching it with ``load`` if nobody is."""
         with self._lock:
             shelf = self._shelves.setdefault(key, _Shelf())
             hit = self._hit_locked(shelf, max_age)
@@ -190,9 +148,7 @@ class SnapshotCache:
             return survivor
         return self._publish(shelf, value, fetch)
 
-    def _publish(
-        self, shelf: _Shelf, value: object, fetch: _Fetch
-    ) -> CachedValue[object]:
+    def _publish(self, shelf: _Shelf, value: object, fetch: _Fetch) -> CachedValue[object]:
         """Store a good value, stamp it, and wake everyone waiting on it."""
         entry = CachedValue(value=value, age=0.0)
         with self._lock:

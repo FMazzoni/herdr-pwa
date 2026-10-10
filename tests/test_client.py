@@ -440,8 +440,7 @@ def test_the_reason_for_the_visible_default_is_written_where_the_code_is() -> No
     viewport moves an operator's screen.
     """
     doc = (
-        Path(__file__).resolve().parents[1]
-        / "docs/modules/engine/client/HerdrClient.read.md"
+        Path(__file__).resolve().parents[1] / "docs/modules/engine/client/HerdrClient.read.md"
     ).read_text(encoding="utf-8")
     assert "viewport_rows" in doc, "the exact threshold is not recorded"
     assert "mouse-scroll" in doc, "the mechanism is not named"
@@ -599,9 +598,7 @@ def test_a_runner_that_does_not_report_readiness_is_not_blocked() -> None:
     fields entirely, so refusing on unknown would refuse every write."""
     raw = raw_agent()
     assert "launch_pending" not in raw and "interactive_ready" not in raw
-    eng, wire = build(
-        {GET: {"id": "x", "result": {"type": "agent_info", "agent": raw}}}
-    )
+    eng, wire = build({GET: {"id": "x", "result": {"type": "agent_info", "agent": raw}}})
     eng.prompt(P3, "hi")
     assert PROMPT in wire.methods
 
@@ -880,9 +877,7 @@ def test_there_is_no_public_arbitrary_method_entry_point() -> None:
         (wire_request.AgentFocusRequest, wire_request.AgentTarget(target="w1:p3")),
     ],
 )
-def test_a_write_through_the_private_caller_still_fails_closed(
-    request_type, params
-) -> None:
+def test_a_write_through_the_private_caller_still_fails_closed(request_type, params) -> None:
     """The guard is a property of issuing a request, not of remembering to ask.
 
     This is the check that survived the transport swap: it used to live in
@@ -1092,9 +1087,7 @@ def test_two_clients_can_be_configured_differently() -> None:
         settings=Isolated(expected_protocol=protocol.EXPECTED_PROTOCOL),
         protocol_number=DRIFTED,
     )
-    new, _ = build(
-        settings=Isolated(expected_protocol=DRIFTED), protocol_number=DRIFTED
-    )
+    new, _ = build(settings=Isolated(expected_protocol=DRIFTED), protocol_number=DRIFTED)
     with pytest.raises(ProtocolMismatch):
         old.focus(P3)
     new.focus(P3)
@@ -1118,9 +1111,7 @@ def test_the_warn_once_flag_resets_with_a_fresh_instance(
     second, _ = build(protocol_number=DRIFTED)
     with caplog.at_level("WARNING"):
         second.snapshot()
-    assert (
-        caplog.text.lower().count(f"protocol {DRIFTED}") == 1
-    )  # said again, by a new view
+    assert caplog.text.lower().count(f"protocol {DRIFTED}") == 1  # said again, by a new view
 
     caplog.clear()
     first.forget_protocol()
@@ -1164,10 +1155,7 @@ def test_there_is_no_module_level_protocol_state_left() -> None:
     """
     tree = ast.parse(Path(client.__file__).read_text(encoding="utf-8"))
     declared = [
-        name
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Global)
-        for name in node.names
+        name for node in ast.walk(tree) if isinstance(node, ast.Global) for name in node.names
     ]
     assert not declared, f"module-level state is back: {declared}"
     assigned_via_globals = [
@@ -1298,9 +1286,7 @@ def test_the_rendered_protocol_check_and_the_write_guard_agree() -> None:
     a dashboard whose writes it was perfectly happy to allow -- the setting was
     honoured by the guard and ignored by the view.
     """
-    eng, _ = build(
-        settings=Isolated(expected_protocol=DRIFTED), protocol_number=DRIFTED
-    )
+    eng, _ = build(settings=Isolated(expected_protocol=DRIFTED), protocol_number=DRIFTED)
     snap = eng.snapshot()
     assert snap.protocol_ok is True  # what the header renders...
     eng.focus(P3)  # ...and what the guard allows
@@ -1505,9 +1491,7 @@ def test_every_other_start_failure_is_raised_on_the_first_attempt(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(client, "_START_BACKOFF", 0)
-    eng, wire = build(
-        {PROCESS_INFO: process_info_frame(), START: EngineTimeout("too slow")}
-    )
+    eng, wire = build({PROCESS_INFO: process_info_frame(), START: EngineTimeout("too slow")})
     with pytest.raises(EngineTimeout):
         eng.start_agent(name="n", kind="claude", pane_id="w1:p9")
     assert wire.methods.count(START) == 1
@@ -1648,9 +1632,7 @@ def test_the_engine_declares_the_eight_fields_it_reads_and_no_more() -> None:
     mixin that supplies exactly that and is built alone by the un-injected
     constructor. tests/test_settings.py holds the two together.
     """
-    engine_reads = {
-        name for name in dir(client.EngineSettings) if not name.startswith("_")
-    }
+    engine_reads = {name for name in dir(client.EngineSettings) if not name.startswith("_")}
     assert engine_reads == {
         "socket_path",
         "command_timeout",

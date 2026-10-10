@@ -511,9 +511,7 @@ class ServerCapabilities(BaseModel):
     live_handoff: bool
     surface_interest: Annotated[
         bool | None,
-        Field(
-            description="Whether this server supports explicit client-shell surface interest."
-        ),
+        Field(description="Whether this server supports explicit client-shell surface interest."),
     ] = False
 
 
@@ -975,9 +973,7 @@ class InstalledPluginInfo(BaseModel):
     platforms: list[PluginPlatform] | None = None
     plugin_id: str
     plugin_root: str
-    source: Annotated[PluginSourceInfo | None, Field(validate_default=True)] = {
-        "kind": "local"
-    }
+    source: Annotated[PluginSourceInfo | None, Field(validate_default=True)] = {"kind": "local"}
     startup: list[PluginManifestStartup] | None = None
     version: str
     warnings: Annotated[

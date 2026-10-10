@@ -3,20 +3,19 @@
 import logging
 import threading
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from functools import cache
-from pathlib import Path
-from typing import Any, Final, NamedTuple, Protocol, TypeVar, get_args
+from typing import Any, Final, NamedTuple, TypeVar, get_args
 
 from pydantic import BaseModel, ValidationError
 
 from herdr_pwa import panetext
-from herdr_pwa import settings as _settings
+from herdr_pwa.engine.config import EngineSettings
 from herdr_pwa.engine.generated import request as wire_request
 from herdr_pwa.engine.generated import success_response as wire
+from herdr_pwa.engine.dialog import BlockedPrompt
 from herdr_pwa.engine.model import (
     Agent,
-    BlockedPrompt,
     PaneId,
     SessionId,
     Snapshot,
@@ -25,79 +24,31 @@ from herdr_pwa.engine.model import (
 )
 from herdr_pwa.engine.transport import (
     EngineError,
-    EngineMisconfigured,
-    EngineTimeout,
-    EngineUnavailable,
     EventStream,
     InvalidRequest,
     InvalidResponse,
     ProtocolMismatch,
-    RequestTooLarge,
     SocketTransport,
     TargetNotFound,
     Transport,
 )
 from herdr_pwa.protocol import WRITE_METHODS
-from herdr_pwa.settings import SECONDS_PER_RECENT_LINE
 
-__all__ = [
-    "INTERRUPT_KEY",
-    "NOT_READY_CODE",
-    "PANE_BUSY_CODE",
-    "SESSION_MOVED_CODE",
-    "START_TIMEOUT_MS",
-    "EngineError",
-    "EngineMisconfigured",
-    "EngineSettings",
-    "EngineTimeout",
-    "EngineUnavailable",
-    "EventStream",
-    "HerdrClient",
-    "InvalidRequest",
-    "InvalidResponse",
-    "ProtocolMismatch",
-    "RequestTooLarge",
-    "StartedAgent",
-    "TargetNotFound",
-    "Transport",
-    "agent",
-    "agents",
-    "blocked_prompt",
-    "default_client",
-    "discovery_subscriptions",
-    "focus",
-    "get_client",
-    "prompt",
-    "read",
-    "send_keys",
-    "snapshot",
-    "status_subscriptions",
-]
 
 log = logging.getLogger(__name__)
 
-# @doc: docs/modules/engine/client.md
-
 
 def discovery_subscriptions() -> list[dict[str, Any]]:
-    """The three pane events that take no `pane_id`, so no roster can stale them.
-
-    @doc: docs/modules/engine/client/discovery_subscriptions.md
-    """
+    """The three pane events that take no `pane_id`, so no roster can stale them."""
     return [
         wire_request.PaneCreatedSubscription(type="pane.created").model_dump(),
-        wire_request.PaneAgentDetectedSubscription(
-            type="pane.agent_detected"
-        ).model_dump(),
+        wire_request.PaneAgentDetectedSubscription(type="pane.agent_detected").model_dump(),
         wire_request.PaneClosedSubscription(type="pane.closed").model_dump(),
     ]
 
 
 def status_subscriptions(panes: Sequence[str | PaneId]) -> list[dict[str, Any]]:
-    """One status subscription per pane, because the runner offers no wildcard.
-
-    @doc: docs/modules/engine/client/status_subscriptions.md
-    """
+    """One status subscription per pane, because the runner offers no wildcard."""
     return [
         wire_request.PaneAgentStatusChangedSubscription(
             type="pane.agent_status_changed", pane_id=str(pane)
@@ -106,71 +57,34 @@ def status_subscriptions(panes: Sequence[str | PaneId]) -> list[dict[str, Any]]:
     ]
 
 
-class EngineSettings(Protocol):
-    """The settings surface this module reads, and the whole of it."""
-
-    @property
-    def socket_path(self) -> Path: ...
-
-    @property
-    def command_timeout(self) -> float: ...
-
-    @property
-    def expected_protocol(self) -> int: ...
-
-    @property
-    def protocol_max_age(self) -> float: ...
-
-    @property
-    def protocol_drift_fails_writes(self) -> bool: ...
-
-    @property
-    def read_source(self) -> str: ...
-
-    @property
-    def read_lines(self) -> int: ...
-
-    @property
-    def recent_max_lines(self) -> int: ...
-
+# Measured cost of one line of a recent read on herdr 0.8.0.
+SECONDS_PER_RECENT_LINE: Final = 0.035
 
 _BLOCKED: Final = "blocked"
-"""The one status whose mirror is allowed to prefer the detection source."""
 
 NOT_READY_CODE: Final = "agent_not_ready"
-"""Reason code for "that agent is not listening yet"."""
 
 INTERRUPT_KEY: Final = "ctrl-c"
-"""The one key that means "stop", and so the one key a busy agent cannot refuse."""
 
 SESSION_MOVED_CODE: Final = "session_moved"
-"""Reason code for "that pane belongs to somebody else now"."""
 
 PANE_BUSY_CODE: Final = "agent_pane_busy"
-"""Reason code for "that pane is not a shell sitting at a prompt"."""
 
 _START_RETRIES: Final = 3
-"""How many times a start is retried after `PANE_BUSY_CODE`."""
 
 _START_BACKOFF: Final = 0.3
-"""How long a retried start waits between attempts."""
 
 _SHELL_POLLS: Final = 20
-"""How many times the readiness gate polls a new pane before refusing the start."""
 
 _SHELL_INTERVAL: Final = 0.1
-"""How long the readiness gate waits between polls."""
 
 START_TIMEOUT_MS: Final = 10_000
-"""`agent.start`'s own timeout, in milliseconds."""
 
 _START_BUDGET: Final = START_TIMEOUT_MS / 1000 + 3.0
-"""The socket budget for a start, longer than the launch happening at the other end."""
 
 _Arm = TypeVar("_Arm", bound=BaseModel)
 
 _UNSENT: Final = ""
-"""Placeholder for the `id` of a request being validated."""
 
 
 @cache
@@ -199,32 +113,20 @@ def _payload_field(arm: type[BaseModel]) -> str:
 
 
 _TEXT_FIELD: Final = "text"
-"""The field of `PaneReadResult` holding terminal content."""
 
 _EXPLAIN_FIELD: Final = "explain"
-"""The field of `AgentExplainResult` holding the detection report."""
 
 
 class StartedAgent(NamedTuple):
     """What starting an agent actually told us, in this app's own words."""
 
     pane: str
-    """The pane the agent was started in. Always known; a start that failed
-    """
     session: str
-    """The provider's session UUID, or `""` when it has not registered one."""
     status: str
-    """herdr's agent status at the instant of the start. `blocked` here is
-    """
     ready: bool = False
-    """Whether herdr says the agent is reading its terminal *now*.
-
-    @doc: docs/modules/engine/client/StartedAgent.md
-    """
 
 
 NO_SESSION: Final[SessionId] = SessionId("")
-"""The sentinel meaning "no session asserted"."""
 
 
 class HerdrClient:
@@ -232,36 +134,24 @@ class HerdrClient:
 
     def __init__(
         self,
-        settings: EngineSettings | None = None,
+        settings: EngineSettings,
         *,
         transport: Transport | None = None,
+        clock: Callable[[], float] = time.monotonic,
+        sleep: Callable[[float], None] = time.sleep,
     ) -> None:
-        self.settings: EngineSettings = (
-            settings if settings is not None else _settings_from_environment()
-        )
-        """Injected, never imported from a module-level singleton: that is what
-        """
+        self.settings = settings
+        self._clock = clock
+        self._sleep = sleep
         self.transport: Transport = (
             transport
             if transport is not None
-            else SocketTransport(
-                self.settings.socket_path, timeout=self.settings.command_timeout
-            )
+            else SocketTransport(self.settings.socket_path, timeout=self.settings.command_timeout)
         )
-        """The wire. Injected for the same reason as the settings, and the seam
-        """
         self.last_protocol: int | None = None
-        """Last protocol actually observed, used to fail writes closed.
-        """
         self.last_protocol_at: float = 0.0
-        """`time.monotonic()` when `last_protocol` was observed. Pairs
-        """
         self.warned_protocol: int | None = None
-        """Protocol the drift warning has already been logged for, so a poll
-        """
         self._refreshing = threading.local()
-        """Per-thread "this thread is already inside the protocol refresh" flag.
-        """
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
         return (
@@ -297,9 +187,7 @@ class HerdrClient:
         writes = method in WRITE_METHODS
         if writes and not guarded:
             self._require_writable(timeout)
-        frame = request_type.model_validate(
-            {"id": _UNSENT, "method": method, "params": params}
-        )
+        frame = request_type.model_validate({"id": _UNSENT, "method": method, "params": params})
         return self.transport.call(
             method,
             frame.model_dump(mode="json", exclude_none=True)["params"],
@@ -337,8 +225,7 @@ class HerdrClient:
             return None, self._sub_object(payload, field, method=method)
         if not isinstance(root, arm):
             raise InvalidResponse(
-                f"{method} answered {type(root).__name__} where "
-                f"{arm.__name__} was expected"
+                f"{method} answered {type(root).__name__} where {arm.__name__} was expected"
             )
         return root, getattr(root, field).model_dump(mode="json", exclude_none=True)
 
@@ -360,15 +247,12 @@ class HerdrClient:
             ) from exc
         if not isinstance(root, arm):
             raise InvalidResponse(
-                f"{method} answered {type(root).__name__} where "
-                f"{arm.__name__} was expected"
+                f"{method} answered {type(root).__name__} where {arm.__name__} was expected"
             )
         return root
 
     @staticmethod
-    def _sub_object(
-        payload: dict[str, Any], key: str, *, method: str
-    ) -> dict[str, Any]:
+    def _sub_object(payload: dict[str, Any], key: str, *, method: str) -> dict[str, Any]:
         """The raw ``result.<key>`` object, for a frame that would not validate."""
         result = payload.get("result")
         raw = result.get(key) if isinstance(result, dict) else None
@@ -398,10 +282,7 @@ class HerdrClient:
         return snap
 
     def watch_statuses(self, panes: Sequence[str | PaneId]) -> EventStream:
-        """A stream of the status transitions on `panes`, on a connection of its own.
-
-        @doc: docs/modules/engine/client/HerdrClient.watch_statuses.md
-        """
+        """A stream of the status transitions on `panes`, on a connection of its own."""
         return EventStream(
             self.settings.socket_path,
             subscriptions=status_subscriptions(panes) + discovery_subscriptions(),
@@ -411,10 +292,8 @@ class HerdrClient:
     def _remember_protocol(self, protocol: int) -> None:
         """Record what the runner just proved it speaks, and warn once on drift."""
         self.last_protocol = protocol
-        self.last_protocol_at = time.monotonic()
-        if protocol != self.settings.expected_protocol and (
-            self.warned_protocol != protocol
-        ):
+        self.last_protocol_at = self._clock()
+        if protocol != self.settings.expected_protocol and (self.warned_protocol != protocol):
             self.warned_protocol = protocol
             log.warning(
                 "runner speaks snapshot protocol %s, expected %s: "
@@ -459,14 +338,10 @@ class HerdrClient:
         """Read an agent's terminal output."""
         target = as_pane_id(target)
         lines = self.settings.read_lines if lines is None else lines
-        where = self._read_source(
-            self.settings.read_source if source is None else source
-        )
-        if where is wire_request.ReadSource.recent and lines > (
-            self.settings.recent_max_lines
-        ):
+        where = self._read_source(self.settings.read_source if source is None else source)
+        if where is wire_request.ReadSource.recent and lines > (self.settings.recent_max_lines):
             # Not only cost: past the viewport this scrolls the operator's own
-            # pane. @doc: docs/modules/engine/client/HerdrClient.read.md
+            # pane.
             log.warning(
                 "read(%s, source=%s, lines=%d) would scroll the agent's pane for "
                 "~%.1fs; capping to %d lines -- use the visible source",
@@ -483,11 +358,7 @@ class HerdrClient:
                 target=target,
                 lines=lines,
                 source=where,
-                format=(
-                    wire_request.ReadFormat.ansi
-                    if colour
-                    else wire_request.ReadFormat.text
-                ),
+                format=(wire_request.ReadFormat.ansi if colour else wire_request.ReadFormat.text),
                 # Belt and braces: the format says what to render, this says
                 # not to sanitise it afterwards. Passed explicitly rather than
                 # left to the schema default, which is True.
@@ -515,9 +386,7 @@ class HerdrClient:
             return wire_request.ReadSource(source)
         except ValueError as exc:
             allowed = ", ".join(s.value for s in wire_request.ReadSource)
-            raise InvalidRequest(
-                f"unknown read source {source!r}; expected {allowed}"
-            ) from exc
+            raise InvalidRequest(f"unknown read source {source!r}; expected {allowed}") from exc
 
     def mirror_read(
         self,
@@ -527,14 +396,7 @@ class HerdrClient:
         lines: int | None = None,
         timeout: float | None = None,
     ) -> str:
-        """The pane read the drill-in mirror renders.
-
-        Args:
-            status: the agent's status, in any spelling
-                `herdr_pwa.engine.model.AgentStatus` accepts. Anything that
-                is not `blocked` takes the visible path directly.
-
-        """
+        """The pane read the drill-in mirror renders --'s source choice."""
         target = as_pane_id(target)
         if str(getattr(status, "value", status)).strip().lower() == _BLOCKED:
             try:
@@ -552,13 +414,8 @@ class HerdrClient:
                     return detected
         return self.read(target, lines=lines, colour=True, timeout=timeout)
 
-    def explain(
-        self, target: PaneId, *, timeout: float | None = None
-    ) -> dict[str, Any]:
-        """Which detection rule decided this agent's state, on what evidence.
-
-        @doc: docs/modules/engine/client/HerdrClient.explain.md
-        """
+    def explain(self, target: PaneId, *, timeout: float | None = None) -> dict[str, Any]:
+        """Which detection rule decided this agent's state, on what evidence."""
         method = _method_of(wire_request.AgentExplainRequest)
         payload = self._call(
             wire_request.AgentExplainRequest,
@@ -567,13 +424,8 @@ class HerdrClient:
         )
         return self._sub_object(payload, _EXPLAIN_FIELD, method=method)
 
-    def agent_frame(
-        self, target: PaneId, *, timeout: float | None = None
-    ) -> dict[str, Any]:
-        """The whole `agent.get` reply as the runner sent it, normalized by nothing.
-
-        @doc: docs/modules/engine/client/HerdrClient.agent_frame.md
-        """
+    def agent_frame(self, target: PaneId, *, timeout: float | None = None) -> dict[str, Any]:
+        """The whole `agent.get` reply as the runner sent it, normalized by nothing."""
         return self._call(
             wire_request.AgentGetRequest,
             wire_request.AgentTarget(target=as_pane_id(target)),
@@ -608,8 +460,7 @@ class HerdrClient:
             return
         fresh = (
             self.last_protocol is not None
-            and (time.monotonic() - self.last_protocol_at)
-            <= self.settings.protocol_max_age
+            and (self._clock() - self.last_protocol_at) <= self.settings.protocol_max_age
         )
         if not fresh:
             self._refresh_protocol(timeout)
@@ -649,7 +500,7 @@ class HerdrClient:
         self._require_session(target, info, session)
         # Launching AND blocked is not "not reading yet" -- it is an
         # agent that stopped during startup to ask something, and a keystroke
-        # is the whole point. @doc: docs/modules/engine/client/HerdrClient._require_ready.md
+        # is the whole point.
         if info.launch_pending and info.agent_status is not wire.AgentStatus.blocked:
             raise EngineError(
                 f"agent {target} is still launching; keys sent now would be typed "
@@ -663,9 +514,7 @@ class HerdrClient:
             )
 
     @staticmethod
-    def _require_session(
-        target: PaneId, info: wire.AgentInfo, session: SessionId | None
-    ) -> None:
+    def _require_session(target: PaneId, info: wire.AgentInfo, session: SessionId | None) -> None:
         """Refuse to type at a pane that a *different* agent now holds."""
         if session is None:
             return
@@ -750,13 +599,8 @@ class HerdrClient:
         running = payload.get("foreground_processes") or []
         return bool(shell) and [p.get("pid") for p in running] == [shell]
 
-    def pane_pids(
-        self, pane_id: str, *, timeout: float | None = None
-    ) -> tuple[int, ...]:
-        """Every process in this pane, shell first. A runner that will not say answers `()`.
-
-        @doc: docs/modules/engine/client/HerdrClient.pane_pids.md
-        """
+    def pane_pids(self, pane_id: str, *, timeout: float | None = None) -> tuple[int, ...]:
+        """Every process in this pane, shell first. A runner that will not say answers `()`."""
         _, payload = self._result(
             self._call(
                 wire_request.PaneProcessInfoRequest,
@@ -771,9 +615,7 @@ class HerdrClient:
         running = payload.get("foreground_processes") or []
         pids = [shell] if isinstance(shell, int) else []
         pids += [
-            p.get("pid")
-            for p in running
-            if isinstance(p, dict) and isinstance(p.get("pid"), int)
+            p.get("pid") for p in running if isinstance(p, dict) and isinstance(p.get("pid"), int)
         ]
         return tuple(dict.fromkeys(pid for pid in pids if isinstance(pid, int)))
 
@@ -815,9 +657,7 @@ class HerdrClient:
             args=list(args) or None,
             timeout_ms=START_TIMEOUT_MS,
         )
-        payload = self._start_with_retries(
-            wire_request.AgentStartRequest, params, timeout
-        )
+        payload = self._start_with_retries(wire_request.AgentStartRequest, params, timeout)
         arm = self._arm(payload, wire.AgentStartedResponseResult, method="agent.start")
         return self._started(arm.agent)
 
@@ -832,13 +672,9 @@ class HerdrClient:
             ready=not info.launch_pending and info.interactive_ready is not False,
         )
 
-    def started_agent(
-        self, pane_id: str, *, timeout: float | None = None
-    ) -> StartedAgent:
+    def started_agent(self, pane_id: str, *, timeout: float | None = None) -> StartedAgent:
         """Re-read a just-started agent, to see whether it has a session UUID yet."""
-        root, _ = self._agent_result(
-            as_pane_id(pane_id), timeout=timeout, degrade=False
-        )
+        root, _ = self._agent_result(as_pane_id(pane_id), timeout=timeout, degrade=False)
         if root is None:  # pragma: no cover - degrade=False cannot return None
             return StartedAgent(pane=pane_id, session="", status="unknown")
         return self._started(root.agent)
@@ -866,7 +702,6 @@ class HerdrClient:
 
     # ----------------------------------------------------------------------
     # Workspaces: the container the herd is grouped by
-    # @doc: docs/modules/engine/client/workspaces.md
     # ----------------------------------------------------------------------
 
     def create_workspace(
@@ -875,14 +710,10 @@ class HerdrClient:
         """Make an empty workspace and hand it back -- no tab is filled, no agent starts."""
         payload = self._call(
             wire_request.WorkspaceCreateRequest,
-            wire_request.WorkspaceCreateParams(
-                label=label or None, cwd=cwd or None, focus=False
-            ),
+            wire_request.WorkspaceCreateParams(label=label or None, cwd=cwd or None, focus=False),
             timeout=timeout,
         )
-        arm = self._arm(
-            payload, wire.WorkspaceCreatedResponseResult, method="workspace.create"
-        )
+        arm = self._arm(payload, wire.WorkspaceCreatedResponseResult, method="workspace.create")
         return Workspace.from_raw(arm.workspace.model_dump(mode="json"))
 
     def rename_workspace(
@@ -895,9 +726,7 @@ class HerdrClient:
             timeout=timeout,
         )
 
-    def close_workspace(
-        self, workspace_id: str, *, timeout: float | None = None
-    ) -> dict[str, Any]:
+    def close_workspace(self, workspace_id: str, *, timeout: float | None = None) -> dict[str, Any]:
         """End every agent in a workspace at once -- the largest write this app makes."""
         return self._call(
             wire_request.WorkspaceCloseRequest,
@@ -913,7 +742,7 @@ class HerdrClient:
             if self.shell_pane(pane_id, timeout=timeout):
                 return
             if attempt + 1 < _SHELL_POLLS:
-                time.sleep(_SHELL_INTERVAL)
+                self._sleep(_SHELL_INTERVAL)
         raise EngineError(
             f"pane {pane_id} never settled to a shell prompt, so starting an "
             "agent in it would fail on a precondition rather than launch",
@@ -937,103 +766,5 @@ class HerdrClient:
                     raise
                 last = exc
                 if attempt + 1 < _START_RETRIES:
-                    time.sleep(_START_BACKOFF)
+                    self._sleep(_START_BACKOFF)
         raise last if last is not None else EngineError("agent.start never ran")
-
-
-# --------------------------------------------------------------------------
-# The default instance, and the verbs that delegate to it
-# --------------------------------------------------------------------------
-
-
-def _settings_from_environment() -> EngineSettings:
-    """Build the settings nobody injected, turning a bad box into a typed failure."""
-    try:
-        return _settings.EngineSettings()
-    except ValidationError as exc:
-        raise EngineMisconfigured(
-            "this box's configuration does not load, so no engine client can be "
-            f"built: {exc}. Fix the HP_ variable or the .env file it names -- "
-            "only the engine's own fields are read here (the runner socket, its "
-            "timeout and the protocol fields), so a bad bind address or a bad "
-            "push cadence cannot be what stopped you"
-        ) from exc
-
-
-@cache
-def default_client() -> HerdrClient:
-    """The process-wide client the module-level verbs use."""
-    return HerdrClient()
-
-
-def get_client() -> HerdrClient:
-    """FastAPI dependency: ``client: HerdrClient = Depends(get_client)``."""
-    return default_client()
-
-
-def snapshot(*, timeout: float | None = None) -> Snapshot:
-    """Fetch the whole session state -- see :meth:`HerdrClient.snapshot`."""
-    return default_client().snapshot(timeout=timeout)
-
-
-def agents(*, timeout: float | None = None) -> list[Agent]:
-    """Every live agent, most urgent first -- see :meth:`HerdrClient.agents`."""
-    return default_client().agents(timeout=timeout)
-
-
-def agent(target: PaneId, *, timeout: float | None = None) -> Agent:
-    """One agent by pane address -- see :meth:`HerdrClient.agent`."""
-    return default_client().agent(target, timeout=timeout)
-
-
-def read(
-    target: PaneId,
-    *,
-    lines: int | None = None,
-    source: str | None = None,
-    colour: bool = False,
-    timeout: float | None = None,
-) -> str:
-    """Read an agent's terminal output -- see :meth:`HerdrClient.read`."""
-    return default_client().read(
-        target, lines=lines, source=source, colour=colour, timeout=timeout
-    )
-
-
-def blocked_prompt(
-    target: PaneId,
-    *,
-    session: SessionId = NO_SESSION,
-    lines: int | None = None,
-    timeout: float | None = None,
-) -> BlockedPrompt:
-    """What a blocked agent is waiting on -- see :meth:`HerdrClient.blocked_prompt`."""
-    return default_client().blocked_prompt(
-        target, session=session, lines=lines, timeout=timeout
-    )
-
-
-def prompt(
-    target: PaneId,
-    text: str,
-    *,
-    session: SessionId | None = None,
-    timeout: float | None = None,
-) -> dict[str, Any]:
-    """Submit a prompt to an agent -- see :meth:`HerdrClient.prompt`."""
-    return default_client().prompt(target, text, session=session, timeout=timeout)
-
-
-def send_keys(
-    target: PaneId,
-    *keys: str,
-    session: SessionId | None = None,
-    timeout: float | None = None,
-) -> dict[str, Any]:
-    """Send key presses to an agent -- see :meth:`HerdrClient.send_keys`."""
-    return default_client().send_keys(target, *keys, session=session, timeout=timeout)
-
-
-def focus(target: PaneId, *, timeout: float | None = None) -> dict[str, Any]:
-    """Focus an agent's pane -- see :meth:`HerdrClient.focus`."""
-    return default_client().focus(target, timeout=timeout)

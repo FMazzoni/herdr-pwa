@@ -14,60 +14,26 @@ from pathlib import Path
 from secrets import token_hex
 from typing import Any, Final, NamedTuple, Protocol, runtime_checkable
 
-__all__ = [
-    "BACKOFF_CAP",
-    "EVENT_SUBSCRIBE",
-    "MAX_FRAME_BYTES",
-    "MAX_REQUEST_BYTES",
-    "MAX_STRAY_FRAMES",
-    "SUBSCRIPTION_STARTED",
-    "EngineError",
-    "EngineMisconfigured",
-    "EngineTimeout",
-    "EngineUnavailable",
-    "EventStream",
-    "InvalidRequest",
-    "InvalidResponse",
-    "ProtocolMismatch",
-    "RequestTooLarge",
-    "SocketTransport",
-    "TargetNotFound",
-    "Transport",
-]
 
 log = logging.getLogger(__name__)
 
 MAX_FRAME_BYTES: Final = 4 * 1024 * 1024
-"""Hard cap on one reply while we are still looking for its newline.
-"""
 
 MAX_REQUEST_BYTES: Final = 1024 * 1024
-"""The largest request line herdr 0.8.0 reads, measured; one more byte and it hangs up.
-"""
 
 MAX_STRAY_FRAMES: Final = 8
-"""How many frames addressed to somebody else we step over before giving up.
-"""
 
 BACKOFF_BASE: Final = 0.1
-"""First and largest wait after a failed connect.
-"""
 
 BACKOFF_CAP: Final = 2.0
-"""The ceiling the doubling backoff is capped at."""
 
 _CHUNK: Final = 65536
-"""Bytes per `recv`. One snapshot arrives in a handful of these."""
 
 EVENT_SUBSCRIBE: Final = "events.subscribe"
-"""The one method whose reply is not the end of the exchange."""
 
 SUBSCRIPTION_STARTED: Final = "subscription_started"
-"""What the runner answers a subscribe with, before any event arrives."""
 
 _EXHAUSTED: Final = frozenset({errno.EMFILE, errno.ENFILE})
-"""`socket()` refusing for lack of descriptors: this process or the whole box.
-"""
 
 
 # --------------------------------------------------------------------------
@@ -75,11 +41,8 @@ _EXHAUSTED: Final = frozenset({errno.EMFILE, errno.ENFILE})
 # --------------------------------------------------------------------------
 
 _LIVE: "weakref.WeakSet[SocketTransport]" = weakref.WeakSet()
-"""Every live transport, weakly held so the fork hook keeps no dropped one alive.
-"""
 
 _REGISTRY_LOCK: Final = threading.Lock()
-"""Guards `_LIVE`, and is held across the fork by the `before` hook."""
 
 
 def _before_fork() -> None:
@@ -178,12 +141,10 @@ class ProtocolMismatch(EngineError):
 _NOT_FOUND_CODES: Final = frozenset(
     {"agent_not_found", "pane_not_found", "target_not_found", "tab_not_found"}
 )
-"""Error codes the runner reports for "that target is gone"."""
 
 _UNAVAILABLE_CODES: Final = frozenset(
     {"server_not_running", "socket_not_found", "connection_refused"}
 )
-"""Error codes that mean the runner is not reachable rather than misused."""
 
 
 def raise_for_error_frame(payload: dict[str, Any]) -> None:
@@ -224,9 +185,7 @@ def _decode(line: bytes) -> dict[str, Any]:
     try:
         payload: Any = json.loads(line.decode("utf-8", errors="replace"))
     except ValueError as exc:
-        raise InvalidResponse(
-            f"the runner sent a frame that is not JSON: {line[:200]!r}"
-        ) from exc
+        raise InvalidResponse(f"the runner sent a frame that is not JSON: {line[:200]!r}") from exc
     if not isinstance(payload, dict):
         raise InvalidResponse(f"expected a JSON object, got {type(payload).__name__}")
     return payload
@@ -286,13 +245,10 @@ class SocketTransport:
         self.backoff_cap = backoff_cap
         self._clock = clock
         self._lock = threading.Lock()
-        """Held for a whole exchange, so at most one request is on the wire."""
         self._sock: socket.socket | None = None
         self._buffer = b""
-        """Bytes read past the last newline; it dies with the connection."""
         self._pid = os.getpid()
         self._prefix = self._mint_prefix()
-        """Unique per transport *instance*, so no two clients mint the same id."""
         self._ids = itertools.count(1)
         self._backoff = 0.0
         self._retry_at = 0.0
@@ -361,7 +317,6 @@ class SocketTransport:
             separators=(",", ":"),
         ).encode()
         # Before the connect, so an over-large call costs no socket and no wait.
-        # @doc: docs/modules/engine/transport/MAX_REQUEST_BYTES.md
         if len(frame) > MAX_REQUEST_BYTES:
             raise RequestTooLarge(
                 f"{call.method} would be {len(frame)} bytes on the wire and the "
@@ -374,16 +329,12 @@ class SocketTransport:
         try:
             sock.sendall(frame + b"\n")
         except TimeoutError as exc:
-            raise EngineTimeout(
-                f"{call.method} could not be sent within {call.budget}s"
-            ) from exc
+            raise EngineTimeout(f"{call.method} could not be sent within {call.budget}s") from exc
         except OSError as exc:
             raise EngineUnavailable(f"{call.method} could not be sent: {exc}") from exc
         return self._receive(sock, request_id, call)
 
-    def _receive(
-        self, sock: socket.socket, request_id: str, call: _Call
-    ) -> dict[str, Any]:
+    def _receive(self, sock: socket.socket, request_id: str, call: _Call) -> dict[str, Any]:
         """Read frames until the one addressed to ``request_id`` arrives."""
         for _ in range(MAX_STRAY_FRAMES):
             payload = self._decode(self._read_frame(sock, call))
@@ -416,9 +367,7 @@ class SocketTransport:
             try:
                 chunk = sock.recv(_CHUNK)
             except TimeoutError as exc:
-                raise EngineTimeout(
-                    f"{call.method} did not answer within {call.budget}s"
-                ) from exc
+                raise EngineTimeout(f"{call.method} did not answer within {call.budget}s") from exc
             except OSError as exc:
                 raise EngineUnavailable(
                     f"reading the reply to {call.method} failed: {exc}"
@@ -454,8 +403,7 @@ class SocketTransport:
             if isinstance(exc, TimeoutError):
                 self._penalise()
                 raise EngineTimeout(
-                    f"connecting to the runner at {self.path} timed out after "
-                    f"{call.budget}s"
+                    f"connecting to the runner at {self.path} timed out after {call.budget}s"
                 ) from exc
             if isinstance(exc, OSError):
                 self._penalise()
@@ -516,10 +464,7 @@ class SocketTransport:
 
 
 class EventStream:
-    """One dedicated connection carrying a subscription and nothing else.
-
-    @doc: docs/modules/engine/transport/EventStream.md
-    """
+    """One dedicated connection carrying a subscription and nothing else."""
 
     def __init__(
         self,
@@ -531,11 +476,7 @@ class EventStream:
     ) -> None:
         self.path = Path(path)
         self.subscriptions = [dict(one) for one in subscriptions]
-        """Fixed for this connection's whole life: the runner takes no second
-        """
         self.timeout = timeout
-        """Budget for the handshake only. Events are waited for indefinitely.
-        """
         self.max_frame_bytes = max_frame_bytes
         self._lock = threading.Lock()
         self._sock: socket.socket | None = None
@@ -570,10 +511,7 @@ class EventStream:
             log.debug("shutting down the event connection failed", exc_info=True)
 
     def open(self) -> socket.socket:
-        """Subscribe now, so a live-but-quiet stream is tellable from a failed one.
-
-        @doc: docs/modules/engine/transport/EventStream.open.md
-        """
+        """Subscribe now, so a live-but-quiet stream is tellable from a failed one."""
         sock = self._sock
         return sock if sock is not None else self._subscribe()
 
@@ -627,9 +565,7 @@ class EventStream:
             try:
                 sock.sendall(frame + b"\n")
             except OSError as exc:
-                raise EngineUnavailable(
-                    f"the subscribe could not be sent: {exc}"
-                ) from exc
+                raise EngineUnavailable(f"the subscribe could not be sent: {exc}") from exc
             self._await_started(sock)
         except BaseException:
             self._drop()
@@ -649,8 +585,7 @@ class EventStream:
                 return
             log.warning("discarding %r while waiting for the subscription", payload)
         raise InvalidResponse(
-            f"the runner never confirmed the subscription after "
-            f"{MAX_STRAY_FRAMES} frames"
+            f"the runner never confirmed the subscription after {MAX_STRAY_FRAMES} frames"
         )
 
     def _connect(self) -> socket.socket:
@@ -673,8 +608,7 @@ class EventStream:
         except TimeoutError as exc:
             self._drop()
             raise EngineTimeout(
-                f"connecting the event stream to {self.path} timed out after "
-                f"{self.timeout}s"
+                f"connecting the event stream to {self.path} timed out after {self.timeout}s"
             ) from exc
         except OSError as exc:
             self._drop()
@@ -692,15 +626,13 @@ class EventStream:
                 return line
             if len(self._buffer) > self.max_frame_bytes:
                 raise InvalidResponse(
-                    f"an event frame exceeded {self.max_frame_bytes} bytes with "
-                    "no terminator"
+                    f"an event frame exceeded {self.max_frame_bytes} bytes with no terminator"
                 )
             try:
                 chunk = sock.recv(_CHUNK)
             except TimeoutError as exc:
                 raise EngineTimeout(
-                    f"the runner did not confirm the subscription within "
-                    f"{self.timeout}s"
+                    f"the runner did not confirm the subscription within {self.timeout}s"
                 ) from exc
             except OSError as exc:
                 raise EngineUnavailable(f"the event stream failed: {exc}") from exc

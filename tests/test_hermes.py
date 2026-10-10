@@ -102,8 +102,7 @@ def build(path: Path, rows: tuple[dict[str, object], ...] = ROWS) -> Path:
         db.executescript(SCHEMA)
         for name in (SESSION, OTHER):
             db.execute(
-                "insert into sessions (id, source, started_at)"
-                " values (?, 'cli', 1780000000.0)",
+                "insert into sessions (id, source, started_at) values (?, 'cli', 1780000000.0)",
                 (name,),
             )
         for row in rows:
@@ -280,8 +279,7 @@ def test_the_store_is_opened_read_only(roots: list[Path]) -> None:
     assert "mode=ro" in uri
     with sqlite3.connect(uri, uri=True) as db, pytest.raises(sqlite3.OperationalError):
         db.execute(
-            "insert into sessions (id, source, started_at)"
-            " values ('x', 'cli', 1780000000.0)"
+            "insert into sessions (id, source, started_at) values ('x', 'cli', 1780000000.0)"
         )
 
 

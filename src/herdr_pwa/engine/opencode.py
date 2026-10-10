@@ -1,7 +1,4 @@
-"""opencode's store, in either of its two layouts, read as one conversation.
-
-@doc: docs/modules/engine/opencode.md
-"""
+"""opencode's store, in either of its two layouts, read as one conversation."""
 
 from __future__ import annotations
 
@@ -34,39 +31,16 @@ from herdr_pwa.engine.transcript import (
     _remember,
 )
 
-__all__ = [
-    "OPENCODE_DB",
-    "OPENCODE_ROOT",
-    "OPENCODE_STORAGE_ROOT",
-    "OpencodeAdapter",
-    "SessionInfo",
-]
 
 OPENCODE_ROOT: Final = "~/.local/share/opencode"
-"""opencode's data directory, which holds BOTH of its stores.
-
-@doc: docs/modules/engine/opencode.md
-"""
 
 OPENCODE_DB: Final = "opencode.db"
-"""The live store since opencode 1.x: one SQLite file beside ``storage/``.
-"""
 
 OPENCODE_STORAGE_ROOT: Final = f"{OPENCODE_ROOT}/storage"
-"""The legacy store: ``session/``, ``message/``, ``part/`` as JSON files.
-"""
 
 _BUSY_SECONDS: Final = 0.25
-"""How long a read waits on a lock before giving up on the whole page.
-
-@doc: docs/modules/engine/opencode/_BUSY_SECONDS.md
-"""
 
 _ID: Final = re.compile(r"^(?:ses|msg|prt)_[A-Za-z0-9]+$")
-"""The shape of every id in the store, and the only name this reader opens.
-
-@doc: docs/modules/engine/opencode/_ID.md
-"""
 
 _TOOL_INPUT_KEYS: Final = (
     "command",
@@ -80,16 +54,10 @@ _TOOL_INPUT_KEYS: Final = (
     "title",
     "content",
 )
-"""Which of a tool's inputs IDENTIFIES the call, in preference order.
-"""
 
 _QUIET_TYPES: Final = frozenset(
     {"step-start", "step-finish", "snapshot", "patch", "reasoning", "compaction"}
 )
-"""Part types that carry no conversation.
-
-@doc: docs/modules/engine/opencode/_QUIET_TYPES.md
-"""
 
 
 def _named(path: Path) -> bool:
@@ -109,16 +77,11 @@ def _decode(blob: object) -> dict[str, Any] | None:
 
 
 class SessionInfo(NamedTuple):
-    """What a session's OWN record says about itself, as opposed to its messages.
-
-    @doc: docs/modules/engine/opencode/SessionInfo.md
-    """
+    """What a session's OWN record says about itself, as opposed to its messages."""
 
     title: str = ""
-    """The name opencode gave the session; it generates one after the first turn."""
 
     model: ModelRef = ModelRef()
-    """What the session is POINTED AT, which no message has to have answered yet."""
 
 
 def _text(value: object) -> str:
@@ -127,10 +90,7 @@ def _text(value: object) -> str:
 
 
 def _model_ref(value: object) -> ModelRef:
-    """The ``model`` column: ``{id, providerID}`` today, a bare name before it.
-
-    @doc: docs/modules/engine/opencode/_model_ref.md
-    """
+    """The ``model`` column: ``{id, providerID}`` today, a bare name before it."""
     record = _decode(value)
     if record is None:
         return ModelRef(_text(value))
@@ -138,10 +98,7 @@ def _model_ref(value: object) -> ModelRef:
 
 
 class _Store(Protocol):
-    """The five questions a page asks of whichever layout holds the session.
-
-    @doc: docs/modules/engine/opencode/_Store.md
-    """
+    """The five questions a page asks of whichever layout holds the session."""
 
     def stream(self) -> list[tuple[str, str]]:
         """Every part as ``(message id, key)``, oldest first."""
@@ -169,10 +126,7 @@ class _Store(Protocol):
 
 
 class _Files:
-    """The legacy layout: one JSON file per record under ``storage/``.
-
-    @doc: docs/modules/engine/opencode.md
-    """
+    """The legacy layout: one JSON file per record under ``storage/``."""
 
     def __init__(self, base: Path, session: str) -> None:
         self._base = base
@@ -181,7 +135,6 @@ class _Files:
     @classmethod
     def open(cls, base: Path, session: str) -> _Files | None:
         """*base* if it holds *session*'s messages, contained to THAT root."""
-        # @doc: docs/modules/engine/opencode.md
         try:
             resolved = base.expanduser().resolve(strict=True)
             messages = (resolved / "message" / session).resolve(strict=True)
@@ -193,7 +146,6 @@ class _Files:
 
     def stream(self) -> list[tuple[str, str]]:
         """Every part as ``(message id, path)``, oldest first."""
-        # @doc: docs/modules/engine/opencode.md
         found: list[tuple[str, str]] = []
         for message in self.messages():
             try:
@@ -222,7 +174,6 @@ class _Files:
 
     def info(self) -> SessionInfo:
         """The session's own JSON, which names it but never says what it is pointed at."""
-        # @doc: docs/modules/engine/opencode/SessionInfo.md
         if not _ID.match(self._session):
             return SessionInfo()
         try:
@@ -251,18 +202,12 @@ class _Files:
 
 
 def _readonly(path: Path) -> str:
-    """*path* as the only URI this module ever hands SQLite.
-
-    @doc: docs/modules/engine/opencode/_readonly.md
-    """
+    """*path* as the only URI this module ever hands SQLite."""
     return f"file:{quote(str(path))}?mode=ro"
 
 
 class _Db:
-    """The live layout: one SQLite file, opened read-only and never locked.
-
-    @doc: docs/modules/engine/opencode/_Db.md
-    """
+    """The live layout: one SQLite file, opened read-only and never locked."""
 
     def __init__(self, connection: sqlite3.Connection, session: str) -> None:
         self._db = connection
@@ -271,16 +216,12 @@ class _Db:
     @classmethod
     def open(cls, path: Path, session: str) -> _Db | None:
         """*path* if it is a store we recognise and *session* is in it."""
-        # @doc: docs/modules/engine/opencode.md
         try:
             resolved = path.expanduser().resolve(strict=True)
         except OSError:
             return None
-        # @doc: docs/modules/engine/opencode.md
         try:
-            connection = sqlite3.connect(
-                _readonly(resolved), uri=True, timeout=_BUSY_SECONDS
-            )
+            connection = sqlite3.connect(_readonly(resolved), uri=True, timeout=_BUSY_SECONDS)
             connection.execute("select id from session limit 0").close()
             held = connection.execute(
                 "select 1 from session where id = ? limit 1", (session,)
@@ -294,16 +235,13 @@ class _Db:
 
     def stream(self) -> list[tuple[str, str]]:
         """Every part as ``(message id, part id)``, oldest first."""
-        # @doc: docs/modules/engine/opencode.md
         rows = self._ask(
-            "select message_id, id from part where session_id = ?"
-            " order by message_id, id"
+            "select message_id, id from part where session_id = ? order by message_id, id"
         )
         return [(m, k) for m, k in rows if _ID.match(m) and _ID.match(k)]
 
     def part(self, key: str) -> tuple[dict[str, Any] | None, int]:
         """One part row, with its own id folded back in as the store spells it."""
-        # @doc: docs/modules/engine/opencode.md
         record, spent = self._row("part", key)
         if record is not None:
             record["id"] = key
@@ -320,7 +258,6 @@ class _Db:
 
     def info(self) -> SessionInfo:
         """The session row itself, which is where opencode keeps both of these."""
-        # @doc: docs/modules/engine/opencode/SessionInfo.md
         found = self._named("title, model")
         if found is None:
             # A store older than the column: narrow the read rather than lose
@@ -374,14 +311,12 @@ class _Db:
 
 def _candidates(root: Path) -> tuple[Path, tuple[Path, Path]]:
     """A configured root as its database and its two legacy spellings."""
-    # @doc: docs/modules/engine/opencode.md
     data = root.parent if root.name == "storage" else root
     return data / OPENCODE_DB, (root, data / "storage")
 
 
 def _open(roots: Sequence[Path], session: str) -> _Store | None:
     """The first root holding *session*, live store before frozen one."""
-    # @doc: docs/modules/engine/opencode.md
     for root in roots:
         database, legacy = _candidates(root.expanduser())
         live = _Db.open(database, session)
@@ -432,11 +367,8 @@ def _summary(params: object) -> tuple[str, bool]:
     return "", False
 
 
-def _text_turn(
-    part: dict[str, Any], uuid: str, ts: str, role: str
-) -> TranscriptTurn | None:
+def _text_turn(part: dict[str, Any], uuid: str, ts: str, role: str) -> TranscriptTurn | None:
     """A ``text`` part, where the whole speaker question lives."""
-    # @doc: docs/modules/engine/opencode.md
     body = part.get("text")
     if not isinstance(body, str):
         return None
@@ -451,7 +383,6 @@ def _text_turn(
 
 def _tool_turn(part: dict[str, Any], uuid: str, ts: str) -> TranscriptTurn:
     """A ``tool`` part, which carries the call AND its result in one record."""
-    # @doc: docs/modules/engine/opencode.md
     state = part.get("state")
     state = state if isinstance(state, dict) else {}
     params = state.get("input")
@@ -484,9 +415,7 @@ def _mention_turn(part: dict[str, Any], uuid: str, ts: str) -> TranscriptTurn | 
     text, cut = _one_line(written if isinstance(written, str) else fallback)
     if not text:
         return None
-    return TranscriptTurn(
-        uuid=uuid, speaker=Speaker.system, text=text, ts=ts, truncated=cut
-    )
+    return TranscriptTurn(uuid=uuid, speaker=Speaker.system, text=text, ts=ts, truncated=cut)
 
 
 def _turn(part: dict[str, Any], message: dict[str, Any]) -> TranscriptTurn | None:
@@ -523,11 +452,8 @@ class _Messages:
         return self._held[identifier]
 
 
-def _page(
-    store: _Store, *, limit: int, before: int | None, max_bytes: int
-) -> TranscriptPage:
+def _page(store: _Store, *, limit: int, before: int | None, max_bytes: int) -> TranscriptPage:
     """Up to *limit* turns ending at frontier *before*, oldest first."""
-    # @doc: docs/modules/engine/opencode.md
     stream = store.stream()
     size = len(stream)
     end = size if before is None else max(0, min(before, size))
@@ -559,7 +485,6 @@ def _page(
 
 def _since(store: _Store, *, after: int, limit: int, max_bytes: int) -> TranscriptPage:
     """Whatever the store has grown past frontier *after*, oldest first."""
-    # @doc: docs/modules/engine/opencode.md
     stream = store.stream()
     size = len(stream)
     start = max(0, after)
@@ -630,7 +555,6 @@ def _prompt_size(tokens: dict[str, Any]) -> int:
 
 def _tally(store: _Store, *, max_bytes: int) -> SessionUsage:
     """What *session* has spent, one message record at a time."""
-    # @doc: docs/modules/engine/opencode.md
     tally = SessionUsage()
     budget = max_bytes
     for key in store.messages():
@@ -663,10 +587,7 @@ def _tally(store: _Store, *, max_bytes: int) -> SessionUsage:
 
 
 class OpencodeAdapter:
-    """opencode's history: either normalised store, paged by POSITION not byte.
-
-    @doc: docs/modules/engine/opencode.md
-    """
+    """opencode's history: either normalised store, paged by POSITION not byte."""
 
     default_roots: ClassVar[tuple[str, ...]] = (OPENCODE_ROOT,)
 
@@ -725,7 +646,6 @@ class OpencodeAdapter:
 
     def info(self, session: str, *, roots: Sequence[Path] = ()) -> SessionInfo:
         """What *session*'s own record calls it and what it is set to. Never raises."""
-        # @doc: docs/modules/engine/opencode/SessionInfo.md
         where = roots or [Path(root) for root in self.default_roots]
         try:
             store = _open(where, session)

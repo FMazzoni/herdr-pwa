@@ -1,7 +1,4 @@
-"""Hermes Agent's SQLite store, read as one conversation.
-
-@doc: docs/modules/engine/hermes.md
-"""
+"""Hermes Agent's SQLite store, read as one conversation."""
 
 from __future__ import annotations
 
@@ -31,38 +28,18 @@ from herdr_pwa.engine.transcript import (
     _tool_summary,  # noqa: PLC2701
 )
 
-__all__ = [
-    "HERMES_DB",
-    "HERMES_ROOT",
-    "HermesAdapter",
-]
 
 HERMES_ROOT: Final = "~/.hermes"
-"""Hermes Agent's data directory, which holds the one store.
-
-@doc: docs/modules/engine/hermes.md
-"""
 
 HERMES_DB: Final = "state.db"
-"""The store: ONE SQLite file for every session, not one per project.
-
-@doc: docs/modules/engine/hermes.md
-"""
 
 _BUSY_SECONDS: Final = 0.25
-"""How long a read waits on a lock before giving up on the whole page.
-"""
 
 _ROW_BYTES: Final = 512
-"""What one row is charged against the page budget when its text is not counted.
-"""
 
 
 def _readonly(path: Path) -> str:
-    """*path* as the only URI this module ever hands SQLite.
-
-    @doc: docs/modules/engine/hermes.md
-    """
+    """*path* as the only URI this module ever hands SQLite."""
     return f"file:{quote(str(path))}?mode=ro"
 
 
@@ -84,11 +61,7 @@ def _calls(blob: object) -> list[dict[str, Any]]:
         loaded = json.loads(blob)
     except (TypeError, ValueError):
         return []
-    return (
-        [item for item in loaded if isinstance(item, dict)]
-        if isinstance(loaded, list)
-        else []
-    )
+    return [item for item in loaded if isinstance(item, dict)] if isinstance(loaded, list) else []
 
 
 def _arguments(call: dict[str, Any]) -> object:
@@ -106,10 +79,7 @@ def _arguments(call: dict[str, Any]) -> object:
 
 
 class _Db:
-    """The store, opened read-only and never locked.
-
-    @doc: docs/modules/engine/hermes.md
-    """
+    """The store, opened read-only and never locked."""
 
     def __init__(self, connection: sqlite3.Connection, session: str) -> None:
         self._db = connection
@@ -118,15 +88,12 @@ class _Db:
     @classmethod
     def open(cls, path: Path, session: str) -> _Db | None:
         """*path* if it is a store we recognise and *session* is in it."""
-        # @doc: docs/modules/engine/hermes.md
         try:
             resolved = path.expanduser().resolve(strict=True)
         except OSError:
             return None
         try:
-            connection = sqlite3.connect(
-                _readonly(resolved), uri=True, timeout=_BUSY_SECONDS
-            )
+            connection = sqlite3.connect(_readonly(resolved), uri=True, timeout=_BUSY_SECONDS)
             connection.execute("select id from sessions limit 0").close()
             held = connection.execute(
                 "select 1 from sessions where id = ? limit 1", (session,)
@@ -140,7 +107,6 @@ class _Db:
 
     def stream(self) -> list[int]:
         """Every message id for this session, oldest first."""
-        # @doc: docs/modules/engine/hermes.md
         return [int(row[0]) for row in self._ask(_STREAM_SQL)]
 
     def rows(self, ids: Sequence[int]) -> dict[int, tuple[Any, ...]]:
@@ -169,7 +135,6 @@ class _Db:
 
     def usage(self) -> list[tuple[Any, ...]]:
         """Every ``session_model_usage`` row for this session."""
-        # @doc: docs/modules/engine/hermes.md
         return self._ask(_USAGE_SQL)
 
     def close(self) -> None:
@@ -184,13 +149,7 @@ class _Db:
             return []
 
 
-_STREAM_SQL: Final = (
-    "select id from messages where session_id = ? and active = 1 order by id"
-)
-"""Only ACTIVE rows: a compaction leaves the originals behind, flagged.
-
-@doc: docs/modules/engine/hermes.md
-"""
+_STREAM_SQL: Final = "select id from messages where session_id = ? and active = 1 order by id"
 
 _USAGE_SQL: Final = (
     "select model, billing_provider, api_call_count, input_tokens,"
@@ -198,21 +157,14 @@ _USAGE_SQL: Final = (
     " actual_cost_usd, estimated_cost_usd, cost_status"
     " from session_model_usage where session_id = ?"
 )
-"""What a session spent, which Hermes keeps per MODEL rather than per message."""
 
 _INFO_SQL: Final = "select title, model from sessions where id = ? limit 1"
-"""What a session's own row calls it -- Hermes names its sessions after a turn."""
 
 _COST_UNKNOWN: Final = frozenset({"", "none", "unknown"})
-"""``cost_status`` values that mean the money is NOT known, whatever the column says.
-
-@doc: docs/modules/engine/hermes.md
-"""
 
 
 def _turn(row: tuple[Any, ...]) -> TranscriptTurn | None:
     """One ``messages`` row as a chat turn, or ``None`` to drop it."""
-    # @doc: docs/modules/engine/hermes.md
     identifier, role, content, call_id, calls, tool_name, stamp = row
     uuid = str(identifier)
     ts = _stamp(stamp)
@@ -221,9 +173,7 @@ def _turn(row: tuple[Any, ...]) -> TranscriptTurn | None:
         body, cut = _clip(text, MAX_PROSE_CHARS)
         if not body:
             return None
-        return TranscriptTurn(
-            uuid=uuid, speaker=Speaker.human, text=body, ts=ts, truncated=cut
-        )
+        return TranscriptTurn(uuid=uuid, speaker=Speaker.human, text=body, ts=ts, truncated=cut)
     if role == "tool":
         body, cut = _clip(text, MAX_RESULT_CHARS)
         return TranscriptTurn(
@@ -239,9 +189,7 @@ def _turn(row: tuple[Any, ...]) -> TranscriptTurn | None:
         return None
     body, cut = _clip(text, MAX_PROSE_CHARS)
     if body:
-        return TranscriptTurn(
-            uuid=uuid, speaker=Speaker.agent, text=body, ts=ts, truncated=cut
-        )
+        return TranscriptTurn(uuid=uuid, speaker=Speaker.agent, text=body, ts=ts, truncated=cut)
     return _call_turn(_calls(calls), uuid=uuid, ts=ts, tool_name=tool_name)
 
 
@@ -249,7 +197,6 @@ def _call_turn(
     calls: list[dict[str, Any]], *, uuid: str, ts: str, tool_name: object
 ) -> TranscriptTurn | None:
     """The FIRST tool call of an assistant row, collapsed the way Claude's is."""
-    # @doc: docs/modules/engine/hermes.md
     if not calls:
         return None
     first = calls[0]
@@ -279,7 +226,6 @@ def _charged(row: tuple[Any, ...] | None) -> int:
 
 def _page(db: _Db, *, limit: int, before: int | None, max_bytes: int) -> TranscriptPage:
     """Up to *limit* turns ending at frontier *before*, oldest first."""
-    # @doc: docs/modules/engine/hermes.md
     stream = db.stream()
     size = len(stream)
     end = size if before is None else max(0, min(before, size))
@@ -312,7 +258,6 @@ def _page(db: _Db, *, limit: int, before: int | None, max_bytes: int) -> Transcr
 
 def _since(db: _Db, *, after: int, limit: int, max_bytes: int) -> TranscriptPage:
     """Whatever the store has grown past frontier *after*, oldest first."""
-    # @doc: docs/modules/engine/hermes.md
     stream = db.stream()
     size = len(stream)
     start = max(0, after)
@@ -346,7 +291,6 @@ def _since(db: _Db, *, after: int, limit: int, max_bytes: int) -> TranscriptPage
 
 def _tally(db: _Db) -> SessionUsage:
     """What *session* has spent, off the per-model rollup Hermes already keeps."""
-    # @doc: docs/modules/engine/hermes.md
     tally = SessionUsage(state=HistoryState.ok, logs=1)
     for row in db.usage():
         model, provider, calls, prompt, produced, cached, written, thought = row[:8]
@@ -362,10 +306,7 @@ def _tally(db: _Db) -> SessionUsage:
 
 
 def _money(actual: object, estimated: object, status: object) -> float:
-    """What one model row cost, or 0.0 -- which this app's own field calls UNKNOWN.
-
-    @doc: docs/modules/engine/hermes.md
-    """
+    """What one model row cost, or 0.0 -- which this app's own field calls UNKNOWN."""
     if str(status or "").strip().lower() in _COST_UNKNOWN:
         return 0.0
     for value in (actual, estimated):
@@ -384,10 +325,7 @@ def _open(roots: Sequence[Path], session: str) -> _Db | None:
 
 
 class HermesAdapter:
-    """Hermes's history: one SQLite store, paged by POSITION not byte.
-
-    @doc: docs/modules/engine/hermes.md
-    """
+    """Hermes's history: one SQLite store, paged by POSITION not byte."""
 
     default_roots: ClassVar[tuple[str, ...]] = (HERMES_ROOT,)
 

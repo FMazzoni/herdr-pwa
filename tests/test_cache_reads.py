@@ -326,9 +326,7 @@ def test_a_follower_blocks_for_the_leaders_read_and_never_reads_itself() -> None
     assert outcome["follower"].value is SNAPSHOT
 
 
-def test_a_leader_that_runs_to_the_full_command_budget_takes_its_followers_with_it() -> (
-    None
-):
+def test_a_leader_that_runs_to_the_full_command_budget_takes_its_followers_with_it() -> None:
     """What the ticket asked for by name: the worst case, stated as a number.
 
     N followers each hold one of the ~40 Starlette threadpool slots for the
@@ -456,9 +454,7 @@ def test_a_follower_takes_the_error_of_the_fetch_it_actually_waited_on() -> None
 
     # This thread's leader failed one way, and published that on its own fetch.
     mine = _Fetch()
-    mine.publish(
-        CachedValue(value=SNAPSHOT, age=1.0, error=EngineTimeout("my leader")), None
-    )
+    mine.publish(CachedValue(value=SNAPSHOT, age=1.0, error=EngineTimeout("my leader")), None)
 
     # A second leader then arrived, failed differently, and stamped the shelf.
     # A follower that went back to the shelf after waking would take this one.
@@ -511,9 +507,7 @@ def test_a_drill_in_tick_costs_one_agent_read_and_no_snapshot() -> None:
     agent = herd.snapshot_value.agents[0]
 
     for _ in range(5):
-        response = http.get(
-            mirror_path(str(agent.target), str(agent.session)), headers=IDENTITY
-        )
+        response = http.get(mirror_path(str(agent.target), str(agent.session)), headers=IDENTITY)
         assert response.status_code == 200
         # A real tick is 2s and the TTL is 2s, so each poll is a genuine miss.
         # Winding rather than sleeping, like every other test in this file.
@@ -556,9 +550,7 @@ def test_a_moved_agent_still_falls_back_to_the_whole_herd() -> None:
     http, _ = build(herd)
     agent = herd.snapshot_value.agents[0]
 
-    response = http.get(
-        mirror_path("w652ae557d5b9c1:p99", str(agent.session)), headers=IDENTITY
-    )
+    response = http.get(mirror_path("w652ae557d5b9c1:p99", str(agent.session)), headers=IDENTITY)
 
     assert herd.agent_calls == 1, "the cheap read was tried"
     assert herd.snapshot_calls == 1, "and the whole herd answered when it could not"
@@ -578,9 +570,7 @@ def test_a_drill_in_tick_is_honest_when_the_runner_is_gone() -> None:
     agent = herd.snapshot_value.agents[0]
     herd.snapshot_ok = False
 
-    response = http.get(
-        mirror_path(str(agent.target), str(agent.session)), headers=IDENTITY
-    )
+    response = http.get(mirror_path(str(agent.target), str(agent.session)), headers=IDENTITY)
 
     assert response.headers.get("HP-Fragment") == "1", "htmx must be able to swap it"
     assert "text/html" in response.headers["content-type"]

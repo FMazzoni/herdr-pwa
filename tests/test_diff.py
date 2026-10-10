@@ -82,9 +82,7 @@ def test_the_marker_is_off_the_text_so_the_template_owns_the_gutter() -> None:
     change = tool_diff(EDIT)
     assert change is not None
     assert not any(
-        line.text.startswith(("+", "-"))
-        for line in change.lines
-        if line.kind in ("add", "del")
+        line.text.startswith(("+", "-")) for line in change.lines if line.kind in ("add", "del")
     )
 
 
@@ -175,9 +173,7 @@ def test_a_call_that_changes_no_file_has_no_diff(params: object) -> None:
 
 def test_an_edit_that_changes_nothing_has_no_diff() -> None:
     """A row reading '+0 -0' is noise, not a receipt."""
-    assert (
-        tool_diff({"file_path": "/a", "old_string": "x\n", "new_string": "x\n"}) is None
-    )
+    assert tool_diff({"file_path": "/a", "old_string": "x\n", "new_string": "x\n"}) is None
 
 
 # --------------------------------------------------------------------------
@@ -215,9 +211,7 @@ def test_the_counts_are_the_whole_change_and_never_the_clipped_part() -> None:
 
 def test_one_enormous_row_is_clipped_and_never_wrapped() -> None:
     """A minified bundle is one line of tens of thousands of characters."""
-    change = tool_diff(
-        {"file_path": "/repo/a.js", "old_string": "a\n", "new_string": "z" * 90000}
-    )
+    change = tool_diff({"file_path": "/repo/a.js", "old_string": "a\n", "new_string": "z" * 90000})
     assert change is not None
     assert all(len(line.text) <= MAX_DIFF_COLS for line in change.lines)
     assert any(line.clipped for line in change.lines)
@@ -249,9 +243,7 @@ def edited(uuid: str, params: dict) -> dict:
         "timestamp": "2026-08-26T04:56:04.502Z",
         "message": {
             "role": "assistant",
-            "content": [
-                {"type": "tool_use", "id": f"t-{uuid}", "name": "Edit", "input": params}
-            ],
+            "content": [{"type": "tool_use", "id": f"t-{uuid}", "name": "Edit", "input": params}],
         },
     }
 
@@ -291,15 +283,9 @@ def test_a_deletion_is_not_a_markdown_bullet(tmp_path: Path) -> None:
     silently become a bullet with its marker eaten. A diff gets its own
     renderer, so a removed line is a row with a gutter mark and never an <li>."""
     body = render(tmp_path, EDIT)
-    block = body[
-        body.index('class="diff"') : body.index(
-            "</details>", body.index('class="diff"')
-        )
-    ]
+    block = body[body.index('class="diff"') : body.index("</details>", body.index('class="diff"'))]
     assert "<li" not in block and "<ul" not in block
-    assert (
-        '<span class="diff__mark">-</span><span class="diff__text">two</span>' in block
-    )
+    assert '<span class="diff__mark">-</span><span class="diff__text">two</span>' in block
 
 
 def test_the_gutter_mark_is_in_the_markup_and_not_only_in_colour(
@@ -354,11 +340,7 @@ def test_a_hostile_change_is_escaped_over_http(tmp_path: Path) -> None:
 def test_no_tag_outside_the_allow_list_reaches_the_page(tmp_path: Path) -> None:
     """templates/diff.html is the whole allow-list; this is it, asserted."""
     body = render(tmp_path, EDIT)
-    block = body[
-        body.index('class="diff"') : body.index(
-            "</details>", body.index('class="diff"')
-        )
-    ]
+    block = body[body.index('class="diff"') : body.index("</details>", body.index('class="diff"'))]
     tags = {t.lower() for t in re.findall(r"<\s*/?\s*([a-zA-Z][a-zA-Z0-9]*)", block)}
     assert tags <= {"div", "p", "span"}
 
