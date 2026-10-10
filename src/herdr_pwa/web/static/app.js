@@ -307,13 +307,16 @@
 
   /* ---- A details the reader opened stays open across the polls that redraw it ----
    * A fold, a tool's result or any other disclosure in the view: each is keyed by the turn it
-   * sits in and its place inside that turn, and reopened before the reader's place is held. */
+   * sits in and its own name there (a tool call's id), else its place inside that turn, and
+   * reopened before the reader's place is held. A run of tool calls is named by its first call,
+   * so it keeps its key as calls are added to it. */
   var unfolded = [];
 
   function detailsKey(details) {
     var unit = details.closest(".turn");
     var inside = unit ? unit.querySelectorAll("details") : [];
-    return (unit ? unitKey(unit) : "") + "#" + Array.prototype.indexOf.call(inside, details);
+    var own = details.getAttribute("data-hp-key");
+    return (unit ? unitKey(unit) : "") + "#" + (own || Array.prototype.indexOf.call(inside, details));
   }
 
   document.addEventListener("htmx:beforeSwap", function (event) {
@@ -335,7 +338,10 @@
     var all = document.querySelectorAll("#agent-view details");
     for (var i = 0; i < all.length; i++) {
       if (unfolded.indexOf(detailsKey(all[i])) !== -1) {
-        all[i].open = true;
+        // A lone call that became the first of a run is now inside a fold: open that too.
+        for (var d = all[i]; d; d = d.parentElement ? d.parentElement.closest("details") : null) {
+          d.open = true;
+        }
       }
     }
   });

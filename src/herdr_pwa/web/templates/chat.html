@@ -1,18 +1,38 @@
 {% from "md.html" import md %}
-{% set speakers = {"human": "You", "agent": "Agent", "tool": "Tool", "system": "Note"} %}
+{% set speakers = {"human": "You", "agent": "Agent", "system": "Note"} %}
 {% set url = "/agent/" ~ (agent.session|urlencode) ~ "/chat" %}
+{# The words on a tool's line: its name, the gist of its input, and a failure said outright. #}
+{% macro tool_words(t) -%}
+<span class="tool__name">{{ t.tool }}</span> <span class="tool__text">{{ t.text }}</span>{% if t.failed %} <span class="tool__failed"><span aria-hidden="true">&#x2715; </span>failed</span>{% endif %}
+{%- endmacro %}
+{# One call, one quiet line; its result opens from that line. Keyed by its call id, so a line the
+   reader opened stays open while the run around it grows. #}
+{% macro tool_line(t) -%}
+{% if t.result %}<details class="tool{% if t.failed %} tool--failed{% endif %}" data-hp-key="call:{{ t.call }}"><summary class="tool__line">{{ tool_words(t) }}</summary><pre class="tool__result">{{ t.result }}</pre>{% if t.truncated %}<p class="turn__clip">clipped</p>{% endif %}</details>
+{%- else %}<p class="tool__line tool__line--still{% if t.failed %} tool--failed{% endif %}">{{ tool_words(t) }}</p>{% endif %}
+{%- endmacro %}
 <section id="agent-view" class="chat" data-hp-poll="{{ url }}" hx-get="{{ url }}" hx-target="this" hx-swap="outerHTML" hx-trigger="every {{ cadence }}s, hp:poke from:body">
   <h2 class="sr-only">Chat</h2>
   {% if chat.note %}<p class="empty">{{ chat.note }}</p>{% endif %}
-  {% for turn in chat.turns %}
-  <article class="turn turn--{{ turn.speaker }}{% if turn.failed %} turn--failed{% endif %}">
+  {% for item in chat.items %}
+  {% if item.tools is defined %}
+  {# Messages lead: tool calls are a quiet line between them, never a box of their own. #}
+  <div class="turn turn--tools" data-hp-key="tools:{{ item.key }}">
+    {% if item.folded %}
+    <details class="tools" data-hp-key="fold"><summary class="tools__head">{{ item.tools|length }} tool calls</summary>
+      <div class="tools__list">{% for t in item.tools %}{{ tool_line(t) }}{% endfor %}</div>
+    </details>
+    {% else %}
+    <span class="sr-only">Tool:</span>{{ tool_line(item.tools[0]) }}
+    {% endif %}
+  </div>
+  {% else %}
+  {% set turn = item %}
+  <article class="turn turn--{{ turn.speaker }}">
     {#- Who spoke is drawn as a colour and an edge; VoiceOver is told in words. #}
     <span class="sr-only">{{ speakers.get(turn.speaker, turn.speaker) }}:</span>
     {% if turn.speaker == "agent" %}
     <div class="prose{% if turn.long %} turn__fold{% endif %}">{{ md(turn.prose) }}</div>
-    {% elif turn.speaker == "tool" %}
-    <p class="turn__tool"><span class="turn__name">{{ turn.tool }}</span> {{ turn.text }}</p>
-    {% if turn.result %}<details class="turn__result"><summary>{% if turn.failed %}failed{% else %}result{% endif %}</summary><pre>{{ turn.result }}</pre></details>{% endif %}
     {% else %}
     <p class="turn__text{% if turn.long %} turn__fold{% endif %}">{{ turn.text }}</p>
     {% endif %}
@@ -20,5 +40,6 @@
     {% if turn.long %}<details class="turn__more"><summary><span class="turn__all">Show all</span><span class="turn__less">Show less</span></summary></details>{% endif %}
     {% if turn.truncated %}<p class="turn__clip">clipped</p>{% endif %}
   </article>
+  {% endif %}
   {% endfor %}
 </section>

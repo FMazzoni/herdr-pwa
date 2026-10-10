@@ -27,6 +27,26 @@ class ChatTurn:
     truncated: bool
     # Long enough to fold behind "Show all", so one wall of text does not bury the rest.
     long: bool = False
+    # A tool call's id, which names its line across the polls that redraw it.
+    call: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class ToolRun:
+    """Tool calls in a row, drawn as one quiet line; more than one fold behind "N tool calls"."""
+
+    tools: tuple[ChatTurn, ...]
+
+    @property
+    def key(self) -> str:
+        """Names the run by its first call, which stays first as the run grows."""
+        first = self.tools[0]
+        return first.call or f"{first.tool} {first.text}"[:120]
+
+    @property
+    def folded(self) -> bool:
+        """Whether the run hides behind one "N tool calls" line."""
+        return len(self.tools) > 1
 
 
 # About eight lines at 390px (some forty characters each), or the text's own line breaks.
@@ -41,10 +61,28 @@ def is_long(text: str) -> bool:
 
 @dataclass(frozen=True, slots=True)
 class ChatView:
-    """A page of turns, or the one sentence that says why there are none."""
+    """A page of turns with tool calls gathered into runs, or the sentence that says why none."""
 
-    turns: tuple[ChatTurn, ...]
+    items: tuple[ChatTurn | ToolRun, ...]
     note: str
+
+
+def fold_tools(turns: tuple[ChatTurn, ...]) -> tuple[ChatTurn | ToolRun, ...]:
+    """Gather each row of tool calls into one run; a failed call is always a run of its own."""
+    items: list[ChatTurn | ToolRun] = []
+    run: list[ChatTurn] = []
+    for turn in turns:
+        if turn.speaker == Speaker.tool.value and not turn.failed:
+            run.append(turn)
+            continue
+        if run:
+            items.append(ToolRun(tuple(run)))
+            run = []
+        # Never folded away: what failed is shown where it happened.
+        items.append(ToolRun((turn,)) if turn.speaker == Speaker.tool.value else turn)
+    if run:
+        items.append(ToolRun(tuple(run)))
+    return tuple(items)
 
 
 def _turn(turn: TranscriptTurn) -> ChatTurn:
@@ -58,6 +96,7 @@ def _turn(turn: TranscriptTurn) -> ChatTurn:
         failed=turn.failed,
         truncated=turn.truncated or turn.result_truncated,
         long=turn.speaker is not Speaker.tool and is_long(turn.text),
+        call=turn.call,
     )
 
 
@@ -65,5 +104,5 @@ def chat_view(page: TranscriptPage) -> ChatView:
     """The Chat tab's content for one transcript page."""
     turns = tuple(_turn(t) for t in page.turns)
     if turns:
-        return ChatView(turns, "")
+        return ChatView(fold_tools(turns), "")
     return ChatView((), _STATE_NOTES.get(page.state, "Nothing has been said yet."))

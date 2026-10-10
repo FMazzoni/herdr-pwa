@@ -331,14 +331,25 @@ html { -webkit-tap-highlight-color: transparent; }
 .chat { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-5); }
 .turn { padding: var(--space-5) var(--space-6); border-radius: var(--radius-3); background: var(--surface); overflow-wrap: anywhere; }
 .turn--human { background: var(--surface-2); border-left: var(--line-3) solid var(--accent); }
-.turn--tool { background: transparent; border: var(--line-1) solid var(--rule); font-size: var(--text-meta); }
 .turn--system { background: transparent; color: var(--ink-3); font-size: var(--text-small); }
-.turn--failed { border-color: var(--blocked); }
 .turn__text { margin: 0; white-space: pre-wrap; }
-.turn__tool { margin: 0; color: var(--ink-2); font-family: var(--mono); }
-.turn__name { color: var(--ink); font-weight: 600; }
-.turn__result pre, .prose pre { overflow-x: auto; padding: var(--space-4); background: var(--ground); border-radius: var(--radius-1); font: var(--text-small)/1.4 var(--mono); }
-.turn__result summary { min-height: var(--tap); line-height: var(--tap); }
+.tool__result, .prose pre { overflow-x: auto; padding: var(--space-4); background: var(--ground); border-radius: var(--radius-1); font: var(--text-small)/1.4 var(--mono); }
+
+/* Tool calls: a quiet line between the messages, never a box. A row of them folds behind one
+   "N tool calls" line; each call's result opens from its own line; a failure is said in words. */
+.turn.turn--tools { padding: 0 var(--space-2); background: transparent; color: var(--ink-3); font-size: var(--text-meta); }
+.tools__head, .tool__line { display: flex; align-items: center; gap: var(--space-4); min-width: 0; min-height: var(--tap); margin: 0; }
+.tools__head, summary.tool__line { list-style: none; cursor: pointer; }
+.tools__head::-webkit-details-marker, summary.tool__line::-webkit-details-marker { display: none; }
+.tools__head::after, summary.tool__line::after { content: var(--chevron); flex: none; color: var(--ink-3); }
+.tools[open] > .tools__head::after, .tool[open] > .tool__line::after { transform: rotate(90deg); }
+.tools__list { display: grid; grid-template-columns: minmax(0, 1fr); padding-left: var(--space-6); border-left: var(--line-1) solid var(--rule); }
+.tool__name { flex: none; color: var(--ink-2); font-weight: 600; }
+.tool__text { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--text-small) var(--mono); }
+/* Opened, the line shows the whole of what was run. */
+.tool[open] > .tool__line .tool__text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.tool__failed { flex: none; color: var(--blocked); font-weight: 600; }
+.tool__result { margin: 0 0 var(--space-4); color: var(--ink-2); }
 .turn__clip { margin: var(--space-2) 0 0; color: var(--ink-3); font-size: var(--text-small); }
 /* A long turn folds to a few lines; the open details below it unfolds it, with or without script. */
 .turn__fold { max-height: calc(var(--fold-lines) * 1.45em); overflow: hidden; }

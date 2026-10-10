@@ -60,7 +60,7 @@ SCROLL_ALLOWED: dict[str, str] = {
         "the terminal mirror with Keep the columns on: the toggle asks for the terminal's own "
         "line breaks, so the pane scrolls inside its box, which starts inside the gutter"
     ),
-    ".turn__result pre": (
+    ".tool__result": (
         "a tool's output, which is terminal text with the same column meaning as code; it "
         "scrolls in its own box and the page around it does not move"
     ),
