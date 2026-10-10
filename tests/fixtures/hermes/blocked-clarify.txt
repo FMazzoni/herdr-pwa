@@ -1,0 +1,16 @@
+  ┊ ❓ preparing clarify…
+╭─ Hermes needs your input ─────────╮
+│ 1 questions                            │
+│ ▸ Which database should I migrate first? │
+│   ❯ 1. users (Recommended)              │
+│     2. orders                           │
+│     3. invoices                         │
+│     4. Other (type your answer)         │
+╰──────────────────────────────────────╯
+
+  ❓ clarify  ( 11.0s · ↓ 36 tok)
+  ↑/↓ to select, Enter to lock, Tab next question  (108s)
+ ⚕ GLM-5.3-Flash │ 13.7K/1M │ ◷ 1.3s
+────────────────────
+? ❯
+────────────────────

