@@ -25,6 +25,9 @@ ignore = [
     "PLR2004", # magic values are fine in assertions
 ]
 
+# Dev scripts talk to the operator on stdout and shell out to herdr by name.
+"scripts/**" = ["T201", "S603", "S607"]
+
 [lint.flake8-tidy-imports]
 ban-relative-imports = "all"
 
