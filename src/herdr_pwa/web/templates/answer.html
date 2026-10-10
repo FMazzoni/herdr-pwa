@@ -3,7 +3,14 @@
 {% set waiting = decision or agent.status.value == "blocked" %}
 <section id="answer" class="answer{% if not waiting %} answer--quiet{% endif %}" data-hp-poll="{{ base }}/answer" hx-get="{{ base }}/answer" hx-target="this" hx-swap="outerHTML"
          {% if refused is not defined and sent is not defined %}hx-trigger="every {{ cadence }}s, hp:poke from:body"{% else %}hx-trigger="hp:poke from:body"{% endif %}>
+  {% set arming = refused is defined and refused.held and key is defined and key == interrupt %}
   {% include "_notice.html" %}
+  {% if arming %}
+  {# The confirm sits under the banner that asks for it, where the thumb already is. #}
+  <div class="keys__stop keys__stop--armed">
+    {{ ui.key_form(base, agent.target, interrupt, "Really interrupt", kind="danger", confirm=true) }}
+  </div>
+  {% endif %}
   {% if sent is defined %}
   {% call ui.banner("sent") %}Sent {{ sent.key }}: {{ sent.outcome.value }} ({{ sent.evidence.value }}).{% endcall %}
   {% endif %}
@@ -20,22 +27,26 @@
   </div>
   {% endif %}
   <div class="answer__keys">
-    {{ ui.section_head("What this screen says" if hints else "Keys") }}
-    <div class="keys keys--pad">
+    {% if hints %}
+    {{ ui.section_head("What this screen says") }}
+    <div class="keys keys--hints">
       {% for hint in hints %}
       {{ ui.key_form(base, agent.target, hint.key, hint.label, screen=fingerprint) }}
       {% endfor %}
+    </div>
+    {% else %}
+    {{ ui.section_head("Keys") }}
+    {% endif %}
+    <div class="keys keys--pad">
       {% for key in pad %}
       {{ ui.key_form(base, agent.target, key, key|capitalize, screen=fingerprint) }}
       {% endfor %}
     </div>
-    {# Set apart from Enter and the pad: a stray thumb on the pad must never land here. #}
+    {# Last, full width, under a rule: away from Enter, so a stray thumb on the pad never lands here. #}
+    {% if not arming %}
     <div class="keys__stop">
-      {% if refused is defined and refused.held and key is defined and key == interrupt %}
-      {{ ui.key_form(base, agent.target, interrupt, "Really interrupt", kind="danger", confirm=true) }}
-      {% else %}
       {{ ui.key_form(base, agent.target, interrupt, "Interrupt (Ctrl+C)", kind="danger") }}
-      {% endif %}
     </div>
+    {% endif %}
   </div>
 </section>

@@ -1,6 +1,7 @@
 """Transcript turns turned into what the Chat tab renders: speaker, text, prose tree."""
 
 from dataclasses import dataclass
+from typing import Final
 
 from herdr_pwa.engine.transcript import HistoryState, Speaker, TranscriptPage, TranscriptTurn
 from herdr_pwa.web.markdown import MdNode, render_tree
@@ -24,6 +25,18 @@ class ChatTurn:
     result: str
     failed: bool
     truncated: bool
+    # Long enough to fold behind "Show all", so one wall of text does not bury the rest.
+    long: bool = False
+
+
+# About eight lines at 390px (some forty characters each), or the text's own line breaks.
+LONG_CHARS: Final = 320
+LONG_LINES: Final = 8
+
+
+def is_long(text: str) -> bool:
+    """Whether a turn's text runs past what the Chat tab shows before "Show all"."""
+    return len(text) > LONG_CHARS or text.count("\n") >= LONG_LINES
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,6 +57,7 @@ def _turn(turn: TranscriptTurn) -> ChatTurn:
         result=turn.result,
         failed=turn.failed,
         truncated=turn.truncated or turn.result_truncated,
+        long=turn.speaker is not Speaker.tool and is_long(turn.text),
     )
 
 

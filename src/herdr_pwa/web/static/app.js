@@ -207,6 +207,38 @@
   document.addEventListener("input", redock);
   document.addEventListener("htmx:afterSettle", redock);
 
+  /* ---- A folded chat turn the user opened stays open across the Chat tab's polls ---- */
+  var unfolded = [];
+
+  function foldKey(more) {
+    var text = more.previousElementSibling;
+    return text ? String(text.textContent).slice(0, 160) : "";
+  }
+
+  document.addEventListener("htmx:beforeSwap", function (event) {
+    var target = event.detail.target;
+    if (!target || target.id !== "agent-view") {
+      return;
+    }
+    unfolded = [];
+    var open = target.querySelectorAll(".turn__more[open]");
+    for (var i = 0; i < open.length; i++) {
+      unfolded.push(foldKey(open[i]));
+    }
+  });
+
+  document.addEventListener("htmx:afterSwap", function () {
+    if (!unfolded.length) {
+      return;
+    }
+    var folds = document.querySelectorAll("#agent-view .turn__more");
+    for (var i = 0; i < folds.length; i++) {
+      if (unfolded.indexOf(foldKey(folds[i])) !== -1) {
+        folds[i].open = true;
+      }
+    }
+  });
+
   /* ---- Keep the columns: the pane unwrapped, remembered on this device ---- */
   var COLUMNS = "hp-columns";
 
