@@ -1,9 +1,12 @@
 {% import "_ui.html" as ui %}
+{% import "_nav.html" as nav %}
 {% set f = herd.freshness %}
+{% macro chip_list() %}{% for c in view.chips %}{{ ui.chip(c.label, "/?ws=" ~ (c.workspace_id|urlencode), c.count, on=c.on, attrs=nav.replace()) }}{% endfor %}{% endmacro %}
+{% set src = "/feed" ~ ("?ws=" ~ (view.selected|urlencode) if view.selected else "") %}
 <div id="feed-list"
      class="feed feed--{{ f.condition.value }}{% if f.stale %} is-stale{% endif %}"
-     data-hp-poll="/feed"
-     hx-get="/feed"
+     data-hp-poll="{{ src }}"
+     hx-get="{{ src }}"
      hx-target="this"
      hx-swap="outerHTML"
      hx-trigger="every {{ herd.cadence }}s, hp:poke from:body">
@@ -15,18 +18,34 @@
   {{ ui.banner("stale", what="stale", why="snapshot " ~ f.age_label) }}
   {% endif %}
 
-  <p class="summary">
-    {% if herd.counts["blocked"] %}<span class="summary__need">{{ herd.counts["blocked"] }} needs you</span>{% endif %}
-    {% if herd.counts["done"] %}<span class="summary__done">{{ herd.counts["done"] }} unseen</span>{% endif %}
-    {% if herd.counts["working"] %}<span class="summary__work">{{ herd.counts["working"] }} working</span>{% endif %}
-    {% if herd.counts["idle"] %}<span class="summary__idle">{{ herd.counts["idle"] }} idle</span>{% endif %}
-    {% if not herd.rows %}<span class="summary__idle">no agents</span>{% endif %}
-  </p>
+  {% set c = view.counts %}
+  <div class="summary">
+    <p class="summary__counts">
+      {% if herd.counts["blocked"] %}<span class="summary__need">{{ herd.counts["blocked"] }} needs you</span>{% endif %}
+      {% if view.selected %}<span class="summary__in">in {{ view.label }}:</span>{% endif %}
+      {% if c["done"] %}<span class="summary__done">{{ c["done"] }} unseen</span>{% endif %}
+      {% if c["working"] %}<span class="summary__work">{{ c["working"] }} working</span>{% endif %}
+      {% if c["idle"] %}<span class="summary__idle">{{ c["idle"] }} idle</span>{% endif %}
+      {% if view.selected and not (c["done"] or c["working"] or c["idle"] or c["unknown"]) %}<span class="summary__idle">nobody else</span>{% endif %}
+      {% if not herd.rows %}<span class="summary__idle">no agents</span>{% endif %}
+    </p>
+    {# Live only: every other condition already says its age in the banner above. #}
+    {% if f.condition.value == "live" and f.age_label %}<span class="summary__age">{{ f.age_label }}</span>{% endif %}
+  </div>
+
+  {% if view.chips %}
+  {# One row that scrolls sideways inside the gutter; the fade says more chips are there. #}
+  <div class="chipbar">
+    <nav class="chips" aria-label="workspace filter">
+      {% if view.selected %}{{ chip_list() }}{{ ui.chip("all", "/", herd.rows|length, attrs=nav.replace()) }}{% else %}{{ ui.chip("all", "/", herd.rows|length, on=true, attrs=nav.replace()) }}{{ chip_list() }}{% endif %}
+    </nav>
+  </div>
+  {% endif %}
 
   {% if herd.rows %}
-  {% for section in herd.sections %}
+  {% for section in view.sections %}
   <section class="group group--{{ section.key.value }}">
-    {{ ui.section_head(section.label, section.count) }}
+    {{ ui.section_head(section.label, section.count, note="always shown" if view.selected and section.key.value == "blocked" else none) }}
     {% if section.rows %}
     <ul class="cards">
       {% for row in section.rows %}{% include "card.html" %}{% endfor %}

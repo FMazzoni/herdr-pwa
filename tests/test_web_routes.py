@@ -78,6 +78,35 @@ def test_feed_fragment_ranks_sections_and_names_agents(tmp_path: Path) -> None:
     assert response.headers["hp-fragment"] == "1"
 
 
+def test_a_workspace_filter_narrows_all_but_needs_you(tmp_path: Path) -> None:
+    frame = snapshot_frame()
+    for agent in agents_of(frame):
+        if agent.get("pane_id") == "w1:p3":
+            agent["agent_status"] = "blocked"
+    rig = build_rig(tmp_path, {SNAPSHOT: frame, READ: read_frame("")})
+    shell = rig.http.get("/?ws=w4").text
+    assert 'hx-get="/feed?ws=w4"' in shell
+    body = rig.http.get("/feed?ws=w4", headers=FRAGMENT).text
+    assert 'hx-get="/feed?ws=w4"' in body
+    assert f'href="/agent/{WORKING_SESSION}"' in body
+    assert "w4:p1" in body
+    assert "w2:p1" not in body
+    chips = body[body.index('class="chips"') :]
+    assert chips.index('href="/?ws=w4" aria-current="true" data-hp-replace') < chips.index(
+        'href="/"'
+    )
+    assert body.index('class="chips"') < body.index("Needs you") < body.index("always shown")
+    assert "in notes:" in body
+
+
+def test_an_unknown_workspace_filter_shows_the_whole_herd(tmp_path: Path) -> None:
+    rig = build_rig(tmp_path)
+    body = rig.http.get("/feed?ws=gone", headers=FRAGMENT).text
+    assert 'hx-get="/feed"' in body
+    assert "w4:p1" in body
+    assert "w2:p1" in body
+
+
 def test_a_hostile_agent_name_stays_text(tmp_path: Path) -> None:
     rig = build_rig(tmp_path, {SNAPSHOT: _hostile_frame()})
     feed = rig.http.get("/feed").text

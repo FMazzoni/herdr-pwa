@@ -382,6 +382,13 @@ FEED: Final = (
         title="Feed: nothing needs you",
     ),
     State(
+        "feed-filtered",
+        f"/?ws={LONELY_WORKSPACE}",
+        "#feed-list .chips .chip--on",
+        _blocked_on(MENU),
+        title="Feed: narrowed to one workspace, needs-you still whole above it",
+    ),
+    State(
         "feed-degraded",
         "/",
         "#feed-list .banner--degraded",
@@ -730,7 +737,6 @@ _SCREEN: Final = "needs the old catalogue's synthetic screen ported in as a fixt
 # Every old state with no screen here yet, in ONE place, with why.
 NOT_YET: Final[dict[str, str]] = {
     "feed-seen": "no v2 feature yet: there is no seen ledger, so done never demotes",
-    "feed-filtered": "no v2 feature yet: the feed has no workspace filter",
     "boot": "the shell's first paint lasts until the first poll; the rig cannot hold it there",
     "chat-edit-diff": "no v2 feature yet: chat does not render an Edit's diff",
     "chat-diff-large": "no v2 feature yet: chat does not render an Edit's diff",
