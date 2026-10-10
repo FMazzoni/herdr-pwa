@@ -567,6 +567,25 @@ TAPPED: Final = (
         act=_click("#answer .button--danger"),
     ),
     State(
+        "agent-pane-columns",
+        f"{AGENT}?tab=pane",
+        ".is-columns .pane",
+        runner(_stressed, _wide_pane()),
+        title="Agent page: Pane, keeping the terminal's columns",
+        armed="[data-hp-columns]",
+        act=_click("[data-hp-columns]"),
+    ),
+    State(
+        "agent-chat-composing",
+        f"{AGENT}?tab=chat",
+        "#composer textarea:focus",
+        runner(_stressed),
+        _chat(),
+        title="Agent page: Chat, the composer focused",
+        armed="#composer textarea",
+        act="document.querySelector('#composer textarea').focus();",
+    ),
+    State(
         "agent-key-refused",
         f"{AGENT}?tab=pane",
         "#answer [role=alert]",
@@ -697,7 +716,13 @@ GEOMETRY_CORE: Final = (
 )
 
 # Screens this app draws that the old app had no name for.
-V2_ONLY: Final = ("feed-herd", "workspaces", "alerts", "agent-unreachable")
+V2_ONLY: Final = (
+    "feed-herd",
+    "workspaces",
+    "alerts",
+    "agent-unreachable",
+    "agent-chat-composing",
+)
 
 _RIG: Final = "the rig answers no write, so the screen after a delivered one cannot be reached yet"
 _SCREEN: Final = "needs the old catalogue's synthetic screen ported in as a fixture"
@@ -715,7 +740,6 @@ NOT_YET: Final[dict[str, str]] = {
     "usage-unpushed": "no v2 feature yet: no usage panel",
     "chat-older": "no v2 feature yet: chat has no older-history paging",
     "chat-may-have-moved": "no v2 feature yet: chat has no moved-transcript note",
-    "agent-pane-columns": "no v2 feature yet: the pane has no column-faithful toggle",
     "agent-answer-waiting": "no v2 feature yet: the answer region does not collapse",
     "agent-answer-wizard-step": _SCREEN,
     "agent-answer-unearned": _SCREEN,

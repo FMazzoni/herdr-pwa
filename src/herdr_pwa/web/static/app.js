@@ -170,6 +170,85 @@
     }
   });
 
+  /* ---- The composer dock ----
+   * The composer is fixed to the bottom. The page reserves the dock's real height, and
+   * while the iOS keyboard is open the dock rides on top of it: the layout viewport keeps
+   * its height there, so the gap under the visual viewport is the keyboard. */
+  var root = document.documentElement;
+  var docking = false;
+
+  function dock() {
+    docking = false;
+    var bar = document.getElementById("composer");
+    if (!bar) {
+      return;
+    }
+    var view = window.visualViewport;
+    var covered = view ? Math.max(0, Math.round(window.innerHeight - view.height - view.offsetTop)) : 0;
+    root.style.setProperty("--kb", covered + "px");
+    root.classList.toggle("is-keyboard", covered > 0);
+    root.style.setProperty("--dock-h", bar.offsetHeight + "px");
+  }
+
+  function redock() {
+    if (!docking) {
+      docking = true;
+      window.requestAnimationFrame(dock);
+    }
+  }
+
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", redock);
+    window.visualViewport.addEventListener("scroll", redock);
+  }
+  window.addEventListener("resize", redock);
+  document.addEventListener("focusin", redock);
+  document.addEventListener("focusout", redock);
+  document.addEventListener("input", redock);
+  document.addEventListener("htmx:afterSettle", redock);
+
+  /* ---- Keep the columns: the pane unwrapped, remembered on this device ---- */
+  var COLUMNS = "hp-columns";
+
+  function local() {
+    try {
+      return window.localStorage;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function showColumns(button, on) {
+    var host = button.closest("main");
+    if (host) {
+      host.classList.toggle("is-columns", on);
+    }
+    button.setAttribute("aria-pressed", on ? "true" : "false");
+  }
+
+  var columnsButton = document.querySelector("[data-hp-columns]");
+  if (columnsButton) {
+    var kept = false;
+    try {
+      kept = !!local() && local().getItem(COLUMNS) === "1";
+    } catch (err) {
+      kept = false;
+    }
+    showColumns(columnsButton, kept);
+    columnsButton.parentNode.hidden = false;
+    columnsButton.addEventListener("click", function () {
+      var on = columnsButton.getAttribute("aria-pressed") !== "true";
+      showColumns(columnsButton, on);
+      try {
+        if (local()) {
+          local().setItem(COLUMNS, on ? "1" : "0");
+        }
+      } catch (err) {
+        /* blocked storage: the choice lasts this page only. */
+      }
+    });
+  }
+
   /* ---- Service worker and the "new build" offer ---- */
 
   var worker = "serviceWorker" in navigator ? navigator.serviceWorker : null;

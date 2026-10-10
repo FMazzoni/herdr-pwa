@@ -39,6 +39,10 @@ SCROLL_ALLOWED: dict[str, str] = {
         "a code block in agent prose: indentation and columns are the meaning, so the block "
         "scrolls inside its own box instead of wrapping a line of code into a different shape"
     ),
+    ".is-columns .pane": (
+        "the terminal mirror with Keep the columns on: the toggle asks for the terminal's own "
+        "line breaks, so the pane scrolls inside its box, which starts inside the gutter"
+    ),
     ".turn__result pre": (
         "a tool's output, which is terminal text with the same column meaning as code; it "
         "scrolls in its own box and the page around it does not move"
@@ -135,18 +139,35 @@ for (const el of document.body.querySelectorAll("*")) {
     }
   }
 }
+// A bar fixed to the bottom covers that band of the page at every scroll, even at its end.
+const vh = root.clientHeight;
+const docked = [];
+let covered = 0;
+for (const el of document.body.querySelectorAll("*")) {
+  if (getComputedStyle(el).position !== "fixed") continue;
+  const r = el.getBoundingClientRect();
+  if (r.height > 0 && r.bottom >= vh - 0.5) {
+    docked.push(el);
+    covered = Math.max(covered, vh - r.top);
+  }
+}
+const end = Math.max(root.scrollHeight, document.body.scrollHeight) - covered;
+const buried = [];
 let measured = 0;
 for (const el of document.querySelectorAll(tappable)) {
   const r = el.getBoundingClientRect();
   const style = getComputedStyle(el);
   if (r.width === 0 || r.height === 0 || style.visibility === "hidden") continue;
+  if (covered > 0 && !docked.some((d) => d.contains(el)) && r.bottom + window.scrollY > end + 0.5) {
+    buried.push({ what: describe(el), bottom: r.bottom + window.scrollY, end: end });
+  }
   measured += 1;
   if (r.width >= floor - 0.5 && r.height >= floor - 0.5) continue;
   taps.push({ what: describe(el), width: r.width, height: r.height,
     allowed: tapAllowed.find((s) => el.matches(s)) || null });
 }
 return { page: page, scrollers: scrollers, spills: spills, taps: taps, edges: edges,
-  measured: measured };
+  buried: buried, measured: measured };
 """
 
 
@@ -286,6 +307,11 @@ def judge(found: dict[str, object], where: str, tally: Tally) -> None:
             f"{where}: {row['what']} spills out of the viewport "
             f"({row['left']:.1f}..{row['right']:.1f}px)"
         )
+    for row in _rows(found, "buried"):
+        tally.problems.append(
+            f"{where}: tap target {row['what']} ends at {row['bottom']:.1f}px, under the bar "
+            f"fixed to the bottom even when the page is scrolled to its end ({row['end']:.1f}px)"
+        )
     for row in _rows(found, "taps"):
         if isinstance(allowed := row["allowed"], str):
             tally.allow(allowed)
@@ -315,6 +341,8 @@ def run_state(driver: Marionette, state: State, base: str, width: int, tally: Ta
         PROBE_GEOMETRY, list(SCROLL_ALLOWED), list(TAP_ALLOWED), TAPPABLE, TAP_FLOOR, EDGE_INSET
     )
     judge(found if isinstance(found, dict) else {}, where, tally)
+    # One window serves every state, so a remembered choice must not leak into the next.
+    driver.script("try { localStorage.clear(); sessionStorage.clear(); } catch (e) {}")
     print(f"  measured {where}", flush=True)
 
 

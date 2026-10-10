@@ -1,6 +1,7 @@
 {% import "_ui.html" as ui %}
 {% set base = "/agent/" ~ (agent.session|urlencode) %}
-<section id="answer" class="answer" data-hp-poll="{{ base }}/answer" hx-get="{{ base }}/answer" hx-target="this" hx-swap="outerHTML"
+{% set waiting = decision or agent.status.value == "blocked" %}
+<section id="answer" class="answer{% if not waiting %} answer--quiet{% endif %}" data-hp-poll="{{ base }}/answer" hx-get="{{ base }}/answer" hx-target="this" hx-swap="outerHTML"
          {% if refused is not defined and sent is not defined %}hx-trigger="every {{ cadence }}s, hp:poke from:body"{% else %}hx-trigger="hp:poke from:body"{% endif %}>
   {% include "_notice.html" %}
   {% if sent is defined %}
@@ -17,20 +18,24 @@
     {% endif %}
     {% endfor %}
   </div>
-  {% elif agent.status.value != "blocked" %}
-  <p class="empty">Nothing is waiting on you here.</p>
   {% endif %}
-  <div class="keys keys--pad">
-    {% for hint in hints %}
-    {{ ui.key_form(base, agent.target, hint.key, hint.label, screen=fingerprint) }}
-    {% endfor %}
-    {% for key in pad %}
-    {{ ui.key_form(base, agent.target, key, key|capitalize, screen=fingerprint) }}
-    {% endfor %}
-    {% if refused is defined and refused.held and key is defined and key == interrupt %}
-    {{ ui.key_form(base, agent.target, interrupt, "Really interrupt", kind="danger", confirm=true) }}
-    {% else %}
-    {{ ui.key_form(base, agent.target, interrupt, "Ctrl+C", kind="danger") }}
-    {% endif %}
+  <div class="answer__keys">
+    {{ ui.section_head("What this screen says" if hints else "Keys") }}
+    <div class="keys keys--pad">
+      {% for hint in hints %}
+      {{ ui.key_form(base, agent.target, hint.key, hint.label, screen=fingerprint) }}
+      {% endfor %}
+      {% for key in pad %}
+      {{ ui.key_form(base, agent.target, key, key|capitalize, screen=fingerprint) }}
+      {% endfor %}
+    </div>
+    {# Set apart from Enter and the pad: a stray thumb on the pad must never land here. #}
+    <div class="keys__stop">
+      {% if refused is defined and refused.held and key is defined and key == interrupt %}
+      {{ ui.key_form(base, agent.target, interrupt, "Really interrupt", kind="danger", confirm=true) }}
+      {% else %}
+      {{ ui.key_form(base, agent.target, interrupt, "Interrupt (Ctrl+C)", kind="danger") }}
+      {% endif %}
+    </div>
   </div>
 </section>

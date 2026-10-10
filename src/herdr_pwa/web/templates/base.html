@@ -24,7 +24,7 @@
 </head>
 <body>
 <header class="topbar">
-  {% from "_nav.html" import replace %}<a class="brand" href="/" {{ replace() }}>herdr</a>
+  {% from "_nav.html" import replace %}{% block brand %}<a class="brand" href="/" {{ replace() }}>herdr</a>{% endblock %}
   {% block topbar %}{% endblock %}
 </header>
 {# Outside every polled region, so a tick can never replace it under a thumb. #}

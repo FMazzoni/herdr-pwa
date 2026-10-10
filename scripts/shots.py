@@ -99,6 +99,9 @@ def snap(page: Page, target: Path) -> list[Path]:
     return [first, full]
 
 
+FORGET = "() => { try { localStorage.clear(); sessionStorage.clear(); } catch (e) {} }"
+
+
 def drive(page: Page, state: State, url: str) -> None:
     """Load the state, tap through to it if it needs a tap, and wait for its proof."""
     page.goto(url)
@@ -133,6 +136,8 @@ def _shoot_device(stage: Stage, device: Device, states: list[State], out: Path) 
                 # The picture is still taken: a screen that never got ready is worth seeing.
                 failed.append(f"{device.name} {state.name}: {str(exc).splitlines()[0]}")
             snap(page, out / device.name / state.name)
+            # One page serves every state, so a remembered choice must not leak into the next.
+            page.evaluate(FORGET)
             print(f"  shot {device.name} {state.name}", flush=True)
     ctx.close()
     return failed
