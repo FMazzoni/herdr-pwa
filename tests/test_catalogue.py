@@ -24,7 +24,7 @@ FRAGMENT = re.compile(r'hx-get="([^"]+)"')
 def _statuses(state: State, home: Path) -> list[tuple[str, int]]:
     rig = build(state, home)
     page = rig.http.get(state.path, follow_redirects=False)
-    urls = dict.fromkeys(FRAGMENT.findall(page.text))
+    urls: list[str] = list(dict.fromkeys(m.group(1) for m in FRAGMENT.finditer(page.text)))
     fragments = [(u, rig.http.get(u.replace("&amp;", "&")).status_code) for u in urls]
     return [(state.path, page.status_code), *fragments]
 
