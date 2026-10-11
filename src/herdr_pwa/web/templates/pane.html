@@ -3,7 +3,4 @@
   <h2 class="sr-only">Terminal</h2>
   {# Run classes come from panetext's closed set; the text is escaped like any other. #}
   <pre class="pane">{% for line in view.lines %}<span class="pane__line{% if line.clip %} pane__line--clip{% endif %}">{% for run in line.runs %}<span class="{{ run.cls }}">{{ run.text }}</span>{% endfor %}</span>{% endfor %}</pre>
-  {% if view.status %}
-  <pre class="pane pane--status">{% for runs in view.status %}<span class="pane__line">{% for run in runs %}<span class="{{ run.cls }}">{{ run.text }}</span>{% endfor %}</span>{% endfor %}</pre>
-  {% endif %}
 </section>

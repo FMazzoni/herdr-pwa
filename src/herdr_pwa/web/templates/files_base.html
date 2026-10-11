@@ -18,6 +18,7 @@
 {% block brand %}{% endblock %}
 {% block topbar %}{% if agent %}{{ agent_ui.bar(agent, "files") }}{% else %}<a class="leave topbar__back" href="{{ back }}" aria-label="{{ 'Back to agent' if nav.back else 'Back to herd' }}" {{ replace() }}>&lsaquo;<span class="topbar__word">&nbsp;{{ "Agent" if nav.back else "Herd" }}</span></a>
   {{ views_nav() }}{% endif %}{% endblock %}
+{% block strip %}{% if agent %}{% include "stats.html" %}{% endif %}{% endblock %}
 {% block body %}
 <main class="feed-host files">
   {% if agent %}{{ views_nav(" subtabs") }}{% endif %}

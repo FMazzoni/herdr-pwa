@@ -154,6 +154,11 @@ class _Db:
         """Every ``session_model_usage`` row for this session."""
         return self._ask(_USAGE_SQL)
 
+    def clock(self) -> _Row:
+        """``(prompts, newest prompt, newest message)`` as the store holds them."""
+        found = self._ask(_CLOCK_SQL)
+        return found[0] if found else (0, None, None)
+
     def close(self) -> None:
         """Drop the connection."""
         self._db.close()
@@ -173,6 +178,12 @@ _USAGE_SQL: Final = (
     " output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens,"
     " actual_cost_usd, estimated_cost_usd, cost_status"
     " from session_model_usage where session_id = ?"
+)
+
+_CLOCK_SQL: Final = (
+    "select count(case when role = 'user' then 1 end),"
+    " max(case when role = 'user' then timestamp end), max(timestamp)"
+    " from messages where session_id = ? and active = 1"
 )
 
 _INFO_SQL: Final = "select title, model from sessions where id = ? limit 1"
@@ -318,6 +329,10 @@ def _tally(db: _Db) -> SessionUsage:
         tally.cache_creation_tokens += _as_int(written or 0)
         tally.thinking_tokens += _as_int(thought or 0)
         tally.cost += _money(*row[8:11])
+    prompts, asked, latest = db.clock()
+    tally.prompts = _as_int(prompts or 0)
+    tally.turn_started = _stamp(asked)
+    tally.last_at = _stamp(latest)
     return tally
 
 

@@ -113,6 +113,15 @@
   --option-lines: 3;
   /* The least of a card's workspace that stays on the line before the line wraps instead. */
   --ws-min: 3ch;
+  /* The stats strip's context meter, drawn at the size of the text beside it. */
+  --meter-w: 2em;
+  --meter-h: 0.45em;
+  /* The tallest the strip's details sheet gets before it scrolls: the bar is sticky, so a sheet
+     taller than the screen would hide the page under it with no way down. */
+  --stats-sheet-max: 55vh;
+  /* How far the strip's 44px tap box reaches under its drawn ~28px line; a negative margin of
+     the same takes it back out of the layout, so the line stays quiet and the tap stays 44px. */
+  --strip-reach: 16px;
 
   /* Code in chat prose: one colour per kind of token, drawn from the terminal palette. */
   --code-keyword: var(--ansi-magenta);
@@ -701,6 +710,41 @@ textarea { resize: vertical; min-height: 4.5em; }
 .tabs.subtabs { grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0 0 var(--space-4); }
 .subtabs .tab__label { padding: 0 var(--space-2); }
 
+/* ---- The stats strip ----
+   One quiet line under the bar on Chat, Pane and Files, inside the sticky header so it never
+   scrolls away; a tap opens what it sums. It wraps rather than cutting the meter. */
+.topbar:has(.stats) { flex-wrap: wrap; row-gap: 0; }
+.stats { flex: 1 0 100%; min-width: 0; margin: 0 calc(-1 * var(--gutter-right)) 0 calc(-1 * var(--gutter-left)); padding: 0 var(--gutter-right) 0 var(--gutter-left); border-top: var(--line-1) solid var(--rule); font-size: var(--text-small); color: var(--ink-2); }
+/* The tap box reaches down past the drawn line, never up into the tabs' 44px. Text stays at the
+   top, so at a large Text Size only the empty reach runs past the bar, never a word. */
+.stats__line { display: flex; align-items: flex-start; gap: var(--space-4); min-height: var(--tap); padding: var(--space-3) 0 calc(var(--space-2) + var(--strip-reach)); margin-bottom: calc(-1 * var(--strip-reach)); list-style: none; cursor: pointer; -webkit-touch-callout: none; }
+.stats__line::-webkit-details-marker { display: none; }
+.stats__line::after { content: var(--chevron); flex: none; margin-left: auto; color: var(--ink-3); transform: rotate(90deg); }
+.stats__sheet[open] > .stats__line::after { transform: rotate(-90deg); }
+/* Spaced by a gap, not a separator glyph, so a wrapped line never starts with a dot. */
+.stats__facts { display: flex; flex-wrap: wrap; align-items: center; min-width: 0; gap: var(--space-1) var(--space-6); }
+.stats__model { color: var(--ink); }
+.stats__note { color: var(--ink-3); }
+.stats__context { display: inline-flex; align-items: center; white-space: nowrap; }
+.meter { flex: none; width: var(--meter-w); height: var(--meter-h); margin-right: var(--space-2); overflow: hidden; background: var(--surface-2); border: var(--line-1) solid var(--rule); border-radius: var(--radius-pill); }
+.meter__fill { display: block; height: 100%; background: var(--accent); }
+.meter--full .meter__fill { background: var(--unknown); }
+.meter__fill--0 { width: 0; }
+.meter__fill--1 { width: 10%; }
+.meter__fill--2 { width: 20%; }
+.meter__fill--3 { width: 30%; }
+.meter__fill--4 { width: 40%; }
+.meter__fill--5 { width: 50%; }
+.meter__fill--6 { width: 60%; }
+.meter__fill--7 { width: 70%; }
+.meter__fill--8 { width: 80%; }
+.meter__fill--9 { width: 90%; }
+.meter__fill--10 { width: 100%; }
+.stats__rows { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--space-2) var(--space-6); max-height: var(--stats-sheet-max); margin: 0; padding: var(--space-2) 0 var(--space-5); overflow: hidden auto; }
+.stats__row { display: contents; }
+.stats__rows dt { color: var(--ink-3); }
+.stats__rows dd { margin: 0; color: var(--ink); overflow-wrap: anywhere; }
+.stats__empty { margin: 0; padding: var(--space-2) 0 var(--space-5); color: var(--ink-3); }
 .files__title { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-body); font-weight: 600; }
 .files__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--space-5); min-height: var(--tap); margin: 0 0 var(--space-4); font-size: var(--text-small); color: var(--ink-3); }
 .files__meta > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

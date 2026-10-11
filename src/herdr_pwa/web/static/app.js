@@ -1156,6 +1156,25 @@
     }, { once: true });
   }
 
+  /* ---- The stats strip keeps its details open across the redraws that refresh it ---- */
+  var statsOpen = false;
+
+  document.addEventListener("htmx:beforeSwap", function (event) {
+    var target = event.detail.target;
+    if (target && target.id === "agent-stats") {
+      var sheet = target.querySelector("details");
+      statsOpen = !!(sheet && sheet.open);
+    }
+  });
+
+  document.addEventListener("htmx:afterSwap", function () {
+    var sheet = statsOpen ? document.querySelector("#agent-stats details") : null;
+    statsOpen = false;
+    if (sheet) {
+      sheet.open = true;
+    }
+  });
+
   /* ---- Seen: a finish the phone has shown is not news ---- */
 
   var seenHost = document.querySelector("[data-hp-seen]");

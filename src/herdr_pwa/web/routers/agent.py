@@ -1,4 +1,4 @@
-"""The agent drill-in: a page with Chat and Pane tabs, each a fragment the event stream refreshes."""
+"""The agent drill-in: Chat and Pane tabs and the stats strip, each a fragment the stream refreshes."""
 
 from typing import Annotated, Final
 
@@ -6,15 +6,27 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from herdr_pwa import panetext
+from herdr_pwa.engine.model import Agent
 from herdr_pwa.engine.tail import Ask, chat_window
 from herdr_pwa.web.chat import chat_view
 from herdr_pwa.web.deps import WebState, hidden_tick, viewer_guard
 from herdr_pwa.web.herd import find_agent
 from herdr_pwa.web.naming import page_title
+from herdr_pwa.web.stats import Stats, stats_for
 from herdr_pwa.web.writing import first_note
 
 # Files is a tab too, but its pages are the explorer's, reached through /agent/<session>/files.
 TABS: Final = ("chat", "pane")
+
+
+def read_stats(web: WebState, agent: Agent) -> Stats:
+    """The stats strip for *agent*, from its harness's own record."""
+    usage = web.usage.read(
+        agent.session,
+        agent_kind=agent.agent or "",
+        root=web.settings.transcript_roots or None,
+    )
+    return stats_for(agent.agent or "", agent.status.value, usage, now=web.wall())
 
 
 def build(web: WebState) -> APIRouter:
@@ -36,6 +48,7 @@ def build(web: WebState) -> APIRouter:
             "tabs": TABS,
             "heading": heading,
             "first": first_note(first),
+            "stats": read_stats(web, agent),
         }
         return web.pages.page("agent_page.html", context)
 
@@ -66,5 +79,11 @@ def build(web: WebState) -> APIRouter:
         text = web.client.mirror_read(agent.target, status=agent.status)
         context = {"agent": agent, "view": panetext.pane_view(text)}
         return web.pages.fragment("pane.html", context)
+
+    @router.get("/stats", dependencies=[Depends(hidden_tick)])
+    def stats(session: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
+        agent = find_agent(web, session)
+        context = {"agent": agent, "stats": read_stats(web, agent)}
+        return web.pages.fragment("stats.html", context)
 
     return router

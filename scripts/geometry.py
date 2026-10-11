@@ -102,8 +102,10 @@ TAP_ALLOWED: dict[str, str] = {
 
 TAPPABLE = "a[href], button, summary, input, select, textarea, [role=button], [role=link]"
 
-# An agent's bar: three 44px segments, on one row with the back link.
+# An agent's bar: three 44px segments, on one row with the back link, the strip under them.
 BAR_TABS = ("Chat", "Pane", "Files")
+# "One quiet line" at the default Text Size: about 28px, with a little room for the font.
+STRIP_MAX = 36
 # The back link keeps its word only on a bar wide enough for it: 390px and up at default text.
 WORD_WIDTHS = (390, 430)
 
@@ -260,19 +262,29 @@ for (const chip of document.querySelectorAll(".card__harness, .card__pane")) {
     cut.push({ what: describe(chip), text: chip.textContent, full: chip.scrollWidth, shown: chip.clientWidth });
   }
 }
-// An agent's bar, when this page has one.
+// An agent's bar and the stats strip under it, when this page has them.
 const box = (el) => el.getBoundingClientRect();
 let bar = null;
 const nav = document.querySelector("header.topbar nav.tabs--3[aria-label=View]");
 if (nav) {
   const back = document.querySelector("header.topbar .topbar__back");
   const word = back ? back.querySelector(".topbar__word") : null;
+  const line = document.querySelector("header.topbar #agent-stats .stats__line");
+  const meter = line ? line.querySelector(".meter") : null;
   bar = {
     tabs: [...nav.querySelectorAll("a.tab")].map((t) => ({
       label: t.textContent.trim(), width: box(t).width, height: box(t).height })),
     oneRow: !!back && box(back).top < box(nav).bottom && box(nav).top < box(back).bottom,
     name: back ? back.getAttribute("aria-label") : null,
     word: word ? getComputedStyle(word).display !== "none" : null,
+    // What is drawn: the toggle's box, less the reach its negative margin takes back.
+    strip: line ? { height: box(line).height + parseFloat(getComputedStyle(line).marginBottom),
+      top: box(line).top, under: box(nav).bottom } : null,
+    meter: meter ? { width: box(meter).width, wants: parseFloat(getComputedStyle(meter).width),
+      right: box(meter).right, edge: box(line).right } : null,
+    cut: line ? [...line.querySelectorAll(".stats__fact")]
+      .filter((f) => f.scrollWidth > f.clientWidth + 0.5 || box(f).right > vw + 0.5)
+      .map((f) => f.textContent) : [],
   };
 }
 return { page: page, scrollers: scrollers, spills: spills, taps: taps, edges: edges,
@@ -488,13 +500,36 @@ def _judge_word(bar: dict[str, object], where: str, size: "Size", tally: Tally) 
         )
 
 
+def _judge_strip(bar: dict[str, object], where: str, size: "Size", tally: Tally) -> None:
+    strip = bar["strip"]
+    if not isinstance(strip, dict):
+        tally.problems.append(f"{where}: no stats strip under the agent's bar")
+        return
+    if float(str(strip["top"])) < float(str(strip["under"])) - 0.5:
+        tally.problems.append(f"{where}: the stats strip is not under the tabs")
+    if size.scale == 1.0 and float(str(strip["height"])) > STRIP_MAX:
+        tally.problems.append(
+            f"{where}: the stats strip is {strip['height']:.1f}px tall, over {STRIP_MAX}px"
+        )
+    meter = bar["meter"]
+    if isinstance(meter, dict) and (
+        float(str(meter["width"])) < float(str(meter["wants"])) - 0.5
+        or float(str(meter["right"])) > float(str(meter["edge"])) + 0.5
+    ):
+        tally.problems.append(f"{where}: the context meter is squeezed or cut: {meter}")
+    cut = bar["cut"]
+    if isinstance(cut, list) and cut:
+        tally.problems.append(f"{where}: the strip cuts {cut}; it must wrap instead")
+
+
 def judge_bar(found: dict[str, object], where: str, size: "Size", tally: Tally) -> None:
-    """An agent's bar: three 44px tabs on one row and the right back link."""
+    """An agent's bar: three 44px tabs on one row, the right back link, the strip under them."""
     bar = found.get("bar")
     if not isinstance(bar, dict):
         return
     _judge_tabs(bar, where, tally)
     _judge_word(bar, where, size, tally)
+    _judge_strip(bar, where, size, tally)
 
 
 def _grow_text(driver: Marionette, scale: float) -> bool:

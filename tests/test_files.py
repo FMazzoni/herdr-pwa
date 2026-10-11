@@ -527,6 +527,8 @@ def test_an_agent_opens_its_own_repository_and_its_paths(tmp_path: Path, repo: P
     assert '<nav class="tabs tabs--3" aria-label="View">' in bar
     assert 'aria-current="page"><span class="tab__label">Files</span>' in bar
     assert 'aria-label="Repository"' not in bar
+    # The same stats strip as on Chat and Pane, under the same bar.
+    assert f'data-hp-topic="stats:{WORKING_SESSION}"' in bar
     # Changes | Files | Find is a row in the page, and the way back to the tab's lists.
     main = page[page.index("<main ") :]
     assert '<nav class="tabs tabs--3 subtabs" aria-label="Repository">' in main

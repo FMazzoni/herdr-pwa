@@ -1043,6 +1043,11 @@ class SessionUsage(BaseModel):
     # A byte budget stopped the read, so the sums are floors.
     partial: bool = False
     state: HistoryState = HistoryState.absent
+    # Prompts the person sent, counted once however many logs a fork copied them into.
+    prompts: int = 0
+    # When the newest prompt was sent, and when the newest record landed; empty when unknown.
+    turn_started: str = ""
+    last_at: str = ""
 
 
 _SYNTHETIC_MODEL: Final = "<synthetic>"
@@ -1102,24 +1107,65 @@ def _prompt_size(usage: JsonObject) -> int:
     )
 
 
-def _tally_log(
-    path: Path, tally: SessionUsage, seen: set[str], budget: int, *, newest: bool
-) -> int:
-    """Add *path*'s messages to *tally*; return the bytes it did not spend."""
+class LiveTally(BaseModel):
+    """A lineage's tally and what is needed to grow it by the lines appended to its newest log."""
+
+    tally: SessionUsage
+    seen: set[str] = Field(default_factory=set[str])
+    budget: int = 0
+    # Where the newest log's last whole line ends.
+    end: int = 0
+
+
+def _worth(raw: bytes) -> bool:
+    """Whether a line can carry usage or a prompt; everything else is not parsed at all."""
+    return b'"usage"' in raw or b'"promptSource"' in raw or b'"origin"' in raw
+
+
+def _tally_log(path: Path, live: LiveTally, *, newest: bool, start: int = 0) -> int:
+    """Add *path*'s whole lines from *start* to *live*; return where the last of them ends."""
+    end = start
     with path.open("rb") as handle:
+        handle.seek(start)
         for raw in handle:
-            budget -= len(raw)
-            if budget < 0:
-                tally.partial = True
-                return 0
-            if b'"usage"' in raw:
-                _tally_line(raw, tally, seen, newest=newest)
-    return budget
+            if not raw.endswith(b"\n"):
+                # A line still being written is read once it is whole.
+                break
+            live.budget -= len(raw)
+            if live.budget < 0:
+                live.tally.partial = True
+                live.budget = 0
+                return end
+            end += len(raw)
+            if _worth(raw):
+                _tally_line(raw, live.tally, live.seen, newest=newest)
+    return end
+
+
+def _stamp_of(record: JsonObject) -> str:
+    stamp = record.get("timestamp")
+    return stamp if isinstance(stamp, str) else ""
+
+
+def _tally_prompt(record: JsonObject, tally: SessionUsage, seen: set[str], *, newest: bool) -> None:
+    """Count one prompt the person sent; the newest log's last one starts the current turn."""
+    if newest:
+        tally.turn_started = _stamp_of(record)
+    key = f"prompt:{record.get('uuid')}"
+    if key not in seen:
+        seen.add(key)
+        tally.prompts += 1
 
 
 def _tally_line(raw: bytes, tally: SessionUsage, seen: set[str], *, newest: bool) -> None:
-    """Add one record's message to *tally*, unless its id was already counted."""
-    found = _usage_of(_loads(raw))
+    """Add one record to *tally*: its message unless already counted, or the prompt it is."""
+    record = _loads(raw)
+    if newest and _stamp_of(record):
+        tally.last_at = _stamp_of(record)
+    if record.get("type") == "user" and not record.get("isMeta") and _is_human(record):
+        _tally_prompt(record, tally, seen, newest=newest)
+        return
+    found = _usage_of(record)
     if found is None:
         return
     identifier, usage, model = found
@@ -1150,18 +1196,31 @@ def _ancestors(path: Path) -> list[Path]:
     return chain
 
 
+def tally_claude(path: Path, *, max_bytes: int = MAX_USAGE_BYTES) -> LiveTally:
+    """Sum *path* and every log its thread was copied out of, ready to grow."""
+    live = LiveTally(tally=SessionUsage(), budget=max_bytes)
+    for index, log in enumerate([path, *_ancestors(path)]):
+        live.tally.logs += 1
+        end = _tally_log(log, live, newest=index == 0)
+        if index == 0:
+            live.end = end
+        if live.tally.partial:
+            break
+    live.tally.state = HistoryState.ok if live.tally.messages else HistoryState.empty
+    return live
+
+
+def grow_claude(live: LiveTally, path: Path) -> None:
+    """Add what was appended to the newest log since *live* last read it."""
+    if live.tally.partial:
+        return
+    live.end = _tally_log(path, live, newest=True, start=live.end)
+    live.tally.state = HistoryState.ok if live.tally.messages else HistoryState.empty
+
+
 def _tally_lineage(path: Path, *, max_bytes: int) -> SessionUsage:
     """Sum *path* and every log its thread was copied out of."""
-    tally = SessionUsage()
-    seen: set[str] = set()
-    budget = max_bytes
-    for index, log in enumerate([path, *_ancestors(path)]):
-        tally.logs += 1
-        budget = _tally_log(log, tally, seen, budget, newest=index == 0)
-        if tally.partial:
-            break
-    tally.state = HistoryState.ok if tally.messages else HistoryState.empty
-    return tally
+    return tally_claude(path, max_bytes=max_bytes).tally
 
 
 def usage(

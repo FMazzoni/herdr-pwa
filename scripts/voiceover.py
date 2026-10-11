@@ -1,6 +1,7 @@
 """Drive the agent page in headless Firefox the way VoiceOver meets it: a poll redraws a region
 while its host says it is busy, gives focus back to the control that had it, and says nothing;
-a new message from the agent is said once, and so is what a tapped answer did."""
+a new message from the agent is said once, and so is what a tapped answer did. The stats strip
+is heard as one sentence, and its redraw says nothing and leaves its sheet as the reader left it."""
 
 import time
 from collections.abc import Callable
@@ -39,7 +40,7 @@ if (window.__hpListening) return true;
 window.__hpListening = true;
 new MutationObserver((changes) => {
   for (const change of changes) for (const node of change.addedNodes) {
-    if (node.id === "agent-view" || node.id === "answer") {
+    if (node.id === "agent-view" || node.id === "answer" || node.id === "agent-stats") {
       window.__hpDrawn.push({ id: node.id, busy: change.target.getAttribute("aria-busy") });
     }
   }
@@ -62,6 +63,25 @@ return {
   newest: [...document.querySelectorAll("#agent-view .turn")].map((t) => t.textContent).pop() || "",
 };
 """
+# What VoiceOver hears on the strip's one control: its text, minus every aria-hidden subtree.
+STRIP = r"""
+const line = document.querySelector("#agent-stats summary");
+if (!line) return null;
+const parts = [];
+const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
+for (let t = walker.nextNode(); t; t = walker.nextNode()) {
+  if (!t.parentElement.closest("[aria-hidden=true]")) parts.push(t.data);
+}
+return {
+  heard: parts.join("").replace(/\s+/g, " ").trim(),
+  drawn: line.querySelectorAll(".stats__fact").length,
+  open: line.parentElement.open,
+};
+"""
+# The strip's sentence: the model, then what it says of the context, the turn and the spend.
+# The strip draws four facts for that sentence: model, context, turn, output.
+DRAWN_FACTS = 4
+SENTENCE = "Haiku 4.5, context 62 percent used, turn running 4 minutes, 38 thousand output tokens"
 FOCUS = r"""
 const button = document.querySelector("#answer .button--option");
 if (!button) return null;
@@ -196,6 +216,44 @@ def outcome(driver: Marionette, base: str, rig: Rig, home: Path) -> list[str]:
     return [f"{name}: the outcome {banner!r} should be said once; heard {said!r}"]
 
 
+def _strip_heard(driver: Marionette) -> dict[str, object]:
+    found = driver.script(STRIP)
+    return found if isinstance(found, dict) else {}
+
+
+def strip(driver: Marionette, base: str, rig: Rig, home: Path) -> list[str]:
+    """The strip is one sentence aloud; refreshed, it says nothing and keeps its sheet open."""
+    del rig, home
+    name = "voiceover strip"
+    state = next(s for s in STATES if s.name == "usage-chat")
+    driver.send("WebDriver:Navigate", {"url": base + state.path})
+    if not _ready(driver, state.ready):
+        return [f"{name}: the strip never drew"]
+    problems: list[str] = []
+    first = _strip_heard(driver)
+    if first.get("heard") != SENTENCE:
+        problems.append(
+            f"{name}: the strip should say {SENTENCE!r}; it says {first.get('heard')!r}"
+        )
+    if _count(first, "drawn") < DRAWN_FACTS:
+        problems.append(f"{name}: the drawn facts are missing, so the sentence proves nothing")
+    driver.script("document.querySelector('#agent-stats summary').click();")
+    driver.script(LISTEN)
+    driver.script(POKE)
+    seen = _until(driver, lambda s: "agent-stats" in _ids(s))
+    if not seen:
+        return [*problems, f"{name}: the strip was never redrawn"]
+    problems += [
+        f"{name}: #agent-stats was drawn in while its host did not say aria-busy"
+        for d in _list(seen, "drawn")
+        if isinstance(d, dict) and d.get("id") == "agent-stats" and d.get("busy") != "true"
+    ]
+    problems += [f"{name}: a strip redraw said {s!r}" for s in _list(seen, "said")]
+    if _strip_heard(driver).get("open") is not True:
+        problems.append(f"{name}: the redraw closed the sheet the reader had opened")
+    return problems
+
+
 def _walks() -> tuple[tuple[State, Callable[[Marionette, str, Rig, Path], list[str]]], ...]:
     asking = State(
         "voiceover poll",
@@ -205,7 +263,8 @@ def _walks() -> tuple[tuple[State, Callable[[Marionette, str, Rig, Path], list[s
         long_chat(TURNS),
     )
     answered = next(s for s in STATES if s.name == "agent-answer-confirmed")
-    return ((asking, poll), (answered, outcome))
+    stats = next(s for s in STATES if s.name == "usage-chat")
+    return ((asking, poll), (answered, outcome), (stats, strip))
 
 
 def run(
