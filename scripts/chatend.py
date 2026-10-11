@@ -7,7 +7,10 @@ stays open while calls are added to it.
 
 The chat is paged by messages and live over an event stream: a tool-heavy transcript opens on
 twenty messages, "Load earlier" lands the page above without moving the reader, one change is
-one refresh, and a lost stream falls back to polling and then recovers."""
+one refresh, and a lost stream falls back to polling and then recovers.
+
+A reader who scrolls up from the end in small steps while the agent works is never pulled back
+to it, and the line they are reading stays where it was across every redraw."""
 
 import json
 import time
@@ -613,6 +616,132 @@ def falls_back(
     return walk
 
 
+# A reader scrolling up from the end in small steps while the agent works and the region is
+# redrawn under them. Each step is a user scroll; the walk counts every return to the end and
+# measures, across each redraw, the line the reader was reading.
+STEP = 10
+REDRAW_SECONDS = 0.3
+SCROLL_UP = r"""
+const [step, every, count] = arguments;
+const walk = { steps: 0, swaps: [], atEnd: 0, done: false };
+window.__hpWalk = walk;
+const units = () => [...document.querySelectorAll(
+  "#agent-view .turn, #agent-view > .pane:not(.pane--status) > .pane__line")];
+const under = () => document.querySelector(".topbar").getBoundingClientRect().bottom;
+const gap = () => document.documentElement.scrollHeight - innerHeight - scrollY;
+let held = null;
+document.addEventListener("htmx:beforeSwap", (event) => {
+  held = null;
+  if (!walk.steps || !event.detail.target || event.detail.target.id !== "agent-view") return;
+  const first = units().find((u) => u.getBoundingClientRect().top >= under());
+  held = first ? { text: first.textContent, top: first.getBoundingClientRect().top } : null;
+});
+document.addEventListener("htmx:afterSwap", () => {
+  if (!held) return;
+  const same = units().find((u) => u.textContent === held.text);
+  walk.swaps.push(same ? Math.round(same.getBoundingClientRect().top - held.top) : null);
+  held = null;
+});
+addEventListener("scroll", () => { if (walk.steps && gap() <= 2) walk.atEnd += 1; });
+const timer = setInterval(() => {
+  scrollBy(0, -step);
+  walk.steps += 1;
+  if (walk.steps >= count) { clearInterval(timer); walk.done = true; }
+}, every);
+return true;
+"""
+READ_WALK = r"""
+const walk = window.__hpWalk || {};
+const gap = document.documentElement.scrollHeight - innerHeight - scrollY;
+return { done: !!walk.done, steps: walk.steps || 0, swaps: walk.swaps || [],
+  atEnd: walk.atEnd || 0, gap: gap };
+"""
+
+
+def _walked(driver: Marionette) -> dict[str, object]:
+    found = driver.script(READ_WALK)
+    return found if isinstance(found, dict) else {}
+
+
+def _redraw_while(driver: Marionette, tab: Tab, rig: Rig, home: Path) -> int:
+    """Redraw the region on a cadence until the reader's walk is done; the last count drawn."""
+    n = 1
+    deadline = time.monotonic() + WAIT_SECONDS
+    while not _walked(driver).get("done") and time.monotonic() < deadline:
+        tab.grow(rig, home, n)
+        driver.script(POKE)
+        time.sleep(REDRAW_SECONDS)
+        n += 1
+    return n
+
+
+def _poked(driver: Marionette, newest: str) -> bool:
+    if newest in str(_probe(driver).get("text", "")):
+        return True
+    driver.script(POKE)
+    time.sleep(REDRAW_SECONDS)
+    return False
+
+
+def _reply(_rig: Rig, home: Path, n: int) -> str:
+    """The agent appends one more reply, the way it writes; return its text."""
+    return _append(home, f"Appended reply number {n}.", f"app{n}")
+
+
+def _walk_problems(name: str, walk: dict[str, object], travelled: int) -> list[str]:
+    problems: list[str] = []
+    if walk.get("atEnd"):
+        problems.append(f"{name}: a redraw pulled the reader back to the end {walk['atEnd']}x")
+    swaps = walk.get("swaps")
+    moved = [s for s in swaps if s is None or abs(s) > DRIFT] if isinstance(swaps, list) else []
+    if moved:
+        problems.append(f"{name}: a redraw moved the line being read by {moved}px")
+    if _num(walk, "gap") < travelled / 2:
+        problems.append(
+            f"{name}: the reader ended {_num(walk, 'gap'):.0f}px from the end "
+            f"after scrolling {travelled}px up"
+        )
+    return problems
+
+
+def scrolling_up(
+    every: float, count: int
+) -> Callable[[Marionette, str, Tab, Rig, Path], list[str]]:
+    """The walk for one cadence: ``count`` steps up, one every ``every`` seconds."""
+
+    def walk(driver: Marionette, base: str, tab: Tab, rig: Rig, home: Path) -> list[str]:
+        """Scroll up from the end in small steps while the region is redrawn: never pulled
+        back, and the line being read stays where it was across every redraw."""
+        driver.send("WebDriver:Navigate", {"url": base + tab.state.path})
+        seen = _wait_for(driver, tab.newest)
+        if not seen or not seen.get("scrollable"):
+            return [f"{tab.name}: never drew a page taller than the screen"]
+        driver.script(SCROLL_UP, STEP, round(every * 1000), count)
+        n = _redraw_while(driver, tab, rig, home)
+        if not _walked(driver).get("done"):
+            return [f"{tab.name}: the reader's walk never finished"]
+        newest = tab.grow(rig, home, n)
+        # A poke while a redraw is in flight is dropped (htmx's default sync), so poke until
+        # the newest line is drawn.
+        if not _until(lambda: _poked(driver, newest)) or not _wait_for(driver, newest):
+            return [f"{tab.name}: the redraw after the reader stopped never landed"]
+        walk = _walked(driver)
+        if not walk.get("swaps"):
+            return [f"{tab.name}: no redraw landed while the reader was scrolled up"]
+        return _walk_problems(tab.name, walk, STEP * count)
+
+    return walk
+
+
+def _scroll_pane(rig: Rig, _home: Path, n: int) -> str:
+    """The terminal scrolls: its oldest line goes and a newer one arrives; return that one."""
+    text = "".join(
+        f"\x1b[32m$\x1b[0m step {k:03d}: applied to the cluster\n" for k in range(n, n + LINES)
+    )
+    rig.wire.replies[READ] = read_frame(text)
+    return f"step {n + LINES - 1:03d}"
+
+
 def _tabs() -> tuple[tuple[Tab, Callable[[Marionette, str, Tab, Rig, Path], list[str]]], ...]:
     blocked = runner(lambda: herd(**BLOCKED), long_pane(LINES) + capture(MENU))
     chat = State("chat", f"{AGENT}?tab=chat", "", runner(snapshot_frame), long_chat(TURNS))
@@ -642,6 +771,10 @@ def _tabs() -> tuple[tuple[Tab, Callable[[Marionette, str, Tab, Rig, Path], list
         (Tab("tool result", tool, "Reply after the tests", _say), kept_open),
         (Tab("chat end", chat, last_reply, _say), follow),
         (Tab("pane end", pane, last_line, _print), follow),
+        (Tab("pane nudged up", pane, last_line, _scroll_pane), scrolling_up(0.4, 10)),
+        (Tab("pane scrolled up", pane, last_line, _scroll_pane), scrolling_up(0.05, 40)),
+        (Tab("chat nudged up", chat, last_reply, _reply), scrolling_up(0.4, 10)),
+        (Tab("chat scrolled up", chat, last_reply, _reply), scrolling_up(0.05, 40)),
         (Tab("chat question", asking_chat, last_reply, _say), asked),
         (Tab("pane question", asking_pane, "", _print), asked),
     )
