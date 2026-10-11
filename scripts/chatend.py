@@ -1,6 +1,7 @@
 """Drive the Chat and Pane tabs in headless Firefox: each opens on its newest line, follows new
 lines while the reader is at the end, and leaves a reader who scrolled up where they were. An
-agent that is asking opens at the top instead, with its question on the first screen. A tool's
+agent that is asking lands at the end too, its question after the newest line and on the first
+screen, and a reader who scrolled up from it is offered the way back. A tool's
 result the reader opened stays open across a poll, and the page does not move under them. A
 burst of tool calls lands folded, its failure in plain sight, and a fold the reader opened
 stays open while calls are added to it.
@@ -68,7 +69,13 @@ if (!last || !bar || !answer || busy || document.readyState !== "complete") retu
 const box = last.getBoundingClientRect();
 const question = document.querySelector("#answer .answer__question");
 const asked = question ? question.getBoundingClientRect() : null;
+const options = [...document.querySelectorAll("#answer .option, #answer .button--option")];
+const lowest = Math.max(0, ...options.map((o) => o.getBoundingClientRect().bottom));
 return {
+  under: document.querySelector(".topbar").getBoundingClientRect().bottom,
+  options: options.length,
+  optionsBottom: lowest,
+  gap: document.documentElement.scrollHeight - innerHeight - scrollY,
   text: last.textContent,
   bottom: box.bottom,
   dock: bar.getBoundingClientRect().top,
@@ -219,17 +226,56 @@ def follow(driver: Marionette, base: str, tab: Tab, rig: Rig, home: Path) -> lis
 
 
 def asked(driver: Marionette, base: str, tab: Tab, _rig: Rig, _home: Path) -> list[str]:
-    """An agent with a question open opens at the top, the question on the first screen."""
+    """An agent with a question open lands at the end like any other page, with the question
+    after the newest line and it and every option on the first screen, above the dock."""
     driver.send("WebDriver:Navigate", {"url": base + tab.state.path})
     seen = _wait_for(driver, tab.newest)
-    if not seen or seen.get("questionTop") is None:
-        return [f"{tab.name}: never drew its question and its newest line"]
+    if not seen or seen.get("questionTop") is None or not seen.get("options"):
+        return [f"{tab.name}: never drew its question, its options and its newest line"]
     if not seen.get("scrollable"):
         return [f"{tab.name}: fits on one screen, so it proves nothing"]
-    top, bottom = _num(seen, "questionTop"), _num(seen, "questionBottom")
-    if top >= 0 and bottom <= _num(seen, "dock"):
-        return []
-    return [f"{tab.name}: the question sits at {top:.0f}..{bottom:.0f}px, off the first screen"]
+    problems: list[str] = []
+    if _num(seen, "gap") > DRIFT:
+        problems.append(f"{tab.name}: landed {_num(seen, 'gap'):.0f}px above the end")
+    top, low = _num(seen, "questionTop"), _num(seen, "optionsBottom")
+    if not (top >= _num(seen, "under") and low <= _num(seen, "dock")):
+        problems.append(
+            f"{tab.name}: the question and its options sit at {top:.0f}..{low:.0f}px, "
+            "not all on the first screen above the dock"
+        )
+    if top < _num(seen, "bottom"):
+        problems.append(f"{tab.name}: the question sits above the newest line, not after it")
+    return problems
+
+
+JUMP = r"""
+const jump = document.getElementById("hp-jump");
+const busy = document.querySelector(".htmx-request, .htmx-swapping, .htmx-settling");
+const gap = document.documentElement.scrollHeight - innerHeight - scrollY;
+return { exists: !!jump, shown: !!jump && !jump.hidden && jump.getBoundingClientRect().height > 0,
+  busy: !!busy, gap: gap };
+"""
+
+
+def _jump(driver: Marionette) -> dict[str, object]:
+    found = driver.script(JUMP)
+    return found if isinstance(found, dict) else {}
+
+
+def waiting_pill(driver: Marionette, base: str, tab: Tab, _rig: Rig, _home: Path) -> list[str]:
+    """Scrolled up from a waiting question, the reader is offered a way back, which works."""
+    driver.send("WebDriver:Navigate", {"url": base + tab.state.path})
+    if not _wait_for(driver, tab.newest):
+        return [f"{tab.name}: never drew its newest line"]
+    if _jump(driver).get("shown"):
+        return [f"{tab.name}: offers the way to the question while the question is on screen"]
+    driver.script("window.scrollTo(0, 0);")
+    if not _until(lambda: bool(_jump(driver).get("shown"))):
+        return [f"{tab.name}: scrolled up from a waiting question, no way back to it appeared"]
+    driver.script('document.getElementById("hp-jump").click(); return true;')
+    if not _until(lambda: _num(_jump(driver), "gap") <= DRIFT and not _jump(driver).get("shown")):
+        return [f"{tab.name}: the way back to the question did not land at the end"]
+    return []
 
 
 def _tool_chat(turns: int) -> list[JsonObject]:
@@ -777,6 +823,8 @@ def _tabs() -> tuple[tuple[Tab, Callable[[Marionette, str, Tab, Rig, Path], list
         (Tab("chat scrolled up", chat, last_reply, _reply), scrolling_up(0.05, 40)),
         (Tab("chat question", asking_chat, last_reply, _say), asked),
         (Tab("pane question", asking_pane, "", _print), asked),
+        (Tab("chat question waiting", asking_chat, last_reply, _say), waiting_pill),
+        (Tab("pane question waiting", asking_pane, "", _print), waiting_pill),
     )
 
 

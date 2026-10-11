@@ -24,7 +24,6 @@
     <a class="leave agent__end" href="{{ base }}/close" {{ replace() }}>End</a>
   </p>
   {% if first %}{{ ui.banner(first.kind, first.what, first.why or none) }}{% endif %}
-  <div class="agent__answer" data-hp-topic="agent:{{ agent.session }}" hx-get="{{ base }}/answer" hx-trigger="load" hx-swap="outerHTML"></div>
   {% if tab == "pane" %}
   {# app.js shows it and remembers the choice; without script the pane just wraps. #}
   <p class="agent__columns" hidden><button type="button" class="button button--toggle" data-hp-columns aria-pressed="false">Keep the columns</button></p>
@@ -32,6 +31,10 @@
   <div id="agent-view" data-hp-poll="{{ base }}/{{ tab }}" data-hp-topic="{{ tab }}:{{ agent.session }}" hx-get="{{ base }}/{{ tab }}" hx-trigger="load" hx-target="this" hx-swap="outerHTML">
     <p class="boot" role="status">Reading&hellip;</p>
   </div>
+  {# The question is where the conversation ends, by the thumb, directly above the composer. #}
+  <div class="agent__answer" data-hp-topic="agent:{{ agent.session }}" hx-get="{{ base }}/answer" hx-trigger="load" hx-swap="outerHTML"></div>
+  {# app.js shows it while a question waits below a reader who scrolled up. #}
+  <button type="button" class="button jump" id="hp-jump" hidden>Question waiting <span aria-hidden="true">&darr;</span></button>
   <div hx-get="{{ base }}/compose" hx-trigger="load" hx-swap="outerHTML"></div>
 </main>
 {% endblock %}
