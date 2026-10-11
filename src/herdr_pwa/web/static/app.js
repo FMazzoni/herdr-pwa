@@ -207,6 +207,7 @@
     var above = bar ? bar.getBoundingClientRect().bottom : 0;
     if (top < above || top > window.innerHeight * 0.6) {
       banner.scrollIntoView({ block: "start" });
+      ownScroll();
     }
   }
 
@@ -450,8 +451,8 @@
     var covered = view ? Math.max(0, Math.round(window.innerHeight - view.height - view.offsetTop)) : 0;
     var height = bar.offsetHeight;
     var moved = covered !== dockedKb || height !== dockedH;
-    // Measured before the dock moves: a reader at the end stays there as the keyboard opens.
-    var wasEnd = moved && atEnd();
+    // A pinned reader stays at the end as the keyboard opens or the dock grows.
+    var wasEnd = moved && pinned;
     dockedKb = covered;
     dockedH = height;
     root.style.setProperty("--kb", covered + "px");
@@ -557,16 +558,25 @@
     }
   });
 
-  /* ---- Chat and Pane open on their newest line and follow it only while the reader is there ----
+  /* ---- Chat and Pane open on their newest line and follow it only while the reader is pinned ----
    * Both read oldest first, so the end of the page is the newest turn or terminal line, just
-   * above the dock. Whether to follow is decided before each swap, from where the reader is
-   * then; a reader who scrolled up keeps what they are reading where it was. A page that opens
-   * on a question stays at the top, where the question is, until the reader moves. */
-  // How far under the dock's top edge the newest line may end and still count as the end.
-  var END_SLACK = 120;
+   * above the dock, and a question the agent asks sits after that, where the thumb is. Pinned is
+   * a state, not a position: set on landing at the end, cleared by a scroll of the reader's that
+   * leaves the end, and set again only when the reader reaches the very end themselves or sends.
+   * A pinned page follows the end; any other keeps what the reader is reading where it was. */
+  // How close to the very bottom a reader's own scroll must come to pin the page again.
+  var BOTTOM_PX = 2;
+  // A redraw waits until the reader's scroll has been still this long, and no finger is down.
+  var IDLE_MS = 250;
+  var pinned = true;
   var swapEnd = false;
   var swapMark = null;
-  var opening = true;
+  // Where the page was last left, by the reader or by this script; a scroll to elsewhere is the reader's.
+  var lastY = window.scrollY;
+  var touching = false;
+  var readerScrolledAt = 0;
+  var deferred = [];
+  var idleTimer = 0;
 
   // A chat turn, or a line of the terminal mirror (its status strip is not scrollback).
   var READ_UNITS = "#agent-view .turn, #agent-view > .pane:not(.pane--status) > .pane__line";
@@ -577,15 +587,13 @@
     return document.querySelectorAll(READ_UNITS);
   }
 
-  function dockTop() {
-    var bar = document.getElementById("composer");
-    return bar ? bar.getBoundingClientRect().top : window.innerHeight;
+  function atBottom() {
+    return root.scrollHeight - window.innerHeight - window.scrollY <= BOTTOM_PX;
   }
 
-  function atEnd() {
-    var turns = readUnits();
-    var last = turns[turns.length - 1];
-    return !last || last.getBoundingClientRect().bottom <= dockTop() + END_SLACK;
+  // This script moved the page: the scroll event that follows is not the reader's.
+  function ownScroll() {
+    lastY = window.scrollY;
   }
 
   function asking() {
@@ -593,9 +601,30 @@
     return !!(region && !region.classList.contains("answer--quiet"));
   }
 
+  /* The end, unless a waiting question is taller than the room between the bar and the dock:
+   * then its top, just under the bar, so the question and its first options show and Interrupt
+   * waits below. The bar is measured, since what it holds varies by page. */
+  function endY() {
+    var end = root.scrollHeight - window.innerHeight;
+    var region = document.getElementById("answer");
+    if (!region || !asking()) {
+      return end;
+    }
+    var bar = document.getElementById("composer");
+    var room = (bar ? bar.getBoundingClientRect().top : window.innerHeight) - barBottom();
+    if (region.getBoundingClientRect().height <= room) {
+      return end;
+    }
+    var asked = region.querySelector(".answer__question, .option, .button--option") || region;
+    return Math.min(end, window.scrollY + asked.getBoundingClientRect().top - barBottom());
+  }
+
+  // Pinned only if this actually reached the end; a tall question's top is not the end.
   function toEnd() {
-    if (readUnits().length && !(opening && asking())) {
-      window.scrollTo(0, root.scrollHeight);
+    if (readUnits().length) {
+      window.scrollTo(0, endY());
+      ownScroll();
+      pinned = atBottom();
     }
   }
 
@@ -642,7 +671,82 @@
     }
     if (best !== -1) {
       window.scrollBy(0, units[best].getBoundingClientRect().top - held.top);
+      ownScroll();
     }
+  }
+
+  /* Only the reader moves the pin: a scroll this script did not make pins the page if it ends at
+   * the very end and unpins it anywhere else, down as well as up, since a reader who opened a
+   * tool's output scrolls down into it. A page that shrank under a pinned reader stays pinned. */
+  window.addEventListener("scroll", function () {
+    var y = window.scrollY;
+    if (y === lastY) {
+      return;
+    }
+    lastY = y;
+    readerScrolledAt = Date.now();
+    pinned = atBottom();
+  }, { passive: true });
+
+  // Opening a fold at the end pushes the end away: the reader is reading the fold now.
+  document.addEventListener("toggle", function (event) {
+    var details = event.target;
+    if (details.open && details.closest && details.closest("#agent-view") && !atBottom()) {
+      pinned = false;
+    }
+  }, true);
+
+  document.addEventListener("touchstart", function () {
+    touching = true;
+  }, { capture: true, passive: true });
+  ["touchend", "touchcancel"].forEach(function (name) {
+    document.addEventListener(name, function (event) {
+      touching = event.touches.length > 0;
+      // Momentum runs on after the finger lifts; its scroll events keep the redraw waiting.
+      readerScrolledAt = Date.now();
+    }, { capture: true, passive: true });
+  });
+
+  function readerBusy() {
+    return touching || Date.now() - readerScrolledAt < IDLE_MS;
+  }
+
+  // Each region whose redraw waited is fetched afresh once the reader is still.
+  function redrawWhenStill() {
+    window.clearTimeout(idleTimer);
+    idleTimer = window.setTimeout(function () {
+      idleTimer = 0;
+      if (readerBusy()) {
+        redrawWhenStill();
+        return;
+      }
+      var ids = deferred;
+      deferred = [];
+      ids.forEach(function (id) {
+        var node = document.getElementById(id);
+        if (node && typeof window.htmx !== "undefined") {
+          window.htmx.ajax("GET", node.getAttribute("data-hp-poll"), { target: node, swap: "outerHTML" });
+        }
+      });
+    }, IDLE_MS);
+  }
+
+  /* Never redraw under a finger or a running scroll: a programmatic scroll then fights the
+   * reader's (iOS drops momentum). The answer is dropped and fetched afresh once still. */
+  function deferring(detail) {
+    var target = detail.target;
+    if (!target || !target.hasAttribute("data-hp-poll") || !readerBusy()) {
+      return false;
+    }
+    if (target.id !== "agent-view" && target.id !== "answer") {
+      return false;
+    }
+    detail.shouldSwap = false;
+    if (deferred.indexOf(target.id) === -1) {
+      deferred.push(target.id);
+    }
+    redrawWhenStill();
+    return true;
   }
 
   function isRead(detail) {
@@ -662,45 +766,85 @@
       return;
     }
     if (isEarlier(event.detail)) {
-      opening = false;
+      pinned = false;
       swapEnd = false;
       swapMark = mark(EARLIER_ANCHORS) || mark();
       return;
     }
+    if (deferring(event.detail)) {
+      return;
+    }
     // Only the agent view follows its end; the feed is read from the top.
-    swapEnd = !!document.getElementById("agent-view") && atEnd();
+    swapEnd = !!document.getElementById("agent-view") && pinned;
     swapMark = swapEnd ? null : mark();
   });
 
   document.addEventListener("htmx:afterSwap", function (event) {
-    if (!isRead(event.detail)) {
-      return;
+    if (isRead(event.detail)) {
+      if (swapEnd) {
+        toEnd();
+      } else if (swapMark) {
+        hold(swapMark);
+      }
+      swapMark = null;
     }
-    if (opening && asking()) {
-      window.scrollTo(0, 0);
-    } else if (swapEnd) {
-      toEnd();
-    } else if (swapMark) {
-      hold(swapMark);
-    }
-    swapMark = null;
-    // The page has opened once both the view and the answer region have arrived.
-    if (document.getElementById("answer") && readUnits().length) {
-      opening = false;
-    }
+    // A swap that shortened the page moved it too, and that move was not the reader's.
+    ownScroll();
   });
 
-  function opened() {
-    opening = false;
+  /* ---- "Question waiting" floats above the dock while the question is below the reader ----
+   * Shown only when the reader has scrolled away from a question still off screen; a tap takes
+   * them back to the end and pins it. Said once per question, never on every scroll. */
+  var jump = document.getElementById("hp-jump");
+  var jumpSaid = "";
+
+  function questionBelow() {
+    var region = document.getElementById("answer");
+    if (pinned || !asking() || region.querySelector(".banner[data-hp-sent]")) {
+      return false;
+    }
+    var bar = document.getElementById("composer");
+    var dock = bar ? bar.getBoundingClientRect().top : window.innerHeight;
+    // Waiting below until the question itself (else the region's first line) is wholly in view.
+    var asked = region.querySelector(".answer__question, .option, .button--option") || region;
+    return asked.getBoundingClientRect().bottom > dock;
   }
-  ["pointerdown", "wheel", "keydown"].forEach(function (name) {
-    document.addEventListener(name, opened, { capture: true, passive: true });
-  });
+
+  function showJump() {
+    if (!jump) {
+      return;
+    }
+    var below = questionBelow();
+    jump.hidden = !below;
+    var question = below ? document.querySelector("#answer .answer__question") : null;
+    var key = question ? words(question) : below ? "waiting" : "";
+    if (below && key !== jumpSaid) {
+      say("A question is waiting at the end.");
+    }
+    if (below) {
+      jumpSaid = key;
+    }
+  }
+
+  if (jump) {
+    window.addEventListener("scroll", showJump, { passive: true });
+    document.addEventListener("htmx:afterSettle", showJump);
+    jump.addEventListener("click", function () {
+      pinned = true;
+      toEnd();
+      showJump();
+      var first = document.querySelector("#answer button, #answer a[href]");
+      if (first) {
+        first.focus({ preventScroll: true });
+      }
+    });
+  }
 
   /* Sending is reading the end: the reply lands there. */
   document.addEventListener("htmx:beforeRequest", function (event) {
     var elt = event.detail.elt;
     if (elt && elt.id === "composer") {
+      pinned = true;
       toEnd();
     }
   });

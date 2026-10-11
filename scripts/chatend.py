@@ -1,13 +1,17 @@
 """Drive the Chat and Pane tabs in headless Firefox: each opens on its newest line, follows new
 lines while the reader is at the end, and leaves a reader who scrolled up where they were. An
-agent that is asking opens at the top instead, with its question on the first screen. A tool's
+agent that is asking lands at the end too, its question after the newest line and on the first
+screen, and a reader who scrolled up from it is offered the way back. A tool's
 result the reader opened stays open across a poll, and the page does not move under them. A
 burst of tool calls lands folded, its failure in plain sight, and a fold the reader opened
 stays open while calls are added to it.
 
 The chat is paged by messages and live over an event stream: a tool-heavy transcript opens on
 twenty messages, "Load earlier" lands the page above without moving the reader, one change is
-one refresh, and a lost stream falls back to polling and then recovers."""
+one refresh, and a lost stream falls back to polling and then recovers.
+
+A reader who scrolls up from the end in small steps while the agent works is never pulled back
+to it, and the line they are reading stays where it was across every redraw."""
 
 import json
 import time
@@ -30,6 +34,7 @@ from tests.catalogue import (
     herd,
     long_chat,
     long_pane,
+    pick,
     runner,
     tool_heavy_chat,
 )
@@ -65,7 +70,13 @@ if (!last || !bar || !answer || busy || document.readyState !== "complete") retu
 const box = last.getBoundingClientRect();
 const question = document.querySelector("#answer .answer__question");
 const asked = question ? question.getBoundingClientRect() : null;
+const options = [...document.querySelectorAll("#answer .option, #answer .button--option")];
+const lowest = Math.max(0, ...options.map((o) => o.getBoundingClientRect().bottom));
 return {
+  under: document.querySelector(".topbar").getBoundingClientRect().bottom,
+  options: options.length,
+  optionsBottom: lowest,
+  gap: document.documentElement.scrollHeight - innerHeight - scrollY,
   text: last.textContent,
   bottom: box.bottom,
   dock: bar.getBoundingClientRect().top,
@@ -140,6 +151,10 @@ class Tab:
     state: State
     newest: str
     grow: Callable[[Rig, Path, int], str]
+    width: int = WIDTH
+    height: int = HEIGHT
+    # iPhone Text Size, as a multiple of the default root.
+    scale: float = 1.0
 
 
 def _probe(driver: Marionette) -> dict[str, object]:
@@ -216,17 +231,102 @@ def follow(driver: Marionette, base: str, tab: Tab, rig: Rig, home: Path) -> lis
 
 
 def asked(driver: Marionette, base: str, tab: Tab, _rig: Rig, _home: Path) -> list[str]:
-    """An agent with a question open opens at the top, the question on the first screen."""
+    """An agent with a question open lands at the end like any other page, with the question
+    after the newest line and it and every option on the first screen, above the dock."""
     driver.send("WebDriver:Navigate", {"url": base + tab.state.path})
     seen = _wait_for(driver, tab.newest)
-    if not seen or seen.get("questionTop") is None:
-        return [f"{tab.name}: never drew its question and its newest line"]
+    if not seen or seen.get("questionTop") is None or not seen.get("options"):
+        return [f"{tab.name}: never drew its question, its options and its newest line"]
     if not seen.get("scrollable"):
         return [f"{tab.name}: fits on one screen, so it proves nothing"]
-    top, bottom = _num(seen, "questionTop"), _num(seen, "questionBottom")
-    if top >= 0 and bottom <= _num(seen, "dock"):
+    problems: list[str] = []
+    if _num(seen, "gap") > DRIFT:
+        problems.append(f"{tab.name}: landed {_num(seen, 'gap'):.0f}px above the end")
+    top, low = _num(seen, "questionTop"), _num(seen, "optionsBottom")
+    if not (top >= _num(seen, "under") and low <= _num(seen, "dock")):
+        problems.append(
+            f"{tab.name}: the question and its options sit at {top:.0f}..{low:.0f}px, "
+            "not all on the first screen above the dock"
+        )
+    if top < _num(seen, "bottom"):
+        problems.append(f"{tab.name}: the question sits above the newest line, not after it")
+    return problems
+
+
+GROW_TEXT = r"""
+const root = document.documentElement;
+root.style.fontSize = parseFloat(getComputedStyle(root).fontSize) * arguments[0] + "px";
+return true;
+"""
+# Where the question's first line sits, and whether the region is taller than the room for it.
+TALL = r"""
+const busy = document.querySelector(".htmx-request, .htmx-swapping, .htmx-settling");
+const question = document.querySelector("#answer .answer__question");
+const region = document.getElementById("answer");
+if (busy || !question || !region) return null;
+const under = document.querySelector(".topbar").getBoundingClientRect().bottom;
+const dock = document.getElementById("composer").getBoundingClientRect().top;
+const line = parseFloat(getComputedStyle(question).lineHeight) || 24;
+return { top: question.getBoundingClientRect().top, line: line, under: under, dock: dock,
+  tall: region.getBoundingClientRect().height > dock - under };
+"""
+
+
+def _tall(driver: Marionette) -> dict[str, object]:
+    found = driver.script(TALL)
+    return found if isinstance(found, dict) else {}
+
+
+def tall_question(driver: Marionette, base: str, tab: Tab, _rig: Rig, _home: Path) -> list[str]:
+    """A question taller than the room between the bar and the dock lands with its first line
+    just under the bar, not at the very end with only Interrupt showing."""
+    driver.send("WebDriver:Navigate", {"url": base + tab.state.path})
+    if not _until(lambda: bool(_tall(driver))):
+        return [f"{tab.name}: never drew its question"]
+    if tab.scale != 1.0:
+        # The dock grows with the text, and the page lands again for its new height.
+        driver.script(GROW_TEXT, tab.scale)
+    time.sleep(SETTLE_SECONDS)
+    seen: dict[str, object] = {}
+    if not _until(lambda: bool(seen.update(_tall(driver)) or seen)):
+        return [f"{tab.name}: never settled"]
+    if not seen.get("tall"):
+        return [f"{tab.name}: the answer fits between the bar and the dock, so it proves nothing"]
+    top, under, dock = _num(seen, "top"), _num(seen, "under"), _num(seen, "dock")
+    if top >= under - DRIFT and top + _num(seen, "line") <= dock:
         return []
-    return [f"{tab.name}: the question sits at {top:.0f}..{bottom:.0f}px, off the first screen"]
+    where = f"between the bar ({under:.0f}px) and the dock ({dock:.0f}px)"
+    return [f"{tab.name}: the question's first line sits at {top:.0f}px, not {where}"]
+
+
+JUMP = r"""
+const jump = document.getElementById("hp-jump");
+const busy = document.querySelector(".htmx-request, .htmx-swapping, .htmx-settling");
+const gap = document.documentElement.scrollHeight - innerHeight - scrollY;
+return { exists: !!jump, shown: !!jump && !jump.hidden && jump.getBoundingClientRect().height > 0,
+  busy: !!busy, gap: gap };
+"""
+
+
+def _jump(driver: Marionette) -> dict[str, object]:
+    found = driver.script(JUMP)
+    return found if isinstance(found, dict) else {}
+
+
+def waiting_pill(driver: Marionette, base: str, tab: Tab, _rig: Rig, _home: Path) -> list[str]:
+    """Scrolled up from a waiting question, the reader is offered a way back, which works."""
+    driver.send("WebDriver:Navigate", {"url": base + tab.state.path})
+    if not _wait_for(driver, tab.newest):
+        return [f"{tab.name}: never drew its newest line"]
+    if _jump(driver).get("shown"):
+        return [f"{tab.name}: offers the way to the question while the question is on screen"]
+    driver.script("window.scrollTo(0, 0);")
+    if not _until(lambda: bool(_jump(driver).get("shown"))):
+        return [f"{tab.name}: scrolled up from a waiting question, no way back to it appeared"]
+    driver.script('document.getElementById("hp-jump").click(); return true;')
+    if not _until(lambda: _num(_jump(driver), "gap") <= DRIFT and not _jump(driver).get("shown")):
+        return [f"{tab.name}: the way back to the question did not land at the end"]
+    return []
 
 
 def _tool_chat(turns: int) -> list[JsonObject]:
@@ -613,6 +713,132 @@ def falls_back(
     return walk
 
 
+# A reader scrolling up from the end in small steps while the agent works and the region is
+# redrawn under them. Each step is a user scroll; the walk counts every return to the end and
+# measures, across each redraw, the line the reader was reading.
+STEP = 10
+REDRAW_SECONDS = 0.3
+SCROLL_UP = r"""
+const [step, every, count] = arguments;
+const walk = { steps: 0, swaps: [], atEnd: 0, done: false };
+window.__hpWalk = walk;
+const units = () => [...document.querySelectorAll(
+  "#agent-view .turn, #agent-view > .pane:not(.pane--status) > .pane__line")];
+const under = () => document.querySelector(".topbar").getBoundingClientRect().bottom;
+const gap = () => document.documentElement.scrollHeight - innerHeight - scrollY;
+let held = null;
+document.addEventListener("htmx:beforeSwap", (event) => {
+  held = null;
+  if (!walk.steps || !event.detail.target || event.detail.target.id !== "agent-view") return;
+  const first = units().find((u) => u.getBoundingClientRect().top >= under());
+  held = first ? { text: first.textContent, top: first.getBoundingClientRect().top } : null;
+});
+document.addEventListener("htmx:afterSwap", () => {
+  if (!held) return;
+  const same = units().find((u) => u.textContent === held.text);
+  walk.swaps.push(same ? Math.round(same.getBoundingClientRect().top - held.top) : null);
+  held = null;
+});
+addEventListener("scroll", () => { if (walk.steps && gap() <= 2) walk.atEnd += 1; });
+const timer = setInterval(() => {
+  scrollBy(0, -step);
+  walk.steps += 1;
+  if (walk.steps >= count) { clearInterval(timer); walk.done = true; }
+}, every);
+return true;
+"""
+READ_WALK = r"""
+const walk = window.__hpWalk || {};
+const gap = document.documentElement.scrollHeight - innerHeight - scrollY;
+return { done: !!walk.done, steps: walk.steps || 0, swaps: walk.swaps || [],
+  atEnd: walk.atEnd || 0, gap: gap };
+"""
+
+
+def _walked(driver: Marionette) -> dict[str, object]:
+    found = driver.script(READ_WALK)
+    return found if isinstance(found, dict) else {}
+
+
+def _redraw_while(driver: Marionette, tab: Tab, rig: Rig, home: Path) -> int:
+    """Redraw the region on a cadence until the reader's walk is done; the last count drawn."""
+    n = 1
+    deadline = time.monotonic() + WAIT_SECONDS
+    while not _walked(driver).get("done") and time.monotonic() < deadline:
+        tab.grow(rig, home, n)
+        driver.script(POKE)
+        time.sleep(REDRAW_SECONDS)
+        n += 1
+    return n
+
+
+def _poked(driver: Marionette, newest: str) -> bool:
+    if newest in str(_probe(driver).get("text", "")):
+        return True
+    driver.script(POKE)
+    time.sleep(REDRAW_SECONDS)
+    return False
+
+
+def _reply(_rig: Rig, home: Path, n: int) -> str:
+    """The agent appends one more reply, the way it writes; return its text."""
+    return _append(home, f"Appended reply number {n}.", f"app{n}")
+
+
+def _walk_problems(name: str, walk: dict[str, object], travelled: int) -> list[str]:
+    problems: list[str] = []
+    if walk.get("atEnd"):
+        problems.append(f"{name}: a redraw pulled the reader back to the end {walk['atEnd']}x")
+    swaps = walk.get("swaps")
+    moved = [s for s in swaps if s is None or abs(s) > DRIFT] if isinstance(swaps, list) else []
+    if moved:
+        problems.append(f"{name}: a redraw moved the line being read by {moved}px")
+    if _num(walk, "gap") < travelled / 2:
+        problems.append(
+            f"{name}: the reader ended {_num(walk, 'gap'):.0f}px from the end "
+            f"after scrolling {travelled}px up"
+        )
+    return problems
+
+
+def scrolling_up(
+    every: float, count: int
+) -> Callable[[Marionette, str, Tab, Rig, Path], list[str]]:
+    """The walk for one cadence: ``count`` steps up, one every ``every`` seconds."""
+
+    def walk(driver: Marionette, base: str, tab: Tab, rig: Rig, home: Path) -> list[str]:
+        """Scroll up from the end in small steps while the region is redrawn: never pulled
+        back, and the line being read stays where it was across every redraw."""
+        driver.send("WebDriver:Navigate", {"url": base + tab.state.path})
+        seen = _wait_for(driver, tab.newest)
+        if not seen or not seen.get("scrollable"):
+            return [f"{tab.name}: never drew a page taller than the screen"]
+        driver.script(SCROLL_UP, STEP, round(every * 1000), count)
+        n = _redraw_while(driver, tab, rig, home)
+        if not _walked(driver).get("done"):
+            return [f"{tab.name}: the reader's walk never finished"]
+        newest = tab.grow(rig, home, n)
+        # A poke while a redraw is in flight is dropped (htmx's default sync), so poke until
+        # the newest line is drawn.
+        if not _until(lambda: _poked(driver, newest)) or not _wait_for(driver, newest):
+            return [f"{tab.name}: the redraw after the reader stopped never landed"]
+        walk = _walked(driver)
+        if not walk.get("swaps"):
+            return [f"{tab.name}: no redraw landed while the reader was scrolled up"]
+        return _walk_problems(tab.name, walk, STEP * count)
+
+    return walk
+
+
+def _scroll_pane(rig: Rig, _home: Path, n: int) -> str:
+    """The terminal scrolls: its oldest line goes and a newer one arrives; return that one."""
+    text = "".join(
+        f"\x1b[32m$\x1b[0m step {k:03d}: applied to the cluster\n" for k in range(n, n + LINES)
+    )
+    rig.wire.replies[READ] = read_frame(text)
+    return f"step {n + LINES - 1:03d}"
+
+
 def _tabs() -> tuple[tuple[Tab, Callable[[Marionette, str, Tab, Rig, Path], list[str]]], ...]:
     blocked = runner(lambda: herd(**BLOCKED), long_pane(LINES) + capture(MENU))
     chat = State("chat", f"{AGENT}?tab=chat", "", runner(snapshot_frame), long_chat(TURNS))
@@ -620,6 +846,8 @@ def _tabs() -> tuple[tuple[Tab, Callable[[Marionette, str, Tab, Rig, Path], list
     asking_chat = State("asking chat", chat.path, "", blocked, long_chat(TURNS))
     asking_pane = State("asking pane", pane.path, "", blocked)
     last_reply = f"Reply {TURNS - 1}:"
+    [plan] = pick(["agent-answer-plan"])
+    [ticks] = pick(["agent-answer-multiselect"])
     last_line = f"step {LINES - 1:03d}"
     tool = State("tool result", chat.path, "", runner(snapshot_frame), _tool_chat(TURNS))
     folds = State("tool burst", chat.path, "", runner(snapshot_frame), _burst_chat(BURST))
@@ -642,8 +870,19 @@ def _tabs() -> tuple[tuple[Tab, Callable[[Marionette, str, Tab, Rig, Path], list
         (Tab("tool result", tool, "Reply after the tests", _say), kept_open),
         (Tab("chat end", chat, last_reply, _say), follow),
         (Tab("pane end", pane, last_line, _print), follow),
+        (Tab("pane nudged up", pane, last_line, _scroll_pane), scrolling_up(0.4, 10)),
+        (Tab("pane scrolled up", pane, last_line, _scroll_pane), scrolling_up(0.05, 40)),
+        (Tab("chat nudged up", chat, last_reply, _reply), scrolling_up(0.4, 10)),
+        (Tab("chat scrolled up", chat, last_reply, _reply), scrolling_up(0.05, 40)),
         (Tab("chat question", asking_chat, last_reply, _say), asked),
         (Tab("pane question", asking_pane, "", _print), asked),
+        (Tab("chat question waiting", asking_chat, last_reply, _say), waiting_pill),
+        (Tab("pane question waiting", asking_pane, "", _print), waiting_pill),
+        (Tab("tall plan", plan, "", _print, width=320, height=568), tall_question),
+        (
+            Tab("tall multiselect", ticks, "", _print, width=430, height=932, scale=2.0),
+            tall_question,
+        ),
     )
 
 
@@ -667,7 +906,7 @@ def run(
         rig = build(tab.state, home)
         mount(rig.http.app)
         first = driver.handles()[0]
-        phone_window(driver, WIDTH, HEIGHT)
+        phone_window(driver, tab.width, tab.height)
         try:
             problems += walk(driver, base, tab, rig, home)
         finally:

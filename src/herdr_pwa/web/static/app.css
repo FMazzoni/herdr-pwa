@@ -336,11 +336,9 @@ html { -webkit-tap-highlight-color: transparent; }
 .agent__status { color: var(--ink); }
 
 /* The agent page is one column. The composer is docked to the bottom, so the page reserves
-   its height; a quiet answer (keys, nothing asked) moves below the view, next to the dock. */
+   its height; the answer region, asked or quiet, follows the view, next to the dock. */
 .agent--docked { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-5); padding-top: var(--space-5); padding-bottom: calc(var(--dock-h) + var(--space-8)); }
 .agent--docked > *, .agent--docked > .answer { margin: 0; }
-.agent--docked > #agent-view, .agent__columns { order: 1; }
-.agent--docked > .answer--quiet { order: 2; }
 .agent__meta--line { flex-wrap: nowrap; overflow-wrap: normal; }
 .agent__facts { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .agent__fact::before { content: "\00B7"; margin: 0 var(--space-4); }
@@ -678,6 +676,21 @@ textarea { resize: vertical; min-height: 4.5em; }
   border-top: var(--line-1) solid var(--rule);
 }
 .is-keyboard .composer { padding-bottom: var(--space-4); }
+/* Floats just above the dock, and above the keyboard with it, while a question waits below. */
+.jump {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--kb) + var(--dock-h) + var(--space-4));
+  z-index: 2;
+  transform: translateX(-50%);
+  min-height: var(--tap);
+  padding-inline: var(--space-6);
+  color: var(--accent);
+  border-color: var(--accent);
+  border-radius: var(--radius-pill);
+  white-space: nowrap;
+}
+.jump[hidden] { display: none; }
 .composer .banner { margin: 0; }
 /* The button drops under the field once both no longer fit, which only the largest Text Size does. */
 .composer__row { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: end; gap: var(--space-4); }
