@@ -1,14 +1,16 @@
 """Every named screen the app can draw, each over its own fake runner, for gates and shots alike."""
 
+import json
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Final
 
 from pydantic import JsonValue
 
 from herdr_pwa.engine.transport import EngineUnavailable
-from herdr_pwa.jsontypes import JsonObject, as_object
+from herdr_pwa.jsontypes import JsonObject, as_object, loads
 from tests.filefakes import make_repo, stand_in
 from tests.webfakes import (
     AGENT_GET,
@@ -341,6 +343,76 @@ def tool_heavy_chat(messages: int = 60, calls: int = 6) -> list[JsonObject]:
                 _tool_record("user", f"r{n}", [result]),
             ]
     return records
+
+
+# The stats strip's states write their stamps a few minutes before the shot, so a running turn
+# reads as one, not as the day since the fixtures were recorded.
+def _ago(minutes: float) -> str:
+    moment = datetime.now(UTC) - timedelta(minutes=minutes)
+    return moment.isoformat().replace("+00:00", "Z")
+
+
+def _spent(record: JsonObject, message: str, *, prompt: int, out: int) -> JsonObject:
+    """``record`` as an answer that carries the usage Claude Code writes beside it."""
+    body = as_object(record["message"])
+    assert body is not None
+    body.update(
+        id=message,
+        model="claude-haiku-4-5-20251001",
+        usage={
+            "input_tokens": 12,
+            "cache_creation_input_tokens": 2_400,
+            "cache_read_input_tokens": prompt - 2_412,
+            "output_tokens": out,
+        },
+    )
+    record["timestamp"] = _ago(1)
+    return record
+
+
+def usage_chat() -> list[JsonObject]:
+    """The chat fixture, its prompt sent four minutes ago and its answers carrying usage."""
+    records = _chat()
+    records[0]["timestamp"] = _ago(4)
+    _spent(records[1], "m1", prompt=118_000, out=2_100)
+    _spent(records[3], "m2", prompt=124_000, out=36_000)
+    return records
+
+
+def _usage_transcript(rig: Rig) -> None:
+    """Write the usage chat as the state is built, so its turn is four minutes old when shot."""
+    write_transcript(rig.settings.state_dir.parent / "transcripts", WORKING_SESSION, usage_chat())
+
+
+OPENCODE_STORE: Final = FIXTURES / "transcript" / "opencode"
+OPENCODE_SESSION: Final = "ses_3fd62ba5bffemIxWVhRda5wgS7"
+
+
+def _opencode_working() -> JsonObject:
+    """The working pane as an opencode agent, holding the captured opencode session."""
+    frame = snapshot_frame()
+    agent = next(a for a in agents_of(frame) if a.get("pane_id") == WORKING_PANE)
+    agent["agent"] = "opencode"
+    agent["agent_session"] = {
+        "agent": "opencode",
+        "kind": "id",
+        "source": "herdr:opencode",
+        "value": OPENCODE_SESSION,
+    }
+    return frame
+
+
+def _opencode_store(rig: Rig) -> None:
+    """The captured opencode store under the rig's transcript root, its first prompt just sent."""
+    root = rig.settings.state_dir.parent / "transcripts"
+    asked = int((datetime.now(UTC) - timedelta(minutes=6)).timestamp() * 1000)
+    for source in OPENCODE_STORE.rglob("*.json"):
+        target = root / source.relative_to(OPENCODE_STORE)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        record = as_object(loads(source.read_text()))
+        if record is not None and record.get("role") == "user":
+            record["time"] = {"created": asked}
+        target.write_text(json.dumps(record) if record is not None else source.read_text())
 
 
 def long_pane(lines: int = 120) -> str:
@@ -682,9 +754,10 @@ AGENT_PAGE: Final = (
     State(
         "agent-pane-chrome",
         f"{AGENT}?tab=pane",
-        ".mirror .pane--status",
+        ".mirror .pane",
         runner(snapshot_frame, capture(WORKING) + STATUS_TAIL),
-        title="Agent page: Pane, with the agent's status line promoted",
+        prime=_usage_transcript,
+        title="Agent page: Pane, its input box and status line gone; the strip says what they said",
     ),
     State(
         "agent-unreachable",
@@ -986,6 +1059,35 @@ FILE_REFS: Final = (
     "moved to 8088 at src/app/server.py:9. The operator notes are in docs/guide.md:3."
 )
 
+STATS: Final = (
+    State(
+        "usage-chat",
+        f"{AGENT}?tab=chat",
+        "#agent-stats .meter",
+        runner(_stressed),
+        prime=_usage_transcript,
+        title="Chat with the stats strip: model, context meter, the running turn, output",
+    ),
+    State(
+        "usage-open",
+        f"{AGENT}?tab=chat",
+        "#agent-stats details[open] .stats__rows",
+        runner(_stressed),
+        prime=_usage_transcript,
+        title="The stats strip opened: every figure named, none summed",
+        armed="#agent-stats .stats__line",
+        act=_click("#agent-stats .stats__line"),
+    ),
+    State(
+        "usage-opencode",
+        f"/agent/{OPENCODE_SESSION}?tab=chat",
+        "#agent-stats .stats__model",
+        runner(_opencode_working),
+        prime=_opencode_store,
+        title="An opencode agent's strip: a model with no known window shows tokens, not a percent",
+    ),
+)
+
 FILES: Final = (
     State(
         "files-roots",
@@ -996,6 +1098,13 @@ FILES: Final = (
         title="Files: every repository an agent is working in",
     ),
     _files("files-changes", "", ".files .flist .frow", "Files: what changed, first"),
+    State(
+        "files-none",
+        f"{AGENT}/files",
+        ".files .empty",
+        runner(snapshot_frame),
+        title="Files tab: an agent with no git repository keeps the tab and says why it is empty",
+    ),
     _files(
         "files-diff",
         "to=diff&path=src/app/server.py",
@@ -1047,7 +1156,7 @@ FILES: Final = (
     ),
 )
 
-STATES: Final = (*FEED, *AGENT_PAGE, *TAPPED, *ANSWERED, *LIFECYCLE, *FILES)
+STATES: Final = (*FEED, *AGENT_PAGE, *TAPPED, *ANSWERED, *LIFECYCLE, *STATS, *FILES)
 
 # The screens the geometry gate has always held, which every other entry is in addition to.
 GEOMETRY_CORE: Final = (
@@ -1073,6 +1182,7 @@ V2_ONLY: Final = (
     "chat-markdown",
     "chat-blocked",
     "pane-long",
+    "usage-chat",
     *(s.name for s in FILES),
 )
 
@@ -1085,10 +1195,8 @@ NOT_YET: Final[dict[str, str]] = {
     "boot": "the shell's first paint lasts until the first poll; the rig cannot hold it there",
     "chat-edit-diff": "no v2 feature yet: chat does not render an Edit's diff",
     "chat-diff-large": "no v2 feature yet: chat does not render an Edit's diff",
-    "usage-open": "no v2 feature yet: no usage panel",
-    "usage-pushed": "no v2 feature yet: no usage panel",
-    "usage-opencode": "no v2 feature yet: no usage panel",
-    "usage-unpushed": "no v2 feature yet: no usage panel",
+    "usage-pushed": "not ported: the strip reads each harness's own record, not a statusline sidecar",
+    "usage-unpushed": "not ported: the strip reads each harness's own record, not a statusline sidecar",
     "chat-may-have-moved": "no v2 feature yet: chat has no moved-transcript note",
     "agent-answer-waiting": "no v2 feature yet: the answer region does not collapse",
     "agent-answer-unearned": _SCREEN,

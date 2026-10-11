@@ -562,6 +562,31 @@ def _prompt_size(tokens: JsonObject) -> int:
     return _count(tokens, "input") + _cached(tokens, "write") + _cached(tokens, "read")
 
 
+def _clock(tally: SessionUsage, record: JsonObject) -> None:
+    """Note when *record* happened, and count it if it is a prompt, which starts a turn."""
+    times = get_object(record, "time")
+    created = _stamp(times.get("created")) if times is not None else ""
+    if created:
+        tally.last_at = created
+    if record.get("role") == "user":
+        tally.prompts += 1
+        tally.turn_started = created
+
+
+def _take(tally: SessionUsage, record: JsonObject) -> None:
+    """Fold one message record into *tally*: its time, and an answer's tokens and money."""
+    _clock(tally, record)
+    if record.get("role") != "assistant":
+        return
+    tally.cost += _spent(record)
+    tokens = get_object(record, "tokens")
+    if tokens is None:
+        return
+    # Every assistant row names both: the provider is not derivable from the model id.
+    _add(tally, tokens, ModelRef(_text(record.get("modelID")), _text(record.get("providerID"))))
+    tally.context_tokens = _prompt_size(tokens)
+
+
 def _tally(store: _Store, *, max_bytes: int) -> SessionUsage:
     """What *session* has spent, one message record at a time."""
     tally = SessionUsage()
@@ -573,19 +598,8 @@ def _tally(store: _Store, *, max_bytes: int) -> SessionUsage:
             tally.partial = True
             break
         tally.logs += 1
-        if record is None or record.get("role") != "assistant":
-            continue
-        tally.cost += _spent(record)
-        tokens = get_object(record, "tokens")
-        if tokens is None:
-            continue
-        # Every assistant row names both: the provider is not derivable from the model id.
-        _add(
-            tally,
-            tokens,
-            ModelRef(_text(record.get("modelID")), _text(record.get("providerID"))),
-        )
-        tally.context_tokens = _prompt_size(tokens)
+        if record is not None:
+            _take(tally, record)
     if not tally.models:
         # Before its first answer no message names a model, but the session row already does.
         remember(tally, store.info().model)

@@ -25,10 +25,9 @@ class Line:
 
 @dataclass(frozen=True, slots=True)
 class PaneView:
-    """One pane read, split into the three things the phone renders separately."""
+    """One pane read: the viewport, and any draft stranded in the agent's input box."""
 
     lines: list[Line]
-    status: list[list[Run]] = field(default_factory=list)
     draft: list[list[Run]] = field(default_factory=list)
     takeover: bool = False
 
@@ -597,10 +596,11 @@ def _trim_blank_edges(lines: list[list[Run]]) -> list[list[Run]]:
 
 
 def pane_view(text: str, *, strip: bool = True) -> PaneView:
-    """Turn one raw pane read into the viewport, the statusline and any stranded draft."""
+    """Turn one raw pane read into the viewport and any stranded draft."""
     lines = _tokenise(text)
     split = _split_chrome(lines)
-    body, status, prompt = split if split is not None else (lines, [], [])
+    # The statusline under the input box is dropped with it: the stats strip says what it said.
+    body, _status, prompt = split if split is not None else (lines, [], [])
     body = _strip_decoration(body) if strip else [_rstrip_line(line) for line in body]
     draft, takeover = _draft(prompt)
     return PaneView(
@@ -608,7 +608,6 @@ def pane_view(text: str, *, strip: bool = True) -> PaneView:
             Line(runs, clip=strip and _is_wide_rule(plain_text(runs)))
             for runs in _trim_blank_edges(body)
         ],
-        status=_strip_decoration(status),
         draft=draft,
         takeover=takeover,
     )

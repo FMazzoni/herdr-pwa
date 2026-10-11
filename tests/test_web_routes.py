@@ -324,9 +324,12 @@ def test_the_view_switch_lives_in_the_top_bar_and_the_title_scrolls(tmp_path: Pa
     rig = build_rig(tmp_path)
     page = rig.http.get(f"/agent/{WORKING_SESSION}?tab=pane").text
     bar = page[page.index('<header class="topbar">') : page.index("</header>")]
-    assert '<nav class="tabs" aria-label="View">' in bar
+    assert '<nav class="tabs tabs--3" aria-label="View">' in bar
     assert f'href="/agent/{WORKING_SESSION}?tab=chat" data-hp-replace' in bar
+    assert f'href="/agent/{WORKING_SESSION}/files" data-hp-replace' in bar
     assert 'aria-current="page"><span class="tab__label">Pane</span>' in bar
+    # The tab replaces the link that sat beside End; End keeps the far edge alone.
+    assert "agent__files" not in page
     main = page[page.index("<main ") :]
     assert main.index('<h1 class="agent__title">') < main.index('class="agent__meta')
     assert "<h1" not in bar

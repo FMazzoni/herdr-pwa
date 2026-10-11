@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% import "_agent.html" as agent_ui %}
+{% block title %}Files &mdash; herdr{% endblock %}
+{% block brand %}{% endblock %}
+{# The tab stays, so the bar never changes shape; it says why there is nothing under it. #}
+{% block topbar %}{{ agent_ui.bar(agent, "files") }}{% endblock %}
+{% block strip %}{% include "stats.html" %}{% endblock %}
+{% block body %}
+<main class="feed-host files">
+  <h1 class="files__title">Files</h1>
+  <p class="empty">This agent is not working in a git repository, so there are no files to show here.</p>
+</main>
+{% endblock %}

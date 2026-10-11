@@ -15,16 +15,19 @@ from starlette.types import ASGIApp
 
 from herdr_pwa.engine.client import HerdrClient
 from herdr_pwa.engine.config import EngineSettings
+from herdr_pwa.files.roots import root_id
 from herdr_pwa.settings import Settings
 from herdr_pwa.web.app import create_app
 from tests._fake_herd import P3, P5, S1, S2, FakeHerd
+from tests.filefakes import make_repo
 
 WAIT_SECONDS = 15.0
 # Spelled as the templates' urlencode spells it, which is also what location.pathname reports.
 DOOR = f"/starting/{quote(P5)}"
 LOGIN = "backnav@example.com"
-# Chat | Pane lives in the top bar, which never scrolls away; a tap is made where it really is.
+# Chat | Pane | Files lives in the top bar, which never scrolls away; a tap is made where it is.
 TABS = "header.topbar nav.tabs"
+FILES_ON = f"{TABS} .tab--on[href$='/files']"
 
 LOCATION = r"""
 const ready = arguments[0];
@@ -211,10 +214,34 @@ def door(walk: Walk, fake: FakeHerd) -> None:
     walk.back_to_feed("the door forwarded")
 
 
-WALKS: tuple[tuple[str, Callable[[Walk, FakeHerd], None]], ...] = (
-    ("tabs", lambda walk, _fake: tabs_and_end(walk)),
-    ("write", lambda walk, _fake: write_sheet(walk)),
-    ("door", door),
+def files_tab(walk: Walk, fake: FakeHerd, home: Path) -> None:
+    """The Files tab, a change, its file and back to the tab: every step replaces its entry."""
+    repo = make_repo(home / "repo")
+    fake.put(P3, S1, cwd=str(repo), foreground_cwd=str(repo))
+    walk.home()
+    agent = f"/agent/{S1}"
+    base = f"/files/{root_id(repo)}"
+    walk.click(f'a.card__link[href="{agent}"]')
+    walk.depth(walk.wait(agent, TABS), 1, "opening an agent")
+    walk.click(f'{TABS} a.tab[href$="/files"]')
+    # The tab opens on Changes, under the agent's own bar with its Files tab lit.
+    walk.depth(walk.wait(base, FILES_ON), 1, "the Files tab")
+    walk.click('main.files .flist a.frow[href*="server.py"]')
+    walk.depth(walk.wait(f"{base}/diff", f"{FILES_ON}"), 1, "opening a change")
+    walk.click("main.files a.files__change")
+    walk.depth(walk.wait(f"{base}/file", f"{FILES_ON}"), 1, "opening the file")
+    walk.click(f"{TABS} a.tab[href$='/files']")
+    walk.depth(walk.wait(base, FILES_ON), 1, "the Files tab again, from the file")
+    walk.click(f'{TABS} a.tab[href$="?tab=chat"]')
+    walk.depth(walk.wait(agent, f"{TABS} .tab--on[href$='?tab=chat']", "?tab=chat"), 1, "Chat")
+    walk.back_to_feed("the Files tab")
+
+
+WALKS: tuple[tuple[str, Callable[[Walk, FakeHerd, Path], None]], ...] = (
+    ("tabs", lambda walk, _fake, _home: tabs_and_end(walk)),
+    ("files", files_tab),
+    ("write", lambda walk, _fake, _home: write_sheet(walk)),
+    ("door", lambda walk, fake, _home: door(walk, fake)),
 )
 
 
@@ -231,7 +258,7 @@ def run(
         walk = Walk(driver, base, f"back {name}")
         first = driver.handles()[0]
         try:
-            walk_through(walk, fake)
+            walk_through(walk, fake, home)
         finally:
             driver.send("WebDriver:CloseWindow", {})
             driver.send("WebDriver:SwitchToWindow", {"handle": first})

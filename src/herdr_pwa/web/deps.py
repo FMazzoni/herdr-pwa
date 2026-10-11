@@ -13,6 +13,7 @@ from herdr_pwa.engine.client import HerdrClient
 from herdr_pwa.engine.config import EngineSettings
 from herdr_pwa.engine.model import Snapshot
 from herdr_pwa.engine.tail import TailCache
+from herdr_pwa.engine.usage import UsageCache
 from herdr_pwa.settings import Settings
 from herdr_pwa.web.failures import PageHidden
 from herdr_pwa.web.render import Pages
@@ -37,6 +38,10 @@ class WebState:
     pacing: Pacing = field(default_factory=Pacing)
     # The viewed transcripts, held parsed so a refresh reads only what was appended.
     tails: TailCache = field(default_factory=TailCache)
+    # The viewed agents' usage tallies, grown by what their logs appended.
+    usage: UsageCache = field(default_factory=UsageCache)
+    # Wall time, for how long ago a stamp in a transcript was; injected so tests hold it still.
+    wall: Callable[[], float] = field(default=time.time)
 
     def snapshot(self) -> CachedValue[Snapshot]:
         """The shared snapshot, fetched only if nobody else is fetching it."""

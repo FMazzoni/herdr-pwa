@@ -1,7 +1,7 @@
 """The event stream: one watcher over the herd, fanned out to every open page as "this is stale".
 
 A page names the regions it shows (``feed``, ``agent:<session>``, ``chat:<session>``,
-``pane:<session>``) and is told only which of them changed. It then fetches each one through its
+``pane:<session>``, ``stats:<session>``) and is told only which of them changed. It then fetches each one through its
 own route, so every rule a swap already follows still holds; nothing rendered rides the stream.
 """
 
@@ -24,7 +24,7 @@ from herdr_pwa.web.deps import WebState
 
 log = logging.getLogger(__name__)
 
-TOPIC: Final = re.compile(r"(feed|(agent|chat|pane):[0-9A-Za-z][0-9A-Za-z_.-]{0,79})")
+TOPIC: Final = re.compile(r"(feed|(agent|chat|pane|stats):[0-9A-Za-z][0-9A-Za-z_.-]{0,79})")
 MAX_TOPICS: Final = 8
 # A transcript is found again this often, so a fork the conversation moved to is followed.
 RELOCATE_SECONDS: Final = 10.0
@@ -63,6 +63,7 @@ def herd_marks(snapshot: Snapshot, error: str = "") -> Marks:
         if agent.agent != "claude":
             # No byte frontier to watch: the screen moving is the best sign the store did.
             marks[f"chat:{agent.session}"] = (agent.status.value, agent.revision)
+            marks[f"stats:{agent.session}"] = (agent.status.value, agent.revision)
     workspaces = tuple((w.workspace_id, w.label, w.number) for w in snapshot.workspaces)
     marks["feed"] = (error, tuple(rows), workspaces)
     return marks
@@ -244,12 +245,12 @@ class Hub:
         return True
 
     def _viewed(self) -> frozenset[str]:
-        """The sessions whose chat some page is showing."""
+        """The sessions whose chat or stats some page is showing: both are read off the log."""
         return frozenset(
             t.partition(":")[2]
             for listener in self._listeners
             for t in listener.topics
-            if t.startswith("chat:")
+            if t.startswith(("chat:", "stats:"))
         )
 
     def _look(self, viewed: frozenset[str], *, fresh: bool) -> Marks:
@@ -261,7 +262,7 @@ class Hub:
         error = type(entry.error).__name__ if entry.error is not None else ""
         marks = herd_marks(snapshot, error)
         self._upstream.follow(snapshot, self._poke)
-        kinds = {str(a.session): a.agent for a in snapshot.agents if a.session}
+        kinds = {str(a.session): (a.agent, a.status.value) for a in snapshot.agents if a.session}
         marks.update(self._chats(viewed, kinds))
         return marks
 
@@ -273,12 +274,16 @@ class Hub:
             log.debug("the event watcher could not read the herd: %s", exc)
             return None
 
-    def _chats(self, viewed: frozenset[str], kinds: Mapping[str, str]) -> Marks:
+    def _chats(self, viewed: frozenset[str], kinds: Mapping[str, tuple[str, str]]) -> Marks:
         """A claude chat's mark is its transcript's identity and size: one stat, no read."""
         marks: Marks = {}
         for session in viewed:
-            if kinds.get(session) == "claude":
-                marks[f"chat:{session}"] = self._stat(session)
+            kind, status = kinds.get(session, ("", ""))
+            if kind == "claude":
+                stat = self._stat(session)
+                marks[f"chat:{session}"] = stat
+                # The strip also says whether a turn is running, which the log alone cannot.
+                marks[f"stats:{session}"] = (status, stat)
         for gone in set(self._watches) - viewed:
             del self._watches[gone]
         return marks

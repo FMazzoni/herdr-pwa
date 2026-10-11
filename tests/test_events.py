@@ -50,6 +50,7 @@ def _snapshot(**edits: Mapping[str, str | int]) -> Snapshot:
 def test_only_well_formed_topics_are_kept() -> None:
     asked = ["feed", f"chat:{WORKING_SESSION}", "chat:../../etc", "agent:", "nope", "pane:a b"]
     assert topics_of(asked) == {"feed", f"chat:{WORKING_SESSION}"}
+    assert topics_of([f"stats:{WORKING_SESSION}"]) == {f"stats:{WORKING_SESSION}"}
     assert len(topics_of([f"agent:s{n}" for n in range(40)])) == 8
 
 
@@ -207,6 +208,34 @@ async def _rest(stream: AsyncIterator[bytes]) -> AsyncIterator[str]:
                 yield line[6:]
 
 
+def test_an_appended_transcript_is_stale_for_the_stats_strip_too(tmp_path: Path) -> None:
+    """The strip sums the log, so a page showing only the strip, as on Pane, is still told."""
+    write_transcript(tmp_path / "transcripts", WORKING_SESSION, long_chat(6))
+    hub, _rig = _hub(tmp_path)
+    log = next((tmp_path / "transcripts").rglob(f"{WORKING_SESSION}.jsonl"))
+    topic = f"stats:{WORKING_SESSION}"
+
+    async def scenario() -> list[str]:
+        listener = hub.join(frozenset({topic, f"pane:{WORKING_SESSION}"}))
+        stream = hub.stream(listener)
+        await asyncio.sleep(0.3)
+        with log.open("a") as handle:
+            handle.write(json.dumps(assistant_says("appended", uuid="z9")) + "\n")
+        heard = await _said(stream, topic)
+        await hub.close()
+        return heard
+
+    assert asyncio.run(scenario()) == [topic]
+
+
+def test_a_status_change_is_stale_for_the_strip_of_a_harness_with_no_log() -> None:
+    """A turn starting or ending moves the strip's turn time; opencode's store moves with it."""
+    kind = {"agent": "opencode"}
+    before = herd_marks(_snapshot(**{IDLE: kind}))
+    after = herd_marks(_snapshot(**{IDLE: {**kind, "agent_status": "working"}}))
+    assert f"stats:{IDLE}" in changed(before, after)
+
+
 def test_a_herd_change_reaches_the_feed_and_the_agent(tmp_path: Path) -> None:
     hub, rig = _hub(tmp_path)
 
@@ -250,4 +279,5 @@ def test_the_agent_page_names_its_topics(tmp_path: Path, tab: str) -> None:
     page = rig.http.get(f"/agent/{WORKING_SESSION}?tab={tab}").text
     assert f'data-hp-topic="agent:{WORKING_SESSION}"' in page
     assert f'data-hp-topic="{tab}:{WORKING_SESSION}"' in page
+    assert f'data-hp-topic="stats:{WORKING_SESSION}"' in page
     assert 'data-hp-fallback="20"' in page

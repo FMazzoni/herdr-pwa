@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from herdr_pwa.engine.model import Agent, as_session_id
+from herdr_pwa.engine.transport import InvalidRequest
 from herdr_pwa.files import diffs, fuzzy
 from herdr_pwa.files.git import Git, Status
 from herdr_pwa.files.reader import LocalReader, NotReadable, OutsideRoot, inside
@@ -32,7 +33,9 @@ from herdr_pwa.files.view import (
     image_type,
 )
 from herdr_pwa.web.deps import WebState, hidden_tick, viewer_guard
+from herdr_pwa.web.failures import AgentGone
 from herdr_pwa.web.herd import find_agent
+from herdr_pwa.web.routers.agent import read_stats
 
 # An open file is re-checked on disk at the feed's quiet cadence.
 WATCH_CADENCE: Final = 10
@@ -96,7 +99,10 @@ class Explorer:
 
     def page(self, name: str, root: Root, nav: Nav, view: str, **context: object) -> HTMLResponse:
         """One explorer page, with the bar, the root's status and its links."""
+        agent = self.agent(nav.back)
         shared = {
+            "agent": agent,
+            "stats": read_stats(self.web, agent) if agent is not None else None,
             "root": root,
             "nav": nav,
             "view": view,
@@ -107,6 +113,15 @@ class Explorer:
             "page_lines": PAGE_LINES,
         }
         return self.web.pages.page(name, {**shared, **context})
+
+    def agent(self, session: str) -> Agent | None:
+        """The agent whose Files tab this is, or None once it has gone."""
+        if not session:
+            return None
+        try:
+            return find_agent(self.web, session)
+        except (AgentGone, InvalidRequest):
+            return None
 
 
 def _redirect(url: str) -> RedirectResponse:
@@ -290,9 +305,14 @@ def _register_agent(router: APIRouter, explorer: Explorer) -> None:
     @router.get("/agent/{session}/files")
     def from_agent(  # pyright: ignore[reportUnusedFunction]
         session: str, path: str = "", line: int = 0, to: str = "", q: str = ""
-    ) -> RedirectResponse:
+    ) -> Response:
         agent = find_agent(explorer.web, session)
-        return _redirect(_agent_url(explorer, agent, _Ask(path, line, to, q)))
+        try:
+            return _redirect(_agent_url(explorer, agent, _Ask(path, line, to, q)))
+        except UnknownRoot:
+            # The tab stays, so the bar keeps its shape; the page says why it is empty.
+            context = {"agent": agent, "stats": read_stats(explorer.web, agent)}
+            return explorer.web.pages.page("files_none.html", context)
 
 
 @dataclass(frozen=True, slots=True)

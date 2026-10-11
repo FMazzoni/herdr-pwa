@@ -437,7 +437,7 @@ def test_an_interior_rule_is_collapsed_and_the_words_around_it_survive() -> None
 
 
 # --------------------------------------------------------------------------
-# The agent's own input box comes off, its statusline is promoted
+# The agent's own input box comes off, and its statusline with it: the stats strip replaces it
 # --------------------------------------------------------------------------
 
 # A box border as claude draws it: U+2500 across the whole pane.
@@ -459,17 +459,17 @@ def test_the_agents_input_box_is_stripped_off_the_tail() -> None:
     ]
 
 
-def test_all_the_statusline_rows_are_promoted_not_just_the_first() -> None:
+def test_every_statusline_row_comes_off_with_the_box_not_just_the_first() -> None:
     """A statusline is arbitrary command output and is routinely two or three rows."""
     rows = ("herdr-pwa [main] | ctx: 16% | 12m | Opus 5", "auto mode on", "x")
     view = pane_view("out\n" + box(status=rows))
-    assert [plain_text(line) for line in view.status] == list(rows)
+    assert [plain_text(line.runs) for line in view.lines] == ["out"]
 
 
 def test_the_statusline_is_matched_by_position_and_never_by_content() -> None:
     """A user-configured statusline is arbitrary. Nothing may be assumed about it."""
     view = pane_view("out\n" + box(status=("\U0001f984 whatever anybody configured",)))
-    assert [plain_text(line) for line in view.status] == ["\U0001f984 whatever anybody configured"]
+    assert [plain_text(line.runs) for line in view.lines] == ["out"]
 
 
 def test_a_pane_with_no_input_box_comes_back_untouched() -> None:
@@ -477,7 +477,6 @@ def test_a_pane_with_no_input_box_comes_back_untouched() -> None:
     text = "a\nb\nc"
     view = pane_view(text)
     assert [plain_text(line.runs) for line in view.lines] == ["a", "b", "c"]
-    assert view.status == []
     assert view.draft == []
 
 
@@ -493,8 +492,9 @@ def test_a_pane_with_no_input_box_comes_back_untouched() -> None:
 def test_a_partial_shape_strips_nothing(tail: str) -> None:
     """Only the WHOLE shape matches. A half-match would hide a real line."""
     view = pane_view("keep me\n" + tail)
-    assert "keep me" in [plain_text(line.runs) for line in view.lines]
-    assert view.status == []
+    kept = [plain_text(line.runs) for line in view.lines]
+    assert "keep me" in kept
+    assert kept[-1].strip() == tail.splitlines()[-1].strip()
 
 
 def test_nothing_above_the_top_border_is_ever_removed() -> None:
@@ -515,7 +515,7 @@ def test_a_heavy_or_double_rule_is_a_rule_but_not_an_input_box_border() -> None:
         rule = glyph * 158
         view = pane_view(f"keep me\n{rule}\n\u276f draft\n{rule}\n st")
         assert view.draft == [], glyph
-        assert view.status == [], glyph
+        assert "st" in [plain_text(line.runs).strip() for line in view.lines], glyph
 
 
 def test_a_wide_rule_clips_and_a_labelled_short_one_does_not() -> None:
@@ -559,7 +559,6 @@ def test_the_chrome_comes_off_in_column_faithful_mode_too() -> None:
     """`strip` is a question about LAYOUT. Where text goes is a different one."""
     view = pane_view("out\n" + box(draft="hi", status=("s",)), strip=False)
     assert [plain_text(line.runs) for line in view.lines] == ["out"]
-    assert [plain_text(line) for line in view.status] == ["s"]
     assert [plain_text(line) for line in view.draft] == ["hi"]
 
 
