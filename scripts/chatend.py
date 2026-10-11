@@ -34,6 +34,7 @@ from tests.catalogue import (
     herd,
     long_chat,
     long_pane,
+    pick,
     runner,
     tool_heavy_chat,
 )
@@ -150,6 +151,10 @@ class Tab:
     state: State
     newest: str
     grow: Callable[[Rig, Path, int], str]
+    width: int = WIDTH
+    height: int = HEIGHT
+    # iPhone Text Size, as a multiple of the default root.
+    scale: float = 1.0
 
 
 def _probe(driver: Marionette) -> dict[str, object]:
@@ -246,6 +251,52 @@ def asked(driver: Marionette, base: str, tab: Tab, _rig: Rig, _home: Path) -> li
     if top < _num(seen, "bottom"):
         problems.append(f"{tab.name}: the question sits above the newest line, not after it")
     return problems
+
+
+GROW_TEXT = r"""
+const root = document.documentElement;
+root.style.fontSize = parseFloat(getComputedStyle(root).fontSize) * arguments[0] + "px";
+return true;
+"""
+# Where the question's first line sits, and whether the region is taller than the room for it.
+TALL = r"""
+const busy = document.querySelector(".htmx-request, .htmx-swapping, .htmx-settling");
+const question = document.querySelector("#answer .answer__question");
+const region = document.getElementById("answer");
+if (busy || !question || !region) return null;
+const under = document.querySelector(".topbar").getBoundingClientRect().bottom;
+const dock = document.getElementById("composer").getBoundingClientRect().top;
+const line = parseFloat(getComputedStyle(question).lineHeight) || 24;
+return { top: question.getBoundingClientRect().top, line: line, under: under, dock: dock,
+  tall: region.getBoundingClientRect().height > dock - under };
+"""
+
+
+def _tall(driver: Marionette) -> dict[str, object]:
+    found = driver.script(TALL)
+    return found if isinstance(found, dict) else {}
+
+
+def tall_question(driver: Marionette, base: str, tab: Tab, _rig: Rig, _home: Path) -> list[str]:
+    """A question taller than the room between the bar and the dock lands with its first line
+    just under the bar, not at the very end with only Interrupt showing."""
+    driver.send("WebDriver:Navigate", {"url": base + tab.state.path})
+    if not _until(lambda: bool(_tall(driver))):
+        return [f"{tab.name}: never drew its question"]
+    if tab.scale != 1.0:
+        # The dock grows with the text, and the page lands again for its new height.
+        driver.script(GROW_TEXT, tab.scale)
+    time.sleep(SETTLE_SECONDS)
+    seen: dict[str, object] = {}
+    if not _until(lambda: bool(seen.update(_tall(driver)) or seen)):
+        return [f"{tab.name}: never settled"]
+    if not seen.get("tall"):
+        return [f"{tab.name}: the answer fits between the bar and the dock, so it proves nothing"]
+    top, under, dock = _num(seen, "top"), _num(seen, "under"), _num(seen, "dock")
+    if top >= under - DRIFT and top + _num(seen, "line") <= dock:
+        return []
+    where = f"between the bar ({under:.0f}px) and the dock ({dock:.0f}px)"
+    return [f"{tab.name}: the question's first line sits at {top:.0f}px, not {where}"]
 
 
 JUMP = r"""
@@ -795,6 +846,8 @@ def _tabs() -> tuple[tuple[Tab, Callable[[Marionette, str, Tab, Rig, Path], list
     asking_chat = State("asking chat", chat.path, "", blocked, long_chat(TURNS))
     asking_pane = State("asking pane", pane.path, "", blocked)
     last_reply = f"Reply {TURNS - 1}:"
+    [plan] = pick(["agent-answer-plan"])
+    [ticks] = pick(["agent-answer-multiselect"])
     last_line = f"step {LINES - 1:03d}"
     tool = State("tool result", chat.path, "", runner(snapshot_frame), _tool_chat(TURNS))
     folds = State("tool burst", chat.path, "", runner(snapshot_frame), _burst_chat(BURST))
@@ -825,6 +878,11 @@ def _tabs() -> tuple[tuple[Tab, Callable[[Marionette, str, Tab, Rig, Path], list
         (Tab("pane question", asking_pane, "", _print), asked),
         (Tab("chat question waiting", asking_chat, last_reply, _say), waiting_pill),
         (Tab("pane question waiting", asking_pane, "", _print), waiting_pill),
+        (Tab("tall plan", plan, "", _print, width=320, height=568), tall_question),
+        (
+            Tab("tall multiselect", ticks, "", _print, width=430, height=932, scale=2.0),
+            tall_question,
+        ),
     )
 
 
@@ -848,7 +906,7 @@ def run(
         rig = build(tab.state, home)
         mount(rig.http.app)
         first = driver.handles()[0]
-        phone_window(driver, WIDTH, HEIGHT)
+        phone_window(driver, tab.width, tab.height)
         try:
             problems += walk(driver, base, tab, rig, home)
         finally:

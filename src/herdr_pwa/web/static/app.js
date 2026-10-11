@@ -601,10 +601,30 @@
     return !!(region && !region.classList.contains("answer--quiet"));
   }
 
+  /* The end, unless a waiting question is taller than the room between the bar and the dock:
+   * then its top, just under the bar, so the question and its first options show and Interrupt
+   * waits below. The bar is measured, since what it holds varies by page. */
+  function endY() {
+    var end = root.scrollHeight - window.innerHeight;
+    var region = document.getElementById("answer");
+    if (!region || !asking()) {
+      return end;
+    }
+    var bar = document.getElementById("composer");
+    var room = (bar ? bar.getBoundingClientRect().top : window.innerHeight) - barBottom();
+    if (region.getBoundingClientRect().height <= room) {
+      return end;
+    }
+    var asked = region.querySelector(".answer__question, .option, .button--option") || region;
+    return Math.min(end, window.scrollY + asked.getBoundingClientRect().top - barBottom());
+  }
+
+  // Pinned only if this actually reached the end; a tall question's top is not the end.
   function toEnd() {
     if (readUnits().length) {
-      window.scrollTo(0, root.scrollHeight);
+      window.scrollTo(0, endY());
       ownScroll();
+      pinned = atBottom();
     }
   }
 
