@@ -336,9 +336,8 @@ html { -webkit-tap-highlight-color: transparent; }
 .agent__facts { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .agent__fact::before { content: "\00B7"; margin: 0 var(--space-4); }
 .agent__meta--line .agent__end { justify-content: flex-end; padding-left: var(--space-10); }
-.agent__files { display: inline-flex; align-items: center; min-height: var(--tap); padding-left: var(--space-8); }
 
-/* Chat | Pane as one segmented control at the top bar's far edge. Each half is a full 44px
+/* Chat | Pane | Files as one segmented control at the top bar's far edge. Each half is a full 44px
    target; the control is drawn smaller inside them, so the bar is no taller than its links. */
 .tabs { position: relative; flex: none; display: grid; grid-template-columns: repeat(2, auto); margin-left: auto; }
 .tabs::before { content: ""; position: absolute; inset: var(--space-2) 0; background: var(--ground); border: var(--line-1) solid var(--rule); border-radius: var(--radius-2); }
@@ -446,7 +445,6 @@ html { -webkit-tap-highlight-color: transparent; }
   font: var(--text-small)/1.35 var(--mono);
   color: var(--ansi-white);
 }
-.pane--status { color: var(--ink-3); }
 .pane__line { display: block; min-height: 1.35em; white-space: pre-wrap; overflow-wrap: anywhere; }
 .pane__line--clip { white-space: pre; overflow: hidden; text-overflow: clip; }
 /* Keep the columns: the terminal's own line breaks only, and the pane scrolls inside its box. */
@@ -692,11 +690,17 @@ textarea { resize: vertical; min-height: 4.5em; }
 .tabs--3 { grid-template-columns: repeat(3, auto); }
 .tabs--3 .tab__label { padding: 0 var(--space-4); }
 /* Three segments and a worded back link do not fit a narrow bar at a large Text Size: the word
-   goes, the arrow and its accessible name stay. In em, so the break moves with the text. */
+   goes, the arrow and its accessible name stay. In em, so the break moves with the text; a
+   query cannot read a custom property, so the length is written here. The bar's em stops at
+   20px, so this drops the word at 320px at any size and from about 120% text on every phone. */
 .topbar:has(.tabs--3) { container-type: inline-size; }
-@container (width < 16em) {
+@container (width < 20.5em) {
   .topbar__word { display: none; }
 }
+/* On an agent's Files tab, Changes | Files | Find is a row in the page, under the agent's bar. */
+.tabs.subtabs { grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0 0 var(--space-4); }
+.subtabs .tab__label { padding: 0 var(--space-2); }
+
 .files__title { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-body); font-weight: 600; }
 .files__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--space-5); min-height: var(--tap); margin: 0 0 var(--space-4); font-size: var(--text-small); color: var(--ink-3); }
 .files__meta > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

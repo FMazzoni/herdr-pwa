@@ -173,7 +173,7 @@ def test_a_dotfiles_repository_at_home_is_not_a_root(tmp_path: Path) -> None:
     make_repo(home)
     rig = _rig(tmp_path, home)
     assert "No agent is working in a git repository" in rig.http.get("/files").text
-    assert rig.http.get(f"/agent/{WORKING_SESSION}/files").status_code == 404
+    assert "not working in a git repository" in rig.http.get(f"/agent/{WORKING_SESSION}/files").text
 
 
 def test_a_worktree_of_a_root_is_a_root_too(tmp_path: Path) -> None:
@@ -522,7 +522,15 @@ def test_an_agent_opens_its_own_repository_and_its_paths(tmp_path: Path, repo: P
     assert absolute.headers["location"].startswith(f"{_base(repo)}/file?path=README.md")
     assert rig.http.get(f"{agent}?path=/etc/passwd", follow_redirects=False).status_code == 403
     page = rig.http.get(f"{agent}?path=README.md").text
-    assert f'href="/agent/{WORKING_SESSION}" aria-label="Back to agent"' in page
+    bar = page[page.index('<header class="topbar">') : page.index("</header>")]
+    # A file opened from the Files tab keeps the agent's bar, its Files tab lit.
+    assert '<nav class="tabs tabs--3" aria-label="View">' in bar
+    assert 'aria-current="page"><span class="tab__label">Files</span>' in bar
+    assert 'aria-label="Repository"' not in bar
+    # Changes | Files | Find is a row in the page, and the way back to the tab's lists.
+    main = page[page.index("<main ") :]
+    assert '<nav class="tabs tabs--3 subtabs" aria-label="Repository">' in main
+    assert f'href="{_base(repo)}?{FROM}" data-hp-replace' in main
     assert rig.http.get("/agent/not-a-session/files").status_code == 404
 
 
@@ -530,7 +538,11 @@ def test_an_agent_outside_any_repository_has_no_files(tmp_path: Path) -> None:
     plain = tmp_path / "not-a-repo"
     plain.mkdir()
     rig = _rig(tmp_path, plain)
-    assert rig.http.get(f"/agent/{WORKING_SESSION}/files").status_code == 404
+    page = rig.http.get(f"/agent/{WORKING_SESSION}/files")
+    # The tab stays, so the bar never changes shape; the page says why it is empty.
+    assert page.status_code == 200
+    assert "not working in a git repository" in page.text
+    assert 'aria-current="page"><span class="tab__label">Files</span>' in page.text
 
 
 def test_a_forged_from_is_dropped_not_linked(tmp_path: Path, repo: Path) -> None:

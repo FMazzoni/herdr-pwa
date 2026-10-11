@@ -1,18 +1,14 @@
 {% extends "base.html" %}
 {% from "_nav.html" import replace, sheet %}
 {% import "_ui.html" as ui %}
+{% import "_agent.html" as agent_ui %}
 {% block title %}{{ heading }} &mdash; herdr{% endblock %}
 {% set base = "/agent/" ~ (agent.session|urlencode) %}
 {# The back arrow is the way home here, so the brand gives its room to the switch. #}
 {% block brand %}{% endblock %}
-{# Chat | Pane sits in the bar that never scrolls away: both tabs open at their newest line,
-   a long scroll below wherever the switch would otherwise be. #}
-{% block topbar %}<a class="leave topbar__back" href="/" aria-label="Back to herd" {{ replace() }}>&lsaquo; Herd</a>{{ ui.dot(agent.status.value, id="agent-dot") }}
-  <nav class="tabs" aria-label="View">
-    {%- for name in tabs %}
-    <a class="tab{% if name == tab %} tab--on{% endif %}" href="{{ base }}?tab={{ name }}" {{ replace() }}{% if name == tab %} aria-current="page"{% endif %}><span class="tab__label">{{ name|capitalize }}</span></a>
-    {%- endfor %}
-  </nav>{% endblock %}
+{# Chat | Pane | Files sits in the bar that never scrolls away: both views open at their newest
+   line, a long scroll below wherever the switch would otherwise be. #}
+{% block topbar %}{{ agent_ui.bar(agent, tab) }}{% endblock %}
 {% block body %}
 <main class="agent agent--docked" data-hp-seen="{{ agent.session }}">
   <h1 class="agent__title">{{ heading }}</h1>
@@ -24,8 +20,6 @@
       {%- if agent.workspace %}<span class="agent__fact">{{ agent.workspace }}</span>{% endif -%}
       <span class="agent__fact">{{ agent.target }}</span>
     </span>
-    {# The files the agent stands in; End keeps the far edge, apart from it. #}
-    <a class="leave agent__files" href="{{ base }}/files" {{ replace() }}>Files</a>
     <a class="leave agent__end" href="{{ base }}/close" {{ replace() }}>End</a>
   </p>
   {% if first %}{{ ui.banner(first.kind, first.what, first.why or none) }}{% endif %}

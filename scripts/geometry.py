@@ -102,6 +102,11 @@ TAP_ALLOWED: dict[str, str] = {
 
 TAPPABLE = "a[href], button, summary, input, select, textarea, [role=button], [role=link]"
 
+# An agent's bar: three 44px segments, on one row with the back link.
+BAR_TABS = ("Chat", "Pane", "Files")
+# The back link keeps its word only on a bar wide enough for it: 390px and up at default text.
+WORD_WIDTHS = (390, 430)
+
 # True once htmx has wired every hx element it can see and nothing is in flight or settling.
 # A fragment swapped in by hx-trigger="load" is attached a settle delay before htmx processes
 # it, and a tap in that gap posts the bare form natively and lands on the no-JS fallback.
@@ -255,8 +260,23 @@ for (const chip of document.querySelectorAll(".card__harness, .card__pane")) {
     cut.push({ what: describe(chip), text: chip.textContent, full: chip.scrollWidth, shown: chip.clientWidth });
   }
 }
+// An agent's bar, when this page has one.
+const box = (el) => el.getBoundingClientRect();
+let bar = null;
+const nav = document.querySelector("header.topbar nav.tabs--3[aria-label=View]");
+if (nav) {
+  const back = document.querySelector("header.topbar .topbar__back");
+  const word = back ? back.querySelector(".topbar__word") : null;
+  bar = {
+    tabs: [...nav.querySelectorAll("a.tab")].map((t) => ({
+      label: t.textContent.trim(), width: box(t).width, height: box(t).height })),
+    oneRow: !!back && box(back).top < box(nav).bottom && box(nav).top < box(back).bottom,
+    name: back ? back.getAttribute("aria-label") : null,
+    word: word ? getComputedStyle(word).display !== "none" : null,
+  };
+}
 return { page: page, scrollers: scrollers, spills: spills, taps: taps, edges: edges,
-  buried: buried, measured: measured, zooms: zooms, cells: cells, cut: cut };
+  buried: buried, measured: measured, zooms: zooms, cells: cells, cut: cut, bar: bar };
 """
 
 
@@ -440,6 +460,43 @@ def judge(found: dict[str, object], where: str, tally: Tally) -> None:
     tally.taps += measured if isinstance(measured, int) else 0
 
 
+def _judge_tabs(bar: dict[str, object], where: str, tally: Tally) -> None:
+    tabs = [t for t in bar["tabs"] if isinstance(t, dict)] if isinstance(bar["tabs"], list) else []
+    labels = tuple(str(t["label"]) for t in tabs)
+    if labels != BAR_TABS:
+        tally.problems.append(f"{where}: the agent's bar holds {labels}, not {BAR_TABS}")
+    for tab in tabs:
+        if (
+            float(str(tab["width"])) < TAP_FLOOR - 0.5
+            or float(str(tab["height"])) < TAP_FLOOR - 0.5
+        ):
+            tally.problems.append(
+                f"{where}: the {tab['label']} segment is {tab['width']:.1f}x{tab['height']:.1f}px"
+            )
+    if not bar["oneRow"]:
+        tally.problems.append(f"{where}: the three tabs wrapped off the back link's row")
+    if bar["name"] != "Back to herd":
+        tally.problems.append(f"{where}: the back link is named {bar['name']!r}")
+
+
+def _judge_word(bar: dict[str, object], where: str, size: "Size", tally: Tally) -> None:
+    wants = size.scale == 1.0 and size.width in WORD_WIDTHS
+    if bar["word"] is not wants:
+        said = "keeps" if bar["word"] else "drops"
+        tally.problems.append(
+            f"{where}: the back link {said} its word; it should {'keep' if wants else 'drop'} it"
+        )
+
+
+def judge_bar(found: dict[str, object], where: str, size: "Size", tally: Tally) -> None:
+    """An agent's bar: three 44px tabs on one row and the right back link."""
+    bar = found.get("bar")
+    if not isinstance(bar, dict):
+        return
+    _judge_tabs(bar, where, tally)
+    _judge_word(bar, where, size, tally)
+
+
 def _grow_text(driver: Marionette, scale: float) -> bool:
     """Set the page's text ``scale`` times its default; whether the dock followed it at once."""
     driver.script(GROW_TEXT, scale)
@@ -497,6 +554,7 @@ def run_state(driver: Marionette, state: State, base: str, size: Size, tally: Ta
         FIELD_FONT_FLOOR,
     )
     judge(found if isinstance(found, dict) else {}, where, tally)
+    judge_bar(found if isinstance(found, dict) else {}, where, size, tally)
     # One window serves every state, so a remembered choice must not leak into the next.
     driver.script("try { localStorage.clear(); sessionStorage.clear(); } catch (e) {}")
     print(f"  measured {where}", flush=True)

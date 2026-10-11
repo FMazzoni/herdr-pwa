@@ -2,18 +2,25 @@
 {% from "_nav.html" import replace %}
 {% import "_ui.html" as ui %}
 {% import "_files.html" as f %}
+{% import "_agent.html" as agent_ui %}
 {% block title %}{{ root.label }} &mdash; herdr{% endblock %}
 {% set labels = {"changes": "Changes", "tree": "Files", "find": "Find"} %}
-{# The back arrow is the way home, as on an agent's page; it goes to the agent the reader came from. #}
-{% block brand %}{% endblock %}
-{% block topbar %}<a class="leave topbar__back" href="{{ back }}" aria-label="{{ 'Back to agent' if nav.back else 'Back to herd' }}" {{ replace() }}>&lsaquo;<span class="topbar__word">&nbsp;{{ "Agent" if nav.back else "Herd" }}</span></a>
-  <nav class="tabs tabs--3" aria-label="Repository">
+{# Changes, Files and Find; on an agent's Files tab they are a row in the page, never a second
+   switcher in the bar, which is the agent's own. #}
+{% macro views_nav(extra="") -%}
+<nav class="tabs tabs--3{{ extra }}" aria-label="Repository">
     {%- for name in views %}
     <a class="tab{% if name == view %} tab--on{% endif %}" href="{{ nav.href('' if name == 'changes' else name) }}" {{ replace() }}{% if name == view %} aria-current="page"{% endif %}><span class="tab__label">{{ labels[name] }}</span></a>
     {%- endfor %}
-  </nav>{% endblock %}
+  </nav>
+{%- endmacro %}
+{# The back arrow is the way home, as on an agent's page; it goes to the agent the reader came from. #}
+{% block brand %}{% endblock %}
+{% block topbar %}{% if agent %}{{ agent_ui.bar(agent, "files") }}{% else %}<a class="leave topbar__back" href="{{ back }}" aria-label="{{ 'Back to agent' if nav.back else 'Back to herd' }}" {{ replace() }}>&lsaquo;<span class="topbar__word">&nbsp;{{ "Agent" if nav.back else "Herd" }}</span></a>
+  {{ views_nav() }}{% endif %}{% endblock %}
 {% block body %}
 <main class="feed-host files">
+  {% if agent %}{{ views_nav(" subtabs") }}{% endif %}
   <h1 class="files__title">{{ root.label }}</h1>
   <p class="files__meta"><span class="files__branch">{{ status.branch or "no branch" }}</span><span class="files__fact">{{ status.changes|length }} changed</span></p>
   {% block content %}{% endblock %}

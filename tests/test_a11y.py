@@ -102,7 +102,7 @@ def test_the_agent_page_has_landmarks_a_heading_and_a_named_way_back(tmp_path: P
     page = rig.http.get(f"/agent/{WORKING_SESSION}").text
     assert '<header class="topbar">' in page
     assert "<main " in page
-    assert '<nav class="tabs" aria-label="View">' in page
+    assert '<nav class="tabs tabs--3" aria-label="View">' in page
     assert re.search(r"<h1 [^>]*>", page)
     assert 'aria-label="Back to herd"' in page
     assert 'id="hp-live" aria-live="polite"' in page

@@ -1,0 +1,15 @@
+{# An agent's top bar, the same on Chat, Pane and Files: home, its status, and the three tabs. #}
+{% from "_nav.html" import replace %}
+{% import "_ui.html" as ui %}
+
+{# Each tab is a 44px segment and replaces history, so back still lands on the feed. On a narrow
+   bar or at a large Text Size the back link drops its word and keeps its arrow and its name. #}
+{% macro bar(agent, tab) -%}
+{% set base = "/agent/" ~ (agent.session|urlencode) %}
+<a class="leave topbar__back" href="/" aria-label="Back to herd" {{ replace() }}>&lsaquo;<span class="topbar__word">&nbsp;Herd</span></a>{{ ui.dot(agent.status.value, id="agent-dot") }}
+  <nav class="tabs tabs--3" aria-label="View">
+    {%- for name, href in (("chat", base ~ "?tab=chat"), ("pane", base ~ "?tab=pane"), ("files", base ~ "/files")) %}
+    <a class="tab{% if name == tab %} tab--on{% endif %}" href="{{ href }}" {{ replace() }}{% if name == tab %} aria-current="page"{% endif %}><span class="tab__label">{{ name|capitalize }}</span></a>
+    {%- endfor %}
+  </nav>
+{%- endmacro %}

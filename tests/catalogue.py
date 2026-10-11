@@ -996,6 +996,13 @@ FILES: Final = (
         title="Files: every repository an agent is working in",
     ),
     _files("files-changes", "", ".files .flist .frow", "Files: what changed, first"),
+    State(
+        "files-none",
+        f"{AGENT}/files",
+        ".files .empty",
+        runner(snapshot_frame),
+        title="Files tab: an agent with no git repository keeps the tab and says why it is empty",
+    ),
     _files(
         "files-diff",
         "to=diff&path=src/app/server.py",
