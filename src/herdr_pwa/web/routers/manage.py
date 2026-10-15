@@ -159,12 +159,11 @@ def _close_routes(
         body: FormBody = b"",
     ) -> Response:
         values = form(body)
-        saw = values.get("saw", "")
         ask = WorkspaceCloseAsk(
             workspace_id,
             confirmed=ticked(values, "confirm"),
             armed=ticked(values, "armed"),
-            saw=int(saw) if saw.isdigit() else None,
+            saw=values.get("saw", "").strip(),
         )
         result = close_workspace(writer_for(web, request, identity), ask)
         if isinstance(result, Refused):

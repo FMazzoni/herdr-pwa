@@ -105,7 +105,9 @@ FAILURES: Final[dict[Refusal, Failure]] = {
         200, "Nothing was {verb} yet: this agent is working. Acknowledge that too."
     ),
     Refusal.COUNT_CHANGED: Failure(
-        409, "Nothing was {verb}: what it holds changed since you confirmed. Look again."
+        409,
+        "Nothing was {verb}: its agents, or what they are doing, changed since you "
+        "confirmed. Look again.",
     ),
     Refusal.NOT_READY: Failure(
         409, "Nothing was {verb}: this agent is not accepting input right now."

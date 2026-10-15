@@ -1,6 +1,7 @@
 """Every write route over a fake herd: what it sends, what it refuses, and at which status."""
 
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -274,11 +275,17 @@ def test_workspace_new_rename_and_close(tmp_path: Path) -> None:
     assert bad.status_code == 400
     first = w.http.post("/workspaces/w1/close", data={"confirm": "1"}, headers=ORIGIN)
     assert first.status_code == 200
-    assert 'name="saw" value="1"' in first.text
+    saw = re.search(r'name="saw" value="([0-9a-f]+)"', first.text)
+    assert saw is not None
+    assert herd.writes("workspace.close") == []
+    stale = w.http.post(
+        "/workspaces/w1/close", data={"confirm": "1", "armed": "1", "saw": "1"}, headers=ORIGIN
+    )
+    assert stale.status_code == 409
     assert herd.writes("workspace.close") == []
     closed = w.http.post(
         "/workspaces/w1/close",
-        data={"confirm": "1", "armed": "1", "saw": "1"},
+        data={"confirm": "1", "armed": "1", "saw": saw.group(1)},
         headers=ORIGIN,
         follow_redirects=False,
     )
