@@ -17,6 +17,10 @@ from herdr_pwa.web.mdnode import MdNode
 HIGHLIGHT_BYTES: Final = 256 * 1024
 HIGHLIGHT_LINES: Final = 5000
 PAGE_LINES: Final = 500
+# A page of long lines is read only this far: a newline-free file is one page however large.
+PAGE_BYTES: Final = 1024 * 1024
+# The markdown parser costs far more per byte than lexing; brackets or math run to seconds.
+MARKDOWN_BYTES: Final = 64 * 1024
 # A chunk the phone may skip laying out until it scrolls near (content-visibility: auto).
 CHUNK_LINES: Final = 400
 # A minified line is cut here; the rest is counted, not drawn.
@@ -41,6 +45,8 @@ IMAGES: Final = {
     ".webp": (b"RIFF", "image/webp"),
 }
 BUSY_NOTE: Final = "Highlighting is busy with another file, so this one is shown plain."
+LONG_PROSE_NOTE: Final = "This file is too long to render as prose, so it is shown as source."
+PAGE_CUT_NOTE: Final = "This page is cut at 1 MB; the rest of its lines are not shown."
 
 
 @dataclass(frozen=True, slots=True)
@@ -162,6 +168,8 @@ class Viewer:
     )
     wait: float = HIGHLIGHT_WAIT
     paint: Callable[[str, str, int], tuple[MdNode, ...]] = highlight
+    # The chat's own cache is keyed by text and sized for turns, not whole files.
+    render: Callable[[str], tuple[MdNode, ...]] = render_tree.__wrapped__
     _code: _Lru[Key, tuple[Line, ...]] = field(default_factory=lambda: _Lru(CACHE_ENTRIES))
     _prose: _Lru[Key, tuple[MdNode, ...]] = field(default_factory=lambda: _Lru(CACHE_ENTRIES))
     _pages: _Lru[Key, tuple[int, ...]] = field(default_factory=lambda: _Lru(CACHE_ENTRIES))
@@ -184,20 +192,33 @@ class Viewer:
         if src.stat.size > HIGHLIGHT_BYTES:
             return self._paged(src, base, line)
         text = src.reader.read_range(src.real, 0, src.stat.size).decode("utf-8", "replace")
-        if PurePosixPath(base.name).suffix.lower() in _MARKDOWN and not source:
-            return replace(base, kind="markdown", prose=self._markdown(src.key, text))
+        if source or PurePosixPath(base.name).suffix.lower() not in _MARKDOWN:
+            return self._code_or_paged(src, base, text, line)
+        if src.stat.size > MARKDOWN_BYTES:
+            shown = self._code_or_paged(src, base, text, line)
+            return replace(shown, note=shown.note or LONG_PROSE_NOTE)
+        return self._markdown(src.key, base, text)
+
+    def _code_or_paged(self, src: "_Source", base: FileView, text: str, line: int) -> FileView:
         lines = _lines_of(text)
         if len(lines) > HIGHLIGHT_LINES:
             return self._paged(src, base, line)
         return self._code_view(src.key, base, lines)
 
-    def _markdown(self, key: Key, text: str) -> tuple[MdNode, ...]:
+    def _markdown(self, key: Key, base: FileView, text: str) -> FileView:
         hit = self._prose.get(key)
         if hit is None:
-            # The chat's own cache is keyed by text and sized for turns, not whole files.
-            hit = render_tree.__wrapped__(text)
+            # Rendering takes a highlight slot too, so prose cannot crowd out the feed.
+            if not self.jobs.acquire(timeout=self.wait):
+                plain = _plain(_lines_of(text), 1)
+                language = language_for(base.name)
+                return replace(base, kind="code", language=language, lines=plain, note=BUSY_NOTE)
+            try:
+                hit = self.render(text)
+            finally:
+                self.jobs.release()
             self._prose.put(key, hit)
-        return hit
+        return replace(base, kind="markdown", prose=hit)
 
     def _code_view(self, key: Key, base: FileView, lines: list[str]) -> FileView:
         language = language_for(base.name)
@@ -234,10 +255,11 @@ class Viewer:
             self._pages.put(key, starts)
         page = min(max(0, (line - 1) // PAGE_LINES), len(starts) - 1) if line > 0 else 0
         end = starts[page + 1] if page + 1 < len(starts) else key[2]
-        raw = reader.read_range(real, starts[page], end - starts[page])
+        raw = reader.read_range(real, starts[page], min(end - starts[page], PAGE_BYTES))
         texts = _lines_of(raw.decode("utf-8", "replace"))
         lines = _plain(texts, page * PAGE_LINES + 1)
-        return replace(base, kind="paged", lines=lines, page=page, pages=len(starts))
+        note = PAGE_CUT_NOTE if end - starts[page] > PAGE_BYTES else ""
+        return replace(base, kind="paged", lines=lines, page=page, pages=len(starts), note=note)
 
 
 def page_starts(reader: Reader, real: Path, size: int) -> tuple[int, ...]:
