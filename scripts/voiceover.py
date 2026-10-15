@@ -3,11 +3,11 @@ while its host says it is busy, gives focus back to the control that had it, and
 a new message from the agent is said once, and so is what a tapped answer did. The stats strip
 is heard as one sentence, and its redraw says nothing and leaves its sheet as the reader left it."""
 
-import time
 from collections.abc import Callable
 from pathlib import Path
 
 from firefox import Marionette, phone_window
+from settle import settle
 from starlette.types import ASGIApp
 
 from tests.catalogue import (
@@ -22,15 +22,13 @@ from tests.catalogue import (
     long_chat,
     runner,
 )
+from tests.waiting import eventually
 from tests.webfakes import WORKING_SESSION, Rig, assistant_says, write_transcript
 
 WIDTH = 390
 HEIGHT = 844
 WAIT_SECONDS = 15.0
-SETTLE_SECONDS = 0.5
 TURNS = 12
-# The live region is emptied and refilled a beat later, so the same words twice are news.
-SAY_SECONDS = 1.0
 
 # Records, from here on: each region drawn in and whether its host said busy as it landed,
 # every settle, and every sentence put in the live region.
@@ -114,24 +112,19 @@ def _heard(driver: Marionette) -> dict[str, object]:
 
 def _until(driver: Marionette, done: Callable[[dict[str, object]], bool]) -> dict[str, object]:
     """Wait until ``done`` holds of what was heard and nothing is in flight, then let it settle."""
-    deadline = time.monotonic() + WAIT_SECONDS
-    while time.monotonic() < deadline:
-        seen = _heard(driver)
-        if done(seen) and not seen.get("busy"):
-            time.sleep(SETTLE_SECONDS)
-            return _heard(driver)
-        time.sleep(0.1)
-    return {}
+    if not eventually(
+        lambda: done(seen := _heard(driver)) and not seen.get("busy"), seconds=WAIT_SECONDS
+    ):
+        return {}
+    settle(driver)
+    return _heard(driver)
 
 
 def _ready(driver: Marionette, selector: str) -> bool:
-    deadline = time.monotonic() + WAIT_SECONDS
-    while time.monotonic() < deadline:
-        if driver.script(READY, selector):
-            time.sleep(SETTLE_SECONDS)
-            return True
-        time.sleep(0.1)
-    return False
+    if not eventually(lambda: bool(driver.script(READY, selector)), seconds=WAIT_SECONDS):
+        return False
+    settle(driver)
+    return True
 
 
 def _count(seen: dict[str, object], key: str) -> int:
@@ -187,7 +180,8 @@ def _new_message(driver: Marionette, name: str, home: Path) -> list[str]:
     seen = _until(driver, lambda s: text in str(s.get("newest")))
     if not seen:
         return [f"{name}: the new reply never reached the chat"]
-    time.sleep(SAY_SECONDS)
+    # The live region is emptied and refilled a beat later; settling in the page outlasts it.
+    settle(driver)
     said = [str(s) for s in _list(_heard(driver), "said")]
     if len(said) == 1 and said[0].startswith("New message: ") and text in said[0]:
         return []
@@ -216,7 +210,8 @@ def outcome(driver: Marionette, base: str, rig: Rig, home: Path) -> list[str]:
     driver.script(state.act)
     if not _ready(driver, state.ready):
         return [f"{name}: the tap never came back with its outcome"]
-    time.sleep(SAY_SECONDS)
+    # The live region is emptied and refilled a beat later; settling in the page outlasts it.
+    settle(driver)
     said = [str(s) for s in _list(_heard(driver), "said")]
     banner = driver.script(OUTCOME, state.ready)
     if not isinstance(banner, dict):

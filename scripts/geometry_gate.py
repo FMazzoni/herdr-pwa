@@ -40,6 +40,8 @@ GUARDED = (
     "scripts/feedhold.py",
     "scripts/sendhold.py",
     "scripts/voiceover.py",
+    "scripts/settle.py",
+    "tests/waiting.py",
     "tests/_fake_herd.py",
     "scripts/geometry_gate.py",
 )

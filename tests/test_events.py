@@ -12,6 +12,7 @@ from fastapi import FastAPI
 from herdr_pwa.engine.model import Snapshot
 from herdr_pwa.web.events import Hub, Listener, changed, herd_marks, topics_of
 from tests.catalogue import long_chat
+from tests.waiting import until_async
 from tests.webfakes import (
     IDENTITY,
     SNAPSHOT,
@@ -184,28 +185,27 @@ def test_an_appended_transcript_is_one_stale_chat(tmp_path: Path) -> None:
     log = next((tmp_path / "transcripts").rglob(f"{WORKING_SESSION}.jsonl"))
     topic = f"chat:{WORKING_SESSION}"
 
-    async def scenario() -> list[str]:
+    async def scenario() -> tuple[list[str], set[str]]:
         listener = hub.join(frozenset({topic, "feed"}))
         stream = hub.stream(listener)
-        await asyncio.sleep(0.3)
+        await _looked(hub, 1)
         with log.open("a") as handle:
             handle.write(json.dumps(assistant_says("appended", uuid="z9")) + "\n")
         heard = await _said(stream, topic)
-        await asyncio.sleep(0.3)
-        listener.close()
-        heard += [line async for line in _rest(stream)]
+        # Two more looks at the unchanged log: a second stale would be queued by now.
+        await _looked(hub, hub.looks + 2)
+        again = set(listener.pending)
         await hub.close()
-        return heard
+        return heard, again
 
-    heard = asyncio.run(scenario())
+    heard, again = asyncio.run(scenario())
     assert heard == [topic]
+    assert again == set()
 
 
-async def _rest(stream: AsyncIterator[bytes]) -> AsyncIterator[str]:
-    async for chunk in stream:
-        for line in chunk.decode().splitlines():
-            if line.startswith("data: "):
-                yield line[6:]
+async def _looked(hub: Hub, looks: int) -> None:
+    """Wait until the watcher has looked ``looks`` times: the first look is the baseline."""
+    await until_async(lambda: True if hub.looks >= looks else None, seconds=WAIT)
 
 
 def test_an_appended_transcript_is_stale_for_the_stats_strip_too(tmp_path: Path) -> None:
@@ -218,7 +218,7 @@ def test_an_appended_transcript_is_stale_for_the_stats_strip_too(tmp_path: Path)
     async def scenario() -> list[str]:
         listener = hub.join(frozenset({topic, f"pane:{WORKING_SESSION}"}))
         stream = hub.stream(listener)
-        await asyncio.sleep(0.3)
+        await _looked(hub, 1)
         with log.open("a") as handle:
             handle.write(json.dumps(assistant_says("appended", uuid="z9")) + "\n")
         heard = await _said(stream, topic)
@@ -242,7 +242,7 @@ def test_a_herd_change_reaches_the_feed_and_the_agent(tmp_path: Path) -> None:
     async def scenario() -> list[str]:
         listener = hub.join(frozenset({"feed", f"agent:{IDLE}"}))
         stream = hub.stream(listener)
-        await asyncio.sleep(0.3)
+        await _looked(hub, 1)
         frame = snapshot_frame()
         for agent in agents_of(frame):
             if IDLE in json.dumps(agent):

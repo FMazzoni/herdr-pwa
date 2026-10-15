@@ -2,6 +2,7 @@
 
 import contextlib
 import inspect
+import itertools
 import json
 import logging
 import os
@@ -37,6 +38,7 @@ from herdr_pwa.engine.transport import (
 )
 from herdr_pwa.jsontypes import JsonObject, as_object, loads
 from tests._jsonpath import at
+from tests.waiting import eventually
 
 SRC = Path(__file__).resolve().parent.parent / "src" / "herdr_pwa"
 
@@ -465,18 +467,21 @@ def test_a_dribbling_peer_cannot_outlast_the_deadline(
 
 def test_a_timeout_destroys_the_connection(sock_path: Path, request: pytest.FixtureRequest) -> None:
     """Otherwise the late reply is handed to whoever asks next."""
-    late: list[JsonObject] = []
+    # The reply is held until the call has given up, however long that takes under load.
+    release = threading.Event()
 
     def handler(req: JsonObject, conn: socket.socket) -> None:
-        time.sleep(0.35)
+        release.wait(10)
         with contextlib.suppress(OSError):
             conn.sendall(_line(ok(req, conn)))
-        late.append(req)
 
     serve(sock_path, handler, request)
     wire = transport(sock_path, timeout=0.15)
-    with pytest.raises(EngineTimeout):
-        wire.call("agent.get", {"target": "w1:p3"})
+    try:
+        with pytest.raises(EngineTimeout):
+            wire.call("agent.get", {"target": "w1:p3"})
+    finally:
+        release.set()
     assert wire._sock is None  # pyright: ignore[reportPrivateUsage]
     wire.close()
 
@@ -497,10 +502,14 @@ def test_an_exhausted_budget_times_out_before_dialling(sock_path: Path) -> None:
     assert len(retained) == 50  # the tracebacks are still alive at this point
 
 
-def test_a_retry_shares_the_calls_deadline_instead_of_doubling_it(
+def test_every_wait_in_a_call_is_armed_from_its_one_deadline(
     sock_path: Path, request: pytest.FixtureRequest
 ) -> None:
-    """``timeout=T`` must mean T for the *call*, whatever it does inside."""
+    """``timeout=T`` must mean T for the *call*, whatever it does inside.
+
+    The clock moves a fixed step each time the transport reads it, so what each wait was armed
+    with is decided by the code, not by how long the machine took.
+    """
     answered: list[int] = []
 
     def handler(req: JsonObject, conn: socket.socket) -> JsonObject | None:
@@ -509,13 +518,27 @@ def test_a_retry_shares_the_calls_deadline_instead_of_doubling_it(
 
     serve(sock_path, handler, request)
     budget = 0.2
-    wire = transport(sock_path, timeout=budget)
+    reads = itertools.count()
+    armed: list[float] = []
+
+    class Recording(socket.socket):
+        def settimeout(self, value: float | None) -> None:
+            if value is not None:
+                armed.append(value)
+            super().settimeout(value)
+
+    class Watched(SocketTransport):
+        def _new_socket(self) -> socket.socket:
+            return Recording(socket.AF_UNIX, socket.SOCK_STREAM)
+
+    wire = Watched(sock_path, timeout=budget, clock=lambda: next(reads) * budget / 20)
     wire.call("agent.list", {})  # answered, and hung up on, like every call
-    started = time.monotonic()  # the second one is never answered at all
-    with pytest.raises(EngineTimeout) as caught:
+    armed.clear()
+    with pytest.raises(EngineTimeout) as caught:  # the second one is never answered at all
         wire.call("agent.get", {"target": "w1:p3"})
-    elapsed = time.monotonic() - started
-    assert elapsed < budget * 1.5, f"one budget, not two: {elapsed:.3f}s"
+    assert len(armed) >= 3, armed
+    assert armed[0] < budget, f"one budget, not a fresh one per wait: {armed}"
+    assert all(later < earlier for earlier, later in itertools.pairwise(armed)), armed
     assert str(budget) in str(caught.value), "the message must name the real budget"
     wire.close()
 
@@ -1281,7 +1304,9 @@ def test_a_refused_subscription_gives_the_descriptor_back(
     for _ in range(20):
         with pytest.raises(TargetNotFound):
             list(stream(sock_path))
-    assert open_fds() <= before, "a refused subscription leaked its connection"
+    # The fake's own end closes on its thread, after the client is done; wait for it, not a leak.
+    settled = eventually(lambda: open_fds() <= before, seconds=5.0)
+    assert settled, f"a refused subscription leaked its connection: {open_fds()} > {before}"
 
 
 # --------------------------------------------------------------------------

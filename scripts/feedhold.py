@@ -2,21 +2,21 @@
 that re-sorts the cards leaves the card under the thumb where it was, so a tap opens the agent
 the reader was looking at."""
 
-import time
 from collections.abc import Callable
 from pathlib import Path
 
 from firefox import Marionette, phone_window
+from settle import READER_STILL_MS, settle
 from starlette.types import ASGIApp
 
 from herdr_pwa.jsontypes import JsonArray, JsonObject, get_object
 from tests.catalogue import State, build
+from tests.waiting import eventually
 from tests.webfakes import READ, SNAPSHOT, Rig, agents_of, read_frame, snapshot_frame
 
 WIDTH = 390
 HEIGHT = 844
 WAIT_SECONDS = 15.0
-SETTLE_SECONDS = 0.5
 # A card may move by a rounding error, never by a card.
 DRIFT = 3
 AGENTS = 24
@@ -79,14 +79,12 @@ def _probe(driver: Marionette, watched: str = "") -> dict[str, object]:
 def _wait(
     driver: Marionette, done: Callable[[dict[str, object]], bool], watched: str = ""
 ) -> dict[str, object]:
-    deadline = time.monotonic() + WAIT_SECONDS
-    while time.monotonic() < deadline:
-        seen = _probe(driver, watched)
-        if seen and done(seen):
-            time.sleep(SETTLE_SECONDS)
-            return _probe(driver, watched)
-        time.sleep(0.1)
-    return {}
+    if not eventually(
+        lambda: bool(seen := _probe(driver, watched)) and done(seen), seconds=WAIT_SECONDS
+    ):
+        return {}
+    settle(driver)
+    return _probe(driver, watched)
 
 
 def _num(seen: dict[str, object], key: str) -> float:
@@ -100,7 +98,7 @@ def walk(driver: Marionette, base: str, rig: Rig) -> list[str]:
     if not _wait(driver, lambda _seen: True):
         return ["feed hold: the feed never drew its cards"]
     driver.script("window.scrollTo(0, 700);")
-    time.sleep(SETTLE_SECONDS)
+    settle(driver, READER_STILL_MS)
     before = _probe(driver)
     above = before.get("above")
     if not before.get("under") or not isinstance(above, list) or not above:

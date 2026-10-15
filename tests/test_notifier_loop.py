@@ -4,6 +4,7 @@ import asyncio
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from herdr_pwa import jsonio
@@ -18,6 +19,7 @@ from herdr_pwa.settings import Settings
 from herdr_pwa.web.app import create_app
 from herdr_pwa.web.notifier import HerdSource, LoopConfig, Notifier, PushStores, open_push
 from tests.test_push import ENDPOINT, raw_subscription
+from tests.waiting import until_async
 from tests.webfakes import (
     READ,
     SNAPSHOT,
@@ -220,7 +222,9 @@ def test_a_held_alert_shortens_the_sleep_to_when_it_falls_due(tmp_path: Path) ->
     assert [payload["event"] for _, payload in loop.sender.sent] == ["blocked"]
 
 
-def test_the_loop_ticks_until_stopped_and_survives_a_bad_tick(tmp_path: Path) -> None:
+def test_the_loop_ticks_until_stopped_and_survives_a_bad_tick(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     loop = build_loop(tmp_path)
     loop.subscribe()
     loop.wire.replies[SNAPSHOT] = RuntimeError("a bug in a tick")
@@ -228,7 +232,12 @@ def test_the_loop_ticks_until_stopped_and_survives_a_bad_tick(tmp_path: Path) ->
     async def scenario() -> None:
         stop = asyncio.Event()
         task = asyncio.create_task(loop.notifier.run(stop))
-        await asyncio.sleep(0.05)
+        # The bad tick has run and been logged; the loop is still going after it.
+        failed = "notifier tick failed"
+        await until_async(
+            lambda: True if failed in caplog.messages or task.done() else None, seconds=5.0
+        )
+        assert not task.done(), "a bad tick ended the loop"
         assert loop.notifier.state.running
         stop.set()
         await asyncio.wait_for(task, timeout=5.0)
