@@ -17,7 +17,7 @@ from herdr_pwa.writes.guard import (
 )
 from herdr_pwa.writes.outcome import Evidence, Outcome, Pacing, audit_result
 from herdr_pwa.writes.refusal import Refusal, Refused, failed_result, refusal_for
-from herdr_pwa.writes.resolve import Writer, agent_now, attempt, snapshot_now
+from herdr_pwa.writes.resolve import Writer, agent_now, attempt, one_at_a_time, snapshot_now
 
 log = logging.getLogger(__name__)
 
@@ -139,6 +139,10 @@ class PromptAsk:
 
 def send_prompt(writer: Writer, ask: PromptAsk) -> PromptSent | Refused:
     """Type one prompt at the agent holding the session now, or say why not."""
+    return one_at_a_time(f"session:{ask.session}", _VERB, lambda: _send_prompt(writer, ask))
+
+
+def _send_prompt(writer: Writer, ask: PromptAsk) -> PromptSent | Refused:
     agent = agent_now(writer.client, ask.session, expected_target=ask.expected_target, verb=_VERB)
     if isinstance(agent, Refused):
         return agent
@@ -187,6 +191,18 @@ def send_first_prompt(
     writer: Writer, pane: PaneId, text: str, *, drawn_against: str = "", confirmed: bool = False
 ) -> PromptSent | Refused:
     """Type the prompt that gives a late-identity agent its session, by address."""
+    return one_at_a_time(
+        f"pane:{pane}",
+        _VERB,
+        lambda: _send_first_prompt(
+            writer, pane, text, drawn_against=drawn_against, confirmed=confirmed
+        ),
+    )
+
+
+def _send_first_prompt(
+    writer: Writer, pane: PaneId, text: str, *, drawn_against: str, confirmed: bool
+) -> PromptSent | Refused:
     snap = snapshot_now(writer.client, verb=_VERB)
     if isinstance(snap, Refused):
         return snap

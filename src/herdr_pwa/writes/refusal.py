@@ -38,6 +38,7 @@ class Refusal(StrEnum):
     CONFIRM = "confirm"
     ACKNOWLEDGE = "acknowledge"
     COUNT_CHANGED = "count_changed"
+    IN_FLIGHT = "in_flight"
     NOT_READY = "not_ready"
     NOT_WAITING = "not_waiting"
     HAS_IDENTITY = "has_identity"
@@ -108,6 +109,12 @@ FAILURES: Final[dict[Refusal, Failure]] = {
         409,
         "Nothing was {verb}: its agents, or what they are doing, changed since you "
         "confirmed. Look again.",
+    ),
+    # Another tab or phone is mid-write to the same agent; its outcome decides what this one means.
+    Refusal.IN_FLIGHT: Failure(
+        409,
+        "Nothing was {verb}: another write to this agent is still in flight. "
+        "Look at what it did before trying again.",
     ),
     Refusal.NOT_READY: Failure(
         409, "Nothing was {verb}: this agent is not accepting input right now."

@@ -1,5 +1,6 @@
 """Typing a prompt: resolved now, refused at a question, read back, never resent."""
 
+import threading
 from pathlib import Path
 
 import pytest
@@ -7,6 +8,7 @@ import pytest
 from herdr_pwa.audit import AuditUnavailableError, Entry, Write
 from herdr_pwa.engine.model import as_session_id, screen_digest
 from herdr_pwa.engine.transport import EngineUnavailable
+from herdr_pwa.jsontypes import JsonObject
 from herdr_pwa.writes.guard import (
     MAX_PROMPT_CHARS,
     NO_ECHO_MECHANISM,
@@ -18,7 +20,7 @@ from herdr_pwa.writes.guard import (
 from herdr_pwa.writes.outcome import Evidence, Outcome
 from herdr_pwa.writes.prompt import PromptAsk, PromptSent, send_first_prompt, send_prompt
 from herdr_pwa.writes.refusal import Refusal, Refused
-from herdr_pwa.writes.resolve import Writer
+from herdr_pwa.writes.resolve import InFlight, Writer
 from tests._fake_herd import P3, P5, S1, S2, SETTLED, FakeHerd, Rig, capture, rig
 
 PROMPT = "agent.prompt"
@@ -357,3 +359,41 @@ def test_no_echo_prompts_are_recognised(tail: str) -> None:
 @pytest.mark.parametrize("screen", ["Password:", "\u276f [sudo] password for owner:", SETTLED, ""])
 def test_anything_unsure_is_not_called_no_echo(screen: str) -> None:
     assert no_echo_notice(screen) == ""
+
+
+def test_a_prompt_from_a_second_tab_mid_send_is_refused_not_typed_twice(tmp_path: Path) -> None:
+    r = idle_rig(tmp_path, SETTLED, SETTLED + "\u276f hello there\n")
+    second: list[PromptSent | Refused] = []
+
+    def other_tab(herd: FakeHerd, params: JsonObject) -> None:
+        del herd.after["agent.read"], params
+        second.append(send_prompt(r.writer, PromptAsk(S1, "hello there")))
+
+    r.herd.after["agent.read"] = other_tab
+    _ = sent(send_prompt(r.writer, PromptAsk(S1, "hello there")))
+    [late] = second
+    assert refused(late).refusal is Refusal.IN_FLIGHT
+    assert len(r.herd.writes(PROMPT)) == 1
+
+
+def test_in_flight_is_held_across_threads_until_the_write_ends() -> None:
+    flights = InFlight()
+    inside, release = threading.Event(), threading.Event()
+    seen: list[bool] = []
+
+    def first() -> None:
+        with flights.hold("session:a") as mine:
+            seen.append(mine)
+            inside.set()
+            assert release.wait(5)
+
+    worker = threading.Thread(target=first)
+    worker.start()
+    assert inside.wait(5)
+    with flights.hold("session:a") as mine, flights.hold("session:b") as other:
+        assert (mine, other) == (False, True)
+    release.set()
+    worker.join()
+    with flights.hold("session:a") as mine:
+        assert mine
+    assert seen == [True]

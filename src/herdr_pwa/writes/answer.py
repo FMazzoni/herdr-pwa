@@ -21,7 +21,7 @@ from herdr_pwa.writes.outcome import (
 )
 from herdr_pwa.writes.prompt import NO_SESSION
 from herdr_pwa.writes.refusal import Refusal, Refused, failed_result, refusal_for
-from herdr_pwa.writes.resolve import Writer, agent_now, attempt, snapshot_now
+from herdr_pwa.writes.resolve import Writer, agent_now, attempt, one_at_a_time, snapshot_now
 
 log = logging.getLogger(__name__)
 
@@ -126,6 +126,11 @@ class KeyAsk:
 
 def send_key(writer: Writer, ask: KeyAsk) -> KeySent | Refused:
     """Send one key the screen offers right now to the agent holding the session."""
+    # From the read the key is checked against to the last look at what it did, alone.
+    return one_at_a_time(f"session:{ask.session}", _VERB, lambda: _send_key(writer, ask))
+
+
+def _send_key(writer: Writer, ask: KeyAsk) -> KeySent | Refused:
     agent = agent_now(writer.client, ask.session, expected_target=ask.expected_target, verb=_VERB)
     if isinstance(agent, Refused):
         return agent
@@ -145,6 +150,14 @@ def send_starting_key(
     writer: Writer, pane: PaneId, key: str, *, confirmed: bool = False
 ) -> KeySent | Refused:
     """Send a pad key to a session-less agent stopped during launch (a trust dialog), by address."""
+    return one_at_a_time(
+        f"pane:{pane}", _VERB, lambda: _send_starting_key(writer, pane, key, confirmed=confirmed)
+    )
+
+
+def _send_starting_key(
+    writer: Writer, pane: PaneId, key: str, *, confirmed: bool
+) -> KeySent | Refused:
     key = key.strip().lower()
     if key not in _STARTING_KEYS:
         return Refused(Refusal.KEY_NOT_OFFERED, _VERB)

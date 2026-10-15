@@ -250,3 +250,25 @@ def test_a_key_whose_answer_was_lost_is_said_to_maybe_have_gone(tmp_path: Path) 
     assert len(r.herd.writes(SEND_KEYS)) == 1, "never re-sent"
     results = [rec.get("result") for rec in r.audit_records if rec["phase"] == "outcome"]
     assert results == ["unknown:EngineUnavailable"]
+
+
+def test_a_second_tab_answering_while_the_first_is_mid_write_is_refused(tmp_path: Path) -> None:
+    """Two phones on one question: both read it, both pass the token check, one may send."""
+    r = blocked_rig(tmp_path)
+    r.herd.after[SEND_KEYS] = answered
+    second: list[KeySent | Refused] = []
+
+    def other_tab(herd: FakeHerd, params: JsonObject) -> None:
+        # Runs inside the first tab's write, right after it read the question to check against.
+        del herd.after["agent.read"], params
+        second.append(send_key(r.writer, KeyAsk(S1, "1", drawn_from=FINGERPRINT)))
+
+    r.herd.after["agent.read"] = other_tab
+    first = sent(send_key(r.writer, KeyAsk(S1, "1", drawn_from=FINGERPRINT)))
+    [late] = second
+    assert (refused(late).refusal, refused(late).status) == (Refusal.IN_FLIGHT, 409)
+    assert r.herd.writes(SEND_KEYS) == [{"target": "w1:p3", "keys": ["1"]}]
+    assert first.evidence is Evidence.GONE
+    # Once the first write has finished, the session takes writes again.
+    again = refused(send_key(r.writer, KeyAsk(S1, "1", drawn_from=FINGERPRINT)))
+    assert again.refusal is not Refusal.IN_FLIGHT
