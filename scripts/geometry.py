@@ -25,6 +25,7 @@ import voiceover  # noqa: E402
 from firefox import BrowserError, Marionette, browser, free_port, phone_window  # noqa: E402
 
 from tests.catalogue import STATES, State, build, pick  # noqa: E402
+from tests.waiting import eventually  # noqa: E402
 
 # The --only name for the back-navigation walks.
 HISTORY = "history"
@@ -149,20 +150,36 @@ return {
 """.replace("HTMX_SETTLED", HTMX_SETTLED)
 
 # Text Size moves the root font, and every rem token with it; the browser's default stands in
-# for the system body size here, because only iOS answers -apple-system-body.
+# for the system body size here, because only iOS answers -apple-system-body. Then, frame by
+# frame, wait for the room the page keeps for the docked composer to be its height again.
+# Every htmx request is refused meanwhile, so no poll's redraw can re-measure the dock for it:
+# the dock must follow the text itself. How many frames that took is not judged, only whether
+# it happened before the ceiling, so a loaded machine is slower but never red.
 GROW_TEXT = r"""
+const [scale, ceiling] = arguments;
+const done = arguments[arguments.length - 1];
+const refuse = (event) => event.preventDefault();
+document.addEventListener("htmx:beforeRequest", refuse, true);
 const root = document.documentElement;
-root.style.fontSize = parseFloat(getComputedStyle(root).fontSize) * arguments[0] + "px";
+root.style.fontSize = parseFloat(getComputedStyle(root).fontSize) * scale + "px";
+const kept = () => {
+  const bar = document.getElementById("composer");
+  return !bar || root.style.getPropertyValue("--dock-h").trim() === bar.offsetHeight + "px";
+};
+const started = performance.now();
+const frame = () => {
+  const ok = kept();
+  if (ok || performance.now() - started > ceiling) {
+    document.removeEventListener("htmx:beforeRequest", refuse, true);
+    done(ok);
+  } else {
+    requestAnimationFrame(frame);
+  }
+};
+requestAnimationFrame(frame);
 """
-
-# The room the page keeps for the docked composer is its height now (app.js keeps it in step).
-DOCK_KEPT = r"""
-const bar = document.getElementById("composer");
-const kept = getComputedStyle(document.documentElement).getPropertyValue("--dock-h").trim();
-return !bar || kept === bar.offsetHeight + "px";
-"""
-# A few frames: the dock must follow the text itself, not wait for the next poll to redraw.
-DOCK_SECONDS = 0.3
+# Only how long to wait before calling the dock stuck; a dock that follows does so in frames.
+DOCK_CEILING_MS = 5000
 
 # One synchronous script, so no htmx poll can swap the DOM halfway through a measurement.
 PROBE_GEOMETRY = r"""
@@ -355,7 +372,7 @@ def _wait(driver: Marionette, selector: str, base: str) -> dict[str, object]:
         seen = found if isinstance(found, dict) else {}
         if (seen.get("ready") and seen.get("settled")) or seen.get("errorPage"):
             break
-        time.sleep(0.2)
+        time.sleep(0.05)
     return seen
 
 
@@ -536,16 +553,9 @@ def judge_bar(found: dict[str, object], where: str, size: "Size", tally: Tally) 
 
 
 def _grow_text(driver: Marionette, scale: float) -> bool:
-    """Set the page's text ``scale`` times its default; whether the dock followed it at once."""
-    driver.script(GROW_TEXT, scale)
-    deadline = time.monotonic() + DOCK_SECONDS
-    kept = False
-    while not kept and time.monotonic() < deadline:
-        time.sleep(0.05)
-        kept = bool(driver.script(DOCK_KEPT))
-    deadline = time.monotonic() + READY_SECONDS
-    while time.monotonic() < deadline and not driver.script(f"return ({HTMX_SETTLED})();"):
-        time.sleep(0.1)
+    """Set the page's text ``scale`` times its default; whether the dock followed it by itself."""
+    kept = driver.script_async(GROW_TEXT, scale, DOCK_CEILING_MS) is True
+    eventually(lambda: bool(driver.script(f"return ({HTMX_SETTLED})();")), seconds=READY_SECONDS)
     return kept
 
 
