@@ -8,7 +8,12 @@
   {{ ui.section_head((agent.title if agent else "Starting") ~ " at " ~ pane) }}
   {% include "_notice.html" %}
   {% if first is defined and first %}{{ ui.banner(first.kind, first.what, first.why or none) }}{% endif %}
-  {% if sent is defined %}{% call ui.banner("sent") %}Delivered to {{ pane }}.{% endcall %}{% endif %}
+  {% if sent is defined %}
+  {# Only what was seen: a prompt read back on the pane, else bytes the runner took. #}
+  {% if sent.outcome.value == "confirmed" %}{% call ui.banner("sent", sent=true) %}Delivered to {{ pane }}, and it is on the pane.{% endcall %}
+  {% else %}{% call ui.banner("unsure", sent=true) %}Sent to {{ pane }}, unverified: nothing showed it land. Look at the pane before sending it again.{% endcall %}{% endif %}
+  {% endif %}
+  {% set held = refused is defined and refused.held %}
   {% if agent %}
   <p class="agent__meta">{{ ui.dot(agent.status.value) }}<span>{{ agent.status.value }}</span><span>{{ agent.agent }}</span></p>
   {% else %}
@@ -16,14 +21,15 @@
   {% endif %}
   <p>This agent has no session yet. claude names itself as it starts; opencode and hermes only once they are first prompted, so a prompt here is what makes it appear.</p>
   <form class="form" {{ sheet(base ~ "/prompt") }}>
-    {% if refused is defined and refused.held %}<input type="hidden" name="confirm" value="1">{% endif %}
+    {% if held and not key %}<input type="hidden" name="confirm" value="1"><input type="hidden" name="screen" value="{{ refused.screen }}">{% endif %}
     {% call ui.field("First prompt") %}<textarea name="text" rows="3" maxlength="4000">{{ text if text is defined else "" }}</textarea>{% endcall %}
     {{ ui.button("Send") }}
   </form>
   {% if agent and agent.status.value == "blocked" %}
   <div class="keys keys--pad">
-    {% for key in pad %}
-    <form {{ sheet(base ~ "/keys") }}><input type="hidden" name="key" value="{{ key }}">{{ ui.button(key|capitalize) }}</form>
+    {% for pad_key in pad %}
+    {% set arming = held and key == pad_key %}
+    <form {{ sheet(base ~ "/keys") }}><input type="hidden" name="key" value="{{ pad_key }}">{% if arming %}<input type="hidden" name="confirm" value="1">{% endif %}{{ ui.button("Really interrupt" if arming else pad_key|capitalize, kind="danger" if arming else none) }}</form>
     {% endfor %}
   </div>
   {% endif %}

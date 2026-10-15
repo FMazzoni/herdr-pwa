@@ -480,3 +480,55 @@ def test_an_answer_herdr_has_not_caught_up_with_says_updating(tmp_path: Path) ->
     # A poll redraws no status: each extra swapped element is another afterSwap for app.js.
     poll = w.http.get(f"/agent/{S1}/answer").text
     assert "hx-swap-oob" not in poll
+
+
+def _forms(page: str) -> list[str]:
+    return [part.split("</form>", 1)[0] for part in page.split("<form")[1:]]
+
+
+def test_the_doors_interrupt_confirm_is_its_own_and_never_rides_on_the_prompt(
+    tmp_path: Path,
+) -> None:
+    herd = FakeHerd()
+    herd.put(P3, "", status="blocked", launch_pending=True)
+    w = web(tmp_path, herd)
+    held = w.http.post("/starting/w1:p3/keys", data={"key": "ctrl-c"}, headers=ORIGIN)
+    assert held.status_code == 200
+    assert herd.writes("agent.send_keys") == []
+    forms = _forms(held.text)
+    prompt = next(f for f in forms if 'name="text"' in f)
+    assert 'name="confirm"' not in prompt, "the interrupt's confirm landed on the prompt form"
+    armed = [f for f in forms if 'value="ctrl-c"' in f and 'name="confirm"' in f]
+    assert len(armed) == 1, "the held interrupt offers no confirm of its own"
+    confirmed = w.http.post(
+        "/starting/w1:p3/keys", data={"key": "ctrl-c", "confirm": "1"}, headers=ORIGIN
+    )
+    assert confirmed.status_code == 200
+    assert herd.writes("agent.send_keys") == [{"target": "w1:p3", "keys": ["ctrl-c"]}]
+
+
+def test_the_doors_destructive_confirm_is_tied_to_the_screen_it_was_asked_about(
+    tmp_path: Path,
+) -> None:
+    herd = FakeHerd()
+    herd.put(P3, "", status="idle")
+    herd.screens[P3] = [SETTLED]
+    w = web(tmp_path, herd)
+    held = w.http.post("/starting/w1:p3/prompt", data={"text": "rm -rf build"}, headers=ORIGIN)
+    assert held.status_code == 200
+    prompt = next(f for f in _forms(held.text) if 'name="text"' in f)
+    assert 'name="confirm"' in prompt
+    assert f'name="screen" value="{screen_digest(SETTLED)}"' in prompt
+    herd.screens[P3] = [SETTLED.replace("Done.", "Done, and moved on.")]
+    moved = w.http.post(
+        "/starting/w1:p3/prompt",
+        data={"text": "rm -rf build", "confirm": "1", "screen": screen_digest(SETTLED)},
+        headers=ORIGIN,
+    )
+    assert moved.status_code == 409
+    assert w.herd.writes("agent.prompt") == []
+    unbound = w.http.post(
+        "/starting/w1:p3/prompt", data={"text": "rm -rf build", "confirm": "1"}, headers=ORIGIN
+    )
+    assert unbound.status_code == 200, "a confirm that names no screen confirms nothing"
+    assert w.herd.writes("agent.prompt") == []

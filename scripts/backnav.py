@@ -207,7 +207,7 @@ def door(walk: Walk, fake: FakeHerd) -> None:
     walk.driver.script(f"setTimeout(() => location.assign('{DOOR}'), 0);")
     walk.depth(walk.wait(DOOR, "form[data-hp-sheet]"), 1, "landing on the door")
     walk.click(f'form[action="{DOOR}/keys"] button')
-    walk.depth(walk.wait(DOOR, ".banner--sent"), 1, "a key sent from the door")
+    walk.depth(walk.wait(DOOR, ".banner[data-hp-sent]"), 1, "a key sent from the door")
     fake.put(P5, S2)
     walk.click(f'a[href="{DOOR}"]')
     walk.depth(walk.wait(f"/agent/{S2}", TABS), 1, "the door opening its agent")

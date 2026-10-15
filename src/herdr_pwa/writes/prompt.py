@@ -184,7 +184,7 @@ def _settled(
 
 
 def send_first_prompt(
-    writer: Writer, pane: PaneId, text: str, *, confirmed: bool = False
+    writer: Writer, pane: PaneId, text: str, *, drawn_against: str = "", confirmed: bool = False
 ) -> PromptSent | Refused:
     """Type the prompt that gives a late-identity agent its session, by address."""
     snap = snapshot_now(writer.client, verb=_VERB)
@@ -199,7 +199,9 @@ def send_first_prompt(
     refused = _text_refusal(text) or _settled(writer.client, pane, writer.pacing)
     if refused is not None:
         return refused
-    return _type(writer, _Send(pane, NO_SESSION, text, "", confirmed, issue=True))
+    # A confirm counts only with the digest of the screen it was asked about.
+    bound = confirmed and bool(drawn_against)
+    return _type(writer, _Send(pane, NO_SESSION, text, drawn_against, bound, issue=True))
 
 
 def send_opening_prompt(writer: Writer, pane: PaneId, text: str) -> PromptSent | Refused:

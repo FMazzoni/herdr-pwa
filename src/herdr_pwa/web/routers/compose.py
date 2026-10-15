@@ -296,7 +296,13 @@ def _starting_routes(
         target = address_of(pane)
         text = values.get("text", "")
         writer = writer_for(web, request, identity)
-        result = send_first_prompt(writer, target, text, confirmed=ticked(values, "confirm"))
+        result = send_first_prompt(
+            writer,
+            target,
+            text,
+            drawn_against=values.get("screen", "").strip(),
+            confirmed=ticked(values, "confirm"),
+        )
         return _door(web, target, text, result)
 
     @router.post("/starting/{pane}/keys")
@@ -311,7 +317,7 @@ def _starting_routes(
         key = values.get("key", "")
         writer = writer_for(web, request, identity)
         result = send_starting_key(writer, target, key, confirmed=ticked(values, "confirm"))
-        return _door(web, target, "", result)
+        return _door(web, target, "", result, key=key.strip().lower())
 
 
 def _door_context(pane: PaneId, agent: Agent | None, text: str = "") -> dict[str, object]:
@@ -319,11 +325,11 @@ def _door_context(pane: PaneId, agent: Agent | None, text: str = "") -> dict[str
 
 
 def _door(
-    web: WebState, pane: PaneId, text: str, result: PromptSent | KeySent | Refused
+    web: WebState, pane: PaneId, text: str, result: PromptSent | KeySent | Refused, key: str = ""
 ) -> HTMLResponse:
     agent = web.client.snapshot().by_target(pane)
     if isinstance(result, Refused):
-        return refused(
-            web.pages, "starting.html", _door_context(pane, agent, text), result, whole=True
-        )
+        # Which form the refusal answers, so a held interrupt never arms the prompt's confirm.
+        context = {**_door_context(pane, agent, text), "key": key}
+        return refused(web.pages, "starting.html", context, result, whole=True)
     return web.pages.page("starting.html", {**_door_context(pane, agent), "sent": result})
