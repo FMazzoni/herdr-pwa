@@ -61,8 +61,10 @@ def _check(
     # An interrupt has to work while the screen is moving, so it skips the token check.
     if key == INTERRUPT_KEY:
         return None if confirmed else Refused(Refusal.CONFIRM, _VERB, prompt=prompt)
-    if prompt is not None and drawn_from != control_token(prompt):
-        return Refused(Refusal.SCREEN_CHANGED, _VERB, screen=control_token(prompt), prompt=prompt)
+    # With no question showing now, a control drawn under one is stale: Esc there interrupts a turn.
+    now = control_token(prompt) if prompt is not None else ""
+    if drawn_from != now:
+        return Refused(Refusal.SCREEN_CHANGED, _VERB, screen=now, prompt=prompt)
     return None
 
 

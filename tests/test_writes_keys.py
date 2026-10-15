@@ -212,3 +212,23 @@ def test_a_status_line_ticking_does_not_make_a_still_question_stale(tmp_path: Pa
     )
     result = send_key(r.writer, KeyAsk(S1, "esc", drawn_from=drawn))
     assert isinstance(result, KeySent), result
+
+
+def test_a_key_drawn_under_a_question_that_has_gone_is_refused(tmp_path: Path) -> None:
+    """Esc drawn under a question, the question answered elsewhere: Esc now would interrupt."""
+    herd = FakeHerd()
+    herd.put(P3, S1, status="working")
+    r = rig(tmp_path, herd)
+    result = refused(send_key(r.writer, KeyAsk(S1, "esc", drawn_from=FINGERPRINT)))
+    assert result.refusal is Refusal.SCREEN_CHANGED
+    assert result.prompt is None
+    assert herd.writes(SEND_KEYS) == []
+    assert r.audit_records == [], "a refusal the app makes on its own is not recorded"
+
+
+def test_an_interrupt_drawn_under_a_question_that_has_gone_still_goes(tmp_path: Path) -> None:
+    herd = FakeHerd()
+    herd.put(P3, S1, status="working")
+    r = rig(tmp_path, herd)
+    _ = sent(send_key(r.writer, KeyAsk(S1, "ctrl-c", drawn_from=FINGERPRINT, confirmed=True)))
+    assert herd.writes(SEND_KEYS) == [{"target": "w1:p3", "keys": ["ctrl-c"]}]
