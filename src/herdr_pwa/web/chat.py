@@ -5,6 +5,7 @@ from typing import Final
 
 from herdr_pwa.engine.transcript import HistoryState, Speaker, TranscriptPage, TranscriptTurn
 from herdr_pwa.web.markdown import MdNode, render_tree
+from herdr_pwa.web.stats import duration
 
 _STATE_NOTES = {
     HistoryState.empty: "Nothing has been said yet.",
@@ -16,7 +17,7 @@ _STATE_NOTES = {
 
 @dataclass(frozen=True, slots=True)
 class ChatTurn:
-    """One rendered line of conversation; only agent prose becomes a tree."""
+    """One rendered line of conversation; only agent prose and peer messages become a tree."""
 
     speaker: str
     text: str
@@ -31,6 +32,12 @@ class ChatTurn:
     call: str = ""
     # The record's own id, which names a message across redraws and an earlier page landing above.
     key: str = ""
+    # A task notice's status word and how long it ran ("4m"), empty when unrecorded.
+    status: str = ""
+    elapsed: str = ""
+    # A peer message's sender, and whether it is a subagent's hand-back report.
+    sender: str = ""
+    report: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,8 +98,12 @@ def fold_tools(turns: tuple[ChatTurn, ...]) -> tuple[ChatTurn | ToolRun, ...]:
     return tuple(items)
 
 
+_PROSE: Final = (Speaker.agent, Speaker.peer)
+_ONE_LINE: Final = (Speaker.tool, Speaker.notice)
+
+
 def _turn(turn: TranscriptTurn) -> ChatTurn:
-    prose = render_tree(turn.text) if turn.speaker is Speaker.agent else ()
+    prose = render_tree(turn.text) if turn.speaker in _PROSE else ()
     return ChatTurn(
         speaker=turn.speaker.value,
         text=turn.text,
@@ -101,9 +112,13 @@ def _turn(turn: TranscriptTurn) -> ChatTurn:
         result=turn.result,
         failed=turn.failed,
         truncated=turn.truncated or turn.result_truncated,
-        long=turn.speaker is not Speaker.tool and is_long(turn.text),
+        long=turn.speaker not in _ONE_LINE and is_long(turn.text),
         call=turn.call,
         key=turn.uuid,
+        status=turn.status,
+        elapsed=duration(turn.elapsed_ms / 1000) if turn.elapsed_ms else "",
+        sender=turn.sender,
+        report=turn.report,
     )
 
 

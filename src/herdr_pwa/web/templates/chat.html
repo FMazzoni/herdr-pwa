@@ -1,5 +1,5 @@
 {% from "md.html" import md %}
-{% set speakers = {"human": "You", "agent": "Agent", "system": "Note"} %}
+{% set speakers = {"human": "You", "agent": "Agent", "system": "Note", "peer": "Agent message"} %}
 {% set base = "/agent/" ~ (agent.session|urlencode) ~ "/chat" %}
 {% set in_log = ("&log=" ~ (chat.log|urlencode)) if chat.log else "" %}
 {# A redraw starts where this view starts, so an earlier page the reader loaded stays loaded. #}
@@ -13,6 +13,14 @@
 {% macro tool_line(t) -%}
 {% if t.result %}<details class="tool{% if t.failed %} tool--failed{% endif %}" data-hp-key="call:{{ t.call }}"><summary class="tool__line">{{ tool_words(t) }}</summary><pre class="tool__result">{{ t.result }}</pre>{% if t.truncated %}<p class="turn__clip">clipped</p>{% endif %}</details>
 {%- else %}<p class="tool__line tool__line--still{% if t.failed %} tool--failed{% endif %}">{{ tool_words(t) }}</p>{% endif %}
+{%- endmacro %}
+{# A task that stopped: the same quiet line as a tool call, its result behind a tap. #}
+{% macro notice_words(t) -%}
+<span class="notice__mark" aria-hidden="true">&#x2699;</span> <span class="notice__text">{{ t.text }}</span>{% if t.elapsed %} <span class="notice__time"><span aria-hidden="true">&middot; </span>{{ t.elapsed }}</span>{% endif %}{% if t.failed %} <span class="tool__failed"><span aria-hidden="true">&#x2715; </span>{{ t.status }}</span>{% endif %}
+{%- endmacro %}
+{% macro notice_line(t) -%}
+{% if t.result %}<details class="tool notice{% if t.failed %} notice--failed{% endif %}"><summary class="tool__line">{{ notice_words(t) }}</summary><pre class="tool__result">{{ t.result }}</pre>{% if t.truncated %}<p class="turn__clip">clipped</p>{% endif %}</details>
+{%- else %}<p class="tool__line tool__line--still notice{% if t.failed %} notice--failed{% endif %}">{{ notice_words(t) }}</p>{% endif %}
 {%- endmacro %}
 <section id="agent-view" class="chat" data-hp-poll="{{ url }}" hx-get="{{ url }}" hx-target="this" hx-swap="outerHTML" data-hp-topic="chat:{{ agent.session }}" hx-trigger="hp:stale, hp:poke from:body">
   <h2 class="sr-only">Chat</h2>
@@ -32,12 +40,17 @@
     <span class="sr-only">Tool:</span>{{ tool_line(item.tools[0]) }}
     {% endif %}
   </div>
+  {% elif item.speaker == "notice" %}
+  <div class="turn turn--tools turn--notice" data-hp-key="turn:{{ item.key }}"><span class="sr-only">Task:</span>{{ notice_line(item) }}</div>
   {% else %}
   {% set turn = item %}
   <article class="turn turn--{{ turn.speaker }}"{% if turn.key %} data-hp-key="turn:{{ turn.key }}"{% endif %}>
     {#- Who spoke is drawn as a colour and an edge; VoiceOver is told in words. #}
     <span class="sr-only">{{ speakers.get(turn.speaker, turn.speaker) }}:</span>
-    {% if turn.speaker == "agent" %}
+    {% if turn.speaker == "peer" %}
+    <p class="peer__head">{{ "Report from" if turn.report else "Message from" }} <span class="peer__name">{{ turn.sender or "another agent" }}</span></p>
+    {% endif %}
+    {% if turn.speaker in ("agent", "peer") %}
     <div class="prose{% if turn.long %} turn__fold{% endif %}">{{ md(turn.prose, files="/agent/" ~ (agent.session|urlencode) ~ "/files") }}</div>
     {% else %}
     <p class="turn__text{% if turn.long %} turn__fold{% endif %}">{{ turn.text }}</p>
