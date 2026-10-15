@@ -15,6 +15,7 @@ from herdr_pwa.engine.transcript import (
     tally_claude,
 )
 from herdr_pwa.jsontypes import JsonObject, as_object, loads
+from herdr_pwa.web.chat import described
 from tests.catalogue import (
     NOTICES,
     failed_notice,
@@ -69,7 +70,7 @@ def test_the_fixture_holds_every_kind_the_harness_injects() -> None:
         "task-notification": 3,
         "assistant": 1,
         "peer-message": 2,
-        "peer-handback": 3,
+        "peer-handback": 6,
         "peer-cross-session": 1,
     }
 
@@ -95,7 +96,12 @@ def test_every_record_lands_as_what_it_is(tmp_path: Path) -> None:
     speakers = [t.speaker for t in _turns(notice_records(), tmp_path)]
     assert speakers == [
         Speaker.human,
-        *[Speaker.notice] * 3,
+        Speaker.peer,
+        Speaker.notice,
+        Speaker.notice,
+        Speaker.peer,
+        Speaker.peer,
+        Speaker.notice,
         Speaker.human,
         Speaker.agent,
         *[Speaker.peer] * 6,
@@ -118,7 +124,7 @@ def test_a_failed_or_killed_task_says_so(tmp_path: Path) -> None:
 
 def test_a_hand_back_is_the_report_without_the_harness_frame(tmp_path: Path) -> None:
     turns = _turns(notices_of("peer", report=True), tmp_path)
-    assert len(turns) == 3
+    assert len(turns) == 6
     for turn in turns:
         assert turn.speaker is Speaker.peer
         assert turn.report
@@ -145,7 +151,7 @@ def test_without_origin_the_leading_tag_decides(tmp_path: Path) -> None:
     without = _turns([_without_origin(r) for r in records], tmp_path / "b")
     assert [t.speaker for t in without] == [t.speaker for t in with_origin]
     reports = [t for t in without if t.report]
-    assert len(reports) == 3
+    assert len(reports) == 6
     assert all(HANDBACK_FRAME not in t.text for t in reports)
     cross = [t for t in without if t.sender == "design-review"]
     assert len(cross) == 1
@@ -236,8 +242,10 @@ def _chat(tmp_path: Path, records: list[JsonObject]) -> str:
 def test_the_chat_draws_notices_as_lines_and_peers_as_cards(tmp_path: Path) -> None:
     chat = _chat(tmp_path, notice_records())
     assert chat.count('class="turn turn--tools turn--notice"') == 3
-    assert chat.count('class="turn turn--peer"') == 6
+    assert chat.count('class="turn turn--peer"') == 9
+    # Three hand-backs are joined to their task's notice; the three with none keep the type.
     assert chat.count('Report from <span class="peer__name">general-purpose</span>') == 3
+    assert 'Report from <span class="peer__name">Review the parser</span>' in chat
     assert 'Message from <span class="peer__name">design-review</span>' in chat
     assert (
         '<span class="notice__text">Agent &#34;Review the parser&#34; finished</span>' in chat
@@ -273,3 +281,37 @@ def test_markup_in_a_peer_body_is_text(tmp_path: Path) -> None:
     assert "<script>" not in chat
     assert "<img" not in chat
     assert "&lt;script&gt;" in chat
+
+
+# A hand-back names its task by the description its notice carries, else by its type.
+
+
+def _report_of(task: str) -> JsonObject:
+    found = [
+        r
+        for r in notices_of("peer", report=True)
+        if (as_object(r.get("origin")) or {}).get("from") == task
+    ]
+    return found[0]
+
+
+def test_a_hand_back_is_titled_by_the_description_of_its_task(tmp_path: Path) -> None:
+    joined = "add26fc36644915e1"
+    notice = next(r for r in notices_of("task-notification") if joined in json.dumps(r))
+    unjoined = notices_of("peer", report=True)[-1]
+    turns = described(tuple(_turns([_report_of(joined), notice, unjoined], tmp_path)))
+    senders = [t.sender for t in turns if t.speaker is Speaker.peer]
+    assert senders == ["Review the parser", "general-purpose"]
+
+
+def test_without_origin_the_tag_still_joins(tmp_path: Path) -> None:
+    joined = "aad73610517032ecf"
+    notice = next(r for r in notices_of("task-notification") if joined in json.dumps(r))
+    records = [_without_origin(_report_of(joined)), _without_origin(notice)]
+    (peer, _) = described(tuple(_turns(records, tmp_path)))
+    assert peer.sender == "Check the example task"
+
+
+def test_a_cross_session_message_keeps_its_session_name(tmp_path: Path) -> None:
+    turns = described(tuple(_turns(notice_records(), tmp_path)))
+    assert [t.sender for t in turns if t.speaker is Speaker.peer and not t.report][-1] == "design-review"

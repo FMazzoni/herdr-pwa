@@ -109,6 +109,8 @@ class TranscriptTurn(BaseModel):
     # Who a peer message is from, and whether it is a subagent's hand-back report.
     sender: str = ""
     report: bool = False
+    # A task notice's task id, or the task a peer message came from: what joins the two.
+    task: str = ""
 
 
 def is_message(turn: TranscriptTurn) -> bool:
@@ -747,6 +749,7 @@ def _injected_turn(found: TaskNotice | PeerMessage, uuid: str, ts: str) -> Trans
             failed=found.failed,
             status=found.status,
             elapsed_ms=found.elapsed_ms,
+            task=found.task,
         )
     body, cut = clip(found.body, MAX_PROSE_CHARS)
     return TranscriptTurn(
@@ -757,6 +760,7 @@ def _injected_turn(found: TaskNotice | PeerMessage, uuid: str, ts: str) -> Trans
         truncated=cut,
         sender=found.sender,
         report=found.report,
+        task=found.task,
     )
 
 

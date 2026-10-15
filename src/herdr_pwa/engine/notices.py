@@ -39,6 +39,8 @@ class TaskNotice:
     status: str
     elapsed_ms: int
     result: str
+    # The task's id, which a subagent's hand-back names as who it is from.
+    task: str = ""
 
     @property
     def failed(self) -> bool:
@@ -53,6 +55,8 @@ class PeerMessage:
     sender: str
     body: str
     report: bool
+    # The sending task's id, the one a task notification carries.
+    task: str = ""
 
 
 type Injected = TaskNotice | PeerMessage | Hidden
@@ -82,6 +86,7 @@ def _task(text: str) -> TaskNotice | None:
         status=_tag(body, "status"),
         elapsed_ms=_millis(_tag(body, "duration_ms")),
         result=_tag(body, "result"),
+        task=_tag(body, "task-id"),
     )
 
 
@@ -105,6 +110,7 @@ def _peer_from_tag(text: str) -> PeerMessage | None:
         sender=attrs.get("from-name") or attrs.get("from", ""),
         body=_report(body),
         report=body.startswith(_HANDBACK_FRAME),
+        task=attrs.get("from", ""),
     )
 
 
@@ -115,10 +121,12 @@ def _peer(origin: JsonObject, text: str) -> PeerMessage | None:
         return tagged
     name = origin.get("name") or origin.get("from")
     sender = name if isinstance(name, str) else ""
+    task = origin.get("senderTaskId") or origin.get("from")
     return PeerMessage(
         sender=sender or (tagged.sender if tagged else ""),
         body=_report(body),
         report=origin.get("handback") is True or body.startswith(_HANDBACK_FRAME),
+        task=task if isinstance(task, str) else "",
     )
 
 

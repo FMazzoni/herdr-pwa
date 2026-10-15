@@ -1,5 +1,6 @@
 """Transcript turns turned into what the Chat tab renders: speaker, text, prose tree."""
 
+import re
 from dataclasses import dataclass
 from typing import Final
 
@@ -122,8 +123,31 @@ def _turn(turn: TranscriptTurn) -> ChatTurn:
     )
 
 
+# A task notice's summary, as Claude Code writes it: Agent "<description>" finished.
+_DESCRIBED: Final = re.compile(r'\AAgent "(.+)" \w+')
+
+
+def described(turns: tuple[TranscriptTurn, ...]) -> tuple[TranscriptTurn, ...]:
+    """Each hand-back named by its task's description, where a notice on the page gives one.
+
+    The harness names a subagent by its type ("general-purpose"); only the task notice
+    carries what it was asked to do. Without a notice, the type stays.
+    """
+    names: dict[str, str] = {}
+    for turn in turns:
+        found = _DESCRIBED.match(turn.text) if turn.speaker is Speaker.notice else None
+        if found is not None and turn.task:
+            names[turn.task] = found.group(1)
+    return tuple(
+        t.model_copy(update={"sender": names[t.task]})
+        if t.speaker is Speaker.peer and t.report and t.task in names
+        else t
+        for t in turns
+    )
+
+
 def chat_view(page: TranscriptPage) -> ChatView:
     """The Chat tab's content for one transcript page."""
-    turns = tuple(_turn(t) for t in page.turns)
+    turns = tuple(_turn(t) for t in described(tuple(page.turns)))
     note = "" if turns else _STATE_NOTES.get(page.state, "Nothing has been said yet.")
     return ChatView(fold_tools(turns), note, start=page.cursor, log=page.log, more=page.has_more)
