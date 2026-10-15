@@ -778,13 +778,12 @@
   }
 
   /* Never redraw under a finger or a running scroll: a programmatic scroll then fights the
-   * reader's (iOS drops momentum). The answer is dropped and fetched afresh once still. */
+   * reader's (iOS drops momentum). That holds for every region that redraws itself, the stats
+   * strip and the feed as much as the view, since each swap ends in a move to the end or a hold.
+   * The answer is dropped and the region fetched afresh, by its id, once still. */
   function deferring(detail) {
     var target = detail.target;
-    if (!target || !target.hasAttribute("data-hp-poll") || !readerBusy()) {
-      return false;
-    }
-    if (target.id !== "agent-view" && target.id !== "answer") {
+    if (!target || !target.id || !target.hasAttribute("data-hp-poll") || !readerBusy()) {
       return false;
     }
     detail.shouldSwap = false;
@@ -825,6 +824,12 @@
     swapMark = swapEnd ? null : mark();
   });
 
+  // Where the page stood as a swap began, so the swap is blamed only for a move it made.
+  var swapY = null;
+  document.addEventListener("htmx:beforeSwap", function (event) {
+    swapY = event.detail.shouldSwap ? window.scrollY : null;
+  });
+
   document.addEventListener("htmx:afterSwap", function (event) {
     if (isRead(event.detail)) {
       if (swapEnd) {
@@ -834,8 +839,13 @@
       }
       swapMark = null;
     }
-    // A swap that shortened the page moved it too, and that move was not the reader's.
-    ownScroll();
+    /* A swap that shortened the page moved it too, and that move was not the reader's. One that
+     * left the page where it stood claims nothing: the reader's last scroll may not have been
+     * heard yet, and taking it as this script's would leave the page pinned under them. */
+    if (swapY === null || window.scrollY !== swapY) {
+      ownScroll();
+    }
+    swapY = null;
   });
 
   /* ---- "Question waiting" floats above the dock while the question is below the reader ----
