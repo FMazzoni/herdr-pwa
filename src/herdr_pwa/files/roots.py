@@ -12,7 +12,19 @@ from herdr_pwa.files.reader import OutsideRoot, inside
 
 ROOT_ID: Final = re.compile(r"[0-9a-f]{12}")
 # Credentials and this app's own state never show, even inside a root, even behind a tap.
-DENIED_UNDER_HOME: Final = (".ssh", ".gnupg", ".aws", ".claude", ".config/herdr-pwa")
+DENIED_UNDER_HOME: Final = (
+    ".ssh",
+    ".gnupg",
+    ".aws",
+    ".claude",
+    # Every tool's tokens: gh's hosts.yml, keyrings, this app's own state among them.
+    ".config",
+    ".local/share",
+    ".netrc",
+    ".git-credentials",
+    ".docker",
+    ".kube",
+)
 # Names that may hold a secret: shown only after a tap that says so.
 _SECRET: Final = re.compile(r"(?i)^(\.env.*|.*\.pem|id_.*|.*\.key|credentials.*)$")
 
@@ -58,7 +70,7 @@ class Fence:
     def allows(self, path: Path) -> bool:
         """Whether a resolved path is clear of every denied directory."""
         text = str(path)
-        # A prefix match, so .config/herdr-pwa-v2 is fenced as well as .config/herdr-pwa.
+        # A prefix match, so a state dir's -v2 sibling or a .netrc-old is fenced as well.
         return not any(inside(path, d) or text.startswith(str(d)) for d in self.denied)
 
 

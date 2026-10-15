@@ -16,8 +16,8 @@ from fastapi.routing import APIRoute
 from starlette.routing import BaseRoute
 
 from herdr_pwa.files import fuzzy
-from herdr_pwa.files.git import _filter_names, parse_status  # pyright: ignore[reportPrivateUsage]
-from herdr_pwa.files.reader import LocalReader, OutsideRoot
+from herdr_pwa.files.git import Git, _filter_names, parse_status  # pyright: ignore[reportPrivateUsage]
+from herdr_pwa.files.reader import Listing, LocalReader, OutsideRoot, Stat
 from herdr_pwa.files.roots import Fence, is_secret, root_id
 from herdr_pwa.files.view import (
     BUSY_NOTE,
@@ -28,7 +28,7 @@ from herdr_pwa.files.view import (
 )
 from herdr_pwa.web.mdnode import MdNode
 from herdr_pwa.web.routers import files as files_router
-from tests.filefakes import booby_trap, git, make_repo, stand_in
+from tests.filefakes import booby_trap, git, make_repo, stand_in, trapped_submodule
 from tests.webfakes import (
     SNAPSHOT,
     WORKING_SESSION,
@@ -187,6 +187,58 @@ def test_a_worktree_of_a_root_is_a_root_too(tmp_path: Path) -> None:
     assert rig.http.get(f"/files/{root_id(tree.resolve())}/tree").status_code == 200
 
 
+def test_a_forged_worktree_entry_is_not_a_root(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path / "main-checkout")
+    real = tmp_path / "feature-tree"
+    git(repo, "worktree", "add", "-q", "-b", "feature", str(real))
+    # Another repository of the user's, and a plain directory, each named by a forged entry.
+    other = make_repo(tmp_path / "forged-other")
+    plain = tmp_path / "forged-plain"
+    plain.mkdir()
+    (plain / "data.txt").write_text("not shared\n")
+    for name, target in (("evil", plain), ("evil2", other)):
+        admin = repo / ".git" / "worktrees" / name
+        admin.mkdir(parents=True)
+        (admin / "gitdir").write_text(f"{target}/.git\n")
+        (admin / "HEAD").write_text("ref: refs/heads/main\n")
+        (admin / "commondir").write_text("../..\n")
+    page = _rig(tmp_path, repo).http.get("/files").text
+    assert "feature-tree" in page
+    assert not _holds(page, "forged-plain")
+    assert not _holds(page, "forged-other")
+    for target in (plain, other):
+        assert (
+            _rig(tmp_path, repo).http.get(f"/files/{root_id(target.resolve())}/tree").status_code
+            == 404
+        )
+
+
+def test_a_work_tree_set_outside_the_agents_cwd_is_not_a_root(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path / "pointing")
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    git(repo, "config", "core.worktree", str(elsewhere))
+    rig = _rig(tmp_path, repo)
+    assert rig.http.get(f"/files/{root_id(elsewhere.resolve())}/tree").status_code == 404
+    assert "No agent is working in a git repository" in rig.http.get("/files").text
+
+
+@pytest.mark.parametrize(
+    "rel",
+    [
+        ".config/gh/hosts.yml",
+        ".local/share/keyrings/login.keyring",
+        ".netrc",
+        ".git-credentials",
+        ".docker/config.json",
+        ".kube/config",
+    ],
+)
+def test_credential_stores_under_home_are_fenced(rel: str) -> None:
+    home = Path.home().resolve()
+    assert not Fence.around(home).allows(home / rel)
+
+
 # ---- what is shown, and what is held back -------------------------------------------------
 
 
@@ -336,6 +388,117 @@ def test_the_highlight_limit_sends_a_third_file_plain(tmp_path: Path) -> None:
     for thread in busy:
         thread.join(5)
     assert viewer.open(reader, tmp_path / "f2.py", line=0, reveal=False, source=False).note == ""
+
+
+def _hold_both_slots(
+    viewer: Viewer, tmp_path: Path
+) -> tuple[threading.Event, list[threading.Thread]]:
+    """Two code highlights parked inside the viewer's slots until the event is set."""
+    gate = threading.Event()
+    started = threading.Semaphore(0)
+
+    def slow(code: str, language: str, limit: int) -> tuple[MdNode, ...]:
+        del code, language, limit
+        started.release()
+        gate.wait(10)
+        return ()
+
+    viewer.paint = slow
+    reader = LocalReader(tmp_path.resolve())
+    for n in range(2):
+        (tmp_path / f"held{n}.py").write_text(f"x = {n}\n")
+    busy = [
+        threading.Thread(
+            target=viewer.open,
+            args=(reader, tmp_path / f"held{n}.py"),
+            kwargs={"line": 0, "reveal": False, "source": False},
+        )
+        for n in range(2)
+    ]
+    for thread in busy:
+        thread.start()
+    assert started.acquire(timeout=5)
+    assert started.acquire(timeout=5)
+    return gate, busy
+
+
+def test_markdown_waits_for_a_highlight_slot_like_code(tmp_path: Path) -> None:
+    rendered: list[str] = []
+
+    def render(text: str) -> tuple[MdNode, ...]:
+        rendered.append(text)
+        return (MdNode(text=text),)
+
+    viewer = Viewer(wait=0.2, render=render)
+    gate, busy = _hold_both_slots(viewer, tmp_path)
+    (tmp_path / "notes.md").write_text("# Notes\n")
+    reader = LocalReader(tmp_path.resolve())
+    shown = viewer.open(reader, tmp_path / "notes.md", line=0, reveal=False, source=False)
+    assert shown.note == BUSY_NOTE
+    assert shown.kind == "code"
+    assert rendered == []
+    gate.set()
+    for thread in busy:
+        thread.join(5)
+    shown = viewer.open(reader, tmp_path / "notes.md", line=0, reveal=False, source=False)
+    assert (shown.kind, shown.note, rendered) == ("markdown", "", ["# Notes\n"])
+
+
+def test_markdown_past_its_cap_is_shown_as_source(tmp_path: Path) -> None:
+    rendered: list[str] = []
+
+    def render(text: str) -> tuple[MdNode, ...]:
+        rendered.append(text)
+        return ()
+
+    # A literal, not the cap: 100KB of brackets is seconds of CPU in the markdown parser.
+    (tmp_path / "big.md").write_text("[" * 100_000 + "\n")
+    viewer = Viewer(render=render)
+    reader = LocalReader(tmp_path.resolve())
+    shown = viewer.open(reader, tmp_path / "big.md", line=0, reveal=False, source=False)
+    assert shown.kind == "code"
+    assert "too long to render" in shown.note
+    assert rendered == []
+
+
+class _Counting:
+    """A reader that remembers the longest read it was asked for."""
+
+    def __init__(self, root: Path) -> None:
+        self.inner = LocalReader(root)
+        self.longest = 0
+
+    def list_dir(self, path: Path) -> Listing:
+        return self.inner.list_dir(path)
+
+    def stat(self, path: Path) -> Stat:
+        return self.inner.stat(path)
+
+    def read_range(self, path: Path, offset: int, length: int) -> bytes:
+        self.longest = max(self.longest, length)
+        return self.inner.read_range(path, offset, length)
+
+
+def test_a_page_with_no_newline_is_read_only_up_to_its_byte_cap(tmp_path: Path) -> None:
+    # A literal: a few MB with no newline is one page, which must not be read whole.
+    (tmp_path / "one.log").write_bytes(b"y" * (6 * 1024 * 1024))
+    reader = _Counting(tmp_path.resolve())
+    shown = Viewer().open(reader, tmp_path / "one.log", line=0, reveal=False, source=False)
+    assert shown.kind == "paged"
+    assert reader.longest <= 2 * 1024 * 1024
+    assert [line.n for line in shown.lines] == [1]
+    assert shown.lines[0].cut > 0
+    assert "cut" in shown.note
+
+
+def test_a_diff_is_read_from_git_only_up_to_a_cap(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path / "huge-diff")
+    # A literal: 12MB of changed lines, past any page a phone reads.
+    (repo / "logs/big.log").write_text("changed line of the log\n" * 500_000)
+    found = Git().diff(repo, "logs/big.log")
+    assert found is not None
+    assert 0 < len(found) <= 8 * 1024 * 1024
+    assert found.startswith("diff --git")
 
 
 # ---- one huge file cannot stall the feed --------------------------------------------------
@@ -714,6 +877,25 @@ def test_no_command_a_repository_configures_is_ever_run(tmp_path: Path) -> None:
         assert rig.http.get(url).status_code == 200, url
         assert sorted(p.name for p in marks.iterdir()) == [], url
     assert "PORT = 9" in rig.http.get(f"{base}/diff?path=src/app/server.py").text
+
+
+def test_a_submodule_never_runs_a_command_its_own_config_names(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path / "super")
+    marks = tmp_path / "marks"
+    inside = trapped_submodule(repo, marks)
+    rig = _rig(tmp_path, repo)
+    base = _base(repo)
+    for url in (
+        "/files",
+        base,
+        f"{base}/tree?path=vendor",
+        f"{base}/find?q=notes",
+        f"{base}/diff?path=vendor",
+        f"{base}/diff?path={inside}",
+        f"{base}/file?path={inside}",
+    ):
+        assert rig.http.get(url).status_code == 200, url
+        assert sorted(p.name for p in marks.iterdir()) == [], url
 
 
 def test_a_filter_name_that_cannot_be_blanked_stops_git() -> None:
