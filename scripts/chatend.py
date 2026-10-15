@@ -61,7 +61,7 @@ LINES = 120
 # Where the newest turn or terminal line, and the question if any, sit against the dock.
 PROBE = r"""
 const units = document.querySelectorAll(
-  "#agent-view .turn, #agent-view > .pane:not(.pane--status) > .pane__line");
+  "#agent-view .turn, #agent-view > .pane > .pane__line");
 const last = units[units.length - 1];
 const bar = document.getElementById("composer");
 const answer = document.getElementById("answer");
@@ -70,7 +70,7 @@ if (!last || !bar || !answer || busy || document.readyState !== "complete") retu
 const box = last.getBoundingClientRect();
 const question = document.querySelector("#answer .answer__question");
 const asked = question ? question.getBoundingClientRect() : null;
-const options = [...document.querySelectorAll("#answer .option, #answer .button--option")];
+const options = [...document.querySelectorAll("#answer .option")];
 const lowest = Math.max(0, ...options.map((o) => o.getBoundingClientRect().bottom));
 return {
   under: document.querySelector(".topbar").getBoundingClientRect().bottom,
@@ -140,6 +140,27 @@ return {
   failedShown: !!failed && !shut && failed.getBoundingClientRect().height > 0,
   scrollY: window.scrollY, swaps: window.__hpSwaps || 0, busy: !!busy,
 };
+"""
+
+# Close the first fold, leaving the call opened inside it open.
+CLOSE_FOLD = r"""
+const fold = document.querySelector("#agent-view details.tools");
+if (!fold) return null;
+fold.querySelector("summary").click();
+return { open: fold.open, inner: !!fold.querySelector("details.tool[open]") };
+"""
+# Redraw the named regions: the answer region alone, or every region on the page.
+REDRAW = r"""
+const ids = arguments[0];
+for (const id of ids) document.getElementById(id).__hpOld = true;
+if (ids.length === 1) htmx.trigger(document.getElementById(ids[0]), "hp:stale");
+else htmx.trigger(document.body, "hp:poke");
+"""
+REDRAWN = r"""
+const fold = document.querySelector("#agent-view details.tools");
+const busy = document.querySelector(".htmx-request, .htmx-swapping, .htmx-settling");
+const fresh = arguments[0].every((id) => !document.getElementById(id).__hpOld);
+return { fresh: fresh, busy: !!busy, open: !!(fold && fold.open) };
 """
 
 
@@ -484,7 +505,149 @@ def burst(driver: Marionette, base: str, tab: Tab, _rig: Rig, home: Path) -> lis
     start, end = _num(before, "scrollY"), _num(after, "scrollY")
     if abs(end - start) > DRIFT:
         problems.append(f"{tab.name}: a poll moved the reader from {start:.0f}px to {end:.0f}px")
-    return problems + _fold_problems(tab.name, after, opened=True)
+    return problems + _fold_problems(tab.name, after, opened=True) + _closed_stays(driver, tab)
+
+
+def _redrawn(driver: Marionette, tab: Tab, ids: list[str]) -> list[str]:
+    """Redraw ``ids``; the fold the reader closed must still be closed once they land."""
+    driver.script(REDRAW, ids)
+    deadline = time.monotonic() + WAIT_SECONDS
+    after: object = None
+    while time.monotonic() < deadline:
+        after = driver.script(REDRAWN, ids)
+        if isinstance(after, dict) and after.get("fresh") and not after.get("busy"):
+            break
+        time.sleep(0.1)
+    if not isinstance(after, dict) or not after.get("fresh"):
+        return [f"{tab.name}: {' and '.join(ids)} never redrew"]
+    if after.get("open"):
+        return [
+            f"{tab.name}: a fold the reader closed opened again when {' and '.join(ids)} redrew"
+        ]
+    return []
+
+
+def _closed_stays(driver: Marionette, tab: Tab) -> list[str]:
+    """Close the fold the poll kept open; another region's redraw, then the view's, leave it shut."""
+    shut = driver.script(CLOSE_FOLD)
+    if not isinstance(shut, dict) or shut.get("open") or not shut.get("inner"):
+        return [f"{tab.name}: the fold would not close over an open call, so it proves nothing"]
+    return _redrawn(driver, tab, ["answer"]) or _redrawn(driver, tab, ["agent-view", "answer"])
+
+
+# A finger, and a reader's scroll that has not been heard yet.
+
+# A finger on the glass as iOS reports it, and a count of what the stats strip did since.
+FINGER = r"""
+const [kind] = arguments;
+if (!window.__hpStrip) {
+  window.__hpStrip = { answered: 0, swaps: 0 };
+  // The answer is in hand once its swap is offered, whether the swap is then taken or put off.
+  document.addEventListener("htmx:beforeSwap", (e) => {
+    if (e.detail.target && e.detail.target.id === "agent-stats") window.__hpStrip.answered += 1;
+  });
+  document.addEventListener("htmx:afterSwap", (e) => {
+    if (e.detail.target && e.detail.target.id === "agent-stats") window.__hpStrip.swaps += 1;
+  });
+}
+const e = new Event(kind, { bubbles: true });
+Object.defineProperty(e, "touches", { value: kind === "touchstart" ? [{}] : [] });
+document.dispatchEvent(e);
+return true;
+"""
+READ_STRIP = r"""
+const busy = document.querySelector(".htmx-request, .htmx-swapping, .htmx-settling");
+return { ...window.__hpStrip, busy: !!busy, there: !!document.getElementById("agent-stats") };
+"""
+STRIP_STALE = "htmx.trigger(document.getElementById('agent-stats'), 'hp:stale');"
+
+
+def _strip_until(
+    driver: Marionette, done: Callable[[dict[str, object]], bool]
+) -> dict[str, object]:
+    deadline = time.monotonic() + WAIT_SECONDS
+    while time.monotonic() < deadline:
+        seen = driver.script(READ_STRIP)
+        if isinstance(seen, dict) and done(seen):
+            return seen
+        time.sleep(0.1)
+    return {}
+
+
+def strip_under_finger(
+    driver: Marionette, base: str, tab: Tab, _rig: Rig, _home: Path
+) -> list[str]:
+    """The stats strip's redraw waits while a finger is down, and lands once it lifts."""
+    driver.send("WebDriver:Navigate", {"url": base + tab.state.path})
+    if not _strip_until(driver, lambda s: bool(s.get("there")) and not s.get("busy")):
+        return [f"{tab.name}: the strip never drew"]
+    driver.script(FINGER, "touchstart")
+    driver.script(STRIP_STALE)
+    held = _strip_until(driver, lambda s: _num(s, "answered") >= 1 and not s.get("busy"))
+    if not held:
+        return [f"{tab.name}: the strip's read never came back"]
+    problems: list[str] = []
+    if _num(held, "swaps"):
+        problems.append(f"{tab.name}: the strip was redrawn under a finger")
+    driver.script(FINGER, "touchend")
+    if not _strip_until(driver, lambda s: _num(s, "swaps") >= 1):
+        problems.append(f"{tab.name}: the strip's redraw never landed after the finger lifted")
+    return problems
+
+
+# Scroll up from the end, and before that scroll is heard, land a swap that does not move the page.
+UNHEARD = r"""
+const [by] = arguments;
+window.__hpHeard = 0;
+window.addEventListener("scroll", () => { window.__hpHeard += 1; }, { passive: true });
+window.__hpSwaps = 0;
+document.addEventListener("htmx:afterSettle", () => { window.__hpSwaps += 1; });
+window.scrollBy({ top: -by, behavior: "instant" });
+const target = document.createElement("div");
+const detail = { target: target, elt: target, requestConfig: { verb: "post" }, shouldSwap: true };
+document.dispatchEvent(new CustomEvent("htmx:beforeSwap", { detail: detail }));
+document.dispatchEvent(new CustomEvent("htmx:afterSwap", { detail: detail }));
+return window.scrollY;
+"""
+HEARD = r"""
+const busy = document.querySelector(".htmx-request, .htmx-swapping, .htmx-settling");
+return { heard: window.__hpHeard, swaps: window.__hpSwaps, scrollY: window.scrollY, busy: !!busy };
+"""
+UNHEARD_PX = 400
+
+
+def _heard_until(
+    driver: Marionette, done: Callable[[dict[str, object]], bool]
+) -> dict[str, object]:
+    deadline = time.monotonic() + WAIT_SECONDS
+    while time.monotonic() < deadline:
+        seen = driver.script(HEARD)
+        if isinstance(seen, dict) and done(seen):
+            return seen
+        time.sleep(0.1)
+    return {}
+
+
+def unheard_scroll(driver: Marionette, base: str, tab: Tab, rig: Rig, home: Path) -> list[str]:
+    """A write's swap that lands before the reader's scroll is heard does not keep them pinned."""
+    driver.send("WebDriver:Navigate", {"url": base + tab.state.path})
+    seen = _wait_for(driver, tab.newest)
+    if not seen or not seen.get("scrollable"):
+        return [f"{tab.name}: never drew a page tall enough to scroll"]
+    up = driver.script(UNHEARD, UNHEARD_PX)
+    if not _heard_until(driver, lambda s: _num(s, "heard") >= 1):
+        return [f"{tab.name}: the reader's scroll was never heard"]
+    tab.grow(rig, home, 1)
+    driver.script(POKE)
+    after = _heard_until(driver, lambda s: _num(s, "swaps") >= 1 and not s.get("busy"))
+    if not after or not isinstance(up, int | float):
+        return [f"{tab.name}: the poll never redrew the chat"]
+    if abs(_num(after, "scrollY") - up) > DRIFT:
+        moved = _num(after, "scrollY")
+        return [
+            f"{tab.name}: scrolled up to {up:.0f}px as a write landed, a poll moved it to {moved:.0f}px"
+        ]
+    return []
 
 
 # Paging and the event stream.
@@ -723,7 +886,7 @@ const [step, every, count] = arguments;
 const walk = { steps: 0, swaps: [], atEnd: 0, done: false };
 window.__hpWalk = walk;
 const units = () => [...document.querySelectorAll(
-  "#agent-view .turn, #agent-view > .pane:not(.pane--status) > .pane__line")];
+  "#agent-view .turn, #agent-view > .pane > .pane__line")];
 const under = () => document.querySelector(".topbar").getBoundingClientRect().bottom;
 const gap = () => document.documentElement.scrollHeight - innerHeight - scrollY;
 let held = null;
@@ -848,6 +1011,7 @@ def _tabs() -> tuple[tuple[Tab, Callable[[Marionette, str, Tab, Rig, Path], list
     last_reply = f"Reply {TURNS - 1}:"
     [plan] = pick(["agent-answer-plan"])
     [ticks] = pick(["agent-answer-multiselect"])
+    [strip] = pick(["usage-chat"])
     last_line = f"step {LINES - 1:03d}"
     tool = State("tool result", chat.path, "", runner(snapshot_frame), _tool_chat(TURNS))
     folds = State("tool burst", chat.path, "", runner(snapshot_frame), _burst_chat(BURST))
@@ -869,6 +1033,8 @@ def _tabs() -> tuple[tuple[Tab, Callable[[Marionette, str, Tab, Rig, Path], list
         (Tab("tool burst", folds, "Reply after the burst", _say), burst),
         (Tab("tool result", tool, "Reply after the tests", _say), kept_open),
         (Tab("chat end", chat, last_reply, _say), follow),
+        (Tab("unheard scroll", chat, last_reply, _say), unheard_scroll),
+        (Tab("strip under a finger", strip, "", _say), strip_under_finger),
         (Tab("pane end", pane, last_line, _print), follow),
         (Tab("pane nudged up", pane, last_line, _scroll_pane), scrolling_up(0.4, 10)),
         (Tab("pane scrolled up", pane, last_line, _scroll_pane), scrolling_up(0.05, 40)),

@@ -2,7 +2,7 @@
 {% set base = "/agent/" ~ (agent.session|urlencode) %}
 <form id="composer" class="composer" method="post" action="{{ base }}/prompt"
       hx-post="{{ base }}/prompt" hx-target="this" hx-swap="outerHTML"
-      hx-disabled-elt="find button" data-hp-composer>
+      hx-disabled-elt="find button">
   {% include "_notice.html" %}
   {% if sent is defined %}
   {% call ui.banner("sent" if sent.verified else "held", sent=true) %}
