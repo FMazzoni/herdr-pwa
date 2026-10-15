@@ -1,5 +1,6 @@
 """Tool calls fold into one quiet line between the messages; a failure is never folded away."""
 
+import re
 from pathlib import Path
 
 from herdr_pwa.jsontypes import JsonObject
@@ -87,9 +88,13 @@ def test_the_chat_draws_a_fold_a_failure_in_sight_and_messages_as_cards(tmp_path
     assert '<summary class="tools__head">2 tool calls</summary>' in chat
     assert chat.count('class="tools"') == 1
     # The failure is a run of its own, outside the fold, saying so on its line.
-    alone = '<div class="turn turn--tools" data-hp-key="tools:tu2">\n    <span class="sr-only">Tool:</span><details class="tool tool--failed"'
-    assert alone in chat
-    line = chat[chat.index(alone) :]
+    alone = re.search(
+        r'<div class="turn turn--tools" data-hp-key="tools:tu2">\s*'
+        r'<span class="sr-only">Tool:</span>\s*<details class="tool tool--failed"',
+        chat,
+    )
+    assert alone is not None
+    line = chat[alone.start() :]
     assert "failed</span></summary>" in line[: line.index("</summary>") + len("</summary>")]
     assert '<article class="turn turn--human" data-hp-key="turn:u1">' in chat
     assert '<article class="turn turn--agent" data-hp-key="turn:a1">' in chat

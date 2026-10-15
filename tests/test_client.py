@@ -1152,14 +1152,18 @@ def test_a_close_fails_closed_on_an_unexpected_protocol() -> None:
 
 
 def test_an_injected_settings_object_is_never_second_guessed(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Nothing builds a ``Settings`` when one was handed in -- not even to check."""
-    settings = SETTINGS
-    monkeypatch.setenv("HP_BIND_HOST", "0.0.0.0")  # noqa: S104 - a value that must never be read
-    eng, wire = build(settings=settings)
-    assert eng.snapshot().protocol == protocol.EXPECTED_PROTOCOL
-    assert wire.last.method == SNAPSHOT
+    """The client dials the socket it was handed, whatever the environment names."""
+    # Real settings names: the app's Settings would read both, and refuse the port outright.
+    monkeypatch.setenv("HP_SOCKET_PATH", str(tmp_path / "from-the-environment.sock"))
+    monkeypatch.setenv("HP_PORT", "not a port")
+    handed = EngineSettings(socket_path=tmp_path / "handed.sock", command_timeout=1.5)
+    eng = HerdrClient(handed)
+    assert eng.settings is handed
+    assert isinstance(eng.transport, SocketTransport)
+    assert eng.transport.path == handed.socket_path
+    assert eng.transport.timeout == handed.command_timeout
 
 
 def test_the_engine_declares_the_eight_fields_it_reads_and_no_more() -> None:

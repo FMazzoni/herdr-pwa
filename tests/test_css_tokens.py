@@ -1,4 +1,4 @@
-"""The token checker passes the real stylesheet and fails one with a literal planted in it."""
+"""The token checker fails a stylesheet with a literal planted in it; the gate runs it on the real one."""
 
 import subprocess
 import sys
@@ -16,13 +16,6 @@ def _run(tmp_path: Path, css: str, allow: str = "") -> subprocess.CompletedProce
     allowlist.write_text(allow, encoding="utf-8")
     command = [sys.executable, str(SCRIPT), str(sheet), "--allow", str(allowlist)]
     return subprocess.run(command, capture_output=True, text=True, check=False)  # noqa: S603
-
-
-def test_the_real_stylesheet_passes() -> None:
-    result = subprocess.run(  # noqa: S603
-        [sys.executable, str(SCRIPT)], capture_output=True, text=True, check=False
-    )
-    assert result.returncode == 0, result.stdout
 
 
 def test_a_planted_px_fails_with_its_line(tmp_path: Path) -> None:

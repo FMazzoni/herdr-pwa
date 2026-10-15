@@ -1264,17 +1264,6 @@ FILES: Final = (
 
 STATES: Final = (*FEED, *AGENT_PAGE, *TAPPED, *ANSWERED, *LIFECYCLE, *STATS, *FILES)
 
-# The screens the geometry gate has always held, which every other entry is in addition to.
-GEOMETRY_CORE: Final = (
-    "feed-empty",
-    "feed-herd",
-    "agent-chat",
-    "agent-pane",
-    "unreachable",
-    "agent-unreachable",
-    "workspaces",
-)
-
 # Screens this app draws that the old app had no name for.
 V2_ONLY: Final = (
     "feed-herd",

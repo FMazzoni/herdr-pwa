@@ -327,7 +327,7 @@ def residual_shape() -> str:
 
 
 def test_the_residual_shape_is_built_the_way_it_claims_to_be() -> None:
-    """Guards the xfail below from decaying into a vacuously-failing test."""
+    """Guards the test below from passing vacuously on a shape that no longer has the trap in it."""
     text = residual_shape()
     assert "  1. README.md" in text
     assert "\u25cf" not in text.split("README.md")[0].rsplit("\n", 1)[-1]
