@@ -41,7 +41,19 @@ HARDENED: Final = (
     "diff.external=",
     "-c",
     "core.quotepath=off",
+    # A submodule is a repository with its own config, whose filters the blanking below never
+    # reads; git must not step into one, nor summarise one by running git log inside it.
+    "-c",
+    "submodule.recurse=false",
+    "-c",
+    "diff.ignoreSubmodules=all",
+    "-c",
+    "diff.submodule=short",
+    "-c",
+    "status.submoduleSummary=false",
 )
+# Said again on status and diff, where it outranks .gitmodules' own submodule.<name>.ignore.
+NO_SUBMODULES: Final = "--ignore-submodules=all"
 # A filter driver's command runs on diff and status for any path its attributes name, and
 # .git/info/attributes can name one too; each driver the config defines is blanked by name.
 _FILTER_KEYS: Final = ("clean", "smudge", "process")
@@ -197,7 +209,8 @@ class Git:
         """Branch and changes, untracked files listed one by one."""
 
         def read() -> Status:
-            out = self.run(top, "status", "--porcelain=v1", "-z", "-b", "--untracked-files=all")
+            args = ("status", "--porcelain=v1", "-z", "-b", "--untracked-files=all", NO_SUBMODULES)
+            out = self.run(top, *args)
             return parse_status(out) if out is not None else Status("", ())
 
         return self._cached(("status", str(top)), STATUS_TTL, read)
@@ -215,6 +228,6 @@ class Git:
     def diff(self, top: Path, path: str) -> str | None:
         """The working tree against HEAD for one path, with no external diff or textconv."""
         base = "HEAD" if self.run(top, "rev-parse", "--verify", "-q", "HEAD") else EMPTY_TREE
-        args = ("diff", "--no-ext-diff", "--no-textconv", "--no-color", "-M", base, "--", path)
-        out = self.run(top, *args)
+        args = ("diff", "--no-ext-diff", "--no-textconv", "--no-color", NO_SUBMODULES, "-M", base)
+        out = self.run(top, *args, "--", path)
         return out.decode("utf-8", "replace") if out is not None else None

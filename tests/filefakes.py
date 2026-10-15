@@ -1,6 +1,7 @@
 """A small, realistic git repository with a change in flight, for the file explorer's tests."""
 
 import base64
+import os
 import subprocess
 from pathlib import Path
 from typing import Final
@@ -196,3 +197,26 @@ def booby_trap(repo: Path, marks: Path) -> None:
     # Where an agent could also name a driver, outside the work tree.
     (repo / ".git" / "info").mkdir(exist_ok=True)
     (repo / ".git" / "info" / "attributes").write_text("*.md filter=trap\n")
+
+
+def trapped_submodule(repo: Path, marks: Path) -> str:
+    """Add a submodule whose own config names a filter, with a same-size edit for it to clean."""
+    marks.mkdir(parents=True, exist_ok=True)
+    inner = repo.parent / f"{repo.name}-inner"
+    inner.mkdir()
+    git(inner, "init", "-q", "-b", "main")
+    _write(inner, "notes.txt", "hello\n")
+    _write(inner, ".gitattributes", "* filter=evil\n")
+    git(inner, "add", "-A")
+    git(inner, "-c", "user.email=f@example.com", "-c", "user.name=F", "commit", "-q", "-m", "x")
+    git(repo, "-c", "protocol.file.allow=always", "submodule", "add", "-q", str(inner), "vendor")
+    git(repo, "commit", "-q", "-m", "vendor")
+    # The submodule's own config, which the superproject's reads never see.
+    git(repo / "vendor", "config", "filter.evil.clean", f'touch "{marks}/submodule-clean"; cat')
+    git(repo / "vendor", "config", "filter.evil.process", f'touch "{marks}/submodule-process"')
+    # Same size, so only hashing the content (through the filter) can tell it changed.
+    path = repo / "vendor" / "notes.txt"
+    stamp = path.stat().st_mtime_ns
+    path.write_text("jello\n")
+    os.utime(path, ns=(stamp + 2_000_000_000, stamp + 2_000_000_000))
+    return "vendor/notes.txt"

@@ -28,7 +28,7 @@ from herdr_pwa.files.view import (
 )
 from herdr_pwa.web.mdnode import MdNode
 from herdr_pwa.web.routers import files as files_router
-from tests.filefakes import booby_trap, git, make_repo, stand_in
+from tests.filefakes import booby_trap, git, make_repo, stand_in, trapped_submodule
 from tests.webfakes import (
     SNAPSHOT,
     WORKING_SESSION,
@@ -711,6 +711,25 @@ def test_no_command_a_repository_configures_is_ever_run(tmp_path: Path) -> None:
         assert rig.http.get(url).status_code == 200, url
         assert sorted(p.name for p in marks.iterdir()) == [], url
     assert "PORT = 9" in rig.http.get(f"{base}/diff?path=src/app/server.py").text
+
+
+def test_a_submodule_never_runs_a_command_its_own_config_names(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path / "super")
+    marks = tmp_path / "marks"
+    inside = trapped_submodule(repo, marks)
+    rig = _rig(tmp_path, repo)
+    base = _base(repo)
+    for url in (
+        "/files",
+        base,
+        f"{base}/tree?path=vendor",
+        f"{base}/find?q=notes",
+        f"{base}/diff?path=vendor",
+        f"{base}/diff?path={inside}",
+        f"{base}/file?path={inside}",
+    ):
+        assert rig.http.get(url).status_code == 200, url
+        assert sorted(p.name for p in marks.iterdir()) == [], url
 
 
 def test_a_filter_name_that_cannot_be_blanked_stops_git() -> None:
