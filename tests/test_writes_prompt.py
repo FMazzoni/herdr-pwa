@@ -21,7 +21,19 @@ from herdr_pwa.writes.outcome import Evidence, Outcome
 from herdr_pwa.writes.prompt import PromptAsk, PromptSent, send_first_prompt, send_prompt
 from herdr_pwa.writes.refusal import Refusal, Refused
 from herdr_pwa.writes.resolve import InFlight, Writer
-from tests._fake_herd import P3, P5, S1, S2, SETTLED, FakeHerd, Rig, capture, rig
+from tests._fake_herd import (
+    P3,
+    P5,
+    S1,
+    S2,
+    SETTLED,
+    FakeHerd,
+    Rig,
+    capture,
+    drafted,
+    echoed,
+    rig,
+)
 
 PROMPT = "agent.prompt"
 
@@ -44,7 +56,7 @@ def refused(result: object) -> Refused:
 
 
 def test_a_prompt_at_a_settled_pane_is_typed_once_and_read_back(tmp_path: Path) -> None:
-    r = idle_rig(tmp_path, SETTLED, SETTLED + "\u276f hello there\n")
+    r = idle_rig(tmp_path, SETTLED, echoed("\u276f hello there"))
     result = sent(send_prompt(r.writer, PromptAsk(S1, "hello there")))
     assert result.verified
     assert result.target == P3
@@ -242,7 +254,7 @@ def test_a_first_prompt_waits_for_a_settled_screen_and_asserts_no_session(
         SETTLED,
         SETTLED,
         SETTLED,
-        SETTLED + "\u276f hi hermes\n",
+        echoed("\u276f hi hermes"),
     ]
     r = rig(tmp_path, herd)
     result = sent(send_first_prompt(r.writer, P3, "hi hermes"))
@@ -344,6 +356,11 @@ def test_prose_about_those_verbs_does_not_ask(text: str) -> None:
     assert destructive_reason(text) == ""
 
 
+def test_text_left_in_the_input_box_has_not_landed() -> None:
+    assert not landed("hello there", SETTLED, drafted("hello there"))
+    assert landed("hello there", SETTLED, echoed("\u276f hello there"))
+
+
 def test_landing_needs_more_copies_than_before() -> None:
     assert landed("hello world", "", "\u276f hello world")
     assert not landed("hello world", "\u276f hello world", "\u276f hello world")
@@ -362,7 +379,7 @@ def test_anything_unsure_is_not_called_no_echo(screen: str) -> None:
 
 
 def test_a_prompt_from_a_second_tab_mid_send_is_refused_not_typed_twice(tmp_path: Path) -> None:
-    r = idle_rig(tmp_path, SETTLED, SETTLED + "\u276f hello there\n")
+    r = idle_rig(tmp_path, SETTLED, echoed("\u276f hello there"))
     second: list[PromptSent | Refused] = []
 
     def other_tab(herd: FakeHerd, params: JsonObject) -> None:

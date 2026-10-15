@@ -621,7 +621,8 @@
 
   function asking() {
     var region = document.getElementById("answer");
-    return !!(region && !region.classList.contains("answer--quiet"));
+    // A failure standing in for the region under its id is not a question.
+    return !!(region && region.classList.contains("answer") && !region.classList.contains("answer--quiet"));
   }
 
   /* The end, unless a waiting question is taller than the room between the bar and the dock:

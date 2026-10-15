@@ -9,9 +9,19 @@ from herdr_pwa.engine.transport import EngineUnavailable
 from herdr_pwa.jsontypes import JsonObject
 from herdr_pwa.writes.answer import KeyAsk, KeySent, send_key, send_starting_key
 from herdr_pwa.writes.keys import allowed_keys, answer_digits, control_token, key_ends_question
-from herdr_pwa.writes.outcome import Evidence, Outcome
+from herdr_pwa.writes.outcome import (
+    ANSWER_INTERVAL,
+    MOVE_INTERVAL,
+    UNREADABLE,
+    Evidence,
+    Outcome,
+    Pacing,
+    Poll,
+    Watched,
+    watch,
+)
 from herdr_pwa.writes.refusal import Refusal, Refused
-from tests._fake_herd import P3, P5, S1, S2, SETTLED, FakeHerd, Rig, capture, rig
+from tests._fake_herd import P3, P5, S1, S2, SETTLED, FakeClock, FakeHerd, Rig, capture, rig
 
 SEND_KEYS = "agent.send_keys"
 PERMISSION = capture("capture-blocked-permission-prompt")
@@ -272,3 +282,47 @@ def test_a_second_tab_answering_while_the_first_is_mid_write_is_refused(tmp_path
     # Once the first write has finished, the session takes writes again.
     again = refused(send_key(r.writer, KeyAsk(S1, "1", drawn_from=FINGERPRINT)))
     assert again.refusal is not Refusal.IN_FLIGHT
+
+
+# The watcher's endings, over a scripted run of reads.
+
+ASKED = BlockedPrompt.parse(PERMISSION)
+OTHER = BlockedPrompt.parse(capture("capture-blocked-plan-approval"))
+
+
+def _watch(*reads: Poll, ends: bool = True) -> tuple[Watched, FakeClock]:
+    clock = FakeClock()
+    queue = list(reads)
+
+    def read() -> Poll:
+        return queue.pop(0) if len(queue) > 1 else queue[0]
+
+    pacing = Pacing(sleep=clock.sleep, clock=clock)
+    return watch(read, aimed=ASKED.identity, ends=ends, pacing=pacing), clock
+
+
+def test_one_frame_of_another_question_is_not_believed_to_be_a_move() -> None:
+    seen, _ = _watch(OTHER, ASKED)
+    assert (seen.outcome, seen.evidence) == (Outcome.UNCONFIRMED, Evidence.UNMOVED)
+    assert seen.prompt is not None
+    assert seen.prompt.identity == ASKED.identity
+
+
+def test_a_move_is_believed_on_its_second_frame_one_interval_later() -> None:
+    seen, clock = _watch(OTHER, OTHER, ASKED)
+    assert (seen.outcome, seen.evidence, seen.polls) == (Outcome.UNCONFIRMED, Evidence.MOVED, 2)
+    assert seen.prompt is not None
+    assert seen.prompt.identity == OTHER.identity
+    assert clock.slept == [ANSWER_INTERVAL], "one interval, never the whole budget"
+
+
+def test_a_navigation_key_that_moves_on_is_confirmed_on_two_frames() -> None:
+    seen, clock = _watch(OTHER, ends=False)
+    assert (seen.outcome, seen.evidence, seen.polls) == (Outcome.CONFIRMED, Evidence.MOVED, 2)
+    assert clock.slept == [MOVE_INTERVAL]
+
+
+def test_an_unreadable_frame_still_settles_at_once_on_accepted() -> None:
+    # Kept on one read: accepted claims nothing and draws no controls, so a wrong one costs nothing.
+    seen, _ = _watch(UNREADABLE, ASKED)
+    assert (seen.outcome, seen.evidence, seen.polls) == (Outcome.ACCEPTED, Evidence.UNREAD, 1)

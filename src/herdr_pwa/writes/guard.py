@@ -4,6 +4,7 @@ import re
 from typing import Final
 
 from herdr_pwa.engine.dialog import BlockedPrompt, MenuShape
+from herdr_pwa.panetext import pane_lines, plain_text
 
 MAX_PROMPT_CHARS: Final = 4000
 
@@ -151,12 +152,17 @@ def _flat(text: str) -> str:
     return _SPACE.sub(" ", text).strip()
 
 
+def _above_the_box(screen: str) -> str:
+    # Text still in the agent's input box was typed, not submitted: it has not landed.
+    return " ".join(plain_text(line) for line in pane_lines(screen, strip=False))
+
+
 def landed(sent: str, before: str, after: str) -> bool:
-    """True when the pane gained more copies of this send than it had before."""
+    """True when the pane gained more copies of this send than it had before, outside its input."""
     needle = _flat(sent)[:MIN_MATCH_CHARS]
     if not needle:
         return False
-    return _flat(after).count(needle) > _flat(before).count(needle)
+    return _flat(_above_the_box(after)).count(needle) > _flat(_above_the_box(before)).count(needle)
 
 
 NO_ECHO_MECHANISM: Final = (

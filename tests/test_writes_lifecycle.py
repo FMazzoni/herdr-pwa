@@ -36,7 +36,7 @@ from herdr_pwa.writes.workspaces import (
     create_workspace,
     rename_workspace,
 )
-from tests._fake_herd import P3, S1, S2, SETTLED, FakeHerd, Rig, capture, rig
+from tests._fake_herd import P3, S1, S2, SETTLED, FakeHerd, Rig, capture, echoed, rig
 
 NEW = "a1b2c3d4-0000-4000-8000-000000000001"
 
@@ -310,11 +310,11 @@ def listening_rig(tmp_path: Path, *, session: str = NEW) -> Rig:
     def listening(herd: FakeHerd, _params: JsonObject) -> None:
         herd.agents[NEW_PANE].update(interactive_ready=True, launch_pending=False)
 
-    def echoed(herd: FakeHerd, params: JsonObject) -> None:
-        herd.screens[NEW_PANE] = [SETTLED + f"> {params['text']}\n"]
+    def typed(herd: FakeHerd, params: JsonObject) -> None:
+        herd.screens[NEW_PANE] = [echoed(f"> {params['text']}")]
 
     r.herd.after["agent.start"] = listening
-    r.herd.after["agent.prompt"] = echoed
+    r.herd.after["agent.prompt"] = typed
     r.herd.screens[NEW_PANE] = ["drawing", SETTLED]
     return r
 

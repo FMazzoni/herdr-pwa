@@ -53,6 +53,9 @@ class Pacing:
 
 # Two not-waiting reads in a row before the question is believed gone.
 GONE_POLLS: Final = 2
+# Two reads of the same other question in a row before the key is believed to have moved it on.
+# One interval, never the whole budget: the point of ending on a move is ending fast.
+MOVED_POLLS: Final = 2
 ANSWER_INTERVAL: Final = 0.35
 ANSWER_BUDGET: Final = 5.0
 # A navigation key is judged quickly, or every second tap is refused as stale.
@@ -82,6 +85,9 @@ class _Run:
     last: BlockedPrompt | None = None
     polls: int = 0
     gone: int = 0
+    # Consecutive reads of one other question, and which one.
+    moved: int = 0
+    moved_to: str = ""
     flickered: bool = False
 
     def note(self, saw: Evidence, poll: Poll) -> None:
@@ -91,6 +97,9 @@ class _Run:
         self.polls += 1
         self.gone = self.gone + 1 if saw is Evidence.GONE else 0
         self.poll = poll if isinstance(poll, BlockedPrompt) else None
+        to = self.poll.identity if saw is Evidence.MOVED and self.poll is not None else ""
+        self.moved = self.moved + 1 if to and to == self.moved_to else int(bool(to))
+        self.moved_to = to
         if saw is Evidence.UNMOVED:
             self.last = self.poll
 
@@ -106,9 +115,10 @@ def _saw(poll: Poll, aimed: str) -> Evidence:
 def _settled(seen: _Run, *, ends: bool) -> Watched | None:
     if seen.gone >= GONE_POLLS:
         return Watched(Outcome.CONFIRMED, Evidence.GONE, None, seen.polls)
+    # Unread settles on one read: accepted claims nothing and draws no controls to be wrong about.
     if seen.saw is Evidence.UNREAD:
         return Watched(Outcome.ACCEPTED, Evidence.UNREAD, None, seen.polls)
-    if seen.saw is Evidence.MOVED:
+    if seen.moved >= MOVED_POLLS:
         ended = Outcome.UNCONFIRMED if ends else Outcome.CONFIRMED
         return Watched(ended, Evidence.MOVED, seen.poll, seen.polls)
     return None
@@ -133,7 +143,7 @@ def watch(read: Callable[[], Poll], *, aimed: str, ends: bool, pacing: Pacing) -
         settled = _settled(seen, ends=ends)
         if settled is not None:
             return settled
-        # A deadline that lands on one uncorroborated gone frame takes one more look.
-        if pacing.clock() >= deadline and not seen.gone:
+        # A deadline that lands on one uncorroborated gone or moved frame takes one more look.
+        if pacing.clock() >= deadline and not (seen.gone or seen.moved):
             return _spent(seen, ends=ends)
         pacing.sleep(interval)

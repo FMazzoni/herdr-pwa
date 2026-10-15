@@ -104,9 +104,10 @@ def _read_now(client: HerdrClient, target: PaneId) -> str | Refused:
 
 
 def _preflight(send: _Send, screen: str) -> Refused | None:
-    digest = screen_digest(screen) if send.issue else ""
+    # A question is no screen to type against, and answering it changes it: it issues no digest.
     if asks_a_question(screen):
-        return Refused(Refusal.QUESTION_SHOWING, _VERB, screen=digest)
+        return Refused(Refusal.QUESTION_SHOWING, _VERB)
+    digest = screen_digest(screen) if send.issue else ""
     if send.drawn_against and send.drawn_against != screen_digest(screen):
         return Refused(Refusal.SCREEN_CHANGED, _VERB, screen=digest)
     # Before the destructive confirm, so its own confirm cannot stand in for this one.
