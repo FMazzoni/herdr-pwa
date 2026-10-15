@@ -17,10 +17,12 @@ sys.path.insert(0, str(ROOT))
 
 from tests.catalogue import CAPTURES  # noqa: E402
 
-# Gitignored and per worktree: a cache of a result, never a record anyone reviews.
-RECEIPTS = ROOT / "evidence" / "geometry"
-# Per user rather than per worktree, so parallel agents queue for one Firefox instead of five.
-LOCK = Path.home() / ".cache" / "herdr-pwa-v2" / "geometry.lock"
+# Per user rather than per worktree: a fresh worktree whose guarded files match a tree already
+# measured reuses that receipt. A cache of a result, never a record anyone reviews.
+CACHE = Path.home() / ".cache" / "herdr-pwa-v2"
+RECEIPTS = CACHE / "geometry"
+# Per user too, so parallel agents queue for one Firefox instead of five.
+LOCK = CACHE / "geometry.lock"
 
 # Everything that decides what the browser lays out, plus the harness itself.
 GUARDED = (
