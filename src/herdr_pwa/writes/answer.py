@@ -20,7 +20,7 @@ from herdr_pwa.writes.outcome import (
     watch,
 )
 from herdr_pwa.writes.prompt import NO_SESSION
-from herdr_pwa.writes.refusal import Refusal, Refused, refusal_for
+from herdr_pwa.writes.refusal import Refusal, Refused, failed_result, refusal_for
 from herdr_pwa.writes.resolve import Writer, agent_now, attempt, snapshot_now
 
 log = logging.getLogger(__name__)
@@ -103,7 +103,7 @@ def _press(
         try:
             _ = writer.client.send_keys(agent.target, key, session=agent.session)
         except EngineError as exc:
-            entry.outcome(f"refused:{type(exc).__name__}")
+            entry.outcome(failed_result(exc))
             return Refused(refusal_for(exc), _VERB, detail=str(exc), prompt=prompt)
         # Written first, so a watcher that raises still leaves a record of a key that went out.
         entry.outcome(audit_result(Outcome.ACCEPTED, Evidence.DELIVERED))

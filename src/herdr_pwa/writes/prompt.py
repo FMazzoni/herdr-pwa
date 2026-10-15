@@ -16,7 +16,7 @@ from herdr_pwa.writes.guard import (
     unsendable,
 )
 from herdr_pwa.writes.outcome import Evidence, Outcome, Pacing, audit_result
-from herdr_pwa.writes.refusal import Refusal, Refused, refusal_for
+from herdr_pwa.writes.refusal import Refusal, Refused, failed_result, refusal_for
 from herdr_pwa.writes.resolve import Writer, agent_now, attempt, snapshot_now
 
 log = logging.getLogger(__name__)
@@ -115,7 +115,7 @@ def _type(writer: Writer, send: _Send) -> PromptSent | Refused:
         try:
             _ = client.prompt(send.target, send.text, session=send.session)
         except EngineError as exc:
-            entry.outcome(f"refused:{type(exc).__name__}")
+            entry.outcome(failed_result(exc))
             return Refused(refusal_for(exc), _VERB, detail=str(exc))
         ok = _landed(client, send, before, writer.pacing)
         outcome, evidence = (

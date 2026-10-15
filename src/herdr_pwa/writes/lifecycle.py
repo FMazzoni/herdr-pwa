@@ -16,7 +16,7 @@ from herdr_pwa.engine.transport import EngineError
 from herdr_pwa.writes.guard import destructive_reason, unsendable
 from herdr_pwa.writes.outcome import Pacing
 from herdr_pwa.writes.prompt import PromptSent, send_opening_prompt
-from herdr_pwa.writes.refusal import Refusal, Refused, refusal_for
+from herdr_pwa.writes.refusal import Refusal, Refused, failed_result, refusal_for
 from herdr_pwa.writes.resolve import Writer, agent_now, attempt, snapshot_now
 
 log = logging.getLogger(__name__)
@@ -215,7 +215,7 @@ def start_agent(
     with entry:
         started = _launch(writer.client, request, name)
         if isinstance(started, Refused):
-            entry.outcome(f"refused:{started.refusal.value}")
+            entry.outcome(f"{'unknown' if started.unsure else 'refused'}:{started.refusal.value}")
             return started
         entry.outcome(f"started:{started.pane}")
     return _opened(writer, started, request.prompt)
@@ -270,7 +270,7 @@ def end_agent(writer: Writer, ask: EndAsk) -> AgentEnded | Refused:
         try:
             _ = writer.client.close_pane(agent.target, session=ask.session)
         except EngineError as exc:
-            entry.outcome(f"refused:{type(exc).__name__}")
+            entry.outcome(failed_result(exc))
             return Refused(refusal_for(exc), "closed", detail=str(exc))
         entry.outcome("closed")
     return AgentEnded(agent.target, verified=not _still_there(writer.client, ask.session))

@@ -255,6 +255,14 @@ class HerdrClient:
             )
         return root
 
+    def _written(self, payload: JsonObject, arm: type[_Arm], *, method: str) -> _Arm:
+        """A write's reply as its typed arm; a reply that will not parse came after the write ran."""
+        try:
+            return self._arm(payload, arm, method=method)
+        except InvalidResponse as exc:
+            exc.after_send = True
+            raise
+
     @staticmethod
     def _sub_object(payload: JsonObject, key: str, *, method: str) -> JsonObject:
         """The raw ``result.<key>`` object, for a frame that would not validate."""
@@ -639,7 +647,7 @@ class HerdrClient:
             ),
             timeout=timeout,
         )
-        arm = self._arm(payload, wire.TabCreatedResponseResult, method="tab.create")
+        arm = self._written(payload, wire.TabCreatedResponseResult, method="tab.create")
         return arm.root_pane.pane_id
 
     def start_agent(
@@ -662,7 +670,7 @@ class HerdrClient:
             timeout_ms=START_TIMEOUT_MS,
         )
         payload = self._start_with_retries(wire_request.AgentStartRequest, params, timeout)
-        arm = self._arm(payload, wire.AgentStartedResponseResult, method="agent.start")
+        arm = self._written(payload, wire.AgentStartedResponseResult, method="agent.start")
         return self._started(arm.agent)
 
     @staticmethod
@@ -717,7 +725,7 @@ class HerdrClient:
             wire_request.WorkspaceCreateParams(label=label or None, cwd=cwd or None, focus=False),
             timeout=timeout,
         )
-        arm = self._arm(payload, wire.WorkspaceCreatedResponseResult, method="workspace.create")
+        arm = self._written(payload, wire.WorkspaceCreatedResponseResult, method="workspace.create")
         return Workspace.from_raw(arm.workspace.model_dump(mode="json"))
 
     def rename_workspace(

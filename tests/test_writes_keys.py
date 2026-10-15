@@ -232,3 +232,21 @@ def test_an_interrupt_drawn_under_a_question_that_has_gone_still_goes(tmp_path: 
     r = rig(tmp_path, herd)
     _ = sent(send_key(r.writer, KeyAsk(S1, "ctrl-c", drawn_from=FINGERPRINT, confirmed=True)))
     assert herd.writes(SEND_KEYS) == [{"target": "w1:p3", "keys": ["ctrl-c"]}]
+
+
+def _lost_after_send(_herd: FakeHerd, _params: JsonObject) -> None:
+    """herdr typed the key, then the connection dropped before its answer came back."""
+    lost = EngineUnavailable("the runner closed the connection while answering")
+    lost.after_send = True
+    raise lost
+
+
+def test_a_key_whose_answer_was_lost_is_said_to_maybe_have_gone(tmp_path: Path) -> None:
+    r = blocked_rig(tmp_path)
+    r.herd.after[SEND_KEYS] = _lost_after_send
+    result = refused(send_key(r.writer, KeyAsk(S1, "1", drawn_from=FINGERPRINT)))
+    assert result.refusal is Refusal.ANSWER_LOST
+    assert "may or may not have been sent" in result.says
+    assert len(r.herd.writes(SEND_KEYS)) == 1, "never re-sent"
+    results = [rec.get("result") for rec in r.audit_records if rec["phase"] == "outcome"]
+    assert results == ["unknown:EngineUnavailable"]
