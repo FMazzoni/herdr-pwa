@@ -61,7 +61,7 @@ LINES = 120
 # Where the newest turn or terminal line, and the question if any, sit against the dock.
 PROBE = r"""
 const units = document.querySelectorAll(
-  "#agent-view .turn, #agent-view > .pane:not(.pane--status) > .pane__line");
+  "#agent-view .turn, #agent-view > .pane > .pane__line");
 const last = units[units.length - 1];
 const bar = document.getElementById("composer");
 const answer = document.getElementById("answer");
@@ -70,7 +70,7 @@ if (!last || !bar || !answer || busy || document.readyState !== "complete") retu
 const box = last.getBoundingClientRect();
 const question = document.querySelector("#answer .answer__question");
 const asked = question ? question.getBoundingClientRect() : null;
-const options = [...document.querySelectorAll("#answer .option, #answer .button--option")];
+const options = [...document.querySelectorAll("#answer .option")];
 const lowest = Math.max(0, ...options.map((o) => o.getBoundingClientRect().bottom));
 return {
   under: document.querySelector(".topbar").getBoundingClientRect().bottom,
@@ -886,7 +886,7 @@ const [step, every, count] = arguments;
 const walk = { steps: 0, swaps: [], atEnd: 0, done: false };
 window.__hpWalk = walk;
 const units = () => [...document.querySelectorAll(
-  "#agent-view .turn, #agent-view > .pane:not(.pane--status) > .pane__line")];
+  "#agent-view .turn, #agent-view > .pane > .pane__line")];
 const under = () => document.querySelector(".topbar").getBoundingClientRect().bottom;
 const gap = () => document.documentElement.scrollHeight - innerHeight - scrollY;
 let held = null;

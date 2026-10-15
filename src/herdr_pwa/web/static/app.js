@@ -23,9 +23,6 @@
     sheetAnswer(event.detail);
   });
 
-  /* iOS Safari applies :active only under a touch listener; the press states in app.css need one. */
-  document.addEventListener("touchstart", function () {}, { passive: true });
-
   /* ---- Back belongs to the herd ----
    * The feed is the root: only its own links push. Every other move replaces the
    * entry it leaves, so a swipe back from anywhere lands on the feed, never on a
@@ -135,16 +132,17 @@
    * restored as a value (never markup), dropped once sent or at a no-echo prompt. */
   var DRAFT = "hp-draft:";
 
-  function store() {
+  // The tab's or the device's storage, or null where reading it at all throws.
+  function storage(name) {
     try {
-      return window.sessionStorage;
+      return window[name];
     } catch (err) {
       return null;
     }
   }
 
   function keep(box) {
-    var s = store();
+    var s = storage("sessionStorage");
     if (!s) {
       return;
     }
@@ -159,9 +157,9 @@
     }
   }
 
-  function settle(root) {
-    var boxes = root.querySelectorAll("textarea[data-hp-draft]");
-    var s = store();
+  function settle(within) {
+    var boxes = within.querySelectorAll("textarea[data-hp-draft]");
+    var s = storage("sessionStorage");
     for (var i = 0; i < boxes.length; i++) {
       var box = boxes[i];
       var key = DRAFT + box.getAttribute("data-hp-draft");
@@ -225,9 +223,7 @@
    * and a tap that got no reply at all (a dropped link) shows the region's own notice. */
   function showOutcome(banner) {
     var top = banner.getBoundingClientRect().top;
-    var bar = document.querySelector(".topbar");
-    var above = bar ? bar.getBoundingClientRect().bottom : 0;
-    if (top < above || top > window.innerHeight * 0.6) {
+    if (top < barBottom() || top > window.innerHeight * 0.6) {
       banner.scrollIntoView({ block: "start" });
       ownScroll();
     }
@@ -424,6 +420,7 @@
     missed = false;
     rearm();
     connect();
+    markSeen();
   });
   document.addEventListener("DOMContentLoaded", connect);
   window.addEventListener("pagehide", closeStream);
@@ -526,8 +523,8 @@
     }, seconds * 1000);
   }
 
-  function armTimers(root) {
-    var nodes = root.querySelectorAll ? root.querySelectorAll("[data-hp-disarm]") : [];
+  function armTimers(within) {
+    var nodes = within.querySelectorAll ? within.querySelectorAll("[data-hp-disarm]") : [];
     for (var i = 0; i < nodes.length; i++) {
       if (!nodes[i].hasAttribute("data-hp-timed")) {
         nodes[i].setAttribute("data-hp-timed", "");
@@ -623,8 +620,8 @@
   var deferred = [];
   var idleTimer = 0;
 
-  // A chat turn, or a line of the terminal mirror (its status strip is not scrollback).
-  var READ_UNITS = "#agent-view .turn, #agent-view > .pane:not(.pane--status) > .pane__line";
+  // A chat turn, or a line of the terminal mirror.
+  var READ_UNITS = "#agent-view .turn, #agent-view > .pane > .pane__line";
   // What a poll may not move under the reader: those, and the feed's cards, which re-sort.
   var ANCHORS = READ_UNITS + ", #feed-list .card";
 
@@ -639,6 +636,11 @@
   // This script moved the page: the scroll event that follows is not the reader's.
   function ownScroll() {
     lastY = window.scrollY;
+  }
+
+  // The question itself, else its first option (a tappable one is an .option too), else the region.
+  function askedIn(region) {
+    return region.querySelector(".answer__question, .option") || region;
   }
 
   function asking() {
@@ -660,7 +662,7 @@
     if (region.getBoundingClientRect().height <= room) {
       return end;
     }
-    var asked = region.querySelector(".answer__question, .option, .button--option") || region;
+    var asked = askedIn(region);
     return Math.min(end, window.scrollY + asked.getBoundingClientRect().top - barBottom());
   }
 
@@ -741,6 +743,7 @@
     }
   }, true);
 
+  // This listener is also what lets iOS Safari apply :active, which the press states in app.css need.
   document.addEventListener("touchstart", function () {
     touching = true;
   }, { capture: true, passive: true });
@@ -860,10 +863,9 @@
       return false;
     }
     var bar = document.getElementById("composer");
-    var dock = bar ? bar.getBoundingClientRect().top : window.innerHeight;
+    var dockTop = bar ? bar.getBoundingClientRect().top : window.innerHeight;
     // Waiting below until the question itself (else the region's first line) is wholly in view.
-    var asked = region.querySelector(".answer__question, .option, .button--option") || region;
-    return asked.getBoundingClientRect().bottom > dock;
+    return askedIn(region).getBoundingClientRect().bottom > dockTop;
   }
 
   function showJump() {
@@ -908,14 +910,6 @@
   /* ---- Keep the columns: the pane unwrapped, remembered on this device ---- */
   var COLUMNS = "hp-columns";
 
-  function local() {
-    try {
-      return window.localStorage;
-    } catch (err) {
-      return null;
-    }
-  }
-
   function showColumns(button, on) {
     var host = button.closest("main");
     if (host) {
@@ -928,7 +922,8 @@
   if (columnsButton) {
     var kept = false;
     try {
-      kept = !!local() && local().getItem(COLUMNS) === "1";
+      var device = storage("localStorage");
+      kept = !!device && device.getItem(COLUMNS) === "1";
     } catch (err) {
       kept = false;
     }
@@ -938,8 +933,9 @@
       var on = columnsButton.getAttribute("aria-pressed") !== "true";
       showColumns(columnsButton, on);
       try {
-        if (local()) {
-          local().setItem(COLUMNS, on ? "1" : "0");
+        var device = storage("localStorage");
+        if (device) {
+          device.setItem(COLUMNS, on ? "1" : "0");
         }
       } catch (err) {
         /* blocked storage: the choice lasts this page only. */
@@ -957,14 +953,14 @@
   var newestSaid = null;
 
   function say(text) {
-    var live = document.getElementById("hp-live");
-    if (!live || !text) {
+    var spoken = document.getElementById("hp-live");
+    if (!spoken || !text) {
       return;
     }
     // Emptied first, so the same words twice are still news.
-    live.textContent = "";
+    spoken.textContent = "";
     window.setTimeout(function () {
-      live.textContent = text;
+      spoken.textContent = text;
     }, 50);
   }
 
@@ -990,19 +986,19 @@
     };
   }
 
-  function refocusIn(mark) {
-    var region = document.getElementById(mark.region);
+  function refocusIn(was) {
+    var region = document.getElementById(was.region);
     if (!region || (document.activeElement && region.contains(document.activeElement))) {
       return;
     }
-    var all = region.querySelectorAll(mark.tag);
+    var all = region.querySelectorAll(was.tag);
     var best = null;
     for (var i = 0; i < all.length; i++) {
       var form = all[i].form || null;
-      var same = words(all[i]) === mark.text
-        && (form ? form.getAttribute("action") : "") === mark.action
-        && (form && form.elements.key ? form.elements.key.value : "") === mark.key;
-      if (same && (!best || Math.abs(i - mark.index) < Math.abs(best.at - mark.index))) {
+      var same = words(all[i]) === was.text
+        && (form ? form.getAttribute("action") : "") === was.action
+        && (form && form.elements.key ? form.elements.key.value : "") === was.key;
+      if (same && (!best || Math.abs(i - was.index) < Math.abs(best.at - was.index))) {
         best = { node: all[i], at: i };
       }
     }
@@ -1375,7 +1371,8 @@
     }
   });
 
-  /* ---- Seen: a finish the phone has shown is not news ---- */
+  /* ---- Seen: a finish the phone has shown is not news ----
+   * Said on load and again each time the page comes back into view (the visibility listener). */
 
   var seenHost = document.querySelector("[data-hp-seen]");
   function markSeen() {
@@ -1388,5 +1385,4 @@
     }
   }
   markSeen();
-  document.addEventListener("visibilitychange", markSeen);
 })();

@@ -94,6 +94,17 @@ const busy = document.querySelector(".htmx-request, .htmx-swapping, .htmx-settli
 return document.readyState === "complete" && !busy && !!document.querySelector(arguments[0]);
 """
 POKE = "htmx.trigger(document.body, 'hp:poke');"
+# A write's outcome banner: its words, and the verdict the server stamped on it.
+OUTCOME = r"""
+const banner = document.querySelector(arguments[0]);
+if (!banner) return null;
+return {
+  text: banner.innerText.replace(/\s+/g, " ").trim(),
+  outcome: banner.getAttribute("data-hp-outcome"),
+};
+"""
+# The verdict of a tap that landed and was seen to land, as the banner's data-hp-outcome starts.
+CONFIRMED = "confirmed:"
 
 
 def _heard(driver: Marionette) -> dict[str, object]:
@@ -207,13 +218,16 @@ def outcome(driver: Marionette, base: str, rig: Rig, home: Path) -> list[str]:
         return [f"{name}: the tap never came back with its outcome"]
     time.sleep(SAY_SECONDS)
     said = [str(s) for s in _list(_heard(driver), "said")]
-    banner = driver.script(
-        "return document.querySelector(arguments[0]).innerText.replace(/\\s+/g, ' ').trim();",
-        state.ready,
-    )
-    if said == [banner]:
+    banner = driver.script(OUTCOME, state.ready)
+    if not isinstance(banner, dict):
+        return [f"{name}: the outcome banner went away before it could be read"]
+    # The write's own verdict, not its wording: a banner that reads well over a write that did not
+    # land is the failure this walk exists for.
+    if not str(banner.get("outcome")).startswith(CONFIRMED):
+        return [f"{name}: the banner said aloud is for {banner.get('outcome')!r}, not a landed tap"]
+    if said == [banner.get("text")]:
         return []
-    return [f"{name}: the outcome {banner!r} should be said once; heard {said!r}"]
+    return [f"{name}: the outcome {banner.get('text')!r} should be said once; heard {said!r}"]
 
 
 def _strip_heard(driver: Marionette) -> dict[str, object]:
