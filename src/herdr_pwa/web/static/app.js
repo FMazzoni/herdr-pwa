@@ -113,6 +113,13 @@
     }
   });
 
+  /* A region fetches itself as its own source, so its hx-sync rule applies: a key tap's request
+   * replaces this one, and this one waits behind a key already out. With no source htmx uses the
+   * body, and the redraw would land over the key's controls mid-send. */
+  function refetch(node) {
+    window.htmx.ajax("GET", node.getAttribute("data-hp-poll"), { source: node, target: node, swap: "outerHTML" });
+  }
+
   /* Re-fetch every polling region once the page is visible again. */
   function rearm() {
     if (document.hidden || typeof window.htmx === "undefined") {
@@ -120,10 +127,7 @@
     }
     var nodes = document.querySelectorAll("[data-hp-poll]");
     for (var i = 0; i < nodes.length; i++) {
-      window.htmx.ajax("GET", nodes[i].getAttribute("data-hp-poll"), {
-        target: nodes[i],
-        swap: "outerHTML",
-      });
+      refetch(nodes[i]);
     }
   }
 
@@ -518,7 +522,7 @@
         disarmLater(node, 1.5);
         return;
       }
-      window.htmx.ajax("GET", region.getAttribute("data-hp-poll"), { target: region, swap: "outerHTML" });
+      refetch(region);
     }, seconds * 1000);
   }
 
@@ -735,7 +739,8 @@
     window.clearTimeout(idleTimer);
     idleTimer = window.setTimeout(function () {
       idleTimer = 0;
-      if (readerBusy()) {
+      // A redraw during a write would draw live controls under the answer still on its way.
+      if (readerBusy() || sending()) {
         redrawWhenStill();
         return;
       }
@@ -744,7 +749,7 @@
       ids.forEach(function (id) {
         var node = document.getElementById(id);
         if (node && typeof window.htmx !== "undefined") {
-          window.htmx.ajax("GET", node.getAttribute("data-hp-poll"), { target: node, swap: "outerHTML" });
+          refetch(node);
         }
       });
     }, IDLE_MS);

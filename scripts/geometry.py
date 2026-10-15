@@ -20,6 +20,7 @@ sys.path.insert(0, str(ROOT))
 import backnav  # noqa: E402
 import chatend  # noqa: E402
 import feedhold  # noqa: E402
+import sendhold  # noqa: E402
 import voiceover  # noqa: E402
 from firefox import BrowserError, Marionette, browser, free_port, phone_window  # noqa: E402
 
@@ -31,6 +32,8 @@ HISTORY = "history"
 CHAT_END = "chat-end"
 # The --only name for the feed's hold-under-the-thumb walk.
 FEED_HOLD = "feed-hold"
+# The --only name for the walk that taps an answer while the runner is slow.
+SEND_HOLD = "send-hold"
 # The --only name for the walks that listen as VoiceOver would.
 VOICEOVER = "voiceover"
 # 390 is the phone this app is designed on; 430 is the largest (a Pro Max size, run as a
@@ -627,7 +630,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     # The unreachable states log a warning per request by design; the report is the output.
     logging.getLogger("herdr_pwa").setLevel(logging.ERROR)
-    names = [n for n in args.only if n not in (HISTORY, CHAT_END, FEED_HOLD, VOICEOVER)]
+    names = [n for n in args.only if n not in (HISTORY, CHAT_END, FEED_HOLD, SEND_HOLD, VOICEOVER)]
     chosen = pick(names) if names or not args.only else []
     widths = WIDTHS if chosen else ()
     sizes = [Size(w) for w in widths] + [
@@ -652,6 +655,8 @@ def main(argv: list[str] | None = None) -> int:
                     tally.problems += chatend.run(driver, base, switch.mount, Path(scratch))
                 if not args.only or FEED_HOLD in args.only:
                     tally.problems += feedhold.run(driver, base, switch.mount, Path(scratch))
+                if not args.only or SEND_HOLD in args.only:
+                    tally.problems += sendhold.run(driver, base, switch.mount, Path(scratch))
                 if not args.only or VOICEOVER in args.only:
                     tally.problems += voiceover.run(driver, base, switch.mount, Path(scratch))
         except BrowserError as exc:
