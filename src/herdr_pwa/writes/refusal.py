@@ -46,6 +46,7 @@ class Refusal(StrEnum):
     PROTOCOL_DRIFT = "protocol_drift"
     RUNNER_REFUSED = "runner_refused"
     TIMED_OUT = "timed_out"
+    ANSWER_LOST = "answer_lost"
     UNRECORDABLE = "unrecordable"
     MISCONFIGURED = "misconfigured"
 
@@ -131,6 +132,12 @@ FAILURES: Final[dict[Refusal, Failure]] = {
         "The runner did not answer in time. It may or may not have been {verb}; "
         "look before trying again.",
     ),
+    # The request went out whole and its answer did not come back, so it may have run.
+    Refusal.ANSWER_LOST: Failure(
+        502,
+        "The runner took this and its answer was lost. It may or may not have been {verb}; "
+        "look before trying again.",
+    ),
     Refusal.UNRECORDABLE: Failure(
         503, "Nothing was {verb}: it could not be recorded in the audit log first."
     ),
@@ -157,6 +164,8 @@ _BY_CODE: Final[dict[str, Refusal]] = {
 
 def refusal_for(exc: EngineError) -> Refusal:
     """The refusal an engine failure during a write amounts to."""
+    if exc.after_send:
+        return Refusal.TIMED_OUT if isinstance(exc, EngineTimeout) else Refusal.ANSWER_LOST
     by_code = _BY_CODE.get(exc.code)
     if by_code is not None:
         return by_code
@@ -164,6 +173,11 @@ def refusal_for(exc: EngineError) -> Refusal:
         if isinstance(exc, kind):
             return refusal
     return Refusal.GONE if isinstance(exc, TargetNotFound) else Refusal.RUNNER_REFUSED
+
+
+def failed_result(exc: EngineError) -> str:
+    """The audit outcome of a write the runner call raised on: refused, or unknown once sent."""
+    return f"{'unknown' if exc.after_send else 'refused'}:{type(exc).__name__}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -190,6 +204,11 @@ class Refused:
     def says(self) -> str:
         """The sentence the failure table assigns, in this write's own verb."""
         return FAILURES[self.refusal].says.format(verb=self.verb)
+
+    @property
+    def unsure(self) -> bool:
+        """True when this write may have run after all, so it must not be offered again blind."""
+        return self.refusal in (Refusal.TIMED_OUT, Refusal.ANSWER_LOST)
 
     @property
     def held(self) -> bool:

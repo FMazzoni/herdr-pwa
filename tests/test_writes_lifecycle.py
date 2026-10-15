@@ -10,6 +10,7 @@ from herdr_pwa.engine.transport import (
     EngineMisconfigured,
     EngineTimeout,
     EngineUnavailable,
+    InvalidResponse,
     ProtocolMismatch,
     RequestTooLarge,
     TargetNotFound,
@@ -27,7 +28,7 @@ from herdr_pwa.writes.lifecycle import (
     start_agent,
 )
 from herdr_pwa.writes.prompt import SETTLED_LOOKS, PromptSent
-from herdr_pwa.writes.refusal import FAILURES, Refusal, Refused, refusal_for
+from herdr_pwa.writes.refusal import FAILURES, Refusal, Refused, failed_result, refusal_for
 from herdr_pwa.writes.workspaces import (
     WorkspaceCloseAsk,
     WorkspaceDone,
@@ -224,6 +225,39 @@ def test_every_refusal_has_one_row_in_the_failure_table() -> None:
 )
 def test_engine_failures_map_onto_refusals(exc: EngineError, refusal: Refusal) -> None:
     assert refusal_for(exc) is refusal
+
+
+def _sent(exc: EngineError) -> EngineError:
+    exc.after_send = True
+    return exc
+
+
+@pytest.mark.parametrize(
+    ("exc", "refusal"),
+    [
+        (_sent(EngineUnavailable("reset")), Refusal.ANSWER_LOST),
+        (_sent(InvalidResponse("garbled")), Refusal.ANSWER_LOST),
+        (_sent(EngineError("x", code="agent_not_ready")), Refusal.ANSWER_LOST),
+        (_sent(EngineTimeout("slow")), Refusal.TIMED_OUT),
+    ],
+)
+def test_a_failure_after_the_send_never_says_nothing_was_sent(
+    exc: EngineError, refusal: Refusal
+) -> None:
+    said = Refused(refusal_for(exc), "sent")
+    assert said.refusal is refusal
+    assert said.unsure
+    assert "Nothing was" not in said.says
+    assert "may or may not have been sent" in said.says
+    assert failed_result(exc) == f"unknown:{type(exc).__name__}"
+
+
+def test_a_failure_before_the_send_says_nothing_was_sent() -> None:
+    exc = EngineUnavailable("no socket")
+    said = Refused(refusal_for(exc), "sent")
+    assert not said.unsure
+    assert said.says.startswith("Nothing was sent")
+    assert failed_result(exc) == "refused:EngineUnavailable"
 
 
 def test_names_are_folded_to_what_the_runner_takes() -> None:

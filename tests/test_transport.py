@@ -1282,3 +1282,88 @@ def test_a_refused_subscription_gives_the_descriptor_back(
         with pytest.raises(TargetNotFound):
             list(stream(sock_path))
     assert open_fds() <= before, "a refused subscription leaked its connection"
+
+
+# --------------------------------------------------------------------------
+# Before the send, or after it: whether a failed write may have run
+# --------------------------------------------------------------------------
+
+
+def _hang_up(_req: JsonObject, conn: socket.socket) -> None:
+    conn.close()
+
+
+def _garbled(_req: JsonObject, _conn: socket.socket) -> bytes:
+    return b"this is not json\n"
+
+
+def _silent(_req: JsonObject, _conn: socket.socket) -> None:
+    return None
+
+
+@pytest.mark.parametrize(
+    ("handler", "kind"),
+    [
+        (_hang_up, EngineUnavailable),
+        (_garbled, InvalidResponse),
+        (_silent, EngineTimeout),
+    ],
+)
+def test_a_write_whose_answer_is_lost_is_marked_as_sent(
+    sock_path: Path,
+    request: pytest.FixtureRequest,
+    handler: Handler,
+    kind: type[EngineError],
+) -> None:
+    """The runner had the whole request when its answer went missing; it may have acted."""
+    fake = serve(sock_path, handler, request)
+    wire = transport(sock_path, timeout=0.2)
+    with pytest.raises(kind) as exc:
+        wire.call("agent.send_keys", {"target": "w1:p3", "keys": ["1"]}, idempotent=False)
+    assert exc.value.after_send
+    assert len(fake.requests) == 1
+    wire.close()
+
+
+@pytest.mark.parametrize("handler", [_hang_up, _garbled, _silent])
+def test_a_read_whose_answer_is_lost_is_not_marked(
+    sock_path: Path, request: pytest.FixtureRequest, handler: Handler
+) -> None:
+    """A lost answer to a read did nothing, so a check before a write never reads as the write."""
+    serve(sock_path, handler, request)
+    wire = transport(sock_path, timeout=0.2)
+    with pytest.raises(EngineError) as exc:
+        wire.call("agent.get", {"target": "w1:p3"})
+    assert not exc.value.after_send
+    wire.close()
+
+
+def test_a_write_that_never_left_is_not_marked(tmp_path: Path) -> None:
+    wire = transport(tmp_path / "nobody-here.sock")
+    with pytest.raises(EngineUnavailable) as exc:
+        wire.call("agent.send_keys", {"target": "w1:p3", "keys": ["1"]}, idempotent=False)
+    assert not exc.value.after_send
+
+
+def test_a_write_too_large_to_send_is_not_marked(server: FakeHerdr, sock_path: Path) -> None:
+    wire = transport(sock_path)
+    with pytest.raises(RequestTooLarge) as exc:
+        wire.call("agent.prompt", {"text": "x" * MAX_REQUEST_BYTES}, idempotent=False)
+    assert not exc.value.after_send
+    assert server.requests == []
+
+
+def test_a_write_the_runner_answered_with_an_error_is_not_marked(
+    sock_path: Path, request: pytest.FixtureRequest
+) -> None:
+    """An error frame is the runner saying what it did not do, not a lost answer."""
+
+    def handler(req: JsonObject, _conn: socket.socket) -> JsonObject:
+        return {"id": req["id"], "error": {"code": "agent_not_found", "message": "gone"}}
+
+    serve(sock_path, handler, request)
+    wire = transport(sock_path)
+    with pytest.raises(TargetNotFound) as exc:
+        wire.call("agent.send_keys", {"target": "w1:p3", "keys": ["1"]}, idempotent=False)
+    assert not exc.value.after_send
+    wire.close()

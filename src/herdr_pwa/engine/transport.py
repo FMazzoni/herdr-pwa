@@ -80,6 +80,8 @@ class EngineError(Exception):
     def __init__(self, message: str, *, code: str | None = None) -> None:
         super().__init__(message)
         self.message = message
+        # True when a write's whole frame went out and its answer was lost: it may have run.
+        self.after_send = False
         if code:
             self.code = code
 
@@ -202,6 +204,8 @@ class _Call(NamedTuple):
     method: str
     deadline: float
     budget: float
+    # A read whose answer is lost did nothing; a write's may have run.
+    idempotent: bool = True
 
     def remaining(self, now: float) -> float:
         return self.deadline - now
@@ -284,13 +288,11 @@ class SocketTransport:
         idempotent: bool = True,
     ) -> JsonObject:
         """Issue one request, return its reply object, raise on anything else."""
-        # One request per connection and no retry, so idempotence changes nothing here.
-        del idempotent
         budget = self.timeout if timeout is None else timeout
         if self._pid != os.getpid():  # forked without the hook running
             self.adopt_fork()
         with self._lock:
-            payload = self._call_locked(method, params, budget)
+            payload = self._call_locked(method, params, budget, idempotent=idempotent)
         raise_for_error_frame(payload)
         return payload
 
@@ -301,9 +303,11 @@ class SocketTransport:
 
     # -- the exchange ------------------------------------------------------
 
-    def _call_locked(self, method: str, params: JsonObject, budget: float) -> JsonObject:
-        """One exchange, with at most one retry on a connection that was reused."""
-        call = _Call(method, self._clock() + budget, budget)
+    def _call_locked(
+        self, method: str, params: JsonObject, budget: float, *, idempotent: bool
+    ) -> JsonObject:
+        """One exchange; never retried, since one request per connection is what herdr speaks."""
+        call = _Call(method, self._clock() + budget, budget, idempotent)
         try:
             return self._exchange(params, call)
         finally:
@@ -332,7 +336,12 @@ class SocketTransport:
             raise EngineTimeout(f"{call.method} could not be sent within {call.budget}s") from exc
         except OSError as exc:
             raise EngineUnavailable(f"{call.method} could not be sent: {exc}") from exc
-        return self._receive(sock, request_id, call)
+        # The whole frame is out, newline and all; from here a failure cannot say nothing ran.
+        try:
+            return self._receive(sock, request_id, call)
+        except EngineError as exc:
+            exc.after_send = not call.idempotent
+            raise
 
     def _receive(self, sock: socket.socket, request_id: str, call: _Call) -> JsonObject:
         """Read frames until the one addressed to ``request_id`` arrives."""

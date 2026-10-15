@@ -7,7 +7,7 @@ from herdr_pwa.audit import CLOSE, Write
 from herdr_pwa.engine.client import HerdrClient
 from herdr_pwa.engine.model import Agent, AgentStatus, Snapshot, Workspace
 from herdr_pwa.engine.transport import EngineError
-from herdr_pwa.writes.refusal import Refusal, Refused, refusal_for
+from herdr_pwa.writes.refusal import Refusal, Refused, failed_result, refusal_for
 from herdr_pwa.writes.resolve import Writer, attempt, workspace_now
 
 MAX_WORKSPACE_LABEL: Final = 40
@@ -153,7 +153,7 @@ def close_workspace(writer: Writer, ask: WorkspaceCloseAsk) -> WorkspaceDone | R
         try:
             _ = writer.client.close_workspace(wid)
         except EngineError as exc:
-            entry.outcome(f"refused:{type(exc).__name__}")
+            entry.outcome(failed_result(exc))
             return Refused(refusal_for(exc), "closed", detail=str(exc))
         entry.outcome(f"closed:{cost.total}")
     read, now = _after(writer.client, wid)

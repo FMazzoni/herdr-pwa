@@ -96,7 +96,7 @@
     if (link.hasAttribute("data-hp-replace")) {
       event.preventDefault();
       /* Leaving mid-write would hide whether it landed. */
-      if (!document.body.classList.contains("is-sending")) {
+      if (!sending()) {
         leave(link.href, true);
       }
     } else if (stream) {
@@ -113,6 +113,13 @@
     }
   });
 
+  /* A region fetches itself as its own source, so its hx-sync rule applies: a key tap's request
+   * replaces this one, and this one waits behind a key already out. With no source htmx uses the
+   * body, and the redraw would land over the key's controls mid-send. */
+  function refetch(node) {
+    window.htmx.ajax("GET", node.getAttribute("data-hp-poll"), { source: node, target: node, swap: "outerHTML" });
+  }
+
   /* Re-fetch every polling region once the page is visible again. */
   function rearm() {
     if (document.hidden || typeof window.htmx === "undefined") {
@@ -120,10 +127,7 @@
     }
     var nodes = document.querySelectorAll("[data-hp-poll]");
     for (var i = 0; i < nodes.length; i++) {
-      window.htmx.ajax("GET", nodes[i].getAttribute("data-hp-poll"), {
-        target: nodes[i],
-        swap: "outerHTML",
-      });
+      refetch(nodes[i]);
     }
   }
 
@@ -188,14 +192,32 @@
     settle(document);
   });
 
-  /* Back and End are disabled while a write is in flight, or the result is never seen. */
-  document.addEventListener("htmx:beforeRequest", function (event) {
-    if (event.detail.requestConfig && event.detail.requestConfig.verb !== "get") {
-      document.body.classList.add("is-sending");
+  /* Back and End are disabled while any write is in flight, or the result is never seen. Each
+   * write is held by its own request, so a read finishing meanwhile releases nothing. */
+  var writing = [];
+
+  function sending() {
+    return writing.length > 0;
+  }
+
+  function showSending() {
+    document.body.classList.toggle("is-sending", sending());
+  }
+
+  // beforeSend, not beforeRequest: a request a listener cancels never sends, and never finishes.
+  document.addEventListener("htmx:beforeSend", function (event) {
+    var detail = event.detail;
+    if (detail.requestConfig && detail.requestConfig.verb !== "get" && writing.indexOf(detail.xhr) === -1) {
+      writing.push(detail.xhr);
+      showSending();
     }
   });
-  document.addEventListener("htmx:afterRequest", function () {
-    document.body.classList.remove("is-sending");
+  document.addEventListener("htmx:afterRequest", function (event) {
+    var at = writing.indexOf(event.detail.xhr);
+    if (at !== -1) {
+      writing.splice(at, 1);
+      showSending();
+    }
   });
 
   /* ---- A tap on the answer region always says what became of it ----
@@ -415,7 +437,8 @@
       for (var i = 0; i < nodes.length; i++) {
         nodes[i].classList.add("is-stale");
       }
-      document.body.classList.remove("is-sending");
+      writing = [];
+      showSending();
       missed = false;
       rearm();
       connect();
@@ -495,11 +518,11 @@
       if (!node.isConnected || !region || typeof window.htmx === "undefined") {
         return;
       }
-      if (Date.now() - lastTouch < 1500 || document.body.classList.contains("is-sending")) {
+      if (Date.now() - lastTouch < 1500 || sending()) {
         disarmLater(node, 1.5);
         return;
       }
-      window.htmx.ajax("GET", region.getAttribute("data-hp-poll"), { target: region, swap: "outerHTML" });
+      refetch(region);
     }, seconds * 1000);
   }
 
@@ -716,7 +739,8 @@
     window.clearTimeout(idleTimer);
     idleTimer = window.setTimeout(function () {
       idleTimer = 0;
-      if (readerBusy()) {
+      // A redraw during a write would draw live controls under the answer still on its way.
+      if (readerBusy() || sending()) {
         redrawWhenStill();
         return;
       }
@@ -725,7 +749,7 @@
       ids.forEach(function (id) {
         var node = document.getElementById(id);
         if (node && typeof window.htmx !== "undefined") {
-          window.htmx.ajax("GET", node.getAttribute("data-hp-poll"), { target: node, swap: "outerHTML" });
+          refetch(node);
         }
       });
     }, IDLE_MS);

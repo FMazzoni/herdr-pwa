@@ -16,7 +16,7 @@ from herdr_pwa.writes.guard import (
     unsendable,
 )
 from herdr_pwa.writes.outcome import Evidence, Outcome, Pacing, audit_result
-from herdr_pwa.writes.refusal import Refusal, Refused, refusal_for
+from herdr_pwa.writes.refusal import Refusal, Refused, failed_result, refusal_for
 from herdr_pwa.writes.resolve import Writer, agent_now, attempt, snapshot_now
 
 log = logging.getLogger(__name__)
@@ -115,7 +115,7 @@ def _type(writer: Writer, send: _Send) -> PromptSent | Refused:
         try:
             _ = client.prompt(send.target, send.text, session=send.session)
         except EngineError as exc:
-            entry.outcome(f"refused:{type(exc).__name__}")
+            entry.outcome(failed_result(exc))
             return Refused(refusal_for(exc), _VERB, detail=str(exc))
         ok = _landed(client, send, before, writer.pacing)
         outcome, evidence = (
@@ -184,7 +184,7 @@ def _settled(
 
 
 def send_first_prompt(
-    writer: Writer, pane: PaneId, text: str, *, confirmed: bool = False
+    writer: Writer, pane: PaneId, text: str, *, drawn_against: str = "", confirmed: bool = False
 ) -> PromptSent | Refused:
     """Type the prompt that gives a late-identity agent its session, by address."""
     snap = snapshot_now(writer.client, verb=_VERB)
@@ -199,7 +199,9 @@ def send_first_prompt(
     refused = _text_refusal(text) or _settled(writer.client, pane, writer.pacing)
     if refused is not None:
         return refused
-    return _type(writer, _Send(pane, NO_SESSION, text, "", confirmed, issue=True))
+    # A confirm counts only with the digest of the screen it was asked about.
+    bound = confirmed and bool(drawn_against)
+    return _type(writer, _Send(pane, NO_SESSION, text, drawn_against, bound, issue=True))
 
 
 def send_opening_prompt(writer: Writer, pane: PaneId, text: str) -> PromptSent | Refused:
