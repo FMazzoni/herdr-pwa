@@ -351,8 +351,9 @@ def failed_notice(status: str = "failed", uuid: str = "failed-notice") -> JsonOb
 def task_notice_chat() -> list[JsonObject]:
     """A prompt, the three tasks it started finishing, and the agent's answer."""
     humans = notices_of("human")
-    answers = [r for r in notice_records() if r.get("type") == "assistant"]
-    return [humans[0], *notices_of("task-notification"), *answers]
+    # The answer without its usage: five days of turn time on the strip is the log's age, not news.
+    answer = "Three surveys are back; the audit says lift the engine and slim it."
+    return [humans[0], *notices_of("task-notification"), assistant_says(answer, uuid="a-tasks")]
 
 
 def failed_notice_chat() -> list[JsonObject]:
