@@ -1,5 +1,6 @@
 """The golden ledger: every recorded decision of the previous implementation, recomputed here."""
 
+import functools
 import hashlib
 import re
 from collections.abc import Iterable, Mapping
@@ -32,9 +33,10 @@ from herdr_pwa.jsontypes import (
     loads,
     objects,
 )
+from tests import _foreign
 
-REPO = Path(__file__).resolve().parents[1]
-LEDGER_PATH = REPO / "tests" / "fixtures" / "ledger.json"
+REPO = _foreign.REPO
+LEDGER_PATH = _foreign.LEDGER_PATH
 # Pinned so the golden file can only change by a reviewed edit to this line.
 LEDGER_SHA256 = "3889d0b4fbb8ce31e0ac73bf714d1a21ee59651c929299e7a4cede78296b2211"
 FOREIGN_CORPUS = REPO / "tests" / "foreign_corpus.json"
@@ -94,23 +96,22 @@ def _str(value: object) -> str:
 @pytest.fixture(scope="session")
 def foreign_root(request: pytest.FixtureRequest) -> Path:
     option: object = request.config.getoption("--foreign-root")
-    # The option already defaults to $HP_FOREIGN_CAPTURES; see conftest.
-    if isinstance(option, str) and option:
-        return Path(option)
-    return REPO / "evidence" / "foreign-captures"
+    # The option already defaults to $HP_FOREIGN_CAPTURES or the per-user cache; see conftest.
+    return Path(option) if isinstance(option, str) and option else _foreign.DEFAULT_ROOT
+
+
+@functools.cache
+def _corpus_problems(root: Path) -> tuple[str, ...]:
+    return tuple(_foreign.problems(root))
 
 
 def _foreign_path(root: Path, capture_id: str) -> Path:
+    # Never a skip: a missing corpus once silently dropped 114 of 163 screens in every worktree.
+    if found := _corpus_problems(root):
+        pytest.fail(_foreign.explain(root, list(found)), pytrace=False)
     clone, _, name = capture_id.removeprefix(FOREIGN_PREFIX).partition("/")
     source = _obj(_obj(META["foreign_sources"])[clone])
-    directory = root / clone / _str(source["captures"])
-    if not directory.is_dir():
-        # Foreign captures are never vendored; their absence is normal off this machine.
-        pytest.skip(f"foreign corpus not present under {root}")
-    head = (root / clone / ".git" / "HEAD").read_text(encoding="utf-8").strip()
-    # A clone at another commit is a different screen set wearing the same file names.
-    assert head == source["commit"], f"{clone} is at {head}, not the pinned {source['commit']}"
-    return directory / name
+    return root / clone / _str(source["captures"]) / name
 
 
 def _decoded(capture_id: str, foreign_root: Path) -> str:

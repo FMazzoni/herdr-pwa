@@ -11,8 +11,15 @@ check:
     uv run python scripts/css_tokens.py
     uv run python scripts/geometry_gate.py
 
+# Clone or fetch the foreign capture repos at the ledger's pinned commits into $HP_FOREIGN_CAPTURES
+# (default ~/.cache/herdr-pwa/foreign-captures), shared by every worktree; the ledger fails without
+# them. Never vendored: one of them is AGPL.
+corpus:
+    uv run python scripts/corpus.py
+
 # Headless Firefox over the real templates at 390px, 430px and 320px: no sideways scroll, 44px tap
-# targets, content inside the viewport. Skips when a receipt for this exact tree exists.
+# targets, content inside the viewport. Skips when a receipt for this exact tree exists in
+# ~/.cache/herdr-pwa-v2/geometry, which every worktree shares.
 geometry:
     uv run python scripts/geometry_gate.py
 
