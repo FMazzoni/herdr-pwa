@@ -1,6 +1,7 @@
 """Command-line entry point: ``serve`` the web app, ``pair`` a phone, or ask ``doctor``."""
 
 import argparse
+import ipaddress
 import logging
 import sys
 from collections.abc import Callable
@@ -81,12 +82,39 @@ def pair(
     return 0 if result.served else 1
 
 
+class NonLoopbackBindError(Exception):
+    """A listen address other peers can reach, where they could forge the identity header."""
+
+
+def is_loopback_bind(host: str) -> bool:
+    """True for a listen address only this machine can reach."""
+    name = host.strip().removeprefix("[").removesuffix("]").lower()
+    if name in auth.LOOPBACK_HOSTS:
+        return True
+    try:
+        return ipaddress.ip_address(name).is_loopback
+    except ValueError:
+        return False
+
+
+def assert_loopback_bind(host: str) -> None:
+    """At startup: refuse a bind any other peer can reach, since the header is all it checks."""
+    if is_loopback_bind(host):
+        return
+    raise NonLoopbackBindError(
+        f"Refusing to start: HP_HOST={host!r} is not a loopback address, so any peer that "
+        "reaches it can send its own Tailscale-User-Login header and drive every agent. "
+        "Bind 127.0.0.1 and publish with 'herdr-pwa pair' (tailscale serve) instead."
+    )
+
+
 # Under the unit's TimeoutStopSec, so open streams are cut rather than the process killed.
 SHUTDOWN_GRACE: Final = 3
 
 
 def serve(settings: Settings, port: int | None) -> None:
-    """Refuse an unsafe assumed login, then serve the app."""
+    """Refuse a reachable bind or an unsafe assumed login, then serve the app."""
+    assert_loopback_bind(settings.host)
     access = auth.Access(tailnet_login=settings.tailnet_login, assume_login=settings.assume_login)
     auth.assert_assumed_login_safe(access, tailscale.LocalApi(settings.tailscaled_socket))
     warning = auth.unpinned_warning(access)
@@ -134,5 +162,9 @@ def main(argv: list[str] | None = None) -> int:
         check: bool = args.check  # pyright: ignore[reportAny]
         return pair(settings, publish=not check)
     port: int | None = args.port  # pyright: ignore[reportAny]
-    serve(settings, port)
+    try:
+        serve(settings, port)
+    except (auth.AuthError, NonLoopbackBindError) as exc:
+        sys.stderr.write(f"serve: {exc}\n")
+        return 1
     return 0

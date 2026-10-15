@@ -5,7 +5,7 @@ from collections.abc import AsyncGenerator, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from typing import Final
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.responses import Response
 from starlette.middleware.gzip import GZipMiddleware
 
@@ -16,8 +16,9 @@ from herdr_pwa.push import Deliver
 from herdr_pwa.settings import Settings
 from herdr_pwa.web import failures
 from herdr_pwa.web.assets import Assets
-from herdr_pwa.web.deps import ClientFactory, WebState
+from herdr_pwa.web.deps import ClientFactory, WebState, viewer_guard
 from herdr_pwa.web.events import Hub, HubConfig
+from herdr_pwa.web.gate import IdentityGate
 from herdr_pwa.web.notifier import PushState, open_push
 from herdr_pwa.web.render import Pages
 from herdr_pwa.web.routers import (
@@ -40,8 +41,9 @@ IMMUTABLE: Final = "public, max-age=31536000, immutable"
 GZIP_MIN_BYTES: Final = 500
 
 
-def _static_route(app: FastAPI, assets: Assets) -> None:
-    @app.get("/static/{name}", include_in_schema=False)
+def _static_route(app: FastAPI, web: WebState, assets: Assets) -> None:
+    # App source is gated like any page: only /healthz answers a caller with no identity.
+    @app.get("/static/{name}", include_in_schema=False, dependencies=[Depends(viewer_guard(web))])
     def static(name: str, v: str = "") -> Response:  # pyright: ignore[reportUnusedFunction]
         asset = assets.files.get(name)
         if asset is None:
@@ -117,7 +119,7 @@ def create_app(
     def healthz() -> dict[str, str]:  # pyright: ignore[reportUnusedFunction]
         return {"status": "ok"}
 
-    _static_route(app, assets)
+    _static_route(app, web, assets)
     for build in (
         feed.build,
         agent.build,
@@ -134,6 +136,8 @@ def create_app(
     if settings.device_report:
         app.include_router(devreport.build(web))
     app.add_middleware(GZipMiddleware, minimum_size=GZIP_MIN_BYTES)
+    # Outside routing, so an unknown caller is refused before any route reads its body.
+    app.add_middleware(IdentityGate, access=web.access(), pages=pages)
     # Added last, so it is outermost and stamps refusals and crashes too.
     app.add_middleware(SecurityHeaders, build=assets.build)
     return app

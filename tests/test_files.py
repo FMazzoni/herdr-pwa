@@ -580,7 +580,10 @@ def test_the_explorer_is_read_only(tmp_path: Path, repo: Path) -> None:
     assert len(routes) == 9
     assert {m for r in routes for m in r.methods or ()} == {"GET"}
     for verb in ("post", "put", "patch", "delete"):
-        response = rig.http.request(verb, f"{_base(repo)}/file?path=README.md")
+        # Same-origin, so the gate passes it and the router is what answers.
+        response = rig.http.request(
+            verb, f"{_base(repo)}/file?path=README.md", headers={"Origin": "http://testserver"}
+        )
         assert response.status_code == 405, verb
 
 
