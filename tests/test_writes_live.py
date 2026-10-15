@@ -207,7 +207,7 @@ def test_every_write_end_to_end(writer: Writer, tmp_path: Path) -> None:
         cost = [a.target for a in client.snapshot().agents if a.workspace_id == workspace]
         say("closing the throwaway workspace, holding", repr(cost))
         armed = close_workspace(writer, WorkspaceCloseAsk(workspace, confirmed=True))
-        saw = int(armed.screen) if isinstance(armed, Refused) and armed.screen else None
+        saw = armed.screen if isinstance(armed, Refused) else ""
         closed = close_workspace(
             writer, WorkspaceCloseAsk(workspace, confirmed=True, armed=True, saw=saw)
         )

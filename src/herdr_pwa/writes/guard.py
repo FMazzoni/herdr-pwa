@@ -4,11 +4,26 @@ import re
 from typing import Final
 
 from herdr_pwa.engine.dialog import BlockedPrompt, MenuShape
+from herdr_pwa.panetext import pane_lines, plain_text
 
 MAX_PROMPT_CHARS: Final = 4000
 
 # What may sit in front of a command and still leave it at the start of a line.
 _LEAD: Final = re.compile(r"^(?:\s|[>*$`]|-(?=\s))*")
+
+# What runs the command after it rather than being it: an alias-bypassing backslash, `command`,
+# `env` with its flags and assignments, a bare assignment, and the wrappers that only re-launch.
+_WRAPPER: Final = re.compile(
+    r"^(?:\\(?=\w)"
+    r"|(?:command|exec|nohup|time|nice|xargs)(?:\s+-\S+)*\s+"
+    r"|env(?:\s+-\S+)*\s+"
+    r"|[A-Za-z_]\w*=\S*\s+)"
+)
+
+# Where one command ends and the next one starts on the same line.
+_SEPARATOR: Final = re.compile(r"[;&|]+")
+
+_GIT: Final = r"^git(?:\s+-[Cc]\s+\S+)*\s+"
 
 _RECURSIVE: Final = r"-(?:[a-qs-zA-Z]*[rR][a-zA-Z]*|-recursive)\b"
 
@@ -23,9 +38,54 @@ _DESTRUCTIVE: Final[tuple[tuple[re.Pattern[str], str, str], ...]] = (
         "deletes a whole directory tree, and nothing puts it back",
     ),
     (
-        re.compile(rf"^git\s+push\b{_GAP}(?:--force(?:-with-lease)?|-f)\b"),
+        re.compile(rf"{_GIT}push\b{_GAP}(?:--force(?:-with-lease)?|-f)\b"),
         "git push --force",
         "overwrites the branch on the remote, including commits nobody here has",
+    ),
+    (
+        re.compile(rf"{_GIT}push\b{_GAP}(?:--delete|-d)\b"),
+        "git push --delete",
+        "deletes the branch on the remote for everyone",
+    ),
+    (
+        re.compile(rf"{_GIT}reset\b{_GAP}--hard\b"),
+        "git reset --hard",
+        "throws away every uncommitted change, and git keeps no copy of them",
+    ),
+    (
+        re.compile(rf"{_GIT}clean\b{_GAP}(?:-[a-zA-Z]*f[a-zA-Z]*|--force)\b"),
+        "git clean -f",
+        "deletes every untracked file, which by definition git has no copy of",
+    ),
+    (
+        re.compile(rf"{_GIT}(?:checkout(?:\s+--)?|restore)\s+\.(?:\s|$)"),
+        "git checkout or restore of everything",
+        "discards every uncommitted change in the tree, and git keeps no copy of them",
+    ),
+    (
+        re.compile(rf"{_GIT}branch\b{_GAP}(?:-D|--delete\s+--force|-df|-fd)\b"),
+        "git branch -D",
+        "deletes a branch even when its commits are merged nowhere else",
+    ),
+    (
+        re.compile(rf"{_GIT}stash\s+clear\b"),
+        "git stash clear",
+        "drops every stash at once",
+    ),
+    (
+        re.compile(rf"^find\b{_GAP}(?:-delete\b|-exec(?:dir)?\s+rm\b)"),
+        "find with -delete",
+        "deletes everything the search matches, and a search is easy to get wider than meant",
+    ),
+    (
+        re.compile(rf"^rsync\b{_GAP}--delete"),
+        "rsync --delete",
+        "deletes whatever the destination has that the source does not",
+    ),
+    (
+        re.compile(r"^shred\b"),
+        "shred",
+        "overwrites the file so that nothing can recover it",
     ),
     (
         re.compile(r"^mkfs(?:\.[a-z0-9]+)?\b"),
@@ -63,11 +123,23 @@ _DESTRUCTIVE: Final[tuple[tuple[re.Pattern[str], str, str], ...]] = (
 def destructive_reason(text: str) -> str:
     """Why this prompt is worth a second deliberate tap, or ``""``."""
     for raw in text.splitlines():
-        line = _LEAD.sub("", raw, count=1)
-        for pattern, matched, why in _DESTRUCTIVE:
-            if pattern.search(line):
-                return f"This prompt contains {matched}, which {why}."
+        for command in _commands(_LEAD.sub("", raw, count=1)):
+            for pattern, matched, why in _DESTRUCTIVE:
+                if pattern.search(command):
+                    return f"This prompt contains {matched}, which {why}."
     return ""
+
+
+def _unwrapped(command: str) -> str:
+    command = command.strip()
+    while (bare := _WRAPPER.sub("", command, count=1)) != command:
+        command = bare
+    return command
+
+
+def _commands(line: str) -> list[str]:
+    # Prose takes a verb only at the start of a line; shell also starts one after a separator.
+    return [_unwrapped(part) for part in _SEPARATOR.split(line)]
 
 
 # Eight characters: enough that the needle is this send's, short enough to survive a wrap.
@@ -80,12 +152,17 @@ def _flat(text: str) -> str:
     return _SPACE.sub(" ", text).strip()
 
 
+def _above_the_box(screen: str) -> str:
+    # Text still in the agent's input box was typed, not submitted: it has not landed.
+    return " ".join(plain_text(line) for line in pane_lines(screen, strip=False))
+
+
 def landed(sent: str, before: str, after: str) -> bool:
-    """True when the pane gained more copies of this send than it had before."""
+    """True when the pane gained more copies of this send than it had before, outside its input."""
     needle = _flat(sent)[:MIN_MATCH_CHARS]
     if not needle:
         return False
-    return _flat(after).count(needle) > _flat(before).count(needle)
+    return _flat(_above_the_box(after)).count(needle) > _flat(_above_the_box(before)).count(needle)
 
 
 NO_ECHO_MECHANISM: Final = (

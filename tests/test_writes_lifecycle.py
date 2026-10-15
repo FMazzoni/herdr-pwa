@@ -36,7 +36,7 @@ from herdr_pwa.writes.workspaces import (
     create_workspace,
     rename_workspace,
 )
-from tests._fake_herd import P3, S1, S2, SETTLED, FakeHerd, Rig, capture, rig
+from tests._fake_herd import P3, S1, S2, SETTLED, FakeHerd, Rig, capture, echoed, rig
 
 NEW = "a1b2c3d4-0000-4000-8000-000000000001"
 
@@ -189,17 +189,50 @@ def test_a_workspace_with_agents_needs_the_armed_count_it_was_shown(tmp_path: Pa
     r = end_rig(tmp_path)
     first = refused(close_workspace(r.writer, WorkspaceCloseAsk("w1", confirmed=True)))
     assert first.refusal is Refusal.CONFIRM
-    assert first.screen == "1"
+    assert first.screen
     assert "ends 1 agent" in first.reason
     r.herd.put("w1:p4", S2)
-    moved = refused(
-        close_workspace(r.writer, WorkspaceCloseAsk("w1", confirmed=True, armed=True, saw=1))
-    )
+    moved = refused(_second_tap(r, first.screen))
     assert (moved.refusal, moved.status) == (Refusal.COUNT_CHANGED, 409)
     assert r.herd.writes("workspace.close") == []
-    done = close_workspace(r.writer, WorkspaceCloseAsk("w1", confirmed=True, armed=True, saw=2))
+    done = _second_tap(r, moved.screen)
     assert done == WorkspaceDone("w1", verified=True)
     assert r.audit_records[0]["endpoint"] == "close"
+
+
+def _armed(r: Rig, workspace: str = "w1") -> str:
+    first = refused(close_workspace(r.writer, WorkspaceCloseAsk(workspace, confirmed=True)))
+    assert first.refusal is Refusal.CONFIRM
+    return first.screen
+
+
+def _second_tap(r: Rig, saw: str) -> WorkspaceDone | Refused:
+    return close_workspace(r.writer, WorkspaceCloseAsk("w1", confirmed=True, armed=True, saw=saw))
+
+
+def test_an_agent_swapped_under_the_same_count_refuses_the_armed_close(tmp_path: Path) -> None:
+    r = end_rig(tmp_path)
+    saw = _armed(r)
+    # Same pane, same count of one: the idle agent shown was replaced by a working one.
+    r.herd.put(P3, S2, status="working")
+    swapped = refused(_second_tap(r, saw))
+    assert (swapped.refusal, swapped.status) == (Refusal.COUNT_CHANGED, 409)
+    assert r.herd.writes("workspace.close") == []
+    assert isinstance(_second_tap(r, swapped.screen), WorkspaceDone)
+
+
+def test_an_agent_that_started_working_since_the_confirm_refuses_it(tmp_path: Path) -> None:
+    r = end_rig(tmp_path)
+    saw = _armed(r)
+    r.herd.put(P3, S1, status="working")
+    assert refused(_second_tap(r, saw)).refusal is Refusal.COUNT_CHANGED
+    assert r.herd.writes("workspace.close") == []
+
+
+def test_the_armed_close_goes_through_when_nothing_moved(tmp_path: Path) -> None:
+    r = end_rig(tmp_path)
+    saw = _armed(r)
+    assert _second_tap(r, saw) == WorkspaceDone("w1", verified=True)
 
 
 def test_every_refusal_has_one_row_in_the_failure_table() -> None:
@@ -277,11 +310,11 @@ def listening_rig(tmp_path: Path, *, session: str = NEW) -> Rig:
     def listening(herd: FakeHerd, _params: JsonObject) -> None:
         herd.agents[NEW_PANE].update(interactive_ready=True, launch_pending=False)
 
-    def echoed(herd: FakeHerd, params: JsonObject) -> None:
-        herd.screens[NEW_PANE] = [SETTLED + f"> {params['text']}\n"]
+    def typed(herd: FakeHerd, params: JsonObject) -> None:
+        herd.screens[NEW_PANE] = [echoed(f"> {params['text']}")]
 
     r.herd.after["agent.start"] = listening
-    r.herd.after["agent.prompt"] = echoed
+    r.herd.after["agent.prompt"] = typed
     r.herd.screens[NEW_PANE] = ["drawing", SETTLED]
     return r
 

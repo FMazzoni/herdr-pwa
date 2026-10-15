@@ -185,6 +185,27 @@ def test_the_failure_table_maps_each_engine_failure(
     assert ("hx-trigger" in response.text) is polls
 
 
+def test_a_failure_fragment_stands_in_for_its_region_under_the_region_id(tmp_path: Path) -> None:
+    # The page holds a region's redraw back under a finger by its id; a failure with none is
+    # swapped out from under the reader the moment it heals.
+    rig = build_rig(tmp_path, {SNAPSHOT: EngineUnavailable("x")})
+    url = f"/agent/{WORKING_SESSION}/answer"
+    response = rig.http.get(url, headers={**FRAGMENT, "HX-Target": "answer"})
+    assert response.status_code == 503
+    assert 'id="answer"' in response.text
+    assert f'data-hp-poll="{url}"' in response.text
+
+
+@pytest.mark.parametrize("target", ['x" onclick="alert(1)', "", "Answer", "a b"])
+def test_a_failure_takes_only_a_plain_region_id_from_the_request(
+    tmp_path: Path, target: str
+) -> None:
+    rig = build_rig(tmp_path, {SNAPSHOT: EngineUnavailable("x")})
+    response = rig.http.get("/feed", headers={**FRAGMENT, "HX-Target": target})
+    assert response.status_code == 503
+    assert " id=" not in response.text.split(">", 1)[0]
+
+
 def test_a_failed_page_load_is_a_whole_document(tmp_path: Path) -> None:
     rig = build_rig(tmp_path, {SNAPSHOT: EngineUnavailable("x")})
     response = rig.http.get(f"/agent/{WORKING_SESSION}")

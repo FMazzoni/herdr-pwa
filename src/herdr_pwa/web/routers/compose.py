@@ -14,7 +14,7 @@ from herdr_pwa.engine.dialog import BlockedPrompt
 from herdr_pwa.engine.model import Agent, AgentStatus, PaneId, SessionId, screen_digest
 from herdr_pwa.engine.transport import EngineError
 from herdr_pwa.web.deps import WebState, viewer_guard
-from herdr_pwa.web.failures import refused
+from herdr_pwa.web.failures import AgentGone, refused
 from herdr_pwa.web.herd import find_agent
 from herdr_pwa.web.writing import (
     FormBody,
@@ -30,6 +30,7 @@ from herdr_pwa.web.writing import (
     writer_for,
 )
 from herdr_pwa.writes.answer import KeyAsk, KeySent, send_key, send_starting_key
+from herdr_pwa.writes.guard import asks_a_question
 from herdr_pwa.writes.keys import PAD_KEYS, allowed_keys, answer_digits, control_token
 from herdr_pwa.writes.lifecycle import EndAsk, end_agent
 from herdr_pwa.writes.outcome import Evidence, Outcome
@@ -42,13 +43,15 @@ DOOR_KEYS: Final = (*PAD_KEYS, INTERRUPT_KEY)
 
 
 def _screen_now(web: WebState, agent: Agent) -> str:
-    # A working agent's screen moves, so the composer claims no digest for it.
+    # A working agent's screen moves, and a question's is gone once it is answered from the keys
+    # (the composer is not redrawn then), so neither is a screen the composer claims.
     if agent.status is AgentStatus.WORKING:
         return ""
     try:
-        return screen_digest(web.client.read(agent.target, source="visible"))
+        screen = web.client.read(agent.target, source="visible")
     except EngineError:
         return ""
+    return "" if asks_a_question(screen) else screen_digest(screen)
 
 
 def _question(web: WebState, agent: Agent) -> BlockedPrompt | None:
@@ -140,7 +143,23 @@ def said(sent: KeySent) -> Said:
     return Said(shape.kind, shape.what.format(key=name), shape.why.format(key=name), shape.unsure)
 
 
+def _lookup(web: WebState, session: SessionId) -> Agent | None:
+    try:
+        return find_agent(web, session)
+    except AgentGone:
+        return None
+
+
+def _after(web: WebState, session: SessionId, prior: Agent | None) -> Agent:
+    # A write that ended its agent (Ctrl+C, /exit) still says what it did; only nothing to draw is 404.
+    agent = _lookup(web, session) or prior
+    if agent is None:
+        raise AgentGone(session)
+    return agent
+
+
 def _key(web: WebState, writer: Writer, session: SessionId, values: dict[str, str]) -> HTMLResponse:
+    prior = _lookup(web, session)
     ask = KeyAsk(
         session,
         values.get("key", ""),
@@ -149,12 +168,12 @@ def _key(web: WebState, writer: Writer, session: SessionId, values: dict[str, st
         confirmed=ticked(values, "confirm"),
     )
     result = send_key(writer, ask)
-    agent = find_agent(web, session)
     if isinstance(result, Refused):
         raise_if_gone(result)
+        agent = _after(web, session, prior)
         context = {**answer_context(agent, result.prompt), "key": ask.key.strip().lower()}
         return refused(web.pages, "answer.html", context, result)
-    return _answered(web, agent, result)
+    return _answered(web, _after(web, session, prior), result)
 
 
 def _fresh(web: WebState, agent: Agent) -> Agent:
@@ -181,23 +200,31 @@ def _answered(web: WebState, agent: Agent, result: KeySent) -> HTMLResponse:
 def _prompt(
     web: WebState, writer: Writer, session: SessionId, values: dict[str, str]
 ) -> HTMLResponse:
+    prior = _lookup(web, session)
     ask = PromptAsk(
         session,
         values.get("text", ""),
         expected_target=expected(values),
         drawn_against=values.get("screen", "").strip(),
         confirmed=ticked(values, "confirm"),
+        again=ticked(values, "again"),
     )
     result = send_prompt(writer, ask)
     if isinstance(result, Refused):
         raise_if_gone(result)
-        context = {"agent": find_agent(web, session), "text": ask.text, "screen": result.screen}
+        context = {
+            "agent": _after(web, session, prior),
+            "text": ask.text,
+            "screen": result.screen,
+            # Kept through a later refusal, or a confirm after it would lose the word "again".
+            "again": result.asks_again or ask.again,
+        }
         return refused(web.pages, "compose.html", context, result)
-    return _composed(web, session, result)
+    return _composed(web, _after(web, session, prior), result)
 
 
-def _composed(web: WebState, session: SessionId, result: PromptSent) -> HTMLResponse:
-    context = {"agent": find_agent(web, session), "text": "", "screen": "", "sent": result}
+def _composed(web: WebState, agent: Agent, result: PromptSent) -> HTMLResponse:
+    context = {"agent": agent, "text": "", "screen": "", "sent": result}
     return web.pages.fragment("compose.html", context, headers={"HX-Trigger": "hp:poke"})
 
 

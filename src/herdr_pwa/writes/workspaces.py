@@ -5,7 +5,7 @@ from typing import Final
 
 from herdr_pwa.audit import CLOSE, Write
 from herdr_pwa.engine.client import HerdrClient
-from herdr_pwa.engine.model import Agent, AgentStatus, Snapshot, Workspace
+from herdr_pwa.engine.model import Agent, AgentStatus, Snapshot, Workspace, screen_digest
 from herdr_pwa.engine.transport import EngineError
 from herdr_pwa.writes.refusal import Refusal, Refused, failed_result, refusal_for
 from herdr_pwa.writes.resolve import Writer, attempt, workspace_now
@@ -43,6 +43,13 @@ class WorkspaceCost:
         label = self.workspace.label or self.workspace.workspace_id
         noun = "agent" if self.total == 1 else "agents"
         return f"Closing {label} ends {self.total} {noun}, and nothing brings them back."
+
+    @property
+    def digest(self) -> str:
+        """What the armed confirm was shown: every agent's session, pane and status, as one token."""
+        # A count alone let an idle agent be swapped for a working one under the same number.
+        rows = sorted(f"{a.session}\t{a.target}\t{a.status.value}" for a in self.agents)
+        return screen_digest("\n".join(rows))
 
     def describe(self) -> str:
         """The close as one audit line: the label, the count, and every agent."""
@@ -112,28 +119,29 @@ def rename_workspace(client: HerdrClient, workspace_id: str, label: str) -> Work
 
 
 def _close_refusal(
-    cost: WorkspaceCost, *, confirmed: bool, armed: bool, saw: int | None
+    cost: WorkspaceCost, *, confirmed: bool, armed: bool, saw: str
 ) -> Refused | None:
     if not confirmed:
         return Refused(Refusal.CONFIRM, "closed", reason=cost.reason)
     if not cost.reason:
         return None
     if not armed:
-        return Refused(Refusal.CONFIRM, "closed", reason=cost.reason, screen=str(cost.total))
-    # The second tap carries the count it was shown; a different count now is a different close.
-    if saw != cost.total:
-        return Refused(Refusal.COUNT_CHANGED, "closed", reason=cost.reason, screen=str(cost.total))
+        return Refused(Refusal.CONFIRM, "closed", reason=cost.reason, screen=cost.digest)
+    # The second tap carries the agents it was shown; any other set now is a different close.
+    if saw != cost.digest:
+        return Refused(Refusal.COUNT_CHANGED, "closed", reason=cost.reason, screen=cost.digest)
     return None
 
 
 @dataclass(frozen=True, slots=True)
 class WorkspaceCloseAsk:
-    """A workspace close: the first confirm, the armed second, and the count it was shown."""
+    """A workspace close: the first confirm, the armed second, and the agents it was shown."""
 
     workspace_id: str
     confirmed: bool = False
     armed: bool = False
-    saw: int | None = None
+    # WorkspaceCost.digest as the armed confirm drew it.
+    saw: str = ""
 
 
 def close_workspace(writer: Writer, ask: WorkspaceCloseAsk) -> WorkspaceDone | Refused:

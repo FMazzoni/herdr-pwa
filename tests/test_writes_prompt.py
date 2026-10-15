@@ -1,5 +1,6 @@
 """Typing a prompt: resolved now, refused at a question, read back, never resent."""
 
+import threading
 from pathlib import Path
 
 import pytest
@@ -7,6 +8,7 @@ import pytest
 from herdr_pwa.audit import AuditUnavailableError, Entry, Write
 from herdr_pwa.engine.model import as_session_id, screen_digest
 from herdr_pwa.engine.transport import EngineUnavailable
+from herdr_pwa.jsontypes import JsonObject
 from herdr_pwa.writes.guard import (
     MAX_PROMPT_CHARS,
     NO_ECHO_MECHANISM,
@@ -18,8 +20,20 @@ from herdr_pwa.writes.guard import (
 from herdr_pwa.writes.outcome import Evidence, Outcome
 from herdr_pwa.writes.prompt import PromptAsk, PromptSent, send_first_prompt, send_prompt
 from herdr_pwa.writes.refusal import Refusal, Refused
-from herdr_pwa.writes.resolve import Writer
-from tests._fake_herd import P3, P5, S1, S2, SETTLED, FakeHerd, Rig, capture, rig
+from herdr_pwa.writes.resolve import InFlight, Writer
+from tests._fake_herd import (
+    P3,
+    P5,
+    S1,
+    S2,
+    SETTLED,
+    FakeHerd,
+    Rig,
+    capture,
+    drafted,
+    echoed,
+    rig,
+)
 
 PROMPT = "agent.prompt"
 
@@ -42,7 +56,7 @@ def refused(result: object) -> Refused:
 
 
 def test_a_prompt_at_a_settled_pane_is_typed_once_and_read_back(tmp_path: Path) -> None:
-    r = idle_rig(tmp_path, SETTLED, SETTLED + "\u276f hello there\n")
+    r = idle_rig(tmp_path, SETTLED, echoed("\u276f hello there"))
     result = sent(send_prompt(r.writer, PromptAsk(S1, "hello there")))
     assert result.verified
     assert result.target == P3
@@ -240,7 +254,7 @@ def test_a_first_prompt_waits_for_a_settled_screen_and_asserts_no_session(
         SETTLED,
         SETTLED,
         SETTLED,
-        SETTLED + "\u276f hi hermes\n",
+        echoed("\u276f hi hermes"),
     ]
     r = rig(tmp_path, herd)
     result = sent(send_first_prompt(r.writer, P3, "hi hermes"))
@@ -272,6 +286,35 @@ def test_a_first_prompt_at_an_agent_with_a_session_is_sent_to_its_own_page(
         ("echo broken > /etc/hosts", "a redirect onto a system path"),
         ("npm publish --force", "--force"),
         ("$ sudo rm -rf /", "sudo"),
+        # A wrapper in front of the verb leaves it the command that runs.
+        ("\\rm -rf build", "rm with a recursive flag"),
+        ("command rm -rf build", "rm with a recursive flag"),
+        ("env rm -rf build", "rm with a recursive flag"),
+        ("env -i PATH=/bin rm -rf build", "rm with a recursive flag"),
+        ("LC_ALL=C rm -rf build", "rm with a recursive flag"),
+        ("nohup rm -rf build", "rm with a recursive flag"),
+        ("command \\rm -r build", "rm with a recursive flag"),
+        # A verb after a separator starts its own command.
+        ("cd build && rm -rf out", "rm with a recursive flag"),
+        ("make clean || rm -rf out", "rm with a recursive flag"),
+        ("cd /srv; git reset --hard", "git reset --hard"),
+        ("ls *.log | xargs rm -rf", "rm with a recursive flag"),
+        ("find . -name '*.pyc' -delete", "find with -delete"),
+        ("find /tmp -type f -exec rm {} +", "find with -delete"),
+        ("git reset --hard", "git reset --hard"),
+        ("git reset --hard origin/main", "git reset --hard"),
+        ("git -C ../repo reset --hard HEAD~3", "git reset --hard"),
+        ("git clean -f", "git clean -f"),
+        ("git clean -fdx", "git clean -f"),
+        ("git clean -xdf", "git clean -f"),
+        ("git clean --force -d", "git clean -f"),
+        ("git checkout -- .", "git checkout or restore of everything"),
+        ("git restore .", "git checkout or restore of everything"),
+        ("git branch -D feature", "git branch -D"),
+        ("git push origin --delete feature", "git push --delete"),
+        ("git stash clear", "git stash clear"),
+        ("rsync -a --delete src/ dst/", "rsync --delete"),
+        ("shred -u secrets.txt", "shred"),
     ],
 )
 def test_the_verbs_worth_a_second_tap(text: str, named: str) -> None:
@@ -286,11 +329,36 @@ def test_the_verbs_worth_a_second_tap(text: str, named: str) -> None:
         "cat notes.md | grep -R todo",
         "the rm -rf in the Makefile is wrong, please fix it",
         "explain why git push --force is dangerous",
+        # Wrappers and separators widen where a verb may start, not what counts as one.
+        "command -v rm",
+        "environment rm -rf is a bad idea",
+        "the env rm -rf trick is wrong, please fix it",
+        "git reset --soft HEAD~1",
+        "git reset HEAD file.txt",
+        "git clean -n",
+        "git clean -nd",
+        "git checkout -- src/app.py",
+        "git checkout main",
+        "git restore --staged .",
+        "git branch -d merged-feature",
+        "git push origin feature",
+        "git stash pop",
+        "find . -name '*.pyc'",
+        "find . -name '*.pyc' -print",
+        "explain how find -delete differs from rm",
+        "please do not git reset --hard, my work is uncommitted",
+        "rsync -a src/ dst/",
+        "the shredder is broken",
         "",
     ],
 )
 def test_prose_about_those_verbs_does_not_ask(text: str) -> None:
     assert destructive_reason(text) == ""
+
+
+def test_text_left_in_the_input_box_has_not_landed() -> None:
+    assert not landed("hello there", SETTLED, drafted("hello there"))
+    assert landed("hello there", SETTLED, echoed("\u276f hello there"))
 
 
 def test_landing_needs_more_copies_than_before() -> None:
@@ -308,3 +376,72 @@ def test_no_echo_prompts_are_recognised(tail: str) -> None:
 @pytest.mark.parametrize("screen", ["Password:", "\u276f [sudo] password for owner:", SETTLED, ""])
 def test_anything_unsure_is_not_called_no_echo(screen: str) -> None:
     assert no_echo_notice(screen) == ""
+
+
+def test_a_prompt_from_a_second_tab_mid_send_is_refused_not_typed_twice(tmp_path: Path) -> None:
+    r = idle_rig(tmp_path, SETTLED, echoed("\u276f hello there"))
+    second: list[PromptSent | Refused] = []
+
+    def other_tab(herd: FakeHerd, params: JsonObject) -> None:
+        del herd.after["agent.read"], params
+        second.append(send_prompt(r.writer, PromptAsk(S1, "hello there")))
+
+    r.herd.after["agent.read"] = other_tab
+    _ = sent(send_prompt(r.writer, PromptAsk(S1, "hello there")))
+    [late] = second
+    assert refused(late).refusal is Refusal.IN_FLIGHT
+    assert len(r.herd.writes(PROMPT)) == 1
+
+
+def test_in_flight_is_held_across_threads_until_the_write_ends() -> None:
+    flights = InFlight()
+    inside, release = threading.Event(), threading.Event()
+    seen: list[bool] = []
+
+    def first() -> None:
+        with flights.hold("session:a") as mine:
+            seen.append(mine)
+            inside.set()
+            assert release.wait(5)
+
+    worker = threading.Thread(target=first)
+    worker.start()
+    assert inside.wait(5)
+    with flights.hold("session:a") as mine, flights.hold("session:b") as other:
+        assert (mine, other) == (False, True)
+    release.set()
+    worker.join()
+    with flights.hold("session:a") as mine:
+        assert mine
+    assert seen == [True]
+
+
+def _lost(_herd: FakeHerd, _params: JsonObject) -> None:
+    lost = EngineUnavailable("the runner closed the connection while answering")
+    lost.after_send = True
+    raise lost
+
+
+def test_a_lost_answer_hands_back_a_fresh_digest_and_holds_the_same_text(tmp_path: Path) -> None:
+    r = idle_rig(tmp_path)
+    r.herd.after[PROMPT] = _lost
+    lost = refused(send_prompt(r.writer, PromptAsk(S1, "hello there")))
+    assert (lost.refusal, lost.screen) == (Refusal.ANSWER_LOST, screen_digest(SETTLED))
+    assert lost.asks_again
+    del r.herd.after[PROMPT]
+    held = refused(send_prompt(r.writer, PromptAsk(S1, "hello there", drawn_against=lost.screen)))
+    assert (held.refusal, held.status, held.screen) == (Refusal.RESEND, 200, lost.screen)
+    # Different text is a different prompt, and goes.
+    _ = sent(send_prompt(r.writer, PromptAsk(S1, "something else")))
+    assert len(r.herd.writes(PROMPT)) == 2
+
+
+def test_sending_again_anyway_still_asks_for_the_destructive_confirm(tmp_path: Path) -> None:
+    r = idle_rig(tmp_path)
+    r.herd.after[PROMPT] = _lost
+    _ = refused(send_prompt(r.writer, PromptAsk(S1, "rm -rf build", confirmed=True)))
+    del r.herd.after[PROMPT]
+    again = refused(send_prompt(r.writer, PromptAsk(S1, "rm -rf build", again=True)))
+    assert again.refusal is Refusal.CONFIRM
+    _ = sent(send_prompt(r.writer, PromptAsk(S1, "rm -rf build", again=True, confirmed=True)))
+    assert len(r.herd.writes(PROMPT)) == 2

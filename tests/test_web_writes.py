@@ -1,6 +1,7 @@
 """Every write route over a fake herd: what it sends, what it refuses, and at which status."""
 
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -12,11 +13,13 @@ from herdr_pwa.engine.client import HerdrClient
 from herdr_pwa.engine.config import EngineSettings
 from herdr_pwa.engine.dialog import BlockedPrompt
 from herdr_pwa.engine.model import screen_digest
+from herdr_pwa.engine.transport import EngineUnavailable
+from herdr_pwa.jsontypes import JsonObject
 from herdr_pwa.settings import Settings
 from herdr_pwa.web.app import create_app
 from herdr_pwa.writes.keys import control_token
 from herdr_pwa.writes.outcome import Pacing
-from tests._fake_herd import P3, P5, S1, S2, SETTLED, FakeClock, FakeHerd, capture
+from tests._fake_herd import P3, P5, S1, S2, SETTLED, FakeClock, FakeHerd, capture, echoed
 from tests.webfakes import IDENTITY
 
 ORIGIN = {"Origin": "http://testserver"}
@@ -86,7 +89,7 @@ def test_the_composer_carries_the_idle_screen_digest_and_a_draft_key(tmp_path: P
 
 
 def test_a_prompt_is_sent_audited_and_read_back(tmp_path: Path) -> None:
-    w = idle(tmp_path, SETTLED, SETTLED + "  hello there\n")
+    w = idle(tmp_path, SETTLED, echoed("\u276f hello there"))
     response = w.http.post(f"/agent/{S1}/prompt", data={"text": "hello there"}, headers=ORIGIN)
     assert response.status_code == 200
     assert "Sent, and it is on the pane." in response.text
@@ -116,6 +119,47 @@ def test_a_destructive_prompt_is_held_with_its_reason_then_sent(tmp_path: Path) 
     data = {"text": "rm -rf build", "confirm": "1", "screen": screen_digest(SETTLED)}
     _ = w.http.post(f"/agent/{S1}/prompt", data=data, headers=ORIGIN)
     assert len(w.herd.writes("agent.prompt")) == 1
+
+
+def _lost_after_send(_herd: FakeHerd, _params: JsonObject) -> None:
+    lost = EngineUnavailable("the runner closed the connection while answering")
+    lost.after_send = True
+    raise lost
+
+
+def _posted_back(page: str) -> dict[str, str]:
+    """What the rendered composer would post: its hidden fields and its textarea."""
+    fields = dict(re.findall(r'<input type="hidden" name="(\w+)" value="([^"]*)"', page))
+    text = re.search(r"<textarea[^>]*>([^<]*)</textarea>", page)
+    assert text is not None
+    return {**fields, "text": text.group(1)}
+
+
+def test_a_prompt_that_may_have_landed_is_not_sent_again_without_saying_so(
+    tmp_path: Path,
+) -> None:
+    w = idle(tmp_path)
+    w.herd.after["agent.prompt"] = _lost_after_send
+    lost = w.http.post(f"/agent/{S1}/prompt", data={"text": "hello there"}, headers=ORIGIN)
+    assert lost.status_code == 502
+    assert "may or may not have been sent" in lost.text
+    assert "Send again anyway" in lost.text
+    form_back = _posted_back(lost.text)
+    assert form_back["screen"] == screen_digest(SETTLED), "a fresh digest, not an empty one"
+    del w.herd.after["agent.prompt"]
+    # The plain resubmit, as a stray tap or a restored draft would send it.
+    plain = {k: v for k, v in form_back.items() if k != "again"}
+    held = w.http.post(f"/agent/{S1}/prompt", data=plain, headers=ORIGIN)
+    assert held.status_code == 200
+    assert "may already have landed" in held.text
+    assert "Send again anyway" in held.text
+    assert len(w.herd.writes("agent.prompt")) == 1
+    again = w.http.post(f"/agent/{S1}/prompt", data=_posted_back(held.text), headers=ORIGIN)
+    assert again.status_code == 200
+    assert len(w.herd.writes("agent.prompt")) == 2
+    # Once something was sent, the next prompt needs no extra word.
+    _ = w.http.post(f"/agent/{S1}/prompt", data={"text": "hello there"}, headers=ORIGIN)
+    assert len(w.herd.writes("agent.prompt")) == 3
 
 
 def test_a_prompt_to_a_gone_agent_is_404(tmp_path: Path) -> None:
@@ -274,11 +318,17 @@ def test_workspace_new_rename_and_close(tmp_path: Path) -> None:
     assert bad.status_code == 400
     first = w.http.post("/workspaces/w1/close", data={"confirm": "1"}, headers=ORIGIN)
     assert first.status_code == 200
-    assert 'name="saw" value="1"' in first.text
+    saw = re.search(r'name="saw" value="([0-9a-f]+)"', first.text)
+    assert saw is not None
+    assert herd.writes("workspace.close") == []
+    stale = w.http.post(
+        "/workspaces/w1/close", data={"confirm": "1", "armed": "1", "saw": "1"}, headers=ORIGIN
+    )
+    assert stale.status_code == 409
     assert herd.writes("workspace.close") == []
     closed = w.http.post(
         "/workspaces/w1/close",
-        data={"confirm": "1", "armed": "1", "saw": "1"},
+        data={"confirm": "1", "armed": "1", "saw": saw.group(1)},
         headers=ORIGIN,
         follow_redirects=False,
     )
@@ -532,3 +582,44 @@ def test_the_doors_destructive_confirm_is_tied_to_the_screen_it_was_asked_about(
     )
     assert unbound.status_code == 200, "a confirm that names no screen confirms nothing"
     assert w.herd.writes("agent.prompt") == []
+
+
+def _exits(herd: FakeHerd, _params: JsonObject) -> None:
+    """The write ended the agent: its pane is gone from the herd by the time the page is drawn."""
+    _ = herd.agents.pop(P3, None)
+
+
+def test_an_interrupt_that_ends_the_agent_still_says_it_was_sent(tmp_path: Path) -> None:
+    w = blocked(tmp_path)
+    w.herd.after["agent.send_keys"] = _exits
+    data = {"key": "ctrl-c", "confirm": "1"}
+    response = w.http.post(f"/agent/{S1}/keys", data=data, headers=ORIGIN)
+    assert response.status_code == 200
+    assert "Sent Ctrl+C" in response.text or "You sent Ctrl+C" in response.text
+
+
+def test_an_exit_prompt_that_ends_the_agent_still_says_it_was_sent(tmp_path: Path) -> None:
+    w = idle(tmp_path)
+    w.herd.after["agent.prompt"] = _exits
+    response = w.http.post(f"/agent/{S1}/prompt", data={"text": "/exit"}, headers=ORIGIN)
+    assert response.status_code == 200
+    assert "Sent" in response.text
+    assert len(w.herd.writes("agent.prompt")) == 1
+
+
+def test_the_first_prompt_after_answering_a_question_is_not_refused_as_moved(
+    tmp_path: Path,
+) -> None:
+    w = blocked(tmp_path)
+    drawn = _posted_back(w.http.get(f"/agent/{S1}/compose").text)
+    # A question's screen is no screen to type against, so it claims none.
+    assert drawn["screen"] == ""
+    asked = w.http.post(f"/agent/{S1}/prompt", data={"text": "hi"}, headers=ORIGIN)
+    assert asked.status_code == 409
+    assert _posted_back(asked.text)["screen"] == ""
+    # The question is answered from the keys; the agent settles; the composer was never redrawn.
+    w.herd.put(P3, S1, status="idle")
+    w.herd.screens[P3] = [SETTLED, echoed("\u276f hello there")]
+    sent = w.http.post(f"/agent/{S1}/prompt", data={**drawn, "text": "hello there"}, headers=ORIGIN)
+    assert sent.status_code == 200
+    assert "Sent, and it is on the pane." in sent.text

@@ -1,7 +1,8 @@
 """Typing a prompt at an agent: look first, refuse what would be swallowed, read back, never resend."""
 
 import logging
-from dataclasses import dataclass
+import threading
+from dataclasses import dataclass, field
 from typing import Final
 
 from herdr_pwa.audit import OMITTED_NO_ECHO, PROMPT, Write
@@ -17,7 +18,7 @@ from herdr_pwa.writes.guard import (
 )
 from herdr_pwa.writes.outcome import Evidence, Outcome, Pacing, audit_result
 from herdr_pwa.writes.refusal import Refusal, Refused, failed_result, refusal_for
-from herdr_pwa.writes.resolve import Writer, agent_now, attempt, snapshot_now
+from herdr_pwa.writes.resolve import Writer, agent_now, attempt, one_at_a_time, snapshot_now
 
 log = logging.getLogger(__name__)
 
@@ -30,6 +31,33 @@ READY_WAIT: Final = 8.0
 READY_POLL: Final = 0.5
 # Three identical reads in a row mean the harness has finished drawing itself.
 SETTLED_LOOKS: Final = 3
+
+
+@dataclass
+class Unsure:
+    """The text each session was last sent with an unknown outcome, until something is sent."""
+
+    _guard: threading.Lock = field(default_factory=threading.Lock)
+    _text: dict[SessionId, str] = field(default_factory=dict[SessionId, str])
+
+    def note(self, session: SessionId, text: str) -> None:
+        """Remember that ``text`` may or may not have reached ``session``."""
+        with self._guard:
+            self._text[session] = text.strip()
+
+    def pending(self, session: SessionId, text: str) -> bool:
+        """Is ``text`` the one whose last send to ``session`` may already have landed?"""
+        with self._guard:
+            return bool(session) and self._text.get(session) == text.strip()
+
+    def clear(self, session: SessionId) -> None:
+        """A send to ``session`` was taken, so what came before it is settled by the pane."""
+        with self._guard:
+            _ = self._text.pop(session, None)
+
+
+# Per process, like the in-flight set; a restart forgets it, and the composer still says so.
+UNSURE: Final = Unsure()
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,6 +84,8 @@ class _Send:
     confirmed: bool
     # A working agent's screen moves, so no digest is issued for it to carry back.
     issue: bool
+    # Sent anyway after an attempt whose outcome is unknown; said in so many words.
+    again: bool = False
 
 
 def _text_refusal(text: str) -> Refused | None:
@@ -74,11 +104,15 @@ def _read_now(client: HerdrClient, target: PaneId) -> str | Refused:
 
 
 def _preflight(send: _Send, screen: str) -> Refused | None:
-    digest = screen_digest(screen) if send.issue else ""
+    # A question is no screen to type against, and answering it changes it: it issues no digest.
     if asks_a_question(screen):
-        return Refused(Refusal.QUESTION_SHOWING, _VERB, screen=digest)
+        return Refused(Refusal.QUESTION_SHOWING, _VERB)
+    digest = screen_digest(screen) if send.issue else ""
     if send.drawn_against and send.drawn_against != screen_digest(screen):
         return Refused(Refusal.SCREEN_CHANGED, _VERB, screen=digest)
+    # Before the destructive confirm, so its own confirm cannot stand in for this one.
+    if not send.again and UNSURE.pending(send.session, send.text):
+        return Refused(Refusal.RESEND, _VERB, screen=digest)
     reason = "" if send.confirmed else destructive_reason(send.text)
     if reason:
         return Refused(Refusal.CONFIRM, _VERB, reason=reason, screen=digest)
@@ -116,13 +150,25 @@ def _type(writer: Writer, send: _Send) -> PromptSent | Refused:
             _ = client.prompt(send.target, send.text, session=send.session)
         except EngineError as exc:
             entry.outcome(failed_result(exc))
-            return Refused(refusal_for(exc), _VERB, detail=str(exc))
+            return _failed(client, send, exc)
         ok = _landed(client, send, before, writer.pacing)
         outcome, evidence = (
             (Outcome.CONFIRMED, Evidence.ECHO) if ok else (Outcome.ACCEPTED, Evidence.NOECHO)
         )
         entry.outcome(audit_result(outcome, evidence))
+    UNSURE.clear(send.session)
     return PromptSent(send.target, outcome, evidence, no_echo)
+
+
+def _failed(client: HerdrClient, send: _Send, exc: EngineError) -> Refused:
+    refused = Refused(refusal_for(exc), _VERB, detail=str(exc))
+    if not refused.unsure:
+        return refused
+    UNSURE.note(send.session, send.text)
+    # The text comes back with a digest of the screen now, so the next tap is checked against it.
+    after = _read_now(client, send.target)
+    fresh = screen_digest(after) if send.issue and isinstance(after, str) else ""
+    return Refused(refused.refusal, _VERB, detail=refused.detail, screen=fresh)
 
 
 @dataclass(frozen=True, slots=True)
@@ -135,10 +181,15 @@ class PromptAsk:
     # The digest the composer was drawn against; empty claims nothing about the screen.
     drawn_against: str = ""
     confirmed: bool = False
+    again: bool = False
 
 
 def send_prompt(writer: Writer, ask: PromptAsk) -> PromptSent | Refused:
     """Type one prompt at the agent holding the session now, or say why not."""
+    return one_at_a_time(f"session:{ask.session}", _VERB, lambda: _send_prompt(writer, ask))
+
+
+def _send_prompt(writer: Writer, ask: PromptAsk) -> PromptSent | Refused:
     agent = agent_now(writer.client, ask.session, expected_target=ask.expected_target, verb=_VERB)
     if isinstance(agent, Refused):
         return agent
@@ -152,6 +203,7 @@ def send_prompt(writer: Writer, ask: PromptAsk) -> PromptSent | Refused:
         ask.drawn_against,
         ask.confirmed,
         issue=agent.status is not AgentStatus.WORKING,
+        again=ask.again,
     )
     return _type(writer, send)
 
@@ -187,6 +239,18 @@ def send_first_prompt(
     writer: Writer, pane: PaneId, text: str, *, drawn_against: str = "", confirmed: bool = False
 ) -> PromptSent | Refused:
     """Type the prompt that gives a late-identity agent its session, by address."""
+    return one_at_a_time(
+        f"pane:{pane}",
+        _VERB,
+        lambda: _send_first_prompt(
+            writer, pane, text, drawn_against=drawn_against, confirmed=confirmed
+        ),
+    )
+
+
+def _send_first_prompt(
+    writer: Writer, pane: PaneId, text: str, *, drawn_against: str, confirmed: bool
+) -> PromptSent | Refused:
     snap = snapshot_now(writer.client, verb=_VERB)
     if isinstance(snap, Refused):
         return snap

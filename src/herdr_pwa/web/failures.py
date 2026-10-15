@@ -1,6 +1,7 @@
 """Every failure the web layer can meet, mapped once to a status and an honest screen."""
 
 import logging
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Final
@@ -126,6 +127,17 @@ def _poll_url(request: Request) -> str:
     return f"{request.url.path}?{query}" if query else request.url.path
 
 
+# The ids this app gives a region that redraws itself: lower-case words joined by hyphens.
+_REGION_ID: Final = re.compile(r"[a-z]+(?:-[a-z]+)*")
+
+
+def _stand_in(request: Request) -> str:
+    # htmx names the element a fragment replaces; the failure keeps that id, so the page still
+    # finds the region (to hold its redraw back under a finger) while it is a failure.
+    target = request.headers.get("HX-Target", "")
+    return target if _REGION_ID.fullmatch(target) else ""
+
+
 def _status_and_detail(exc: Exception, failure: Failure) -> tuple[int, str]:
     # The auth library words its refusals for the caller; runner text stays in the log.
     if isinstance(exc, AuthError):
@@ -146,6 +158,7 @@ def respond(pages: Pages, request: Request, exc: Exception) -> Response:
         "detail": detail,
         "poll_url": _poll_url(request) if retry else "",
         "cadence": IDLE_CADENCE,
+        "region": _stand_in(request),
     }
     if request.headers.get("HX-Request"):
         return pages.fragment("failure.html", context, status=status)

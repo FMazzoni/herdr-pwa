@@ -25,13 +25,25 @@ S2 = as_session_id("a36eed14-ff20-48e5-9b50-b8b846cbf977")
 P3 = as_pane_id("w1:p3")
 P5 = as_pane_id("w1:p5")
 
-SETTLED = (
-    "\n\u25cf Done. The file has been created.\n\n\u273b Sautéed for 4s\n"
-    + "─" * 30
-    + "\n\u276f\n"
-    + "─" * 30
-    + "\n"
-)
+_SCROLLBACK = "\n\u25cf Done. The file has been created.\n\n\u273b Sautéed for 4s\n"
+_RULE = "─" * 30
+
+
+def _box(draft: str = "") -> str:
+    return f"{_RULE}\n\u276f{' ' + draft if draft else ''}\n{_RULE}\n"
+
+
+SETTLED = _SCROLLBACK + _box()
+
+
+def echoed(line: str) -> str:
+    """The settled screen once ``line`` has been submitted: in the transcript, above the box."""
+    return f"{_SCROLLBACK}{line}\n{_box()}"
+
+
+def drafted(text: str) -> str:
+    """The settled screen with ``text`` typed into the input box and never submitted."""
+    return _SCROLLBACK + _box(text)
 
 
 def capture(name: str, source: str = "detection") -> str:

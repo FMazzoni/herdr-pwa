@@ -17,7 +17,7 @@
     <input type="hidden" name="confirm" value="1">
     {% if armed %}
     <input type="hidden" name="armed" value="1">
-    <input type="hidden" name="saw" value="{{ cost.total }}">
+    <input type="hidden" name="saw" value="{{ cost.digest }}">
     {{ ui.button("Yes, end all " ~ cost.total, "danger") }}
     {% else %}
     {{ ui.button("Close workspace", "danger") }}
