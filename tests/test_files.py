@@ -187,6 +187,58 @@ def test_a_worktree_of_a_root_is_a_root_too(tmp_path: Path) -> None:
     assert rig.http.get(f"/files/{root_id(tree.resolve())}/tree").status_code == 200
 
 
+def test_a_forged_worktree_entry_is_not_a_root(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path / "main-checkout")
+    real = tmp_path / "feature-tree"
+    git(repo, "worktree", "add", "-q", "-b", "feature", str(real))
+    # Another repository of the user's, and a plain directory, each named by a forged entry.
+    other = make_repo(tmp_path / "forged-other")
+    plain = tmp_path / "forged-plain"
+    plain.mkdir()
+    (plain / "data.txt").write_text("not shared\n")
+    for name, target in (("evil", plain), ("evil2", other)):
+        admin = repo / ".git" / "worktrees" / name
+        admin.mkdir(parents=True)
+        (admin / "gitdir").write_text(f"{target}/.git\n")
+        (admin / "HEAD").write_text("ref: refs/heads/main\n")
+        (admin / "commondir").write_text("../..\n")
+    page = _rig(tmp_path, repo).http.get("/files").text
+    assert "feature-tree" in page
+    assert not _holds(page, "forged-plain")
+    assert not _holds(page, "forged-other")
+    for target in (plain, other):
+        assert (
+            _rig(tmp_path, repo).http.get(f"/files/{root_id(target.resolve())}/tree").status_code
+            == 404
+        )
+
+
+def test_a_work_tree_set_outside_the_agents_cwd_is_not_a_root(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path / "pointing")
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    git(repo, "config", "core.worktree", str(elsewhere))
+    rig = _rig(tmp_path, repo)
+    assert rig.http.get(f"/files/{root_id(elsewhere.resolve())}/tree").status_code == 404
+    assert "No agent is working in a git repository" in rig.http.get("/files").text
+
+
+@pytest.mark.parametrize(
+    "rel",
+    [
+        ".config/gh/hosts.yml",
+        ".local/share/keyrings/login.keyring",
+        ".netrc",
+        ".git-credentials",
+        ".docker/config.json",
+        ".kube/config",
+    ],
+)
+def test_credential_stores_under_home_are_fenced(rel: str) -> None:
+    home = Path.home().resolve()
+    assert not Fence.around(home).allows(home / rel)
+
+
 # ---- what is shown, and what is held back -------------------------------------------------
 
 

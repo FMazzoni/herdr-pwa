@@ -20,6 +20,8 @@ FILES_TTL: Final = 5.0
 LAYOUT_TTL: Final = 30.0
 # git's well-known empty tree, to diff against in a repository with no commit yet.
 EMPTY_TREE: Final = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+# A .git file, or a worktree's gitdir file, is one line holding a path.
+GITFILE_BYTES: Final = 4096
 # No optional locks (status never blocks an agent's commit), no prompt, no system config.
 _ENV: Final = {
     "GIT_OPTIONAL_LOCKS": "0",
@@ -190,20 +192,42 @@ class Git:
 
         def read() -> Path | None:
             out = self.run(cwd, "rev-parse", "--show-toplevel")
-            return Path(out.decode().strip()).resolve() if out else None
+            top = Path(out.decode().strip()).resolve() if out else None
+            # core.worktree can name any directory; a top that does not hold the cwd is not one.
+            here = cwd.resolve()
+            return top if top is not None and (here == top or top in here.parents) else None
 
         return self._cached(("top", str(cwd)), LAYOUT_TTL, read)
 
     def worktrees(self, top: Path) -> tuple[Path, ...]:
         """Every worktree of the repository at ``top``, ``top`` included."""
+        return self._cached(("worktrees", str(top)), LAYOUT_TTL, lambda: self._worktrees(top))
 
-        def read() -> tuple[Path, ...]:
-            out = self.run(top, "worktree", "list", "--porcelain")
-            lines = out.decode("utf-8", "replace").splitlines() if out else []
-            found = [Path(line[9:]).resolve() for line in lines if line.startswith("worktree ")]
-            return tuple(dict.fromkeys([top, *found]))
+    def _worktrees(self, top: Path) -> tuple[Path, ...]:
+        out = self.run(top, "worktree", "list", "--porcelain")
+        lines = out.decode("utf-8", "replace").splitlines() if out else []
+        found = [Path(line[9:]).resolve() for line in lines if line.startswith("worktree ")]
+        layout = self._layout(top)
+        if layout is None or layout[0] != top:
+            return (top,)
+        # The list is read from files in .git that an agent can write, so each entry
+        # must also claim this repository from its own side before it is believed.
+        kept = [t for t in dict.fromkeys(found) if t == top or self._claims(t, layout[1])]
+        return tuple(dict.fromkeys([top, *kept]))
 
-        return self._cached(("worktrees", str(top)), LAYOUT_TTL, read)
+    def _layout(self, tree: Path) -> tuple[Path, Path] | None:
+        out = self.run(
+            tree, "rev-parse", "--path-format=absolute", "--show-toplevel", "--git-common-dir"
+        )
+        match out.decode("utf-8", "replace").splitlines() if out else []:
+            case [tree_top, common]:
+                return Path(tree_top).resolve(), Path(common).resolve()
+            case _:
+                return None
+
+    def _claims(self, tree: Path, common: Path) -> bool:
+        layout = self._layout(tree)
+        return layout == (tree, common) and points_back(tree / ".git", common)
 
     def status(self, top: Path) -> Status:
         """Branch and changes, untracked files listed one by one."""
@@ -231,3 +255,34 @@ class Git:
         args = ("diff", "--no-ext-diff", "--no-textconv", "--no-color", NO_SUBMODULES, "-M", base)
         out = self.run(top, *args, "--", path)
         return out.decode("utf-8", "replace") if out is not None else None
+
+
+def _small(path: Path) -> str | None:
+    """The start of a small regular file; never opens a FIFO or a device."""
+    try:
+        if not path.is_file():
+            return None
+        with path.open("rb") as handle:
+            return handle.read(GITFILE_BYTES).decode("utf-8", "replace").strip()
+    except OSError:
+        return None
+
+
+def points_back(dotgit: Path, common: Path) -> bool:
+    """Whether ``dotgit`` is this repository's own: its directory, or a worktree's linked file."""
+    if dotgit.is_dir() and not dotgit.is_symlink():
+        return dotgit.resolve() == common
+    text = _small(dotgit) or ""
+    if not text.startswith("gitdir: "):
+        return False
+    admin = (dotgit.parent / text.removeprefix("gitdir: ")).resolve()
+    if admin == common:
+        # A main work tree whose repository lives elsewhere (git init --separate-git-dir).
+        return True
+    # A linked worktree: its admin directory is this repository's, and names this file back.
+    back = _small(admin / "gitdir")
+    return (
+        admin.parent == common / "worktrees"
+        and back is not None
+        and (admin / back).resolve() == dotgit.resolve()
+    )
