@@ -142,6 +142,27 @@ return {
 };
 """
 
+# Close the first fold, leaving the call opened inside it open.
+CLOSE_FOLD = r"""
+const fold = document.querySelector("#agent-view details.tools");
+if (!fold) return null;
+fold.querySelector("summary").click();
+return { open: fold.open, inner: !!fold.querySelector("details.tool[open]") };
+"""
+# Redraw the named regions: the answer region alone, or every region on the page.
+REDRAW = r"""
+const ids = arguments[0];
+for (const id of ids) document.getElementById(id).__hpOld = true;
+if (ids.length === 1) htmx.trigger(document.getElementById(ids[0]), "hp:stale");
+else htmx.trigger(document.body, "hp:poke");
+"""
+REDRAWN = r"""
+const fold = document.querySelector("#agent-view details.tools");
+const busy = document.querySelector(".htmx-request, .htmx-swapping, .htmx-settling");
+const fresh = arguments[0].every((id) => !document.getElementById(id).__hpOld);
+return { fresh: fresh, busy: !!busy, open: !!(fold && fold.open) };
+"""
+
 
 @dataclass(frozen=True)
 class Tab:
@@ -484,7 +505,34 @@ def burst(driver: Marionette, base: str, tab: Tab, _rig: Rig, home: Path) -> lis
     start, end = _num(before, "scrollY"), _num(after, "scrollY")
     if abs(end - start) > DRIFT:
         problems.append(f"{tab.name}: a poll moved the reader from {start:.0f}px to {end:.0f}px")
-    return problems + _fold_problems(tab.name, after, opened=True)
+    return problems + _fold_problems(tab.name, after, opened=True) + _closed_stays(driver, tab)
+
+
+def _redrawn(driver: Marionette, tab: Tab, ids: list[str]) -> list[str]:
+    """Redraw ``ids``; the fold the reader closed must still be closed once they land."""
+    driver.script(REDRAW, ids)
+    deadline = time.monotonic() + WAIT_SECONDS
+    after: object = None
+    while time.monotonic() < deadline:
+        after = driver.script(REDRAWN, ids)
+        if isinstance(after, dict) and after.get("fresh") and not after.get("busy"):
+            break
+        time.sleep(0.1)
+    if not isinstance(after, dict) or not after.get("fresh"):
+        return [f"{tab.name}: {' and '.join(ids)} never redrew"]
+    if after.get("open"):
+        return [
+            f"{tab.name}: a fold the reader closed opened again when {' and '.join(ids)} redrew"
+        ]
+    return []
+
+
+def _closed_stays(driver: Marionette, tab: Tab) -> list[str]:
+    """Close the fold the poll kept open; another region's redraw, then the view's, leave it shut."""
+    shut = driver.script(CLOSE_FOLD)
+    if not isinstance(shut, dict) or shut.get("open") or not shut.get("inner"):
+        return [f"{tab.name}: the fold would not close over an open call, so it proves nothing"]
+    return _redrawn(driver, tab, ["answer"]) or _redrawn(driver, tab, ["agent-view", "answer"])
 
 
 # Paging and the event stream.
