@@ -9,7 +9,7 @@
   "not_ready": "Wait for it to settle, then try again.",
 } %}
 {# The reason reads after the sentence here, so the parts come in by hand rather than as what/why. #}
-{% call ui.banner("held" if refused.held else "failure", role="alert") %}
+{% call ui.banner("held" if refused.held or refused.refusal.value == "resend" else "failure", role="alert") %}
   <span class="banner__why">{{ says }}</span>
   {% if refused.reason %}<span class="banner__what">{{ refused.reason }}</span>{% endif %}
   {% if refused.refusal.value in next %}<span class="banner__next">{{ next[refused.refusal.value] }}</span>{% endif %}

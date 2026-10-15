@@ -397,3 +397,34 @@ def test_in_flight_is_held_across_threads_until_the_write_ends() -> None:
     with flights.hold("session:a") as mine:
         assert mine
     assert seen == [True]
+
+
+def _lost(_herd: FakeHerd, _params: JsonObject) -> None:
+    lost = EngineUnavailable("the runner closed the connection while answering")
+    lost.after_send = True
+    raise lost
+
+
+def test_a_lost_answer_hands_back_a_fresh_digest_and_holds_the_same_text(tmp_path: Path) -> None:
+    r = idle_rig(tmp_path)
+    r.herd.after[PROMPT] = _lost
+    lost = refused(send_prompt(r.writer, PromptAsk(S1, "hello there")))
+    assert (lost.refusal, lost.screen) == (Refusal.ANSWER_LOST, screen_digest(SETTLED))
+    assert lost.asks_again
+    del r.herd.after[PROMPT]
+    held = refused(send_prompt(r.writer, PromptAsk(S1, "hello there", drawn_against=lost.screen)))
+    assert (held.refusal, held.status, held.screen) == (Refusal.RESEND, 200, lost.screen)
+    # Different text is a different prompt, and goes.
+    _ = sent(send_prompt(r.writer, PromptAsk(S1, "something else")))
+    assert len(r.herd.writes(PROMPT)) == 2
+
+
+def test_sending_again_anyway_still_asks_for_the_destructive_confirm(tmp_path: Path) -> None:
+    r = idle_rig(tmp_path)
+    r.herd.after[PROMPT] = _lost
+    _ = refused(send_prompt(r.writer, PromptAsk(S1, "rm -rf build", confirmed=True)))
+    del r.herd.after[PROMPT]
+    again = refused(send_prompt(r.writer, PromptAsk(S1, "rm -rf build", again=True)))
+    assert again.refusal is Refusal.CONFIRM
+    _ = sent(send_prompt(r.writer, PromptAsk(S1, "rm -rf build", again=True, confirmed=True)))
+    assert len(r.herd.writes(PROMPT)) == 2

@@ -36,6 +36,7 @@ class Refusal(StrEnum):
     SCREEN_CHANGED = "screen_changed"
     KEY_NOT_OFFERED = "key_not_offered"
     CONFIRM = "confirm"
+    RESEND = "resend"
     ACKNOWLEDGE = "acknowledge"
     COUNT_CHANGED = "count_changed"
     IN_FLIGHT = "in_flight"
@@ -102,6 +103,12 @@ FAILURES: Final[dict[Refusal, Failure]] = {
     ),
     # Held for a second deliberate tap, not failed; legacy answered these 200 with the confirm.
     Refusal.CONFIRM: Failure(200, "Nothing was {verb} yet: confirm it."),
+    # The same text again after an attempt that may have landed: held for "Send again anyway".
+    Refusal.RESEND: Failure(
+        200,
+        "Nothing was {verb} yet: the last send of this may already have landed. Look at the "
+        "Pane, and send it again only if it did not.",
+    ),
     Refusal.ACKNOWLEDGE: Failure(
         200, "Nothing was {verb} yet: this agent is working. Acknowledge that too."
     ),
@@ -218,6 +225,11 @@ class Refused:
     def unsure(self) -> bool:
         """True when this write may have run after all, so it must not be offered again blind."""
         return self.refusal in (Refusal.TIMED_OUT, Refusal.ANSWER_LOST)
+
+    @property
+    def asks_again(self) -> bool:
+        """True when the next send of this text has to say, in so many words, that it is again."""
+        return self.unsure or self.refusal is Refusal.RESEND
 
     @property
     def held(self) -> bool:

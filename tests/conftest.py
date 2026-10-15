@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from herdr_pwa.writes import prompt, resolve
 from tests._foreign import default_root
 
 
@@ -26,3 +27,10 @@ def _isolated_home(
     for name in [key for key in os.environ if key.startswith("HP_")]:
         monkeypatch.delenv(name)
     return home
+
+
+@pytest.fixture(autouse=True)
+def _fresh_write_memory(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Which writes are in flight, and which may have landed, is per process; never across tests.
+    monkeypatch.setattr(resolve, "IN_FLIGHT", resolve.InFlight())
+    monkeypatch.setattr(prompt, "UNSURE", prompt.Unsure())

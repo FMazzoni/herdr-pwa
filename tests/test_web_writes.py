@@ -13,6 +13,8 @@ from herdr_pwa.engine.client import HerdrClient
 from herdr_pwa.engine.config import EngineSettings
 from herdr_pwa.engine.dialog import BlockedPrompt
 from herdr_pwa.engine.model import screen_digest
+from herdr_pwa.engine.transport import EngineUnavailable
+from herdr_pwa.jsontypes import JsonObject
 from herdr_pwa.settings import Settings
 from herdr_pwa.web.app import create_app
 from herdr_pwa.writes.keys import control_token
@@ -117,6 +119,47 @@ def test_a_destructive_prompt_is_held_with_its_reason_then_sent(tmp_path: Path) 
     data = {"text": "rm -rf build", "confirm": "1", "screen": screen_digest(SETTLED)}
     _ = w.http.post(f"/agent/{S1}/prompt", data=data, headers=ORIGIN)
     assert len(w.herd.writes("agent.prompt")) == 1
+
+
+def _lost_after_send(_herd: FakeHerd, _params: JsonObject) -> None:
+    lost = EngineUnavailable("the runner closed the connection while answering")
+    lost.after_send = True
+    raise lost
+
+
+def _posted_back(page: str) -> dict[str, str]:
+    """What the rendered composer would post: its hidden fields and its textarea."""
+    fields = dict(re.findall(r'<input type="hidden" name="(\w+)" value="([^"]*)"', page))
+    text = re.search(r"<textarea[^>]*>([^<]*)</textarea>", page)
+    assert text is not None
+    return {**fields, "text": text.group(1)}
+
+
+def test_a_prompt_that_may_have_landed_is_not_sent_again_without_saying_so(
+    tmp_path: Path,
+) -> None:
+    w = idle(tmp_path)
+    w.herd.after["agent.prompt"] = _lost_after_send
+    lost = w.http.post(f"/agent/{S1}/prompt", data={"text": "hello there"}, headers=ORIGIN)
+    assert lost.status_code == 502
+    assert "may or may not have been sent" in lost.text
+    assert "Send again anyway" in lost.text
+    form_back = _posted_back(lost.text)
+    assert form_back["screen"] == screen_digest(SETTLED), "a fresh digest, not an empty one"
+    del w.herd.after["agent.prompt"]
+    # The plain resubmit, as a stray tap or a restored draft would send it.
+    plain = {k: v for k, v in form_back.items() if k != "again"}
+    held = w.http.post(f"/agent/{S1}/prompt", data=plain, headers=ORIGIN)
+    assert held.status_code == 200
+    assert "may already have landed" in held.text
+    assert "Send again anyway" in held.text
+    assert len(w.herd.writes("agent.prompt")) == 1
+    again = w.http.post(f"/agent/{S1}/prompt", data=_posted_back(held.text), headers=ORIGIN)
+    assert again.status_code == 200
+    assert len(w.herd.writes("agent.prompt")) == 2
+    # Once something was sent, the next prompt needs no extra word.
+    _ = w.http.post(f"/agent/{S1}/prompt", data={"text": "hello there"}, headers=ORIGIN)
+    assert len(w.herd.writes("agent.prompt")) == 3
 
 
 def test_a_prompt_to_a_gone_agent_is_404(tmp_path: Path) -> None:

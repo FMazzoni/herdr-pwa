@@ -187,11 +187,18 @@ def _prompt(
         expected_target=expected(values),
         drawn_against=values.get("screen", "").strip(),
         confirmed=ticked(values, "confirm"),
+        again=ticked(values, "again"),
     )
     result = send_prompt(writer, ask)
     if isinstance(result, Refused):
         raise_if_gone(result)
-        context = {"agent": find_agent(web, session), "text": ask.text, "screen": result.screen}
+        context = {
+            "agent": find_agent(web, session),
+            "text": ask.text,
+            "screen": result.screen,
+            # Kept through a later refusal, or a confirm after it would lose the word "again".
+            "again": result.asks_again or ask.again,
+        }
         return refused(web.pages, "compose.html", context, result)
     return _composed(web, session, result)
 
