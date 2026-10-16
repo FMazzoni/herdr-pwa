@@ -26,6 +26,7 @@ from herdr_pwa.files.view import (
     Viewer,
     human_size,
 )
+from herdr_pwa.web.highlight import highlight
 from herdr_pwa.web.mdnode import MdNode
 from herdr_pwa.web.routers import files as files_router
 from tests.filefakes import booby_trap, git, make_repo, stand_in, trapped_submodule
@@ -526,12 +527,15 @@ def _serving(rig: Rig) -> Generator[str]:
 @pytest.fixture
 def served(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> Iterator[tuple[str, threading.Event]]:
-    """The real app on an ephemeral port, its highlighter stuck until the test lets it go."""
+) -> Iterator[tuple[str, threading.Event, threading.Semaphore]]:
+    """The real app on an ephemeral port, its highlighter stuck until the test lets it go; the
+    semaphore is released once by each highlight that has started."""
     gate = threading.Event()
+    started = threading.Semaphore(0)
 
     def stuck(code: str, language: str, limit: int) -> tuple[MdNode, ...]:
         del code, language, limit
+        started.release()
         gate.wait(20)
         return ()
 
@@ -541,18 +545,20 @@ def served(
     rig = _rig(tmp_path, repo, login="me@example.com")
     with _serving(rig) as origin:
         try:
-            yield f"{origin}{_base(repo)}", gate
+            yield f"{origin}{_base(repo)}", gate, started
         finally:
             gate.set()
 
 
-FEED_BUDGET: Final = 1.0
+# Only how long to wait before calling the feed stuck: a feed queued behind a held highlight
+# never answers at all, so this measures nothing about speed.
+FEED_CEILING: Final = 10.0
 
 
 def test_a_feed_poll_completes_while_two_huge_highlights_hold_their_slots(
-    served: tuple[str, threading.Event],
+    served: tuple[str, threading.Event, threading.Semaphore],
 ) -> None:
-    base, gate = served
+    base, gate, started = served
     origin = base.split("/files/")[0]
     held: list[httpx.Response] = []
 
@@ -562,37 +568,52 @@ def test_a_feed_poll_completes_while_two_huge_highlights_hold_their_slots(
     jammed = [threading.Thread(target=open_huge) for _ in range(2)]
     for thread in jammed:
         thread.start()
-    time.sleep(0.3)
-    assert not held, "the stuck highlights should still be running"
-    started = time.monotonic()
-    feed = httpx.get(f"{origin}/feed", timeout=5)
-    elapsed = time.monotonic() - started
+    assert started.acquire(timeout=10)
+    assert started.acquire(timeout=10)
+    # Both slots are held until the gate opens, so a feed that queued behind them never answers.
+    feed = httpx.get(f"{origin}/feed", timeout=FEED_CEILING)
     assert feed.status_code == 200
-    assert elapsed < FEED_BUDGET, f"the feed took {elapsed:.2f}s behind a highlight"
-    assert not held
+    assert not held, "the stuck highlights should still be running"
     gate.set()
     for thread in jammed:
         thread.join(10)
     assert [r.status_code for r in held] == [200, 200]
 
 
-def test_a_real_highlight_of_a_capped_file_leaves_the_feed_within_budget(tmp_path: Path) -> None:
+def test_a_real_highlight_of_a_capped_file_leaves_the_feed_answering(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The real highlighter runs, and its answer is held until the feed has answered."""
+    painting = threading.Event()
+    gate = threading.Event()
+
+    def real(code: str, language: str, limit: int) -> tuple[MdNode, ...]:
+        painting.set()
+        painted = highlight(code, language, limit)
+        gate.wait(20)
+        return painted
+
+    monkeypatch.setattr(files_router, "Viewer", lambda: Viewer(paint=real))
     repo = make_repo(tmp_path / "capped")
     line = "def f(x: int) -> int:  # comment\n    return x * 2 + len('text')\n"
     (repo / "big.py").write_text(line * 2400)
     rig = _rig(tmp_path, repo, login="me@example.com")
     with _serving(rig) as origin:
+        opened: list[httpx.Response] = []
         worker = threading.Thread(
-            target=httpx.get,
-            args=(f"{origin}{_base(repo)}/file?path=big.py",),
-            kwargs={"timeout": 30},
+            target=lambda: opened.append(
+                httpx.get(f"{origin}{_base(repo)}/file?path=big.py", timeout=30)
+            )
         )
         worker.start()
-        time.sleep(0.05)
-        started = time.monotonic()
-        assert httpx.get(f"{origin}/feed", timeout=5).status_code == 200
-        assert time.monotonic() - started < FEED_BUDGET
-        worker.join(30)
+        try:
+            assert painting.wait(10)
+            assert httpx.get(f"{origin}/feed", timeout=FEED_CEILING).status_code == 200
+            assert not opened, "the file answered before its highlight was let go"
+        finally:
+            gate.set()
+            worker.join(30)
+    assert [r.status_code for r in opened] == [200]
 
 
 # ---- changes, tree, find, diff --------------------------------------------------------------

@@ -1,8 +1,6 @@
 """Every write, driven end to end against the throwaway hp-test session; opt in with HP_LIVE=1."""
 
 import os
-import time
-from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -33,6 +31,7 @@ from herdr_pwa.writes.workspaces import (
     create_workspace,
     rename_workspace,
 )
+from tests.waiting import until
 
 # Read at import, before the autouse fixture points HOME at a temp dir.
 SOCKET = Path.home() / ".config/herdr/sessions/hp-test/herdr.sock"
@@ -52,16 +51,6 @@ def show(client: HerdrClient, pane: PaneId, label: str, rows: int = 14) -> str:
     tail = [line.rstrip() for line in screen.splitlines() if line.strip()][-rows:]
     say(f"pane {pane} after {label}", "\n".join(tail))
     return screen
-
-
-def until[T](probe: Callable[[], T | None], *, seconds: float, step: float = 1.0) -> T:
-    deadline = time.monotonic() + seconds
-    while time.monotonic() < deadline:
-        found = probe()
-        if found is not None:
-            return found
-        time.sleep(step)
-    raise AssertionError(f"gave up after {seconds}s")
 
 
 def agent_at(client: HerdrClient, pane: PaneId) -> Agent | None:
@@ -107,7 +96,9 @@ def _claude_session(writer: Writer, pane: PaneId) -> SessionId:
 
 def _wait_status(client: HerdrClient, pane: PaneId, *wanted: AgentStatus) -> Agent:
     return until(
-        lambda: a if (a := agent_at(client, pane)) and a.status in wanted else None, seconds=120
+        lambda: a if (a := agent_at(client, pane)) and a.status in wanted else None,
+        seconds=120,
+        step=1.0,
     )
 
 
@@ -116,6 +107,7 @@ def _replied(client: HerdrClient, pane: PaneId, word: str) -> str:
     return until(
         lambda: s if (s := client.read(pane, source="visible")).count(word) >= 2 else None,
         seconds=120,
+        step=1.0,
     )
 
 
@@ -184,7 +176,9 @@ def _late_identity_round(writer: Writer, workspace: str, cwd: Path) -> None:
     say("send_first_prompt hermes", repr(first))
     assert isinstance(first, PromptSent)
     _ = until(
-        lambda: a.session or None if (a := agent_at(client, hermes.pane)) else None, seconds=60
+        lambda: a.session or None if (a := agent_at(client, hermes.pane)) else None,
+        seconds=60,
+        step=1.0,
     )
     show(client, hermes.pane, "send_first_prompt hermes")
 

@@ -7,7 +7,7 @@ check:
     uv run ruff check .
     uv run basedpyright
     uv run complexipy --quiet src
-    uv run pytest -q
+    uv run pytest -q -n auto
     node --test tests/js/*.test.mjs
     uv run python scripts/css_tokens.py
     uv run python scripts/geometry_gate.py

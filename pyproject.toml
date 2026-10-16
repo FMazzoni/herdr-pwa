@@ -36,6 +36,7 @@ dev = [
     "httpx2",
     "datamodel-code-generator",
     "playwright>=1.63.0",
+    "pytest-xdist>=3.8.0",
 ]
 
 [tool.complexipy]

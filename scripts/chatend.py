@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from firefox import Marionette, phone_window
+from settle import READER_STILL_MS, settle
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from herdr_pwa.jsontypes import JsonObject
@@ -38,6 +39,7 @@ from tests.catalogue import (
     runner,
     tool_heavy_chat,
 )
+from tests.waiting import eventually
 from tests.webfakes import (
     READ,
     WORKING_SESSION,
@@ -51,8 +53,6 @@ from tests.webfakes import (
 WIDTH = 390
 HEIGHT = 844
 WAIT_SECONDS = 15.0
-# The swap scrolls in the same task; this covers htmx's settle and the dock's next frame.
-SETTLE_SECONDS = 0.5
 # A reader's place may move by a rounding error, never by a line.
 DRIFT = 3
 TURNS = 24
@@ -185,13 +185,10 @@ def _probe(driver: Marionette) -> dict[str, object]:
 
 def _wait_for(driver: Marionette, text: str) -> dict[str, object]:
     """Wait until the newest line says ``text`` and nothing is in flight, then let it settle."""
-    deadline = time.monotonic() + WAIT_SECONDS
-    while time.monotonic() < deadline:
-        if text in str(_probe(driver).get("text", "")):
-            time.sleep(SETTLE_SECONDS)
-            return _probe(driver)
-        time.sleep(0.1)
-    return {}
+    if not _until(lambda: text in str(_probe(driver).get("text", ""))):
+        return {}
+    settle(driver)
+    return _probe(driver)
 
 
 def _num(seen: dict[str, object], key: str) -> float:
@@ -224,7 +221,7 @@ def _print(rig: Rig, _home: Path, n: int) -> str:
 
 def _scrolled_up_stays(driver: Marionette, tab: Tab, rig: Rig, home: Path) -> list[str]:
     driver.script("window.scrollTo(0, 200);")
-    time.sleep(SETTLE_SECONDS)
+    settle(driver, READER_STILL_MS)
     before = _num(_probe(driver), "scrollY")
     newest = tab.grow(rig, home, 2)
     driver.script(POKE)
@@ -307,7 +304,7 @@ def tall_question(driver: Marionette, base: str, tab: Tab, _rig: Rig, _home: Pat
     if tab.scale != 1.0:
         # The dock grows with the text, and the page lands again for its new height.
         driver.script(GROW_TEXT, tab.scale)
-    time.sleep(SETTLE_SECONDS)
+    settle(driver)
     seen: dict[str, object] = {}
     if not _until(lambda: bool(seen.update(_tall(driver)) or seen)):
         return [f"{tab.name}: never settled"]
@@ -386,20 +383,14 @@ def kept_open(driver: Marionette, base: str, tab: Tab, _rig: Rig, _home: Path) -
     driver.send("WebDriver:Navigate", {"url": base + tab.state.path})
     if not _wait_for(driver, tab.newest) or not driver.script(OPEN_RESULT):
         return [f"{tab.name}: never drew its tool result"]
-    time.sleep(SETTLE_SECONDS)
+    settle(driver, READER_STILL_MS)
     seen = _probe(driver)
     if _num(seen, "bottom") <= _num(seen, "dock") + END_SLACK:
         return [f"{tab.name}: the reader is at the end, so it proves nothing"]
     before = driver.script(READ_RESULT)
     driver.script(POKE)
-    deadline = time.monotonic() + WAIT_SECONDS
-    after: object = None
-    while time.monotonic() < deadline:
-        after = driver.script(READ_RESULT)
-        if isinstance(after, dict) and after.get("swaps") and not after.get("busy"):
-            break
-        time.sleep(0.1)
-    time.sleep(SETTLE_SECONDS)
+    _until(lambda: _swapped(driver.script(READ_RESULT)))
+    settle(driver)
     after = driver.script(READ_RESULT)
     if not isinstance(before, dict) or not isinstance(after, dict) or not after.get("swaps"):
         return [f"{tab.name}: the poll never redrew the chat"]
@@ -410,6 +401,11 @@ def kept_open(driver: Marionette, base: str, tab: Tab, _rig: Rig, _home: Path) -
     if abs(end - start) > DRIFT:
         problems.append(f"{tab.name}: a poll moved the reader from {start:.0f}px to {end:.0f}px")
     return problems
+
+
+def _swapped(seen: object) -> bool:
+    """A redraw has landed and nothing is in flight."""
+    return isinstance(seen, dict) and bool(seen.get("swaps")) and not seen.get("busy")
 
 
 def _call(n: int, *, failed: bool = False) -> list[JsonObject]:
@@ -477,7 +473,7 @@ def burst(driver: Marionette, base: str, tab: Tab, _rig: Rig, home: Path) -> lis
         return [f"{tab.name}: the burst drew no fold"]
     problems = _fold_problems(tab.name, landed, opened=False)
     driver.script(OPEN_FOLD)
-    time.sleep(SETTLE_SECONDS)
+    settle(driver, READER_STILL_MS)
     before = driver.script(READ_FOLD)
     # One more call joins the first run, before the failure: the run's text changes, its
     # first call does not.
@@ -485,14 +481,8 @@ def burst(driver: Marionette, base: str, tab: Tab, _rig: Rig, home: Path) -> lis
     at = TURNS + 2 * FAILS_AT
     write_transcript(home / "transcripts", WORKING_SESSION, [*grown[:at], *_call(99), *grown[at:]])
     driver.script(POKE)
-    deadline = time.monotonic() + WAIT_SECONDS
-    after: object = None
-    while time.monotonic() < deadline:
-        after = driver.script(READ_FOLD)
-        if isinstance(after, dict) and after.get("swaps") and not after.get("busy"):
-            break
-        time.sleep(0.1)
-    time.sleep(SETTLE_SECONDS)
+    _until(lambda: _swapped(driver.script(READ_FOLD)))
+    settle(driver)
     after = driver.script(READ_FOLD)
     if not isinstance(before, dict) or not isinstance(after, dict) or not after.get("swaps"):
         return [*problems, f"{tab.name}: the poll never redrew the chat"]
@@ -655,12 +645,12 @@ def unheard_scroll(driver: Marionette, base: str, tab: Tab, rig: Rig, home: Path
 PAGE_MESSAGES = 20
 # The rig's stream: a quick watcher, and a fallback poll short enough to see inside a walk.
 LIVE_SETTINGS: dict[str, object] = {"events_interval": 0.2, "events_fallback": 2}
-# Longer than one fallback poll: a page that polls while its stream is up shows here.
-QUIET_SECONDS = 3.0
-# How long a second refresh would take to land after the first.
-SECOND_SECONDS = 1.5
-OUTAGE_SECONDS = 6.0
-# Three fallback polls fit in the outage; two leave room for the drop to be noticed.
+# Half as long again as one fallback poll, timed in the page: a page that polls while its
+# stream is up shows here, because the poll's own timer is ordered before the window's end.
+QUIET_MS = 3000
+# Watcher looks after a change before a second refresh for it would have been published.
+LOOKS_AFTER = 2
+# Two polls with the stream down, so the page is seen polling on its interval, not once.
 MIN_FALLBACK_POLLS = 2
 RECONNECT_SECONDS = 25.0
 
@@ -676,6 +666,38 @@ if (!window.__hpCounting) {
 return true;
 """
 READ_COUNT = "return window.__hpChat || 0;"
+# How many chat fetches the page made over ``ms`` of its own time from now.
+COUNT_OVER = r"""
+const [ms] = arguments;
+const done = arguments[arguments.length - 1];
+window.__hpChat = 0;
+setTimeout(() => done(window.__hpChat), ms);
+"""
+# Whether the page's event stream is open now, read off its own request: app.js keeps no flag
+# a script can see, so every request to /events made from here on is watched.
+WATCH_STREAM = r"""
+if (window.__hpWatching) return true;
+window.__hpWatching = true;
+window.__hpStream = false;
+const open = XMLHttpRequest.prototype.open;
+const send = XMLHttpRequest.prototype.send;
+XMLHttpRequest.prototype.open = function (method, url) {
+  this.__hpEvents = String(url).indexOf("/events") === 0;
+  return open.apply(this, arguments);
+};
+XMLHttpRequest.prototype.send = function () {
+  if (this.__hpEvents) {
+    // Added after app.js's own handler, so it runs once that handler has opened the stream.
+    this.addEventListener("readystatechange", () => {
+      if (this.readyState >= 2 && this.status === 200) window.__hpStream = true;
+    });
+    this.addEventListener("loadend", () => { window.__hpStream = false; });
+  }
+  return send.apply(this, arguments);
+};
+return true;
+"""
+STREAM_OPEN = "return window.__hpStream === true;"
 # The first message wholly in view under the top bar, how many there are, and whether the
 # reader is at the end as well as at the top.
 EARLIER = r"""
@@ -707,12 +729,7 @@ def _hub(rig: Rig) -> Hub:
 
 
 def _until(done: Callable[[], bool], seconds: float = WAIT_SECONDS) -> bool:
-    deadline = time.monotonic() + seconds
-    while time.monotonic() < deadline:
-        if done():
-            return True
-        time.sleep(0.1)
-    return False
+    return eventually(done, seconds=seconds)
 
 
 def _append(home: Path, text: str, uuid: str) -> str:
@@ -728,13 +745,28 @@ def _count(driver: Marionette) -> int:
     return int(found) if isinstance(found, int | float) else -1
 
 
+def _quiet_count(driver: Marionette) -> int:
+    found = driver.script_async(COUNT_OVER, QUIET_MS)
+    return int(found) if isinstance(found, int | float) else -1
+
+
+def _refreshes(driver: Marionette, hub: Hub, newest: str) -> int:
+    """How many chat fetches one change made, once a second one would have been told."""
+    if not _wait_for(driver, newest):
+        return -1
+    looked = hub.looks
+    _until(lambda: hub.looks >= looked + LOOKS_AFTER)
+    settle(driver)
+    return _count(driver)
+
+
 def _open_live(driver: Marionette, base: str, tab: Tab, rig: Rig) -> list[str]:
     driver.send("WebDriver:Navigate", {"url": base + tab.state.path})
     if not _wait_for(driver, tab.newest):
         return [f"{tab.name}: never drew its newest turn"]
     if not _until(lambda: _hub(rig).listeners >= 1):
         return [f"{tab.name}: the page never opened its event stream"]
-    time.sleep(SETTLE_SECONDS)
+    settle(driver)
     driver.script(COUNT_CHAT)
     return []
 
@@ -762,7 +794,7 @@ def earlier(driver: Marionette, base: str, tab: Tab, _rig: Rig, _home: Path) -> 
     if not _wait_for(driver, tab.newest):
         return [f"{tab.name}: never drew its newest turn"]
     driver.script("window.scrollTo(0, 0);")
-    time.sleep(SETTLE_SECONDS)
+    settle(driver, READER_STILL_MS)
     before = driver.script(EARLIER, "")
     if not isinstance(before, dict) or not before.get("key") or not before.get("more"):
         return [f"{tab.name}: no message in view under a Load earlier button"]
@@ -780,7 +812,7 @@ def earlier(driver: Marionette, base: str, tab: Tab, _rig: Rig, _home: Path) -> 
 
     if not _until(landed):
         return [f"{tab.name}: Load earlier never landed a page"]
-    time.sleep(SETTLE_SECONDS)
+    settle(driver)
     after = driver.script(EARLIER, key)
     after = after if isinstance(after, dict) else {}
     problems: list[str] = []
@@ -806,18 +838,14 @@ def refreshed_once(driver: Marionette, base: str, tab: Tab, rig: Rig, home: Path
     problems = _open_live(driver, base, tab, rig)
     if problems:
         return problems
-    time.sleep(QUIET_SECONDS)
-    if _count(driver):
-        problems.append(
-            f"{tab.name}: a live page fetched its chat {_count(driver)}x with no change"
-        )
+    if quiet := _quiet_count(driver):
+        problems.append(f"{tab.name}: a live page fetched its chat {quiet}x with no change")
     driver.script(COUNT_CHAT)
-    newest = _append(home, "Event reply one.", "ev1")
-    if not _wait_for(driver, newest):
+    made = _refreshes(driver, _hub(rig), _append(home, "Event reply one.", "ev1"))
+    if made < 0:
         return [*problems, f"{tab.name}: the change never reached the page"]
-    time.sleep(SECOND_SECONDS)
-    if _count(driver) != 1:
-        problems.append(f"{tab.name}: one change made {_count(driver)} chat refreshes, not 1")
+    if made != 1:
+        problems.append(f"{tab.name}: one change made {made} chat refreshes, not 1")
     return problems
 
 
@@ -845,10 +873,10 @@ def falls_back(
         if problems:
             return problems
         hub = _hub(rig)
+        driver.script(WATCH_STREAM)
         mount(_refusing(rig.http.app))
         hub.drop_all()
-        time.sleep(OUTAGE_SECONDS)
-        if _count(driver) < MIN_FALLBACK_POLLS:
+        if not _until(lambda: _count(driver) >= MIN_FALLBACK_POLLS, RECONNECT_SECONDS):
             problems.append(f"{tab.name}: with the stream down the page polled {_count(driver)}x")
         newest = _append(home, "Polled reply one.", "pl1")
         if not _wait_for(driver, newest):
@@ -856,21 +884,18 @@ def falls_back(
         mount(rig.http.app)
         if not _until(lambda: hub.listeners >= 1, RECONNECT_SECONDS):
             return [*problems, f"{tab.name}: the stream never came back"]
-        time.sleep(SECOND_SECONDS)
+        # Open in the page too: its one refresh for what it missed has then been asked for.
+        if not _until(lambda: driver.script(STREAM_OPEN) is True):
+            return [*problems, f"{tab.name}: the page never saw its stream come back"]
+        settle(driver)
+        if quiet := _quiet_count(driver):
+            problems.append(f"{tab.name}: still polling ({quiet}x) after the stream came back")
         driver.script(COUNT_CHAT)
-        time.sleep(QUIET_SECONDS)
-        if _count(driver):
-            problems.append(
-                f"{tab.name}: still polling ({_count(driver)}x) after the stream came back"
-            )
-        newest = _append(home, "Recovered reply one.", "rc1")
-        if not _wait_for(driver, newest):
+        made = _refreshes(driver, hub, _append(home, "Recovered reply one.", "rc1"))
+        if made < 0:
             return [*problems, f"{tab.name}: the recovered stream never brought a change"]
-        time.sleep(SECOND_SECONDS)
-        if _count(driver) != 1:
-            problems.append(
-                f"{tab.name}: after recovery one change made {_count(driver)} refreshes"
-            )
+        if made != 1:
+            problems.append(f"{tab.name}: after recovery one change made {made} refreshes")
         return problems
 
     return walk
@@ -1052,21 +1077,32 @@ def _tabs() -> tuple[tuple[Tab, Callable[[Marionette, str, Tab, Rig, Path], list
     )
 
 
-def run(
-    driver: Marionette, base: str, mount: Callable[[ASGIApp], None], scratch: Path
-) -> list[str]:
-    """Every walk on a fresh app in its own phone window; empty when each tab keeps its end."""
-    problems: list[str] = []
+def _walks(
+    mount: Callable[[ASGIApp], None],
+) -> list[tuple[Tab, Callable[[Marionette, str, Tab, Rig, Path], list[str]]]]:
     chat = State("stream loss", f"{AGENT}?tab=chat", "", runner(snapshot_frame), long_chat(TURNS))
     lost = State(chat.name, chat.path, "", chat.replies, chat.transcript, settings=LIVE_SETTINGS)
-    walks = [
-        *_tabs(),
-        (
-            Tab("stream loss", lost, f"Reply {TURNS - 1}:", _say),
-            falls_back(mount),
-        ),
-    ]
-    for tab, walk in walks:
+    return [*_tabs(), (Tab("stream loss", lost, f"Reply {TURNS - 1}:", _say), falls_back(mount))]
+
+
+def names() -> list[str]:
+    """Every walk's name, in the order ``run`` walks them."""
+    return [tab.name for tab, _walk in _walks(lambda _app: None)]
+
+
+def run(
+    driver: Marionette,
+    base: str,
+    mount: Callable[[ASGIApp], None],
+    scratch: Path,
+    only: frozenset[str] | None = None,
+) -> list[str]:
+    """Every walk, or those ``only`` names, on a fresh app in its own phone window; empty when
+    each tab keeps its end."""
+    problems: list[str] = []
+    for tab, walk in _walks(mount):
+        if only is not None and tab.name not in only:
+            continue
         home = scratch / f"end-{tab.name.replace(' ', '-')}"
         home.mkdir(parents=True)
         rig = build(tab.state, home)

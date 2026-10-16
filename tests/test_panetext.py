@@ -378,12 +378,14 @@ def test_the_module_stays_a_leaf() -> None:
 def test_a_progress_bar_does_not_hang_the_pane() -> None:
     """``_TAIL_FRAME`` was ``(?:[WS]*[BOX]+)*[WS]*$`` -- catastrophic backtracking."""
     bar = "Building [" + "█" * 18 + "░" * 10 + "] 60%"
-    start = time.perf_counter()
+    # CPU time of this thread, which other processes' load does not inflate: backtracking costs
+    # minutes of it here, a linear scan about a millisecond.
+    start = time.thread_time()
     pane_lines(bar)
     pane_lines("cpu ▁▂▃▄▅▆▇█" * 8 + " 74%")
     pane_lines("x" + "█" * 400 + "y")
-    elapsed = time.perf_counter() - start
-    assert elapsed < 1.0, f"pane text took {elapsed:.1f}s; the regex is backtracking"
+    spent = time.thread_time() - start
+    assert spent < 1.0, f"pane text took {spent:.1f}s of CPU; the regex is backtracking"
 
 
 def test_the_indentation_of_a_diff_survives_a_gutter() -> None:
@@ -617,12 +619,13 @@ def test_a_draft_is_kept_verbatim_and_not_padding_collapsed() -> None:
 
 def test_the_new_rule_predicates_are_linear_on_a_pathological_row() -> None:
     """Every regex added since must be checked for the ``(a+)*`` shape."""
-    start = time.perf_counter()
+    start = time.thread_time()
     for size in (200, 2000, 20000):
         pane_view("█" * size + "x")
         pane_view("-" * size + " tail")
         pane_view(("─" * size) + "\n\u276f d\n" + ("─" * size) + "\ns")
-    assert time.perf_counter() - start < 2.0
+    # CPU time, as above, so a loaded machine cannot fail a linear scan.
+    assert time.thread_time() - start < 2.0
 
 
 # --------------------------------------------------------------------------

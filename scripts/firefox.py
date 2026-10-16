@@ -73,6 +73,11 @@ class Marionette:
         answer = self.send("WebDriver:ExecuteScript", {"script": body, "args": list(args)})
         return answer.get("value") if isinstance(answer, dict) else answer
 
+    def script_async(self, body: str, *args: object) -> object:
+        """Run JavaScript that hands its value to its last argument, and wait for that call."""
+        answer = self.send("WebDriver:ExecuteAsyncScript", {"script": body, "args": list(args)})
+        return answer.get("value") if isinstance(answer, dict) else answer
+
     def handles(self) -> list[str]:
         """Every open top-level window."""
         found = self.send("WebDriver:GetWindowHandles", {})

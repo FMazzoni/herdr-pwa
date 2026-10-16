@@ -132,8 +132,10 @@ class Hub:
         self._marks: Marks = {}
         self._watches: dict[str, _Watch] = {}
         self._upstream = _Upstream(web)
-        # Counted for the tests and the measurements: what the stream has said, in all.
+        # Counted for the tests and the measurements: what the stream has said, in all, and how
+        # many times the watcher has looked, so a test can wait for a look instead of a sleep.
         self.sent = 0
+        self.looks = 0
 
     @property
     def listeners(self) -> int:
@@ -227,6 +229,7 @@ class Hub:
                 self._marks = marks
                 if stale:
                     self.publish(stale)
+                self.looks += 1
                 fresh = await self._sleep()
         finally:
             self._upstream.stop()

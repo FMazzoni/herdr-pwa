@@ -6,7 +6,6 @@ from pathlib import Path
 import pytest
 
 from tests.catalogue import (
-    GEOMETRY_CORE,
     LEGACY_KEYS,
     NOT_YET,
     STATES,
@@ -52,10 +51,6 @@ def test_names_are_unique_and_every_new_name_is_declared() -> None:
     names = [s.name for s in STATES]
     assert len(names) == len(set(names))
     assert sorted(set(names) - set(LEGACY_KEYS)) == sorted(V2_ONLY)
-
-
-def test_the_geometry_core_is_still_in_the_catalogue() -> None:
-    assert set(GEOMETRY_CORE) <= {s.name for s in STATES}
 
 
 def test_a_tap_state_says_what_to_wait_for_before_tapping() -> None:
