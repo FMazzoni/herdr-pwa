@@ -142,7 +142,10 @@ def _shoot_device(stage: Stage, device: Device, states: list[State], out: Path) 
     page = ctx.new_page()
     with tempfile.TemporaryDirectory(prefix="hp-shots-") as scratch:
         for state in states:
-            install(stage.switch, state, Path(scratch))
+            failed += [
+                f"{device.name} {state.name}: {p}"
+                for p in install(stage.switch, state, Path(scratch))
+            ]
             try:
                 drive(page, state, stage.base + state.path)
             except BrowserError as exc:

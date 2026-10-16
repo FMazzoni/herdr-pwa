@@ -344,16 +344,38 @@ class Switch:
         self.app: ASGIApp | None = None
         # Writes the current state's runner is sitting on, let go when the next state mounts.
         self.held: list[Hold] = []
+        # Writes still being answered; a read's stream never ends, so only writes are counted.
+        self.writing = 0
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         """Forward one request."""
         if self.app is None:
             raise RuntimeError("no state is being served")
-        await self.app(scope, receive, send)
+        write = scope["type"] == "http" and scope["method"] != "GET"
+        self.writing += write
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            self.writing -= write
 
     def mount(self, app: ASGIApp) -> None:
         """Serve ``app`` from the next request on."""
         self.app = app
+
+    def let_go(self) -> list[str]:
+        """Release every held write and wait for each to be answered; what never was."""
+        held, self.held = self.held, []
+        if not held:
+            return []
+        # The tap is drawn as out before it reaches the runner: let go early, it would land late.
+        # One never made is already its state's failure, and then nothing is out.
+        _ = eventually(lambda: all(h.taken.is_set() for h in held), seconds=READY_SECONDS)
+        for hold in held:
+            hold.release.set()
+        # The in-flight claim is one per process, so a write still out refuses the next tap.
+        if eventually(lambda: self.writing == 0, seconds=READY_SECONDS):
+            return []
+        return ["a held write was still out when the next state mounted, so its tap may be refused"]
 
 
 @contextmanager
@@ -384,16 +406,18 @@ def serve(switch: Switch) -> Iterator[str]:
         thread.join(timeout=10)
 
 
-def install(switch: Switch, state: State, scratch: Path) -> None:
-    """Build a fresh app for ``state`` over its own fake runner and make it current."""
+def install(switch: Switch, state: State, scratch: Path) -> list[str]:
+    """Build a fresh app for ``state`` over its own fake runner and make it current.
+
+    The last state's held writes are let go and answered first; what went wrong doing so.
+    """
     home = scratch / state.name
     home.mkdir(parents=True)
-    # A held write keeps its session's write lock, which would refuse the next state's tap.
-    for hold in switch.held:
-        hold.release.set()
+    problems = switch.let_go()
     rig = build(state, home)
     switch.held = [hook for hook in rig.wire.after.values() if isinstance(hook, Hold)]
     switch.app = rig.http.app
+    return problems
 
 
 def _wait(
@@ -714,7 +738,8 @@ def _do(task: Task, driver: Marionette, base: str, switch: Switch, scratch: Path
         size = Size(int(str(task["width"])), float(str(task["scale"])))
         phone_window(driver, size.width, HEIGHT)
         for state in pick(_strings(task["names"])):
-            install(switch, state, scratch)
+            mounted = install(switch, state, scratch)
+            tally.problems += [f"{size.label(state.name)}: {p}" for p in mounted]
             run_state(driver, state, base, size, tally)
         driver.send("WebDriver:CloseWindow", {})
         driver.send("WebDriver:SwitchToWindow", {"handle": driver.handles()[0]})
