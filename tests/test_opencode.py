@@ -7,8 +7,15 @@ from pathlib import Path
 import pytest
 from pydantic import JsonValue, TypeAdapter
 
-from herdr_pwa.engine import HistoryState, ModelRef, Source, Speaker, TranscriptPage
-from tests._jsonpath import at
+from herdr_pwa.engine import (
+    HistoryState,
+    ModelRef,
+    Source,
+    Speaker,
+    TranscriptPage,
+    is_api_error,
+)
+from tests._jsonpath import at, obj
 from tests.engine_seam import (
     MAX_RESULT_CHARS,
     OPENCODE_DB,
@@ -19,6 +26,7 @@ from tests.engine_seam import (
     Window,
     adapter_for,
     history,
+    is_message,
     readonly_uri,
     usage,
 )
@@ -681,7 +689,7 @@ def test_the_tally_splits_spend_by_provider_and_model_in_first_seen_order(
 ) -> None:
     assert spend_of(MIXED_ROWS, tmp_path) == [
         (ModelRef("zai-org/GLM-5.2", "togetherai"), 4, 14381, 1475, 2814, 39872, 0, 0.04937172),
-        (ModelRef("MiniMaxAI/MiniMax-M3", "togetherai"), 3, 150367, 1117, 0, 150528, 0, 0.05548218),
+        (ModelRef("MiniMaxAI/MiniMax-M3", "togetherai"), 2, 150367, 1117, 0, 150528, 0, 0.05548218),
         (ModelRef("zai-org/GLM-5.3-Flash", "togetherai"), 2, 0, 0, 0, 0, 0, 0.0),
         (ModelRef("hy3-free", "opencode"), 1, 254, 3, 11, 8448, 0, 0.0),
     ]
@@ -690,7 +698,7 @@ def test_the_tally_splits_spend_by_provider_and_model_in_first_seen_order(
 def test_the_per_model_rows_add_up_to_the_session_total(tmp_path: Path) -> None:
     build(tmp_path / OPENCODE_DB, MIXED_ROWS)
     tally = usage(Source.of(MIXED, agent_kind="opencode", root=tmp_path))
-    assert sum(row.messages for row in tally.by_model) == tally.messages == 10
+    assert sum(row.messages for row in tally.by_model) == tally.messages == 9
     assert sum(row.input_tokens for row in tally.by_model) == tally.input_tokens
     assert sum(row.cache_read_tokens for row in tally.by_model) == tally.cache_read_tokens
     assert sum(row.cost for row in tally.by_model) == pytest.approx(tally.cost)
@@ -722,3 +730,187 @@ def test_cache_written_is_kept_apart_from_cache_read(tmp_path: Path) -> None:
     """No captured row writes the cache, so one is made to: the two must not be folded."""
     glm = spend_of(edited(1, '"write":0', '"write":321'), tmp_path)[0]
     assert glm[5:7] == (39872, 321)
+
+
+# ---- API errors and interrupts ---------------------------------------------------------------
+
+# opencode keeps a failed answer as the message's own `error`, often with no part at all. One
+# real session that hit a provider's rate limit, then borrowed rows: two interrupts out of the
+# live store (one before anything was written, one mid tool call) and, out of the frozen store,
+# a prompt that outgrew the model, a request the provider refused, and an interrupt worded the
+# older way. Paths, prompts, a command and request ids anonymised.
+ERRORED = "ses_fdb61ad3cffeYvgWpZTc6KTDX2"
+ERROR_ROWS = TypeAdapter(dict[str, list[dict[str, JsonValue]]]).validate_json(
+    (STORE / "error-rows.json").read_text()
+)
+RATE_LIMITED = "Too many requests in a short window."
+OVERFLOW = "Requested token count exceeds the model's maximum context length"
+CONTEXT_LINE = "Full · run /compact or start a new session"
+
+
+def _error_of(row: dict[str, JsonValue]) -> dict[str, JsonValue] | None:
+    found = RECORD.validate_json(str(row["data"])).get("error")
+    return found if isinstance(found, dict) else None
+
+
+def errored_page(
+    root: Path, rows: dict[str, list[dict[str, JsonValue]]] = ERROR_ROWS
+) -> TranscriptPage:
+    """The whole errored session, out of a database holding *rows*."""
+    build(root / OPENCODE_DB, rows)
+    return history(Source.of(ERRORED, agent_kind="opencode", root=root), Window(limit=400))
+
+
+def notices(got: TranscriptPage) -> list[tuple[str, str, bool]]:
+    return [(t.tool, t.text, t.failed) for t in got.turns if t.speaker is Speaker.notice]
+
+
+def test_the_fixture_holds_every_error_shape_found_locally() -> None:
+    errors = [e for e in map(_error_of, ERROR_ROWS["message"]) if e is not None]
+    shapes = sorted((str(e["name"]), obj(e, "data").get("statusCode")) for e in errors)
+    assert shapes == [
+        ("APIError", 400),
+        ("APIError", 400),
+        ("APIError", 429),
+        ("MessageAbortedError", None),
+        ("MessageAbortedError", None),
+        ("MessageAbortedError", None),
+    ]
+    # Measured: every errored row records no tokens and no money.
+    for row in ERROR_ROWS["message"]:
+        if _error_of(row) is not None:
+            data = RECORD.validate_json(str(row["data"]))
+            assert data["cost"] == 0
+            assert dig(data, "tokens", "input") == dig(data, "tokens", "output") == 0
+
+
+def test_every_failed_answer_is_a_quiet_line_where_it_happened(tmp_path: Path) -> None:
+    got = errored_page(tmp_path)
+    speakers = [t.speaker for t in got.turns]
+    # The rate limit had no part at all, yet stands between the prompt it refused and the next.
+    assert speakers[:3] == [Speaker.human, Speaker.notice, Speaker.human]
+    assert len(notices(got)) == 6
+    assert not any(t.speaker is Speaker.agent and not t.text for t in got.turns)
+
+
+def test_a_rate_limit_says_to_send_again_and_opens_on_the_providers_words(tmp_path: Path) -> None:
+    turn = next(t for t in errored_page(tmp_path).turns if t.tool == "Limit")
+    assert (turn.text, turn.failed) == ("Rate limited · wait, then send it again", True)
+    assert turn.result.startswith(RATE_LIMITED)
+
+
+def test_a_prompt_that_outgrew_the_model_says_to_compact(tmp_path: Path) -> None:
+    turn = next(t for t in errored_page(tmp_path).turns if t.tool == "Context")
+    assert (turn.text, turn.failed) == (CONTEXT_LINE, True)
+    assert turn.result.startswith(OVERFLOW)
+
+
+def test_any_other_error_is_its_own_text_with_nothing_more_to_open(tmp_path: Path) -> None:
+    turn = next(t for t in errored_page(tmp_path).turns if t.tool == "Error")
+    assert (turn.text, turn.result, turn.failed) == ("Input validation error", "", True)
+
+
+def test_an_interrupt_is_one_still_line_and_not_a_failure(tmp_path: Path) -> None:
+    """The person stopped it: said once, quietly, whichever way opencode worded it."""
+    got = errored_page(tmp_path)
+    stopped = [t for t in got.turns if t.tool == "Interrupted"]
+    assert [(t.text, t.result, t.failed) for t in stopped] == [("", "", False)] * 3
+    # The interrupt mid tool call follows the call it cut off, not the other way round.
+    cut = got.turns.index(stopped[1])
+    assert got.turns[cut - 1].speaker is Speaker.tool
+    assert "User aborted the command" in got.turns[cut - 1].result
+
+
+def test_errors_are_harness_lines_not_messages(tmp_path: Path) -> None:
+    got = errored_page(tmp_path)
+    assert len(notices(got)) == 6
+    for turn in got.turns:
+        if turn.speaker is Speaker.notice:
+            assert is_api_error(turn)
+            assert not is_message(turn)
+
+
+def test_paging_backwards_walks_the_errored_session_exactly_once(tmp_path: Path) -> None:
+    whole = errored_page(tmp_path)
+    assert len(notices(whole)) == 6
+    source = Source.of(ERRORED, agent_kind="opencode", root=tmp_path)
+    seen: list[str] = []
+    before: int | None = None
+    while True:
+        got = history(source, Window(limit=3, before=before))
+        seen = [t.uuid for t in got.turns] + seen
+        if not got.has_more:
+            break
+        before = got.cursor
+    assert seen == [t.uuid for t in whole.turns]
+
+
+def test_an_error_written_onto_a_finished_turn_arrives_as_appended(tmp_path: Path) -> None:
+    """opencode writes the error when the answer ends, after its parts: a poll must see it."""
+    rows = {**ERROR_ROWS, "message": [dict(r) for r in ERROR_ROWS["message"]]}
+    last = rows["message"][-1]
+    final = str(last["data"])
+    clean = RECORD.validate_json(final)
+    clean.pop("error")
+    last["data"] = json.dumps(clean)
+    before = errored_page(tmp_path / "before", rows)
+    last["data"] = final
+    build(tmp_path / "after" / OPENCODE_DB, rows)
+    source = Source.of(ERRORED, agent_kind="opencode", root=tmp_path / "after")
+    grown = history(source, Window(after=before.end, limit=400))
+    assert [(t.tool, t.speaker) for t in grown.turns] == [("Interrupted", Speaker.notice)]
+
+
+def _as_files(rows: dict[str, list[dict[str, JsonValue]]], base: Path) -> Path:
+    """*rows* written the way the frozen layout keeps them: one JSON file per record."""
+    for message in rows["message"]:
+        record = {
+            "id": message["id"],
+            "sessionID": ERRORED,
+            **RECORD.validate_json(str(message["data"])),
+        }
+        path = base / "message" / ERRORED / f"{message['id']}.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(record))
+    for part in rows["part"]:
+        record = {
+            "id": part["id"],
+            "messageID": part["message_id"],
+            **RECORD.validate_json(str(part["data"])),
+        }
+        path = base / "part" / str(part["message_id"]) / f"{part['id']}.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(record))
+    return base
+
+
+def test_both_layouts_read_the_same_errors(tmp_path: Path) -> None:
+    live = errored_page(tmp_path / "live")
+    frozen = _as_files(ERROR_ROWS, tmp_path / "frozen" / "storage")
+    got = history(Source.of(ERRORED, agent_kind="opencode", root=frozen), Window(limit=400))
+    assert len(notices(live)) == 6
+    assert notices(got) == notices(live)
+    assert [t.uuid for t in got.turns] == [t.uuid for t in live.turns]
+
+
+def test_a_failed_answer_spends_nothing_and_names_no_model(tmp_path: Path) -> None:
+    build(tmp_path / OPENCODE_DB, ERROR_ROWS)
+    tally = usage(Source.of(ERRORED, agent_kind="opencode", root=tmp_path))
+    # Three answers came back; six failed. The frozen rows' GLM-4.7 never answered here.
+    assert tally.messages == 3
+    assert tally.models == [ModelRef("MiniMaxAI/MiniMax-M3", "togetherai")]
+    assert [row.messages for row in tally.by_model] == [3]
+
+
+def test_an_interrupt_after_an_answer_keeps_that_answers_context(tmp_path: Path) -> None:
+    """A failed answer sent nothing up, so the window is still what the last answer sent."""
+    build(tmp_path / "plain" / OPENCODE_DB, MIXED_ROWS)
+    plain = usage(Source.of(MIXED, agent_kind="opencode", root=tmp_path / "plain"))
+    interrupt = next(
+        r for r in ERROR_ROWS["message"] if _error_of(r) is not None and "Aborted" in str(r["data"])
+    )
+    late = {**interrupt, "id": "msg_ffff00001001Borrowed0Fixture", "session_id": MIXED}
+    build(tmp_path / "cut" / OPENCODE_DB, {**MIXED_ROWS, "message": [*MIXED_ROWS["message"], late]})
+    cut = usage(Source.of(MIXED, agent_kind="opencode", root=tmp_path / "cut"))
+    assert plain.context_tokens > 0
+    assert (cut.context_tokens, cut.messages) == (plain.context_tokens, plain.messages)

@@ -434,7 +434,7 @@ def test_each_model_shows_its_tokens_cache_apart_and_its_own_money(tmp_path: Pat
         "4 answers: 14k in, 1.5k out, 2.8k thinking, 40k cache read; $0.05"
     )
     assert rows["MiniMax-M3 via togetherai"] == (
-        "3 answers: 150k in, 1.1k out, 151k cache read; $0.06"
+        "2 answers: 150k in, 1.1k out, 151k cache read; $0.06"
     )
 
 

@@ -1,4 +1,4 @@
-"""What Claude Code writes that nobody typed or said: task notices, peer messages, API errors."""
+"""What a harness writes that nobody typed or said: task notices, peer messages, API errors."""
 
 from __future__ import annotations
 
@@ -132,33 +132,59 @@ type Injected = TaskNotice | PeerMessage | Hidden
 
 # Measured: the text Claude Code writes when a turn no longer fits, with `error: invalid_request`.
 _TOO_LONG: Final = "Prompt is too long"
+# Measured through opencode, an OpenAI-compatible provider's 400: "Requested token count exceeds
+# the model's maximum context length of 202752 tokens. ..."
+_OVERFLOW: Final = re.compile(r"\bmaximum context length\b")
 # Measured: "You've hit your session limit · resets 5am (<the user's time zone>)", and "weekly".
 _LIMIT: Final = re.compile(r"\AYou've hit your (\w+) limit · (resets .+)\Z", re.DOTALL)
-# The line's label for each error kind; a task notice's are Agent, Command and Task.
+# Claude Code's words for why a turn was refused, which an HTTP status is read into.
+_INVALID_REQUEST: Final = "invalid_request"
+_RATE_LIMIT: Final = "rate_limit"
+_BY_STATUS: Final = {400: _INVALID_REQUEST, 429: _RATE_LIMIT}
+# Not the API's: the person stopped the turn (opencode's MessageAbortedError).
+INTERRUPTED_CODE: Final = "interrupted"
+# The line's label for each kind; a task notice's are Agent, Command and Task.
 CONTEXT: Final = "Context"
 LIMIT: Final = "Limit"
 ERROR: Final = "Error"
-API_ERROR_KINDS: Final = frozenset({CONTEXT, LIMIT, ERROR})
+INTERRUPTED: Final = "Interrupted"
+API_ERROR_KINDS: Final = frozenset({CONTEXT, LIMIT, ERROR, INTERRUPTED})
 
 
 @dataclass(frozen=True, slots=True)
 class ApiError:
-    """The API refused a turn: what happened, what unblocks it, and the harness's own words."""
+    """A turn that ended with no answer: what happened, what unblocks it, the harness's words."""
 
     kind: str
     line: str
     said: str
+    # An interrupt is the person's own doing, so it is said without the alarm of a failure.
+    failed: bool = True
+
+
+def status_code(status: int | None) -> str | None:
+    """An HTTP status as the code Claude Code would have written for it, if it is one we read."""
+    return _BY_STATUS.get(status) if status is not None else None
 
 
 def api_error(code: str | None, said: str) -> ApiError:
-    """What an assistant record Claude Code wrote in place of an answer means for the person."""
+    """What a turn the harness ended in place of an answer means for the person."""
     said = said.strip()
-    if code == "invalid_request" and said.startswith(_TOO_LONG):
+    if code == INTERRUPTED_CODE:
+        return ApiError(INTERRUPTED, "", "", failed=False)
+    if code == _INVALID_REQUEST and (said.startswith(_TOO_LONG) or _OVERFLOW.search(said)):
         return ApiError(CONTEXT, "Full · run /compact or start a new session", said)
-    found = _LIMIT.match(said) if code == "rate_limit" else None
-    if found is not None:
-        return ApiError(LIMIT, f"{found.group(1).capitalize()} limit · {found.group(2)}", said)
+    if code == _RATE_LIMIT:
+        return _limit(said)
     return ApiError(ERROR, said, said)
+
+
+def _limit(said: str) -> ApiError:
+    found = _LIMIT.match(said)
+    if found is None:
+        # A provider's own rate limit, which names no reset this reader could trust.
+        return ApiError(LIMIT, "Rate limited · wait, then send it again", said)
+    return ApiError(LIMIT, f"{found.group(1).capitalize()} limit · {found.group(2)}", said)
 
 
 def without_reminders(text: str) -> str:
