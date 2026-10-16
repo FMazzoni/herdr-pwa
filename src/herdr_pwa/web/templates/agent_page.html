@@ -42,5 +42,7 @@
   {% set jump %}id="hp-jump" hidden{% endset %}
   {% call ui.button(none, extra="jump", type="button", attrs=jump) %}Question waiting <span aria-hidden="true">&darr;</span>{% endcall %}
   {{ composer }}
+  {# app.js lays it under the keyboard's pill when the composer cannot reach there itself. #}
+  <div id="pill-backdrop" class="pill-backdrop" aria-hidden="true"></div>
 </main>
 {% endblock %}

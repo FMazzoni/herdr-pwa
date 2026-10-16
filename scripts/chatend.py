@@ -1215,6 +1215,51 @@ frames(2, () => {
 });
 """
 SWAP_TOPS = [0, 241.7, 413]
+# After a downward scroll iOS leaves the band at the layout viewport's bottom (offsetTop 413 in
+# device-report.jsonl), so the keyboard's pill sits below the layout viewport, where a fixed box's
+# overflow is not drawn: the page under it must be the composer's colour, the chat's rest as much
+# as the canvas past its end, without the page growing.
+PILL = r"""
+const kb = window.__hpKb;
+const root = document.documentElement;
+const view = window.visualViewport;
+const rest = kb.top;
+const before = root.scrollHeight;
+kb.top = root.clientHeight - window.innerHeight;
+view.dispatchEvent(new Event("scroll"));
+const back = document.getElementById("pill-backdrop");
+const box = back ? back.getBoundingClientRect() : null;
+const seen = {
+  found: !!back,
+  top: box ? Math.round(box.top) : null,
+  height: box ? Math.round(box.height) : null,
+  band: window.innerHeight,
+  below: Math.round(before - scrollY - window.innerHeight),
+  grew: root.scrollHeight - before,
+  canvas: getComputedStyle(root).backgroundColor,
+  bar: getComputedStyle(document.getElementById("composer")).backgroundColor,
+};
+kb.top = rest;
+view.dispatchEvent(new Event("scroll"));
+return seen;
+"""
+
+
+def _pill_problems(name: str, found: object) -> list[str]:
+    seen = found if isinstance(found, dict) else {}
+    problems: list[str] = []
+    if seen.get("canvas") != seen.get("bar"):
+        problems.append(
+            f"{name}: past the page's end the pill shows {seen.get('canvas')}, not the composer's colour"
+        )
+    if not seen.get("found"):
+        return [*problems, f"{name}: nothing of the composer's colour lies under the pill"]
+    placed = abs(_num(seen, "top") - _num(seen, "band")) <= 1
+    if not placed or (_num(seen, "below") > 0 and not _num(seen, "height") > 0):
+        problems.append(f"{name}: the chat under the pill is not covered: {seen}")
+    if seen.get("grew") != 0:
+        problems.append(f"{name}: covering the pill grew the page by {seen.get('grew')}px")
+    return problems
 
 
 def _swap_problems(name: str, found: object) -> list[str]:
@@ -1248,9 +1293,10 @@ def keyboard_up(driver: Marionette, base: str, tab: Tab, rig: Rig, home: Path) -
     newest = tab.grow(rig, home, n)
     if not _until(lambda: _poked(driver, newest)) or not _wait_for(driver, newest):
         return [f"{tab.name}: the redraw after the reader stopped never landed"]
+    problems = _pill_problems(tab.name, driver.script(PILL))
     found = driver.script(READ_KEYBOARD)
     kb = found if isinstance(found, dict) else {}
-    problems = pans + _walk_problems(tab.name, _walked(driver), STEP * KEYBOARD_STEPS)
+    problems += pans + _walk_problems(tab.name, _walked(driver), STEP * KEYBOARD_STEPS)
     if _num(kb, "pans") <= 1:
         problems.append(f"{tab.name}: the band never moved")
     if kb.get("wrong"):

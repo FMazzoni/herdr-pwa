@@ -794,7 +794,38 @@
     }
     // Open for as long as the band is short, not only while it sits above the layout's bottom.
     root.classList.toggle("is-keyboard", keyboard);
+    if (keyboard) {
+      underPill(Math.round(view.pageTop - view.offsetTop + layout));
+    }
     return keyboard ? Math.round(view.height) : 0;
+  }
+
+  // The layout viewport's bottom, in the page, is where the pill starts once iOS has panned the band
+  // down to it; the box there stops at the page's end. Its own custom properties, not <html>'s, so
+  // moving it restyles nothing else.
+  var pill = null;
+  var pillTop = -1;
+  var pillRoom = -1;
+  function underPill(top) {
+    var back = document.getElementById("pill-backdrop");
+    if (!back) {
+      return;
+    }
+    if (back !== pill) {
+      pill = back;
+      pillTop = -1;
+      pillRoom = -1;
+    }
+    // An absolute box is not in <html>'s height, so this is the page's end without it.
+    var room = Math.max(0, root.offsetHeight - top);
+    if (top !== pillTop) {
+      back.style.setProperty("--pill-top", top + "px");
+      pillTop = top;
+    }
+    if (room !== pillRoom) {
+      back.style.setProperty("--pill-room", room + "px");
+      pillRoom = room;
+    }
   }
 
   function viewMoved() {
