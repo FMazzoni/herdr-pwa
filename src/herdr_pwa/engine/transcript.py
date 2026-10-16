@@ -17,10 +17,15 @@ from herdr_pwa.engine.generated.request import IntegrationTarget
 from herdr_pwa.engine.model import Agent, SessionId
 from herdr_pwa.engine.notices import (
     API_ERROR_KINDS,
+    OUTPUT,
+    SLASH,
+    SLASH_KINDS,
     ApiError,
+    CommandOutput,
     Hidden,
     PeerMessage,
     RecordOrigin,
+    SlashCommand,
     TaskNotice,
     api_error,
     injected,
@@ -135,6 +140,11 @@ class TranscriptTurn(BaseModel):
 def is_message(turn: TranscriptTurn) -> bool:
     """Whether *turn* is a message a page counts: a person's prompt or the agent's prose."""
     return turn.speaker in (Speaker.human, Speaker.agent)
+
+
+def is_slash_command(turn: TranscriptTurn) -> bool:
+    """Whether *turn* is a slash command the person ran in the harness, or what one printed."""
+    return turn.speaker is Speaker.notice and turn.tool in SLASH_KINDS
 
 
 def is_api_error(turn: TranscriptTurn) -> bool:
@@ -933,8 +943,37 @@ def _blocks(record: ClaudeRecord) -> list[_Block]:
     return [block for block in content if block is not None]
 
 
-def _injected_turn(found: TaskNotice | PeerMessage, stamp: TurnStamp) -> TranscriptTurn:
+def _slash_turn(found: SlashCommand | CommandOutput, stamp: TurnStamp) -> TranscriptTurn:
+    """A slash command as one quiet line; its output is one too until it is folded onto it."""
+    if isinstance(found, SlashCommand):
+        text, cut = one_line(found.line, MAX_NOTE_CHARS)
+        return TranscriptTurn(
+            uuid=stamp.uuid,
+            speaker=Speaker.notice,
+            text=text,
+            ts=stamp.written,
+            tool=SLASH,
+            truncated=cut,
+        )
+    text, _ = one_line(found.said)
+    result, cut = clip(found.said, MAX_RESULT_CHARS)
+    return TranscriptTurn(
+        uuid=stamp.uuid,
+        speaker=Speaker.notice,
+        text=text,
+        ts=stamp.written,
+        tool=OUTPUT,
+        result=result,
+        result_truncated=cut,
+    )
+
+
+def _injected_turn(
+    found: TaskNotice | PeerMessage | SlashCommand | CommandOutput, stamp: TurnStamp
+) -> TranscriptTurn:
     uuid, ts = stamp.uuid, stamp.written
+    if isinstance(found, SlashCommand | CommandOutput):
+        return _slash_turn(found, stamp)
     if isinstance(found, TaskNotice):
         detail, _ = one_line(found.detail)
         # A command opens on the whole of what was run; anything else on what it said.
@@ -1119,8 +1158,31 @@ def _claude_turn(record: ClaudeRecord) -> TranscriptTurn | None:
 
 
 def fold_turns(turns: Iterable[TranscriptTurn]) -> list[TranscriptTurn]:
-    """Fold each tool result onto its call, and each run of one repeated API error into one line."""
-    return _fold_repeats(_fold_results(turns))
+    """Fold tool results onto calls, command output onto its command, and repeated API errors."""
+    return _fold_repeats(_fold_outputs(_fold_results(turns)))
+
+
+def _prints_for(output: TranscriptTurn, command: TranscriptTurn) -> bool:
+    """Whether *output* is what *command* printed: measured, it is the very next record."""
+    return (
+        is_slash_command(output)
+        and output.tool == OUTPUT
+        and is_slash_command(command)
+        and command.tool == SLASH
+        and not command.result
+    )
+
+
+def _fold_outputs(turns: list[TranscriptTurn]) -> list[TranscriptTurn]:
+    """Each slash command's OUTPUT folded onto the command just before it, where it opens."""
+    folded: list[TranscriptTurn] = []
+    for turn in turns:
+        if folded and _prints_for(turn, folded[-1]):
+            update = {"result": turn.result, "result_truncated": turn.result_truncated}
+            folded[-1] = folded[-1].model_copy(update=update)
+            continue
+        folded.append(turn)
+    return folded
 
 
 def _fold_results(turns: Iterable[TranscriptTurn]) -> list[TranscriptTurn]:
@@ -1182,6 +1244,11 @@ class Harness:
 _RETRY_TRIGGERS: Final = (Speaker.notice, Speaker.peer)
 
 
+def _wakes(turn: TranscriptTurn) -> bool:
+    """Whether *turn* only woke the agent to retry; a slash command is the person acting."""
+    return turn.speaker in _RETRY_TRIGGERS and not is_slash_command(turn)
+
+
 def _same_error(a: TranscriptTurn, b: TranscriptTurn) -> bool:
     return (a.tool, a.text, a.result) == (b.tool, b.text, b.result)
 
@@ -1202,7 +1269,7 @@ def _fold_repeats(turns: list[TranscriptTurn]) -> list[TranscriptTurn]:
                 earlier = folded.pop(open_at)
                 kept = turn.model_copy(update={"times": earlier.times + turn.times})
             open_at = len(folded)
-        elif turn.speaker not in _RETRY_TRIGGERS:
+        elif not _wakes(turn):
             open_at = -1
         folded.append(kept)
     return folded
@@ -1211,13 +1278,13 @@ def _fold_repeats(turns: list[TranscriptTurn]) -> list[TranscriptTurn]:
 def ends_refused(turns: Sequence[TranscriptTurn]) -> TranscriptTurn | None:
     """The API error the conversation ends on, past what only woke it to retry; else ``None``.
 
-    The same run ``_fold_repeats`` folds: a notice or a peer message set off a retry, so it
-    does not end a refusal, and anything else said or run after it does.
+    The same run ``_fold_repeats`` folds, by the same ``_wakes``: a notice or a peer message set
+    off a retry, so it does not end a refusal; a slash command, or anything said, does.
     """
     for turn in reversed(turns):
         if is_api_error(turn):
             return turn
-        if turn.speaker not in _RETRY_TRIGGERS:
+        if not _wakes(turn):
             return None
     return None
 

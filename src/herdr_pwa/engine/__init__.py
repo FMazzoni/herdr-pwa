@@ -64,6 +64,7 @@ from herdr_pwa.engine.transcript import (
     has_byte_frontier,
     history,
     is_api_error,
+    is_slash_command,
     locate,
     session_origin,
 )
@@ -150,6 +151,7 @@ __all__ = [
     "has_byte_frontier",
     "history",
     "is_api_error",
+    "is_slash_command",
     "locate",
     "rank",
     "screen_digest",

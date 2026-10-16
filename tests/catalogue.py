@@ -334,6 +334,11 @@ def _records(path: Path) -> list[dict[str, JsonValue]]:
     return [{k: v for k, v in record.items() if k != "cwd"} for record in found]
 
 
+# Real slash-command records, every shape found locally, each with the caveat before it and the
+# output after it, in the order Claude Code writes them.
+SLASH_COMMANDS: Final = FIXTURES / "transcript" / "notices" / "slash-commands.jsonl"
+
+
 def notice_records() -> list[dict[str, JsonValue]]:
     """The scrubbed records, in the order they were written."""
     return _records(NOTICES)
@@ -342,6 +347,11 @@ def notice_records() -> list[dict[str, JsonValue]]:
 def api_error_records() -> list[dict[str, JsonValue]]:
     """The scrubbed API-error sequence, in fixture order."""
     return _records(API_ERRORS)
+
+
+def slash_command_records() -> list[dict[str, JsonValue]]:
+    """The scrubbed slash-command records, in fixture order."""
+    return _records(SLASH_COMMANDS)
 
 
 def origin_of(record: dict[str, JsonValue]) -> dict[str, JsonValue]:
@@ -1023,6 +1033,16 @@ AGENT_PAGE: Final = (
         act=_click(".chat .notice--command > summary"),
     ),
     State(
+        "chat-slash-commands",
+        f"{AGENT}?tab=chat",
+        ".chat .notice--ran[open] .notice__result",
+        runner(_stressed),
+        slash_command_records(),
+        title="Chat: slash commands the person ran, each a quiet line, /compact opened on its output",
+        armed=".chat .notice--ran > summary",
+        act=_click(".chat .notice--ran > summary"),
+    ),
+    State(
         "chat-notices",
         f"{AGENT}?tab=chat",
         ".chat .notice--command",
@@ -1563,6 +1583,7 @@ STATES: Final = (*FEED, *AGENT_PAGE, *TAPPED, *ANSWERED, *LIFECYCLE, *STATS, *FI
 
 # Screens this app draws that the old app had no name for.
 V2_ONLY: Final = (
+    "chat-slash-commands",
     "usage-opencode-models",
     "chat-doubted-identity",
     "feed-herd",
