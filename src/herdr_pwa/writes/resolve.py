@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import Final, Protocol
 
 from herdr_pwa.audit import AuditUnavailableError, Entry, Write
+from herdr_pwa.decisions import identity_doubt
 from herdr_pwa.engine import (
     Agent,
     EngineError,
@@ -17,6 +18,7 @@ from herdr_pwa.engine import (
     SessionId,
     Snapshot,
     Workspace,
+    session_origin,
 )
 from herdr_pwa.writes.outcome import Pacing
 from herdr_pwa.writes.refusal import Refusal, Refused
@@ -34,11 +36,14 @@ class AuditTrail(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class Writer:
-    """What every write needs: the runner, the audit trail, and the clock its waits run on."""
+    """What every write needs: the runner, the audit trail, the clock its waits run on, and
+    the transcript roots a session's own store is looked up in (empty: each harness's default).
+    """
 
     client: HerdrClient
     audit: AuditTrail
     pacing: Pacing = Pacing()  # noqa: RUF009 - frozen, so one shared default is safe
+    stores: tuple[str, ...] = ()
 
 
 def snapshot_now(client: HerdrClient, *, verb: str) -> Snapshot | Refused:
@@ -50,21 +55,33 @@ def snapshot_now(client: HerdrClient, *, verb: str) -> Snapshot | Refused:
         return Refused(Refusal.UNREACHABLE, verb, detail=str(exc))
 
 
+def doubt(agent: Agent, stores: tuple[str, ...] = ()) -> str:
+    """Why *agent*'s reported session may belong to something else in its pane, or ``""``."""
+    started = session_origin(agent, root=stores or None)
+    return identity_doubt(started, (agent.foreground_cwd, agent.cwd))
+
+
 def agent_now(
-    client: HerdrClient,
+    writer: Writer,
     session: SessionId,
     *,
     expected_target: PaneId | None,
     verb: str,
 ) -> Agent | Refused:
-    """The agent holding ``session`` right now, followed if it moved; gone refuses."""
-    snap = snapshot_now(client, verb=verb)
+    """The agent holding ``session`` right now, followed if it moved; gone or doubted refuses."""
+    snap = snapshot_now(writer.client, verb=verb)
     if isinstance(snap, Refused):
         return snap
     # A swapped id raises here (as_session_id / as_pane_id); it is never "not found".
     resolution = snap.resolve_session(session, expected_target=expected_target)
     if resolution.presence is Presence.GONE or resolution.agent is None:
         return Refused(Refusal.GONE, verb, detail=resolution.message)
+    # The session check on the wire compares herdr's record with herdr's record; a pane whose
+    # record was overwritten by a nested harness passes it, and the keys reach the real agent.
+    said = doubt(resolution.agent, writer.stores)
+    if said:
+        log.warning("write refused at %s: %s", resolution.agent.target, said)
+        return Refused(Refusal.DOUBTED_IDENTITY, verb, detail=said)
     return resolution.agent
 
 

@@ -46,6 +46,7 @@ class Refusal(StrEnum):
     NOT_WAITING = "not_waiting"
     HAS_IDENTITY = "has_identity"
     SESSION_MOVED = "session_moved"
+    DOUBTED_IDENTITY = "doubted_identity"
     PANE_BUSY = "pane_busy"
     PROTOCOL_DRIFT = "protocol_drift"
     RUNNER_REFUSED = "runner_refused"
@@ -136,6 +137,11 @@ FAILURES: Final[dict[Refusal, Failure]] = {
     ),
     Refusal.SESSION_MOVED: Failure(
         409, "Nothing was {verb}: that pane now belongs to a different agent."
+    ),
+    Refusal.DOUBTED_IDENTITY: Failure(
+        409,
+        "Nothing was {verb}: this app is not sure which agent holds this pane. The session it "
+        "reports started somewhere else. Look at the Pane.",
     ),
     Refusal.PANE_BUSY: Failure(
         409, "Nothing was {verb}: the new pane never settled to a shell prompt."

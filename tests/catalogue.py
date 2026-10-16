@@ -317,7 +317,10 @@ NOTICES: Final = FIXTURES / "transcript" / "notices" / "notices.jsonl"
 def notice_records() -> list[JsonObject]:
     """The scrubbed records, in the order they were written."""
     found = (as_object(loads(line)) for line in NOTICES.read_text().splitlines())
-    return [record for record in found if record is not None]
+    # Its cwd is another machine's repo; kept, it would read as a session started elsewhere.
+    return [
+        {k: v for k, v in record.items() if k != "cwd"} for record in found if record is not None
+    ]
 
 
 def _origin_kind(record: JsonObject) -> str:
@@ -494,6 +497,7 @@ def _usage_transcript(rig: Rig) -> None:
 
 OPENCODE_STORE: Final = FIXTURES / "transcript" / "opencode"
 OPENCODE_SESSION: Final = "ses_3fd62ba5bffemIxWVhRda5wgS7"
+OPENCODE_DIRECTORY: Final = "/home/user/projects/herdr-pwa"
 
 
 def _opencode_working() -> JsonObject:
@@ -507,6 +511,16 @@ def _opencode_working() -> JsonObject:
         "source": "herdr:opencode",
         "value": OPENCODE_SESSION,
     }
+    # Where the captured session was started; anywhere else is a pane whose identity is doubted.
+    agent["cwd"] = agent["foreground_cwd"] = OPENCODE_DIRECTORY
+    return frame
+
+
+def _opencode_elsewhere() -> JsonObject:
+    """The opencode pane reporting a session its store says was started in another directory."""
+    frame = _opencode_working()
+    agent = next(a for a in agents_of(frame) if a.get("pane_id") == WORKING_PANE)
+    agent["cwd"] = agent["foreground_cwd"] = "/home/user/projects/notes-app"
     return frame
 
 
@@ -1264,6 +1278,14 @@ STATS: Final = (
         prime=_opencode_store,
         title="An opencode agent's strip: a model with no known window shows tokens, not a percent",
     ),
+    State(
+        "chat-doubted-identity",
+        f"/agent/{OPENCODE_SESSION}?tab=chat",
+        ".chat .chat__note[role=status]",
+        runner(_opencode_elsewhere),
+        prime=_opencode_store,
+        title="Chat: the pane reports a session started elsewhere, said above it, and writes refused",
+    ),
 )
 
 FILES: Final = (
@@ -1338,6 +1360,7 @@ STATES: Final = (*FEED, *AGENT_PAGE, *TAPPED, *ANSWERED, *LIFECYCLE, *STATS, *FI
 
 # Screens this app draws that the old app had no name for.
 V2_ONLY: Final = (
+    "chat-doubted-identity",
     "feed-herd",
     "feed-build-scrollback",
     "workspaces",

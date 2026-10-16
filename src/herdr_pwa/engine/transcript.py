@@ -12,7 +12,7 @@ from typing import ClassVar, Final, NamedTuple, Protocol
 from pydantic import BaseModel, Field, JsonValue
 
 from herdr_pwa.diff import FileDiff, tool_diff
-from herdr_pwa.engine.model import SessionId
+from herdr_pwa.engine.model import Agent, SessionId
 from herdr_pwa.engine.notices import Hidden, PeerMessage, TaskNotice, injected, without_reminders
 from herdr_pwa.jsontypes import JsonObject, as_object, loads, objects
 
@@ -952,6 +952,10 @@ class TranscriptAdapter(Protocol):
         """What *session* has spent, over everything its thread has lived in."""
         ...
 
+    def origin(self, session: str, *, roots: Sequence[Path]) -> str:
+        """The directory *session* was started in, or ``""`` when its store does not say."""
+        ...
+
 
 class ClaudeAdapter:
     """Claude Code: one JSONL per session, and the frontier is a BYTE OFFSET."""
@@ -1007,6 +1011,17 @@ class ClaudeAdapter:
         if path is None:
             return SessionUsage(state=HistoryState.absent)
         return _tally_lineage(path, max_bytes=max_bytes)
+
+    def origin(self, session: str, *, roots: Sequence[Path]) -> str:
+        """The first ``cwd`` the log records: where it began, not where a tool wandered."""
+        path = self._log(session, roots, follow=False)
+        if path is None:
+            return ""
+        for record in _head_records(_head_window(path)):
+            cwd = record.get("cwd")
+            if isinstance(cwd, str) and cwd.strip():
+                return cwd.strip()
+        return ""
 
     def log(self, session: str, roots: Sequence[Path]) -> Path | None:
         """The file *session*'s conversation is in now, forks followed, or ``None``."""
@@ -1075,6 +1090,19 @@ def history(  # noqa: PLR0913
         # Found and then unreadable is not "there is none"; the view must not show a quiet chat.
         return TranscriptPage(state=HistoryState.unreadable)
     return page.model_copy(update={"turns": fold_tool_results(page.turns)})
+
+
+def session_origin(agent: Agent, *, root: TranscriptRoots = None) -> str:
+    """Where *agent*'s reported session was started, as its own store says, or ``""``."""
+    kind = agent.agent.strip().lower()
+    adapter = adapter_for(kind)
+    text = _session_id(agent.session)
+    if adapter is None or not text:
+        return ""
+    try:
+        return adapter.origin(text, roots=_roots(root, kind=kind, default=adapter.default_roots))
+    except OSError:
+        return ""
 
 
 # What it cost: the usage tally

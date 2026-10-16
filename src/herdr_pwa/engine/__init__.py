@@ -45,6 +45,7 @@ from herdr_pwa.engine.transcript import (
     TranscriptPage,
     TranscriptTurn,
     locate,
+    session_origin,
 )
 from herdr_pwa.engine.transport import (
     EngineError,
@@ -112,4 +113,5 @@ __all__ = [
     "located",
     "rank",
     "screen_digest",
+    "session_origin",
 ]

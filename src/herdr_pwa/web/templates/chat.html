@@ -30,6 +30,8 @@
 {%- endmacro %}
 <section id="agent-view" class="chat" data-hp-poll="{{ url }}" hx-get="{{ url }}" hx-target="this" hx-swap="outerHTML" data-hp-topic="chat:{{ agent.session }}" hx-trigger="hp:stale, hp:poke from:body">
   <h2 class="sr-only">Chat</h2>
+  {# The pane's reported session started somewhere else: said before any of it is believed. #}
+  {% if chat.doubt %}<p class="chat__note" role="status">{{ chat.doubt }}</p>{% endif %}
   {% if chat.more %}
   {% set earlier %}data-hp-earlier hx-get="{{ base }}?before={{ chat.start }}{{ in_log }}" hx-target="#agent-view" hx-swap="outerHTML"{% endset %}
   <p class="chat__earlier">{{ ui.button("Load earlier messages", extra="chat__earlier-button", type="button", attrs=earlier) }}</p>

@@ -168,6 +168,11 @@ class _Db:
         title, model = found[0]
         return str(title or ""), str(model or "")
 
+    def origin(self) -> str:
+        """The ``cwd`` Hermes recorded on the session's own row."""
+        found = self._ask(_ORIGIN_SQL)
+        return str(found[0][0] or "").strip() if found else ""
+
     def usage(self) -> list[_Row]:
         """Every ``session_model_usage`` row for this session."""
         return self._ask(_USAGE_SQL)
@@ -205,6 +210,8 @@ _CLOCK_SQL: Final = (
     " max(case when role = 'user' then timestamp end), max(timestamp)"
     " from messages where session_id = ? and active = 1"
 )
+
+_ORIGIN_SQL: Final = "select cwd from sessions where id = ? limit 1"
 
 _INFO_SQL: Final = "select title, model from sessions where id = ? limit 1"
 
@@ -425,6 +432,17 @@ class HermesAdapter(TranscriptAdapter):
                 return _since(db, after=after, limit=limit, max_bytes=max_bytes)
         except _LockedError:
             return TranscriptPage(state=HistoryState.unreadable)
+
+    def origin(self, session: str, *, roots: Sequence[Path]) -> str:
+        """The directory Hermes recorded *session* as started in, or ``""``."""
+        try:
+            db = _open(roots, session)
+            if db is None:
+                return ""
+            with closing(db):
+                return db.origin()
+        except _LockedError:
+            return ""
 
     def info(self, session: str, *, roots: Sequence[Path] = ()) -> tuple[str, str]:
         """``(title, model)`` off *session*'s own row. Never raises."""
