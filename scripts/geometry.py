@@ -187,6 +187,25 @@ requestAnimationFrame(frame);
 # Only how long to wait before calling the dock stuck; a dock that follows does so in frames.
 DOCK_CEILING_MS = 5000
 
+# A tap can grow the dock too (a focused composer is taller), and the app re-measures it on the
+# resize observer's next frame: wait that out, frame by frame, before the room for it is judged.
+DOCK_KEPT = r"""
+const [ceiling] = arguments;
+const done = arguments[arguments.length - 1];
+const root = document.documentElement;
+const kept = () => {
+  const bar = document.getElementById("composer");
+  return !bar || root.style.getPropertyValue("--dock-h").trim() === bar.offsetHeight + "px";
+};
+const started = performance.now();
+const frame = () => {
+  const ok = kept();
+  if (ok || performance.now() - started > ceiling) done(ok);
+  else requestAnimationFrame(frame);
+};
+requestAnimationFrame(frame);
+"""
+
 # One synchronous script, so no htmx poll can swap the DOM halfway through a measurement.
 PROBE_GEOMETRY = r"""
 const [scrollAllowed, tapAllowed, tappable, floor, edge, fields, fontFloor] = arguments;
@@ -610,6 +629,11 @@ def run_state(driver: Marionette, state: State, base: str, size: Size, tally: Ta
     if scale != 1.0 and not _grow_text(driver, scale, settle=not state.in_flight):
         tally.problems.append(
             f"{where}: the docked composer was not re-measured after the text grew, so the "
+            "room the page keeps for it is the old size"
+        )
+    elif scale == 1.0 and driver.script_async(DOCK_KEPT, DOCK_CEILING_MS) is not True:
+        tally.problems.append(
+            f"{where}: the docked composer was not re-measured after it changed size, so the "
             "room the page keeps for it is the old size"
         )
     found = driver.script(
