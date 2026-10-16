@@ -416,7 +416,7 @@ html { -webkit-tap-highlight-color: transparent; }
    ending wraps to a second row rather than leaving the screen. */
 .notice > .tool__line { flex-wrap: wrap; }
 .notice__text { flex: 1 1 0; min-width: 4em; max-width: max-content; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); }
-.notice--agent[open] > .tool__line .notice__text, .notice--task[open] > .tool__line .notice__text { white-space: normal; overflow-wrap: anywhere; }
+.notice--agent[open] > .tool__line .notice__text, .notice--task[open] > .tool__line .notice__text, .notice--ran[open] > .tool__line .notice__text { white-space: normal; overflow-wrap: anywhere; }
 .notice__status, .notice__time, .notice__times { flex: none; color: var(--ink-3); }
 .notice--still .notice__text { white-space: normal; overflow-wrap: anywhere; }
 .notice--failed .notice__label, .notice--failed .notice__status { color: var(--blocked); font-weight: 600; }

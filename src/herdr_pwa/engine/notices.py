@@ -1,4 +1,5 @@
-"""What a harness writes that nobody typed or said: task notices, peer messages, API errors."""
+"""What a harness writes that nobody typed or said: task notices, peer messages, API errors,
+and the slash commands the person ran in the harness itself."""
 
 from __future__ import annotations
 
@@ -10,6 +11,7 @@ from typing import Final
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from herdr_pwa.panetext import plain
 from herdr_pwa.validation import Flag, Text
 
 # The harness's own wrapper, never shown: it is context for the model, not conversation.
@@ -127,7 +129,39 @@ class PeerMessage:
     task: str = ""
 
 
-type Injected = TaskNotice | PeerMessage | Hidden
+# Measured: a slash command is one record, `<command-name>/compact</command-name>` then its
+# `<command-message>` and `<command-args>`; what it printed is the next record, on its own.
+_COMMAND: Final = "<command-name>"
+_STDOUT: Final = "local-command-stdout"
+# Measured: what the harness writes for a command that printed nothing (/chrome, /exit).
+_NO_CONTENT: Final = "(no content)"
+# The line's label for a slash command, and for its output when the command is not on the page.
+SLASH: Final = "Ran"
+OUTPUT: Final = "Output"
+SLASH_KINDS: Final = frozenset({SLASH, OUTPUT})
+
+
+@dataclass(frozen=True, slots=True)
+class SlashCommand:
+    """A slash command the person ran in the harness: its name and what followed it."""
+
+    name: str
+    args: str
+
+    @property
+    def line(self) -> str:
+        """The command as the person typed it: ``/compact keep the tooling``."""
+        return f"{self.name} {self.args}".strip()
+
+
+@dataclass(frozen=True, slots=True)
+class CommandOutput:
+    """What a slash command printed, terminal styling dropped."""
+
+    said: str
+
+
+type Injected = TaskNotice | PeerMessage | SlashCommand | CommandOutput | Hidden
 
 
 # Measured: the text Claude Code writes when a turn no longer fits, with `error: invalid_request`.
@@ -258,11 +292,20 @@ def _peer(origin: RecordOrigin, text: str) -> PeerMessage | None:
     )
 
 
+def _output(text: str) -> CommandOutput | Hidden:
+    said = plain(_tag(text, _STDOUT)).strip()
+    return CommandOutput(said) if said and said != _NO_CONTENT else HIDDEN
+
+
 def _by_tag(text: str) -> Injected | None:
     if not text:
         return HIDDEN
     if text.startswith("<task-notification>"):
         return _task(text) or HIDDEN
+    if text.startswith(_COMMAND):
+        return SlashCommand(_tag(text, "command-name"), _tag(text, "command-args"))
+    if text.startswith(f"<{_STDOUT}>"):
+        return _output(text)
     return _peer_from_tag(text)
 
 

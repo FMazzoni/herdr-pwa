@@ -5,7 +5,14 @@ from dataclasses import dataclass
 from typing import Final
 
 from herdr_pwa.clock import duration
-from herdr_pwa.engine import HistoryState, Speaker, TranscriptPage, TranscriptTurn, is_api_error
+from herdr_pwa.engine import (
+    HistoryState,
+    Speaker,
+    TranscriptPage,
+    TranscriptTurn,
+    is_api_error,
+    is_slash_command,
+)
 from herdr_pwa.web.markdown import MdNode, render_tree
 
 _STATE_NOTES = {
@@ -68,6 +75,8 @@ class ChatTurn:
     # The harness's line that the API refused a turn, and how many identical refusals it stands for.
     api_error: bool = False
     times: int = 1
+    # A slash command the person ran in the harness, opening on what it printed if anything.
+    slash: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -178,6 +187,7 @@ def _turn(turn: TranscriptTurn) -> ChatTurn:
         output=turn.output,
         api_error=is_api_error(turn),
         times=turn.times,
+        slash=is_slash_command(turn),
     )
 
 
