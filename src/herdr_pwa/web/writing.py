@@ -1,11 +1,12 @@
 """What every write route shares: the form, the ids in the URL, and a writer that audits who asks."""
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Annotated, Final
 from urllib.parse import parse_qs, quote
 
-from fastapi import Body, Request
+from fastapi import Body, Depends, Request
 from fastapi.responses import RedirectResponse, Response
 
 from herdr_pwa import auth
@@ -67,6 +68,30 @@ def writer_for(web: WebState, request: Request, identity: auth.Identity) -> Writ
     return Writer(
         web.client, Recorder(web.audit, origin), web.pacing, web.settings.transcript_roots
     )
+
+
+@dataclass(frozen=True, slots=True)
+class Posted:
+    """One write as its route acts on it: the request, its audited writer and its form's fields."""
+
+    request: Request
+    writer: Writer
+    values: dict[str, str]
+
+
+# A dependency FastAPI calls with the request, the guard's identity and the body.
+type Posting = Callable[..., Posted]
+
+
+def posted(web: WebState, guard: Callable[[Request], auth.Identity]) -> Posting:
+    """The dependency a write route takes its post from, checked by the router's own ``guard``."""
+
+    def read_post(
+        request: Request, identity: Annotated[auth.Identity, Depends(guard)], body: FormBody = b""
+    ) -> Posted:
+        return Posted(request, writer_for(web, request, identity), form(body))
+
+    return read_post
 
 
 def agent_url(session: str) -> str:

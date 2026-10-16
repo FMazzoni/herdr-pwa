@@ -1,13 +1,11 @@
 """Writes to one agent: a prompt, a tapped key, an end; and the by-address door of a starting one."""
 
-from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Annotated, Final
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
-from herdr_pwa import auth
 from herdr_pwa.decisions import decide_screen, page_status
 from herdr_pwa.engine import (
     INTERRUPT_KEY,
@@ -21,20 +19,20 @@ from herdr_pwa.engine import (
     screen_digest,
 )
 from herdr_pwa.web.deps import WebState, viewer_guard
-from herdr_pwa.web.failures import AgentGone, refused
+from herdr_pwa.web.failures import AgentGone, Redraw, refused
 from herdr_pwa.web.herd import find_agent, unread_of
 from herdr_pwa.web.writing import (
-    FormBody,
+    Posted,
+    Posting,
     address_of,
     agent_url,
     expected,
     first_note,
-    form,
     identity_of,
     opened,
+    posted,
     raise_if_gone,
     ticked,
-    writer_for,
 )
 from herdr_pwa.writes.answer import KeyAsk, KeySent, send_key, send_starting_key
 from herdr_pwa.writes.guard import asks_a_question
@@ -43,7 +41,6 @@ from herdr_pwa.writes.lifecycle import EndAsk, end_agent
 from herdr_pwa.writes.outcome import Evidence, Outcome
 from herdr_pwa.writes.prompt import PromptAsk, PromptSent, send_first_prompt, send_prompt
 from herdr_pwa.writes.refusal import Refused
-from herdr_pwa.writes.resolve import Writer
 
 ANSWER_CADENCE: Final = 5
 DOOR_KEYS: Final = (*PAD_KEYS, INTERRUPT_KEY)
@@ -179,8 +176,9 @@ def _after(web: WebState, session: SessionId, prior: Agent | None) -> Agent:
     return agent
 
 
-def _key(web: WebState, writer: Writer, session: SessionId, values: dict[str, str]) -> HTMLResponse:
+def _key(web: WebState, session: SessionId, post: Posted) -> HTMLResponse:
     prior = _lookup(web, session)
+    values = post.values
     ask = KeyAsk(
         session,
         values.get("key", ""),
@@ -188,13 +186,13 @@ def _key(web: WebState, writer: Writer, session: SessionId, values: dict[str, st
         drawn_from=values.get("screen", "").strip(),
         confirmed=ticked(values, "confirm"),
     )
-    result = send_key(writer, ask)
+    result = send_key(post.writer, ask)
     if isinstance(result, Refused):
         raise_if_gone(result)
         agent = _after(web, session, prior)
         shown = shown_status(web, agent)
         context = {**answer_context(agent, result.prompt, shown), "key": ask.key.strip().lower()}
-        return refused(web.pages, "answer.html", context, result)
+        return refused(web.pages, Redraw("answer.html", context), result)
     return _answered(web, _after(web, session, prior), result)
 
 
@@ -218,10 +216,9 @@ def _answered(web: WebState, agent: Agent, result: KeySent) -> HTMLResponse:
     return web.pages.fragment("answer.html", context, headers={"HX-Trigger": "hp:poke"})
 
 
-def _prompt(
-    web: WebState, writer: Writer, session: SessionId, values: dict[str, str]
-) -> HTMLResponse:
+def _prompt(web: WebState, session: SessionId, post: Posted) -> HTMLResponse:
     prior = _lookup(web, session)
+    values = post.values
     ask = PromptAsk(
         session,
         values.get("text", ""),
@@ -230,7 +227,7 @@ def _prompt(
         confirmed=ticked(values, "confirm"),
         again=ticked(values, "again"),
     )
-    result = send_prompt(writer, ask)
+    result = send_prompt(post.writer, ask)
     if isinstance(result, Refused):
         raise_if_gone(result)
         context = {
@@ -240,7 +237,7 @@ def _prompt(
             # Kept through a later refusal, or a confirm after it would lose the word "again".
             "again": result.asks_again or ask.again,
         }
-        return refused(web.pages, "compose.html", context, result)
+        return refused(web.pages, Redraw("compose.html", context), result)
     return _composed(web, _after(web, session, prior), result)
 
 
@@ -249,80 +246,69 @@ def _composed(web: WebState, agent: Agent, result: PromptSent) -> HTMLResponse:
     return web.pages.fragment("compose.html", context, headers={"HX-Trigger": "hp:poke"})
 
 
-def build(web: WebState) -> APIRouter:
-    """The per-agent write routes; every one sits behind the identity and origin guard."""
-    guard = viewer_guard(web)
-    router = APIRouter(dependencies=[Depends(guard)])
-
-    @router.get("/agent/{session}/compose")
-    def composer(session: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
-        agent = find_agent(web, identity_of(session))
-        return web.pages.fragment("compose.html", composer_region(web, agent))
-
-    @router.post("/agent/{session}/prompt")
-    def prompt(  # pyright: ignore[reportUnusedFunction]
-        session: str,
-        request: Request,
-        identity: Annotated[auth.Identity, Depends(guard)],
-        body: FormBody = b"",
-    ) -> HTMLResponse:
-        writer = writer_for(web, request, identity)
-        return _prompt(web, writer, identity_of(session), form(body))
-
-    @router.get("/agent/{session}/answer")
-    def answer(session: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
-        agent = find_agent(web, identity_of(session))
-        return web.pages.fragment("answer.html", answer_region(web, agent))
-
-    @router.post("/agent/{session}/keys")
-    def keys(  # pyright: ignore[reportUnusedFunction]
-        session: str,
-        request: Request,
-        identity: Annotated[auth.Identity, Depends(guard)],
-        body: FormBody = b"",
-    ) -> HTMLResponse:
-        writer = writer_for(web, request, identity)
-        return _key(web, writer, identity_of(session), form(body))
-
-    @router.get("/agent/{session}/close")
-    def close_form(session: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
-        agent = find_agent(web, identity_of(session))
-        return web.pages.page("close.html", {"agent": agent})
-
-    @router.post("/agent/{session}/close", response_model=None)
-    def close(  # pyright: ignore[reportUnusedFunction]
-        session: str,
-        request: Request,
-        identity: Annotated[auth.Identity, Depends(guard)],
-        body: FormBody = b"",
-    ) -> Response:
-        writer = writer_for(web, request, identity)
-        return _close(web, request, writer, identity_of(session), form(body))
-
-    _starting_routes(router, web, guard)
-    return router
-
-
-def _close(
-    web: WebState, request: Request, writer: Writer, session: SessionId, values: dict[str, str]
-) -> Response:
+def _close(web: WebState, session: SessionId, post: Posted) -> Response:
+    values = post.values
     ask = EndAsk(
         session,
         expected_target=expected(values),
         confirmed=ticked(values, "confirm"),
         acknowledged=ticked(values, "acknowledge"),
     )
-    result = end_agent(writer, ask)
+    result = end_agent(post.writer, ask)
     if isinstance(result, Refused):
         raise_if_gone(result)
         context = {"agent": find_agent(web, session)}
-        return refused(web.pages, "close.html", context, result, whole=True)
-    return opened(request, "/")
+        return refused(web.pages, Redraw("close.html", context, whole=True), result)
+    return opened(post.request, "/")
 
 
-def _starting_routes(
-    router: APIRouter, web: WebState, guard: Callable[[Request], auth.Identity]
-) -> None:
+def build(web: WebState) -> APIRouter:
+    """The per-agent write routes; every one sits behind the identity and origin guard."""
+    guard = viewer_guard(web)
+    router = APIRouter(dependencies=[Depends(guard)])
+    posting = posted(web, guard)
+    _composer_routes(router, web, posting)
+    _answer_routes(router, web, posting)
+    _close_routes(router, web, posting)
+    _door_page(router, web)
+    _door_writes(router, web, posting)
+    return router
+
+
+def _composer_routes(router: APIRouter, web: WebState, posting: Posting) -> None:
+    @router.get("/agent/{session}/compose")
+    def composer(session: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
+        agent = find_agent(web, identity_of(session))
+        return web.pages.fragment("compose.html", composer_region(web, agent))
+
+    @router.post("/agent/{session}/prompt")
+    def prompt(session: str, post: Annotated[Posted, Depends(posting)]) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
+        return _prompt(web, identity_of(session), post)
+
+
+def _answer_routes(router: APIRouter, web: WebState, posting: Posting) -> None:
+    @router.get("/agent/{session}/answer")
+    def answer(session: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
+        agent = find_agent(web, identity_of(session))
+        return web.pages.fragment("answer.html", answer_region(web, agent))
+
+    @router.post("/agent/{session}/keys")
+    def keys(session: str, post: Annotated[Posted, Depends(posting)]) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
+        return _key(web, identity_of(session), post)
+
+
+def _close_routes(router: APIRouter, web: WebState, posting: Posting) -> None:
+    @router.get("/agent/{session}/close")
+    def close_form(session: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
+        agent = find_agent(web, identity_of(session))
+        return web.pages.page("close.html", {"agent": agent})
+
+    @router.post("/agent/{session}/close", response_model=None)
+    def close(session: str, post: Annotated[Posted, Depends(posting)]) -> Response:  # pyright: ignore[reportUnusedFunction]
+        return _close(web, identity_of(session), post)
+
+
+def _door_page(router: APIRouter, web: WebState) -> None:
     @router.get("/starting/{pane}", response_model=None)
     def starting(pane: str, first: str = "") -> Response:  # pyright: ignore[reportUnusedFunction]
         target = address_of(pane)
@@ -332,51 +318,49 @@ def _starting_routes(
         context = {**_door_context(target, agent), "first": first_note(first)}
         return web.pages.page("starting.html", context)
 
+
+def _door_writes(router: APIRouter, web: WebState, posting: Posting) -> None:
     @router.post("/starting/{pane}/prompt")
-    def first_prompt(  # pyright: ignore[reportUnusedFunction]
-        pane: str,
-        request: Request,
-        identity: Annotated[auth.Identity, Depends(guard)],
-        body: FormBody = b"",
-    ) -> HTMLResponse:
-        values = form(body)
+    def first_prompt(pane: str, post: Annotated[Posted, Depends(posting)]) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
+        values = post.values
         target = address_of(pane)
         text = values.get("text", "")
-        writer = writer_for(web, request, identity)
         result = send_first_prompt(
-            writer,
+            post.writer,
             target,
             text,
             drawn_against=values.get("screen", "").strip(),
             confirmed=ticked(values, "confirm"),
         )
-        return _door(web, target, text, result)
+        return _door(web, target, _Knock(result, text=text))
 
     @router.post("/starting/{pane}/keys")
-    def first_key(  # pyright: ignore[reportUnusedFunction]
-        pane: str,
-        request: Request,
-        identity: Annotated[auth.Identity, Depends(guard)],
-        body: FormBody = b"",
-    ) -> HTMLResponse:
-        values = form(body)
+    def first_key(pane: str, post: Annotated[Posted, Depends(posting)]) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
         target = address_of(pane)
-        key = values.get("key", "")
-        writer = writer_for(web, request, identity)
-        result = send_starting_key(writer, target, key, confirmed=ticked(values, "confirm"))
-        return _door(web, target, "", result, key=key.strip().lower())
+        key = post.values.get("key", "")
+        confirmed = ticked(post.values, "confirm")
+        result = send_starting_key(post.writer, target, key, confirmed=confirmed)
+        return _door(web, target, _Knock(result, key=key.strip().lower()))
 
 
 def _door_context(pane: PaneId, agent: Agent | None, text: str = "") -> dict[str, object]:
     return {"pane": pane, "agent": agent, "pad": DOOR_KEYS, "text": text}
 
 
-def _door(
-    web: WebState, pane: PaneId, text: str, result: PromptSent | KeySent | Refused, key: str = ""
-) -> HTMLResponse:
+@dataclass(frozen=True, slots=True)
+class _Knock:
+    """What a write at the door came to, with the prompt or key it carried, kept for a refusal."""
+
+    result: PromptSent | KeySent | Refused
+    text: str = ""
+    key: str = ""
+
+
+def _door(web: WebState, pane: PaneId, knock: _Knock) -> HTMLResponse:
     agent = web.client.snapshot().by_target(pane)
+    result = knock.result
     if isinstance(result, Refused):
         # Which form the refusal answers, so a held interrupt never arms the prompt's confirm.
-        context = {**_door_context(pane, agent, text), "key": key}
-        return refused(web.pages, "starting.html", context, result, whole=True)
+        context = {**_door_context(pane, agent, knock.text), "key": knock.key}
+        return refused(web.pages, Redraw("starting.html", context, whole=True), result)
     return web.pages.page("starting.html", {**_door_context(pane, agent), "sent": result})

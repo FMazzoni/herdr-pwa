@@ -175,16 +175,18 @@ def install(app: FastAPI, pages: Pages) -> None:
         app.add_exception_handler(kind, handle)
 
 
-def refused(
-    pages: Pages,
-    name: str,
-    context: Mapping[str, object],
-    result: Refused,
-    *,
-    whole: bool = False,
-) -> HTMLResponse:
+@dataclass(frozen=True, slots=True)
+class Redraw:
+    """The template a refused write is drawn back into, what it draws, and whether as a page."""
+
+    name: str
+    context: Mapping[str, object]
+    whole: bool = False
+
+
+def refused(pages: Pages, redraw: Redraw, result: Refused) -> HTMLResponse:
     """A write the library declined, at the status the write library's one table assigns."""
     log.info("write refused: %s %s", result.refusal.value, result.detail)
-    shown = {**context, "refused": result, "says": result.says}
-    render = pages.page if whole else pages.fragment
-    return render(name, shown, status=result.status)
+    shown = {**redraw.context, "refused": result, "says": result.says}
+    render = pages.page if redraw.whole else pages.fragment
+    return render(redraw.name, shown, status=result.status)
