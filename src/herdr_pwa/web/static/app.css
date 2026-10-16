@@ -107,9 +107,6 @@
      accessory pill. Fixed and tall, not --kb: --kb is 0 whenever iOS has panned the band to the
      layout viewport's bottom, and the pill then sits below that edge. */
   --keyboard-backdrop: 50lvh;
-  /* Where app.js lays the page's own backdrop under the pill, and how much page is left there. */
-  --pill-top: 0px;
-  --pill-room: 0px;
   --composer-grow: 5.5em;
   /* The narrowest the prompt field gets before the Send button moves under it. */
   --composer-min: 8em;
@@ -763,22 +760,33 @@ textarea { resize: vertical; min-height: 4.5em; }
 }
 /* After a downward scroll iOS leaves the band at the layout viewport's bottom, and the pill then
    sits below it, where a fixed box's overflow is not drawn (seen on iOS 26). There the
-   chat itself is under the pill, so the page carries the colour: a box in the document at the
-   layout viewport's bottom, cut at the page's end so the page never grows, and the canvas past
-   that end. */
-.pill-backdrop { display: none; }
-.is-keyboard .pill-backdrop {
-  display: block;
+   chat itself is under the pill, so the page carries the colour. Sticky, not placed by script: iOS
+   moves a sticky box with the viewport as it moves a fixed one, a fling's frames included, where a
+   script's placement trails by as long as the fling lasts. The rail spans the page, so the box
+   rides one dock's height below the viewport's bottom and, at the page's end, comes to rest in the
+   room the page keeps under the dock, behind the composer; it never makes the page taller. */
+.agent--docked { position: relative; }
+.pill-rail { display: none; }
+.is-keyboard .pill-rail {
   position: absolute;
-  left: 0;
-  right: 0;
-  top: var(--pill-top);
-  z-index: 1;
-  height: min(var(--keyboard-backdrop), var(--pill-room));
-  background: var(--surface);
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
   pointer-events: none;
 }
+.pill-rail__backdrop {
+  position: sticky;
+  bottom: calc(-1 * var(--dock-h));
+  z-index: 1;
+  height: var(--dock-h);
+  background: var(--surface);
+}
+/* Past the page's end iOS paints its under-page colour, which WebKit takes from <html>'s
+   background-color with <body>'s blended over it, so while the keyboard is up <body> paints its
+   ground as an image, which that colour ignores, and the composer's colour shows there. */
 html.is-keyboard { background: var(--surface); }
+.is-keyboard body { background: linear-gradient(var(--ground), var(--ground)); }
 /* Floats just above the dock, and above the keyboard with it, while a question waits below. */
 .jump {
   position: fixed;

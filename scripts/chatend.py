@@ -1217,48 +1217,84 @@ frames(2, () => {
 SWAP_TOPS = [0, 241.7, 413]
 # After a downward scroll iOS leaves the band at the layout viewport's bottom (offsetTop 413 in
 # device-report.jsonl), so the keyboard's pill sits below the layout viewport, where a fixed box's
-# overflow is not drawn: the page under it must be the composer's colour, the chat's rest as much
-# as the canvas past its end, without the page growing.
-PILL = r"""
+# overflow is not drawn: the page under it must carry the composer's colour. A fling moves the page
+# for many frames before a script hears of it, so this flings without visualViewport events and
+# looks, then lets one event through and looks again: nothing of the composer's colour may be
+# missing under the pill or lie over the chat above the composer, and the page may not grow. Past
+# the page's end iOS paints its under-page colour, which WebKit takes from <html>'s background with
+# <body>'s blended over it, so <body> must not paint an opaque colour of its own there.
+PILL_PX = 44
+FLING_STEPS = 5
+FLING_PX = 80
+FLING = r"""
+const [pill, steps, px] = arguments;
+const done = arguments[arguments.length - 1];
 const kb = window.__hpKb;
 const root = document.documentElement;
 const view = window.visualViewport;
-const rest = kb.top;
-const before = root.scrollHeight;
-kb.top = root.clientHeight - window.innerHeight;
-view.dispatchEvent(new Event("scroll"));
-const back = document.getElementById("pill-backdrop");
-const box = back ? back.getBoundingClientRect() : null;
-const seen = {
-  found: !!back,
-  top: box ? Math.round(box.top) : null,
-  height: box ? Math.round(box.height) : null,
-  band: window.innerHeight,
-  below: Math.round(before - scrollY - window.innerHeight),
-  grew: root.scrollHeight - before,
-  canvas: getComputedStyle(root).backgroundColor,
-  bar: getComputedStyle(document.getElementById("composer")).backgroundColor,
+const bar = document.getElementById("composer");
+const colour = getComputedStyle(bar).backgroundColor;
+const frames = (n, then) => (n ? requestAnimationFrame(() => frames(n - 1, then)) : then());
+const painted = () => [...document.querySelectorAll("body *")].filter((el) => {
+  if (el.closest("#composer, .topbar")) return false;
+  const style = getComputedStyle(el);
+  if (style.backgroundColor !== colour || style.display === "none") return false;
+  const box = el.getBoundingClientRect();
+  return box.height > 0 && box.left <= 1 && box.right >= innerWidth - 1;
+}).map((el) => el.getBoundingClientRect());
+const look = (when) => {
+  const band = window.innerHeight;
+  const boxes = painted();
+  let reach = band;
+  for (const box of boxes.slice().sort((a, b) => a.top - b.top)) {
+    if (box.top <= reach + 0.5 && box.bottom > reach) reach = box.bottom;
+  }
+  const floor = band - bar.offsetHeight - 1;
+  const over = boxes.filter((box) => box.top < floor).map((box) => Math.round(box.top));
+  return { when, band, reach: Math.round(reach), over };
 };
-kb.top = rest;
-view.dispatchEvent(new Event("scroll"));
-return seen;
+window.scrollBy(0, -(steps * px + 2 * innerHeight));
+frames(3, () => {
+  const before = root.scrollHeight;
+  kb.top = root.clientHeight - window.innerHeight;
+  view.dispatchEvent(new Event("scroll"));
+  const seen = [look("at rest")];
+  for (let i = 0; i < steps; i++) window.scrollBy(0, px);
+  seen.push(look("mid-fling, no event yet"));
+  view.dispatchEvent(new Event("scroll"));
+  seen.push(look("after the event"));
+  done({
+    seen: seen,
+    pill: pill,
+    grew: root.scrollHeight - before,
+    under: getComputedStyle(document.body).backgroundColor,
+    canvas: getComputedStyle(root).backgroundColor,
+    colour: colour,
+  });
+});
 """
 
 
 def _pill_problems(name: str, found: object) -> list[str]:
-    seen = found if isinstance(found, dict) else {}
+    fling = found if isinstance(found, dict) else {}
     problems: list[str] = []
-    if seen.get("canvas") != seen.get("bar"):
+    colour = fling.get("colour")
+    if fling.get("canvas") != colour:
+        problems.append(f"{name}: <html> is {fling.get('canvas')} under the pill, not {colour}")
+    if fling.get("under") not in (colour, "rgba(0, 0, 0, 0)"):
         problems.append(
-            f"{name}: past the page's end the pill shows {seen.get('canvas')}, not the composer's colour"
+            f"{name}: <body> paints {fling.get('under')}, which iOS blends over <html> past the "
+            "page's end"
         )
-    if not seen.get("found"):
-        return [*problems, f"{name}: nothing of the composer's colour lies under the pill"]
-    placed = abs(_num(seen, "top") - _num(seen, "band")) <= 1
-    if not placed or (_num(seen, "below") > 0 and not _num(seen, "height") > 0):
-        problems.append(f"{name}: the chat under the pill is not covered: {seen}")
-    if seen.get("grew") != 0:
-        problems.append(f"{name}: covering the pill grew the page by {seen.get('grew')}px")
+    if fling.get("grew") != 0:
+        problems.append(f"{name}: covering the pill grew the page by {fling.get('grew')}px")
+    seen = fling.get("seen")
+    for look in seen if isinstance(seen, list) else []:
+        at = look if isinstance(look, dict) else {}
+        if _num(at, "reach") - _num(at, "band") < _num(fling, "pill"):
+            problems.append(f"{name}: {at.get('when')}, chat shows under the pill: {at}")
+        if at.get("over"):
+            problems.append(f"{name}: {at.get('when')}, the backdrop lies over the chat: {at}")
     return problems
 
 
@@ -1293,10 +1329,9 @@ def keyboard_up(driver: Marionette, base: str, tab: Tab, rig: Rig, home: Path) -
     newest = tab.grow(rig, home, n)
     if not _until(lambda: _poked(driver, newest)) or not _wait_for(driver, newest):
         return [f"{tab.name}: the redraw after the reader stopped never landed"]
-    problems = _pill_problems(tab.name, driver.script(PILL))
     found = driver.script(READ_KEYBOARD)
     kb = found if isinstance(found, dict) else {}
-    problems += pans + _walk_problems(tab.name, _walked(driver), STEP * KEYBOARD_STEPS)
+    problems = pans + _walk_problems(tab.name, _walked(driver), STEP * KEYBOARD_STEPS)
     if _num(kb, "pans") <= 1:
         problems.append(f"{tab.name}: the band never moved")
     if kb.get("wrong"):
@@ -1306,7 +1341,8 @@ def keyboard_up(driver: Marionette, base: str, tab: Tab, rig: Rig, home: Path) -
         )
     if kb.get("shut"):
         problems.append(f"{tab.name}: the keyboard read as closed at band offsets {kb['shut'][:4]}")
-    return problems
+    fling = driver.script_async(FLING, PILL_PX, FLING_STEPS, FLING_PX)
+    return problems + _pill_problems(tab.name, fling)
 
 
 def _scroll_pane(rig: Rig, _home: Path, n: int) -> str:
