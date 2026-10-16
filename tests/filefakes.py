@@ -102,10 +102,10 @@ MINIFIED: Final = (
 )
 
 
-def git(repo: Path, *args: str) -> None:
-    """Run one git command in ``repo``, failing the test if it fails."""
+def git(repo: Path, *args: str) -> bytes:
+    """Run one git command in ``repo`` and return its output, failing the test if it fails."""
     command = ["git", "-C", str(repo), *args]
-    subprocess.run(command, check=True, capture_output=True)  # noqa: S603
+    return subprocess.run(command, check=True, capture_output=True).stdout  # noqa: S603
 
 
 def _write(repo: Path, rel: str, body: str | bytes) -> None:
