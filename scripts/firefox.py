@@ -25,6 +25,9 @@ PREFS = {
     # Phones draw overlay scrollbars, so a classic one must not eat the measured width.
     "ui.useOverlayScrollbars": "1",
     "dom.disable_open_during_load": "false",
+    # Under 5% or 200MB free, Firefox's watcher sends memory-pressure, which empties the bfcache.
+    "browser.low_commit_space_threshold_percent": "0",
+    "browser.low_commit_space_threshold_mb": "0",
 }
 
 

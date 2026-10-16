@@ -480,18 +480,23 @@ def test_a_timeout_destroys_the_connection(sock_path: Path, request: pytest.Fixt
 
 def test_an_exhausted_budget_times_out_before_dialling(sock_path: Path) -> None:
     """A zero timeout must not become an unbounded connect -- and must not leak."""
-    wire = transport(sock_path, timeout=0.0)
-    with pytest.raises(EngineTimeout):
-        wire.call("session.snapshot", {})
+    opened: list[socket.socket] = []
 
-    before = open_fds()
+    # Only its own descriptors: other tests' threads close theirs in this process meanwhile.
+    class Counted(SocketTransport):
+        def _new_socket(self) -> socket.socket:
+            opened.append(super()._new_socket())
+            return opened[-1]
+
+    wire = Counted(sock_path, timeout=0.0)
     retained: list[EngineTimeout] = []  # what logging.exception would hold
-    for _ in range(50):
+    for _ in range(51):
         with pytest.raises(EngineTimeout) as caught:
             wire.call("session.snapshot", {})
         retained.append(caught.value)
-    assert open_fds() == before
-    assert len(retained) == 50  # the tracebacks are still alive at this point
+    assert [s for s in opened if s.fileno() != -1] == [], "a timed-out call kept its socket open"
+    assert opened == [], f"{len(opened)} sockets made for calls with no budget to dial"
+    assert len(retained) == 51  # the tracebacks are still alive at this point
 
 
 def test_every_wait_in_a_call_is_armed_from_its_one_deadline(
