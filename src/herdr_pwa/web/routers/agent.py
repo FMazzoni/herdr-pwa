@@ -72,12 +72,15 @@ def read_chat(
 def _turning(web: WebState, agent: Agent) -> Turning:
     """The turn as the agent's status, its card and its tally tell it, beside the log."""
     status = agent_status(web, agent)
+    usage = _usage(web, agent)
+    # The prompt's stamp names the turn, so answering a question mid-turn keeps its verb; with
+    # no tally, herdr's sequence, which it bumps on every status change, names the stretch.
+    turn = usage.turn_started or str(agent.state_change_seq)
     return Turning(
         status=status,
-        # herdr bumps the sequence on every status change, so it names one working stretch.
-        stretch=f"{agent.session}:{agent.state_change_seq}",
+        stretch=f"{agent.session}:{turn}",
         asked=asked_by(web, agent) if needs_you(status) else "",
-        times=turn_times(_usage(web, agent), web.wall()),
+        times=turn_times(usage, web.wall()),
     )
 
 

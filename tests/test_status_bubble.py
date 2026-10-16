@@ -2,7 +2,7 @@
 
 import asyncio
 import re
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import cast
 
@@ -160,12 +160,13 @@ def test_a_failed_call_is_not_still_running() -> None:
 
 
 def test_past_the_threshold_with_nothing_new_it_says_how_long_it_has_been_quiet() -> None:
-    view = _working(ASKED, _tool("Bash", "pytest"), quiet=QUIET_AFTER + 95)
+    done = _tool("Bash", "pytest", result="ok")
+    view = _working(ASKED, done, quiet=QUIET_AFTER + 95)
     assert view.bubble is not None
     assert view.bubble.state == "quiet"
     assert view.bubble.text == "No activity for 3m"
     assert view.bubble.said == "No activity for 3 minutes"
-    fresh = _working(ASKED, _tool("Bash", "pytest"), quiet=QUIET_AFTER - 1)
+    fresh = _working(ASKED, done, quiet=QUIET_AFTER - 1)
     assert fresh.bubble is not None
     assert fresh.bubble.state == "working"
     assert fresh.bubble.quiet == QUIET_AFTER - 1
@@ -260,18 +261,22 @@ def _bubble(body: str) -> str:
     return found.group(0)
 
 
-def test_the_route_draws_the_running_tool_its_timer_and_its_quiet_clock(tmp_path: Path) -> None:
+def test_the_route_draws_the_running_tool_and_its_timer(tmp_path: Path) -> None:
     bubble = _bubble(_chat(tmp_path, "tool", "working"))
     assert 'data-hp-bubble="working"' in bubble
     assert ">Running pytest -q tests/test_chat_fold.py<" in bubble
     assert re.search(r'class="bubble__time" aria-hidden="true">2m 3\ds<', bubble)
     assert re.search(r'data-hp-ran="15\d"', bubble)
-    assert re.search(r'data-hp-quiet="(19|2\d)"', bubble)
-    assert f'data-hp-quiet-after="{QUIET_AFTER}"' in bubble
     assert f'data-working-palette="{WORKING_PALETTE}"' in bubble
     assert '<span class="bubble__text" aria-hidden="true">' in bubble
     assert '<span class="sr-only">Working: Running pytest' in bubble
     assert 'data-hp-said="Working"' in bubble
+
+
+def test_the_route_draws_how_long_a_thinking_turn_has_been_still(tmp_path: Path) -> None:
+    bubble = _bubble(_chat(tmp_path, "thinking", "working"))
+    assert re.search(r'data-hp-quiet="(19|2\d)"', bubble)
+    assert f'data-hp-quiet-after="{QUIET_AFTER}"' in bubble
 
 
 def test_the_route_draws_a_quiet_turn_still(tmp_path: Path) -> None:
@@ -323,3 +328,45 @@ def test_a_status_change_with_no_new_line_is_stale_for_the_chat(tmp_path: Path) 
         return heard
 
     assert asyncio.run(scenario()) == {topic}
+
+
+def test_a_tool_still_open_is_working_however_long_it_runs() -> None:
+    """A ten-minute test run writes nothing until it ends; that is not the agent being stuck."""
+    view = _working(ASKED, _tool("Bash", "just check"), quiet=300)
+    assert view.bubble is not None
+    assert view.bubble.state == "working"
+    assert view.bubble.text == "Running just check"
+    # No quiet clock, so the page never flips it to quiet either.
+    assert view.bubble.quiet is None
+
+
+def test_the_route_keeps_an_open_tool_working_past_the_threshold(tmp_path: Path) -> None:
+    records = turn_chat("tool")
+    for record in records:
+        stamp = datetime.fromisoformat(str(record["timestamp"]).replace("Z", "+00:00"))
+        record["timestamp"] = (stamp - timedelta(minutes=5)).isoformat()
+    write_transcript(tmp_path / "transcripts", WORKING_SESSION, records)
+    rig = build_rig(tmp_path, {SNAPSHOT: _status("working")})
+    bubble = _bubble(rig.http.get(f"/agent/{WORKING_SESSION}/chat", headers=FRAGMENT).text)
+    assert 'data-hp-bubble="working"' in bubble
+    assert "data-hp-quiet=" not in bubble.replace("data-hp-quiet-after", "")
+
+
+def _verb_at_seq(tmp_path: Path, seq: int) -> str:
+    frame = _status("working")
+    for agent in agents_of(frame):
+        agent["state_change_seq"] = seq
+    rig = build_rig(tmp_path, {SNAPSHOT: frame})
+    body = rig.http.get(f"/agent/{WORKING_SESSION}/chat", headers=FRAGMENT).text
+    found = re.search(r'class="bubble__text" aria-hidden="true">(\w+)…<', body)
+    assert found is not None, body[-1500:]
+    return found.group(1)
+
+
+def test_the_verb_is_the_turns_and_survives_a_question_answered_mid_turn(tmp_path: Path) -> None:
+    """Answering a question bumps herdr's sequence; the turn, and so its verb, is the same."""
+    records = turn_chat("thinking")
+    for name in ("a", *(f"s{seq}" for seq in range(8, 20))):
+        write_transcript(tmp_path / name / "transcripts", WORKING_SESSION, records)
+    first = _verb_at_seq(tmp_path / "a", 7)
+    assert {_verb_at_seq(tmp_path / f"s{seq}", seq) for seq in range(8, 20)} == {first}

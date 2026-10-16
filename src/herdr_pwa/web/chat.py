@@ -266,8 +266,8 @@ def _carrying(notice: TranscriptTurn, reports: list[TranscriptTurn]) -> Transcri
 
 @dataclass(frozen=True, slots=True)
 class Turning:
-    """What the router knows of the turn beside its log: the agent's status, the stretch it is
-    working in (herdr's sequence), what its card says it is asking, and the turn's clock."""
+    """What the router knows of the turn beside its log: the agent's status, the turn it is on
+    (which names its verb), what its card says it is asking, and the turn's clock."""
 
     status: AgentStatus = AgentStatus.UNKNOWN
     stretch: str = ""
@@ -378,18 +378,20 @@ def _working(items: tuple[ChatTurn | ToolRun, ...], turning: Turning) -> Bubble:
     times = turning.times
     ran = _whole(times.ran)
     time = elapsed(ran) if ran is not None else ""
+    call = _running(items)
+    # A call still open is the agent at work however long it runs (a test run writes nothing
+    # until it ends), so it carries no quiet clock and never reads as gone quiet.
+    if call is not None:
+        text = doing(call)
+        return Bubble("working", text, "Working", f"Working: {text}", turning.stretch, ran, time)
     if gone_quiet(times.quiet):
         quiet = int(times.quiet or 0)
         text = f"No activity for {elapsed(quiet // 60 * 60)}"
         said = f"No activity for {duration_said(quiet)}"
-        return Bubble("quiet", text, said, said, turning.stretch, quiet=quiet, ran=ran, time=time)
-    call = _running(items)
-    text = doing(call) if call is not None else f"{turn_verb(turning.stretch)}\u2026"
-    describe = f"Working: {text}" if call is not None else "Working"
+        return Bubble("quiet", text, said, said, turning.stretch, ran, time, quiet)
+    text = f"{turn_verb(turning.stretch)}\u2026"
     quiet = _whole(times.quiet)
-    return Bubble(
-        "working", text, "Working", describe, turning.stretch, quiet=quiet, ran=ran, time=time
-    )
+    return Bubble("working", text, "Working", "Working", turning.stretch, ran, time, quiet)
 
 
 def _blocked(turning: Turning) -> Bubble:
