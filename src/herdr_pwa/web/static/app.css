@@ -198,6 +198,8 @@ html { -webkit-tap-highlight-color: transparent; }
 
 .feed-host, .agent { padding: var(--space-6) var(--gutter-right) calc(env(safe-area-inset-bottom) + var(--space-10)) var(--gutter-left); max-width: var(--page-max); margin: 0 auto; }
 .boot, .empty { color: var(--ink-3); font-size: var(--text-meta); text-align: center; padding: var(--space-10) var(--space-4); }
+/* The catching-up note sits at the bottom of the log, where the waiting eye is. */
+.chat__note { color: var(--ink-3); font-size: var(--text-meta); text-align: center; padding: var(--space-6) var(--space-4); }
 
 /* Freshness: everything but live dims the claim the cards make. */
 .feed.is-stale .cards { opacity: 0.55; }

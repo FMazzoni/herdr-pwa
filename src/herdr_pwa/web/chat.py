@@ -81,6 +81,8 @@ class ChatView:
     start: int = 0
     log: str = ""
     more: bool = False
+    # The agent is working, so the turn it is producing now lands here when it is done.
+    catching_up: bool = False
 
 
 def fold_tools(turns: tuple[ChatTurn, ...]) -> tuple[ChatTurn | ToolRun, ...]:
@@ -205,8 +207,20 @@ def _carrying(notice: TranscriptTurn, reports: list[TranscriptTurn]) -> Transcri
     return notice.model_copy(update={"result": text, "result_truncated": cut})
 
 
-def chat_view(page: TranscriptPage) -> ChatView:
-    """The Chat tab's content for one transcript page."""
+def chat_view(page: TranscriptPage, *, working: bool = False) -> ChatView:
+    """The Chat tab's content for one transcript page.
+
+    *working* is the agent's own status, not a guess from the page: turns land
+    at message boundaries, so while the agent works whatever it is saying now
+    is not in the log yet, and the tab says so instead of looking complete.
+    """
     turns = tuple(_turn(t) for t in joined(tuple(page.turns)))
     note = "" if turns else _STATE_NOTES.get(page.state, "Nothing has been said yet.")
-    return ChatView(fold_tools(turns), note, start=page.cursor, log=page.log, more=page.has_more)
+    return ChatView(
+        fold_tools(turns),
+        note,
+        start=page.cursor,
+        log=page.log,
+        more=page.has_more,
+        catching_up=working,
+    )

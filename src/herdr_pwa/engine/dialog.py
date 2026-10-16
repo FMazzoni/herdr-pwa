@@ -610,18 +610,10 @@ class BlockedPrompt(BaseModel):
     ) -> Self:
         """Split detection output into a question and any numbered options.
 
-        *ansi* is the same pane read with its escapes intact, when the caller
-        has it: some harnesses draw the cursor only as colour, and the
-        no-cursor gate may then be satisfied by the ANSI instead of a glyph.
-        Without it the gate is glyph-only, exactly as it has always been.
+        *ansi* is the same pane read with escapes intact, when the caller has
+        it: the no-cursor gate may then be satisfied by colour, not a glyph.
         """
-        barred = [bool(_EDGE_RE.match(line)) for line in text.splitlines()]
-        lines = [_EDGE_RE.sub(r"\1", line) for line in text.splitlines()]
-        # A drawn panel is the screen; `text` follows it so `raw` is still what was read.
-        # Its rows lost their sides here, so the border no longer marks any of them.
-        if (panel := _panel_screen(lines)) is not None:
-            lines, text = panel, "\n".join(panel)
-            barred = [False] * len(lines)
+        lines, barred, text = _prepared(text)
         found = _trailing_menu(lines)
         hints = _hints(_footer_lines(lines))
         buttons, buttons_at = _buttons(lines, barred, hints)
@@ -647,6 +639,19 @@ class BlockedPrompt(BaseModel):
         if ansi and parsed.options:
             return located(parsed, ansi)
         return parsed
+
+
+def _prepared(text: str) -> tuple[list[str], list[bool], str]:
+    """The screen as the grammar reads it: bars stripped, and where they were.
+
+    A drawn panel is the screen; its rows lost their sides here, so the border
+    no longer marks any of them.
+    """
+    barred = [bool(_EDGE_RE.match(line)) for line in text.splitlines()]
+    lines = [_EDGE_RE.sub(r"\1", line) for line in text.splitlines()]
+    if (panel := _panel_screen(lines)) is not None:
+        return panel, [False] * len(panel), "\n".join(panel)
+    return lines, barred, text
 
 
 def _trusted(

@@ -94,6 +94,16 @@ def _fetched(cursor: sqlite3.Cursor) -> list[_Row]:
     return cast(list[_Row], cursor.fetchall())
 
 
+class _LockedError(Exception):
+    """The store is being written and would not answer inside the busy wait."""
+
+
+def _locked(exc: sqlite3.Error) -> bool:
+    """Is this failure the writer holding the store, not a broken one?"""
+    text = str(exc).lower()
+    return "locked" in text or "busy" in text
+
+
 class _Db:
     """The store, opened read-only and never locked."""
 
@@ -117,7 +127,13 @@ class _Db:
                     "select 1 from sessions where id = ? limit 1", (session,)
                 ).fetchone(),
             )
-        except (sqlite3.Error, OSError, ValueError):
+        except ValueError:
+            return None
+        except OSError:
+            return None
+        except sqlite3.Error as exc:
+            if _locked(exc):
+                raise _LockedError from exc
             return None
         if held is None:
             connection.close()
@@ -138,7 +154,9 @@ class _Db:
         sql = f"select {columns} from messages where session_id = ? and id in ({holes})"  # noqa: S608
         try:
             found = _fetched(self._db.execute(sql, (self._session, *ids)))
-        except sqlite3.Error:
+        except sqlite3.Error as exc:
+            if _locked(exc):
+                raise _LockedError from exc
             return {}
         return {_as_int(row[0]): row for row in found}
 
@@ -167,7 +185,9 @@ class _Db:
         """One parameterised read, or an empty result when the store refuses."""
         try:
             return _fetched(self._db.execute(sql, (self._session,)))
-        except sqlite3.Error:
+        except sqlite3.Error as exc:
+            if _locked(exc):
+                raise _LockedError from exc
             return []
 
 
@@ -374,12 +394,16 @@ class HermesAdapter(TranscriptAdapter):
     ) -> TranscriptPage:
         """Up to *limit* turns, or *messages* messages, ending at *before*, oldest first."""
         # `expect` is ignored: one file holds every session, so it cannot move under a cursor.
-        db = _open(roots, session)
-        if db is None:
-            return TranscriptPage(state=HistoryState.absent)
-        with closing(db):
-            gather = Gather(limit, messages)
-            return _page(db, gather=gather, before=before, max_bytes=max_bytes)
+        try:
+            db = _open(roots, session)
+            if db is None:
+                return TranscriptPage(state=HistoryState.absent)
+            with closing(db):
+                gather = Gather(limit, messages)
+                return _page(db, gather=gather, before=before, max_bytes=max_bytes)
+        except _LockedError:
+            # The writer holds the store; the page says so rather than looking empty.
+            return TranscriptPage(state=HistoryState.unreadable)
 
     @override
     def since(
@@ -393,11 +417,14 @@ class HermesAdapter(TranscriptAdapter):
         expect: str = "",
     ) -> TranscriptPage:
         """Whatever the store has grown past frontier *after*, oldest first."""
-        db = _open(roots, session)
-        if db is None:
-            return TranscriptPage(state=HistoryState.absent)
-        with closing(db):
-            return _since(db, after=after, limit=limit, max_bytes=max_bytes)
+        try:
+            db = _open(roots, session)
+            if db is None:
+                return TranscriptPage(state=HistoryState.absent)
+            with closing(db):
+                return _since(db, after=after, limit=limit, max_bytes=max_bytes)
+        except _LockedError:
+            return TranscriptPage(state=HistoryState.unreadable)
 
     def info(self, session: str, *, roots: Sequence[Path] = ()) -> tuple[str, str]:
         """``(title, model)`` off *session*'s own row. Never raises."""
@@ -413,8 +440,11 @@ class HermesAdapter(TranscriptAdapter):
         self, session: str, *, roots: Sequence[Path], max_bytes: int = MAX_USAGE_BYTES
     ) -> SessionUsage:
         """What this session has spent. Hermes records no money, so cost stays 0."""
-        db = _open(roots, session)
-        if db is None:
-            return SessionUsage(state=HistoryState.absent)
-        with closing(db):
-            return _tally(db)
+        try:
+            db = _open(roots, session)
+            if db is None:
+                return SessionUsage(state=HistoryState.absent)
+            with closing(db):
+                return _tally(db)
+        except _LockedError:
+            return SessionUsage(state=HistoryState.unreadable)

@@ -351,28 +351,9 @@ class HerdrClient:
         target = as_pane_id(target)
         lines = self.settings.read_lines if lines is None else lines
         where = self._read_source(self.settings.read_source if source is None else source)
-        if where is wire_request.ReadSource.recent and lines > (self.settings.recent_max_lines):
-            # Not only cost: past the viewport this scrolls the operator's own pane.
-            log.warning(
-                "read(%s, source=%s, lines=%d) would scroll the agent's pane for "
-                "~%.1fs; capping to %d lines -- use the visible source",
-                target,
-                where,
-                lines,
-                lines * SECONDS_PER_RECENT_LINE,
-                self.settings.recent_max_lines,
-            )
-            lines = self.settings.recent_max_lines
         payload = self._call(
             wire_request.AgentReadRequest,
-            wire_request.AgentReadParams(
-                target=target,
-                lines=lines,
-                source=where,
-                format=(wire_request.ReadFormat.ansi if colour else wire_request.ReadFormat.text),
-                # Explicit because the schema default is True, which would sanitise the colour away.
-                strip_ansi=not colour,
-            ),
+            self._read_params(target, where, lines, colour),
             timeout=timeout,
         )
         _, raw = self._result(
@@ -385,6 +366,31 @@ class HerdrClient:
         if not isinstance(text, str):
             raise InvalidResponse("the runner answered a read with no terminal text")
         return text
+
+    def _read_params(
+        self, target: PaneId, where: "wire_request.ReadSource", lines: int, colour: bool
+    ) -> "wire_request.AgentReadParams":
+        """The read's parameters, with the lines a recent read would scroll capped off."""
+        if where is wire_request.ReadSource.recent and lines > (self.settings.recent_max_lines):
+            # Not only cost: past the viewport this scrolls the operator's own pane.
+            log.warning(
+                "read(%s, source=%s, lines=%d) would scroll the agent's pane for "
+                "~%.1fs; capping to %d lines -- use the visible source",
+                target,
+                where,
+                lines,
+                lines * SECONDS_PER_RECENT_LINE,
+                self.settings.recent_max_lines,
+            )
+            lines = self.settings.recent_max_lines
+        return wire_request.AgentReadParams(
+            target=target,
+            lines=lines,
+            source=where,
+            format=(wire_request.ReadFormat.ansi if colour else wire_request.ReadFormat.text),
+            # Explicit because the schema default is True, which would sanitise the colour away.
+            strip_ansi=not colour,
+        )
 
     @staticmethod
     def _read_source(source: str) -> "wire_request.ReadSource":

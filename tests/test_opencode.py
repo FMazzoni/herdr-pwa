@@ -580,3 +580,31 @@ def test_a_row_whose_blob_is_rubbish_stops_the_forward_frontier(
     build(tmp_path / OPENCODE_DB, rows)
     got = OpencodeAdapter().since(PROBE, roots=[tmp_path], after=0, limit=100)
     assert got.end < got.size
+
+
+def test_a_locked_store_reads_as_unreadable_not_empty(database: Path) -> None:
+    """A writer holding the store must not read as "nothing said yet"."""
+    path = database / OPENCODE_DB
+    holder = sqlite3.connect(path)
+    # An exclusive transaction blocks every other connection, readers included.
+    holder.execute("begin exclusive")
+    try:
+        page = history(PROBE, agent_kind="opencode", root=database)
+        assert page.state is HistoryState.unreadable
+        assert not page.turns
+        assert usage(PROBE, agent_kind="opencode", root=database).state is HistoryState.unreadable
+    finally:
+        holder.rollback()
+        holder.close()
+
+
+def test_a_locked_store_reads_fine_once_the_writer_is_gone(database: Path) -> None:
+    """The lock is momentary; the next read is the honest page, not a stale refusal."""
+    holder = sqlite3.connect(database / OPENCODE_DB)
+    holder.execute("begin exclusive")
+    try:
+        assert history(PROBE, agent_kind="opencode", root=database).state is HistoryState.unreadable
+    finally:
+        holder.rollback()
+        holder.close()
+    assert history(PROBE, agent_kind="opencode", root=database).state is HistoryState.ok

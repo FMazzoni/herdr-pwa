@@ -5,14 +5,20 @@ from pathlib import Path
 import pytest
 
 from herdr_pwa.engine import (
+    AgentStatus,
     EngineError,
     EngineMisconfigured,
     EngineTimeout,
     EngineUnavailable,
+    HistoryState,
     InvalidResponse,
     ProtocolMismatch,
+    Speaker,
+    TranscriptPage,
+    TranscriptTurn,
 )
 from herdr_pwa.jsontypes import JsonObject
+from herdr_pwa.web.chat import chat_view
 from herdr_pwa.web.security import CSP
 from tests.webfakes import (
     IDLE_SESSION,
@@ -355,3 +361,35 @@ def test_the_view_switch_lives_in_the_top_bar_and_the_title_scrolls(tmp_path: Pa
     main = page[page.index("<main ") :]
     assert main.index('<h1 class="agent__title">') < main.index('class="agent__meta')
     assert "<h1" not in bar
+
+
+# The Chat tab's catching-up note: the agent's status alone decides it, so it
+# cannot flicker between polls, and a locked store never reads as "nothing said".
+
+NOTE = "It is talking; what it says lands here when the turn is done."
+
+
+def test_the_chat_says_it_is_catching_up_while_the_agent_works(tmp_path: Path) -> None:
+    rig = build_rig(tmp_path)
+    body = rig.http.get(f"/agent/{WORKING_SESSION}/chat").text
+    assert NOTE in body
+
+
+def test_the_catching_up_note_is_gone_when_the_agent_stops(tmp_path: Path) -> None:
+    frame = snapshot_frame()
+    for agent in agents_of(frame):
+        agent["agent_status"] = "done"
+    rig = build_rig(tmp_path, {SNAPSHOT: frame})
+    body = rig.http.get(f"/agent/{WORKING_SESSION}/chat").text
+    assert NOTE not in body
+
+
+def test_the_catching_up_note_is_a_function_of_the_status_alone() -> None:
+    """No clock, no age, no pane read: the same page renders the same note for a status."""
+    page = TranscriptPage(
+        turns=[TranscriptTurn(uuid="t1", speaker=Speaker.human, text="hi", ts="")],
+        state=HistoryState.ok,
+    )
+    for status in AgentStatus:
+        view = chat_view(page, working=status is AgentStatus.WORKING)
+        assert view.catching_up is (status is AgentStatus.WORKING), status

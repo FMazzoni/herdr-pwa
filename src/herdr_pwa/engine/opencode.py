@@ -42,6 +42,17 @@ OPENCODE_STORAGE_ROOT: Final = f"{OPENCODE_ROOT}/storage"
 
 _BUSY_SECONDS: Final = 0.25
 
+
+class _LockedError(Exception):
+    """The store is being written and would not answer inside the busy wait."""
+
+
+def _locked(exc: sqlite3.Error) -> bool:
+    """Is this failure the writer holding the store, not a broken one?"""
+    text = str(exc).lower()
+    return "locked" in text or "busy" in text
+
+
 _ID: Final = re.compile(r"^(?:ses|msg|prt)_[A-Za-z0-9]+$")
 
 _TOOL_INPUT_KEYS: Final = (
@@ -231,7 +242,13 @@ class _Db:
                     "select 1 from session where id = ? limit 1", (session,)
                 ).fetchone(),
             )
-        except (sqlite3.Error, OSError, ValueError):
+        except ValueError:
+            return None
+        except OSError:
+            return None
+        except sqlite3.Error as exc:
+            if _locked(exc):
+                raise _LockedError from exc
             return None
         if held is None:
             connection.close()
@@ -297,7 +314,11 @@ class _Db:
         try:
             with closing(self._db.execute(sql, (self._session,))) as rows:
                 return cast(list[_Row], rows.fetchall())
-        except (sqlite3.Error, OSError):
+        except sqlite3.Error as exc:
+            if _locked(exc):
+                raise _LockedError from exc
+            return []
+        except OSError:
             return []
 
     def _row(self, table: str, key: str) -> tuple[JsonObject | None, int]:
@@ -308,7 +329,11 @@ class _Db:
         try:
             with closing(self._db.execute(sql, (key, self._session))) as rows:
                 found = cast(_Row | None, rows.fetchone())
-        except (sqlite3.Error, OSError):
+        except sqlite3.Error as exc:
+            if _locked(exc):
+                raise _LockedError from exc
+            return None, 0
+        except OSError:
             return None, 0
         if found is None:
             return None, 0
@@ -626,12 +651,16 @@ class OpencodeAdapter(TranscriptAdapter):
     ) -> TranscriptPage:
         """Up to *limit* turns, or *messages* messages, ending at *before*, oldest first."""
         # `expect` is ignored: one directory per session cannot move under a cursor.
-        store = _open(roots, session)
-        if store is None:
-            return TranscriptPage(state=HistoryState.absent)
-        with closing(store):
-            gather = Gather(limit, messages)
-            return _page(store, gather=gather, before=before, max_bytes=max_bytes)
+        try:
+            store = _open(roots, session)
+            if store is None:
+                return TranscriptPage(state=HistoryState.absent)
+            with closing(store):
+                gather = Gather(limit, messages)
+                return _page(store, gather=gather, before=before, max_bytes=max_bytes)
+        except _LockedError:
+            # The writer holds the store; the page says so rather than looking empty.
+            return TranscriptPage(state=HistoryState.unreadable)
 
     @override
     def since(
@@ -646,11 +675,14 @@ class OpencodeAdapter(TranscriptAdapter):
     ) -> TranscriptPage:
         """Whatever the store has grown past frontier *after*, oldest first."""
         # `expect` is ignored: one directory per session cannot move under a cursor.
-        store = _open(roots, session)
-        if store is None:
-            return TranscriptPage(state=HistoryState.absent)
-        with closing(store):
-            return _since(store, after=after, limit=limit, max_bytes=max_bytes)
+        try:
+            store = _open(roots, session)
+            if store is None:
+                return TranscriptPage(state=HistoryState.absent)
+            with closing(store):
+                return _since(store, after=after, limit=limit, max_bytes=max_bytes)
+        except _LockedError:
+            return TranscriptPage(state=HistoryState.unreadable)
 
     @override
     def tally(
@@ -661,11 +693,14 @@ class OpencodeAdapter(TranscriptAdapter):
         max_bytes: int = MAX_USAGE_BYTES,
     ) -> SessionUsage:
         """What *session* has spent so far, across its message records."""
-        store = _open(roots, session)
-        if store is None:
-            return SessionUsage(state=HistoryState.absent)
-        with closing(store):
-            return _tally(store, max_bytes=max_bytes)
+        try:
+            store = _open(roots, session)
+            if store is None:
+                return SessionUsage(state=HistoryState.absent)
+            with closing(store):
+                return _tally(store, max_bytes=max_bytes)
+        except _LockedError:
+            return SessionUsage(state=HistoryState.unreadable)
 
     def info(self, session: str, *, roots: Sequence[Path] = ()) -> SessionInfo:
         """What *session*'s own record calls it and what it is set to. Never raises."""
