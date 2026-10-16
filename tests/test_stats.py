@@ -10,6 +10,7 @@ from pydantic import JsonValue, TypeAdapter
 
 from herdr_pwa.engine import HistoryState, ModelRef, SessionUsage, Source, UsageCache
 from herdr_pwa.web.stats import (
+    Reading,
     Stats,
     duration,
     duration_said,
@@ -64,7 +65,7 @@ def labels(stats: Stats) -> dict[str, str]:
 def test_an_unknown_model_has_no_window_so_no_percent() -> None:
     assert window_of("moonshotai/Kimi-K2.5") == 0
     assert window_of("claude-opus-5") == 0
-    stats = stats_for("claude", "idle", tally("claude-opus-5"), now=NOW)
+    stats = stats_for(Reading("claude", "idle", tally("claude-opus-5"), NOW))
     assert stats.percent is None
     assert stats.context == "50k ctx"
     assert labels(stats)["Context"] == "50k used; this model's window is not known"
@@ -73,7 +74,7 @@ def test_an_unknown_model_has_no_window_so_no_percent() -> None:
 
 
 def test_a_known_model_shows_a_percent_and_a_meter() -> None:
-    stats = stats_for("claude", "idle", tally(), now=NOW)
+    stats = stats_for(Reading("claude", "idle", tally(), NOW))
     assert stats.percent == 25
     assert stats.meter == 3
     assert stats.context == "25%"
@@ -83,7 +84,7 @@ def test_a_known_model_shows_a_percent_and_a_meter() -> None:
 
 def test_a_prompt_larger_than_the_listed_window_says_tokens_not_a_percent() -> None:
     """The session runs a larger window than the table knows, so a percent would be false."""
-    stats = stats_for("claude", "idle", tally(context_tokens=420_000), now=NOW)
+    stats = stats_for(Reading("claude", "idle", tally(context_tokens=420_000), NOW))
     assert stats.percent is None
     assert stats.context == "420k ctx"
 
@@ -92,14 +93,14 @@ def test_a_prompt_larger_than_the_listed_window_says_tokens_not_a_percent() -> N
 
 
 def test_claude_records_no_money_so_no_cost_is_shown() -> None:
-    stats = stats_for("claude", "idle", tally(cost=3.5), now=NOW)
+    stats = stats_for(Reading("claude", "idle", tally(cost=3.5), NOW))
     assert "Cost" not in labels(stats)
     assert stats.spend == "38k out"
     assert "$" not in stats.sentence
 
 
 def test_opencode_shows_the_money_it_recorded() -> None:
-    stats = stats_for("opencode", "idle", tally("x/Kimi-K2.5", cost=0.42), now=NOW)
+    stats = stats_for(Reading("opencode", "idle", tally("x/Kimi-K2.5", cost=0.42), NOW))
     assert stats.spend == "$0.42"
     assert labels(stats)["Cost"] == "$0.42"
     assert "spent $0.42" in stats.sentence
@@ -107,13 +108,13 @@ def test_opencode_shows_the_money_it_recorded() -> None:
 
 def test_a_harness_that_recorded_no_cost_shows_none_never_zero() -> None:
     for kind in ("opencode", "hermes"):
-        stats = stats_for(kind, "idle", tally("a-model", cost=0.0), now=NOW)
+        stats = stats_for(Reading(kind, "idle", tally("a-model", cost=0.0), NOW))
         assert "Cost" not in labels(stats), kind
         assert "$" not in stats.spend, kind
 
 
 def test_hermes_stores_no_context_so_none_is_shown() -> None:
-    stats = stats_for("hermes", "idle", tally("a-model", context_tokens=9000), now=NOW)
+    stats = stats_for(Reading("hermes", "idle", tally("a-model", context_tokens=9000), NOW))
     assert stats.context == ""
     assert "Context" not in labels(stats)
     assert "context" not in stats.sentence
@@ -123,7 +124,7 @@ def test_hermes_stores_no_context_so_none_is_shown() -> None:
 
 
 def test_a_running_turn_is_timed_from_the_newest_prompt() -> None:
-    stats = stats_for("claude", "working", tally(), now=NOW)
+    stats = stats_for(Reading("claude", "working", tally(), NOW))
     assert stats.turn == "4m"
     assert stats.sentence == (
         "Haiku 4.5, context 25 percent used, turn running 4 minutes, 38 thousand output tokens"
@@ -131,19 +132,19 @@ def test_a_running_turn_is_timed_from_the_newest_prompt() -> None:
 
 
 def test_a_turn_is_timed_only_while_one_is_running() -> None:
-    assert stats_for("claude", "idle", tally(), now=NOW).turn == ""
-    assert stats_for("claude", "blocked", tally(), now=NOW).turn == ""
+    assert stats_for(Reading("claude", "idle", tally(), NOW)).turn == ""
+    assert stats_for(Reading("claude", "blocked", tally(), NOW)).turn == ""
 
 
 def test_a_stamp_from_the_future_or_unreadable_is_not_a_duration() -> None:
     later = tally(turn_started="2026-10-11T13:00:00Z", last_at="garbage")
-    stats = stats_for("claude", "working", later, now=NOW)
+    stats = stats_for(Reading("claude", "working", later, NOW))
     assert stats.turn == ""
     assert "Last activity" not in labels(stats)
 
 
 def test_the_sheet_names_every_figure_and_never_sums_them() -> None:
-    rows = labels(stats_for("claude", "idle", tally(), now=NOW))
+    rows = labels(stats_for(Reading("claude", "idle", tally(), NOW)))
     assert rows["Input"] == "900"
     assert rows["Output"] == "38k"
     assert rows["Cache read"] == "1.2M"
@@ -153,14 +154,16 @@ def test_the_sheet_names_every_figure_and_never_sums_them() -> None:
 
 
 def test_a_harness_with_no_store_says_so_and_shows_no_number() -> None:
-    stats = stats_for("cursor", "working", SessionUsage(state=HistoryState.unsupported), now=NOW)
+    stats = stats_for(
+        Reading("cursor", "working", SessionUsage(state=HistoryState.unsupported), NOW)
+    )
     assert stats.note == "No usage from this harness"
     assert (stats.model, stats.context, stats.turn, stats.spend) == ("", "", "", "")
     assert stats.rows == ()
 
 
 def test_before_the_first_answer_nothing_is_counted() -> None:
-    stats = stats_for("claude", "idle", SessionUsage(state=HistoryState.absent), now=NOW)
+    stats = stats_for(Reading("claude", "idle", SessionUsage(state=HistoryState.absent), NOW))
     assert stats.note == "No usage recorded yet"
 
 
@@ -236,7 +239,7 @@ def test_claude_maps_its_transcript_and_grows_by_what_is_appended(tmp_path: Path
     grown = cache.read(Source.of(WORKING_SESSION, agent_kind="claude", root=str(root)))
     assert (grown.messages, grown.output_tokens, grown.context_tokens) == (2, 3_000, 50_000)
     assert grown.last_at == "2026-10-11T11:58:00Z"
-    stats = stats_for("claude", "working", grown, now=NOW)
+    stats = stats_for(Reading("claude", "working", grown, NOW))
     assert stats.sentence == (
         "Haiku 4.5, context 25 percent used, turn running 4 minutes, 3 thousand output tokens"
     )
@@ -269,7 +272,7 @@ def test_opencode_maps_its_store_with_no_cost_when_it_recorded_none() -> None:
     found = usage(Source.of(OPENCODE_SESSION, agent_kind="opencode", root=OPENCODE))
     assert found.prompts > 0
     assert found.turn_started
-    stats = stats_for("opencode", "working", found, now=found_now(found.turn_started, 90))
+    stats = stats_for(Reading("opencode", "working", found, found_now(found.turn_started, 90)))
     assert stats.model == "Kimi-K2.5"
     assert stats.percent is None
     assert stats.context.endswith(" ctx")
@@ -287,7 +290,7 @@ def test_opencode_shows_the_cost_its_messages_record(tmp_path: Path) -> None:
             record["cost"] = 0.21
         target.write_text(json.dumps(record))
     found = usage(Source.of(OPENCODE_SESSION, agent_kind="opencode", root=store))
-    stats = stats_for("opencode", "idle", found, now=NOW)
+    stats = stats_for(Reading("opencode", "idle", found, NOW))
     assert stats.spend.startswith("$")
     assert labels(stats)["Cost"] == stats.spend
 
@@ -302,7 +305,7 @@ def test_hermes_maps_its_rollup_and_its_messages(tmp_path: Path) -> None:
     found = usage(Source.of(test_hermes.SESSION, agent_kind="hermes", root=tmp_path))
     assert found.prompts == 1
     assert found.turn_started
-    stats = stats_for("hermes", "working", found, now=found_now(found.turn_started, 30))
+    stats = stats_for(Reading("hermes", "working", found, found_now(found.turn_started, 30)))
     assert stats.model == "a-model"
     assert stats.context == ""
     assert stats.spend == "$2.50"
@@ -313,7 +316,7 @@ def test_hermes_with_no_priced_row_shows_no_cost(tmp_path: Path) -> None:
     path = test_hermes.build(tmp_path / HERMES_DB)
     test_hermes.spend(path, cost_status="unknown", estimated_cost_usd=1.5)
     found = usage(Source.of(test_hermes.SESSION, agent_kind="hermes", root=tmp_path))
-    stats = stats_for("hermes", "idle", found, now=NOW)
+    stats = stats_for(Reading("hermes", "idle", found, NOW))
     assert "Cost" not in labels(stats)
     assert stats.spend == "20 out"
 

@@ -18,7 +18,7 @@ from herdr_pwa.web.deps import WebState, hidden_tick, viewer_guard
 from herdr_pwa.web.herd import agent_status, find_agent
 from herdr_pwa.web.naming import page_title
 from herdr_pwa.web.routers.compose import answer_region, composer_region
-from herdr_pwa.web.stats import Stats, stats_for
+from herdr_pwa.web.stats import Reading, Stats, stats_for
 from herdr_pwa.web.writing import first_note
 from herdr_pwa.writes.resolve import doubt
 
@@ -33,7 +33,8 @@ def read_stats(web: WebState, agent: Agent) -> Stats:
     usage = web.usage.read(
         Source.of(agent.session, agent_kind=agent.agent, root=web.settings.transcript_roots or None)
     )
-    return stats_for(agent.agent or "", agent_status(web, agent).value, usage, now=web.wall())
+    status = agent_status(web, agent).value
+    return stats_for(Reading(agent.agent or "", status, usage, now=web.wall()))
 
 
 def read_chat(
@@ -77,7 +78,29 @@ def first_view(web: WebState, agent: Agent, tab: str) -> Markup | None:
 def build(web: WebState) -> APIRouter:
     """The drill-in's routes."""
     router = APIRouter(prefix="/agent/{session}", dependencies=[Depends(viewer_guard(web))])
+    _page_route(router, web)
+    _view_routes(router, web)
+    return router
 
+
+def _page_context(web: WebState, agent: Agent, tab: str, first: str) -> dict[str, object]:
+    """The whole drill-in page: its bar, the chosen tab's first drawing, and the write regions."""
+    chosen = tab if tab in TABS else TABS[0]
+    return {
+        "agent": agent,
+        "agent_status": agent_status(web, agent),
+        "tab": chosen,
+        "tabs": TABS,
+        "heading": page_title(agent.title, agent.agent, agent.target),
+        "first": first_note(first),
+        "stats": read_stats(web, agent),
+        "view": first_view(web, agent, chosen),
+        "answer": web.pages.piece("answer.html", answer_region(web, agent)),
+        "composer": web.pages.piece("compose.html", composer_region(web, agent)),
+    }
+
+
+def _page_route(router: APIRouter, web: WebState) -> None:
     @router.get("")
     def agent_page(  # pyright: ignore[reportUnusedFunction]
         session: str, tab: str = "chat", first: str = ""
@@ -85,22 +108,10 @@ def build(web: WebState) -> APIRouter:
         agent = find_agent(web, session)
         if tab == "files":
             return RedirectResponse(f"/agent/{agent.session}/files", status_code=303)
-        chosen = tab if tab in TABS else TABS[0]
-        heading = page_title(agent.title, agent.agent, agent.target)
-        context = {
-            "agent": agent,
-            "agent_status": agent_status(web, agent),
-            "tab": chosen,
-            "tabs": TABS,
-            "heading": heading,
-            "first": first_note(first),
-            "stats": read_stats(web, agent),
-            "view": first_view(web, agent, chosen),
-            "answer": web.pages.piece("answer.html", answer_region(web, agent)),
-            "composer": web.pages.piece("compose.html", composer_region(web, agent)),
-        }
-        return web.pages.page("agent_page.html", context)
+        return web.pages.page("agent_page.html", _page_context(web, agent, tab, first))
 
+
+def _view_routes(router: APIRouter, web: WebState) -> None:
     @router.get("/chat", dependencies=[Depends(hidden_tick)])
     def chat(  # pyright: ignore[reportUnusedFunction]
         session: str,
@@ -127,5 +138,3 @@ def build(web: WebState) -> APIRouter:
         agent = find_agent(web, session)
         context = {"agent": agent, "stats": read_stats(web, agent)}
         return web.pages.fragment("stats.html", context)
-
-    return router

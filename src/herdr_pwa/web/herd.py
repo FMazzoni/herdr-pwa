@@ -4,7 +4,7 @@ import logging
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
-from herdr_pwa.decisions import HerdDecision, decide_herd, effective_status
+from herdr_pwa.decisions import Fetched, HerdDecision, decide_herd, effective_status
 from herdr_pwa.engine import (
     Agent,
     AgentStatus,
@@ -79,13 +79,12 @@ def load_herd(web: WebState) -> Herd:
         a.session: p for a in blocked if (p := _prompt(web, a)) is not None
     }
     now = web.clock()
+    failure = type(entry.error).__name__ if entry.error is not None else None
     decision = decide_herd(
         snapshot.agents,
         prompts=prompts,
         unread=unread_of(web, snapshot.agents),
-        now=now,
-        taken_at=now - entry.age,
-        error=type(entry.error).__name__ if entry.error is not None else None,
+        fetched=Fetched(now, now - entry.age, failure),
     )
     return Herd(snapshot, decision)
 
