@@ -232,6 +232,18 @@ def test_a_template_changed_on_disk_after_start_is_not_what_is_served(tmp_path: 
         _ = pages.render("u.html", {})
 
 
+def test_static_files_are_what_the_process_started_with(tmp_path: Path) -> None:
+    # A merge lands on disk under a running service; what it serves must not move with it.
+    (tmp_path / "app.js").write_text("old")
+    (tmp_path / "app.css").write_text("old")
+    assets = Assets.load(tmp_path)
+    started = (assets.build, assets.url("app.js"), assets.files["app.js"].body)
+    (tmp_path / "app.js").write_text("new")
+    (tmp_path / "app.css").unlink()
+    assert (assets.build, assets.url("app.js"), assets.files["app.js"].body) == started
+    assert assets.files["app.css"].body == b"old"
+
+
 def test_no_template_or_script_writes_inline_style_or_markup() -> None:
     templates = Path(STATIC_DIR).parent / "templates"
     for path in templates.iterdir():

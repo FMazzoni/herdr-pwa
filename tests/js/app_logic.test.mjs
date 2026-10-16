@@ -89,6 +89,42 @@ test("pin: an earlier page unpins; sending and the waiting pill pin", () => {
   assert.equal(pinAfter([{ type: "jumped", y: 300, gap: 900 }], away).pinned, true);
 });
 
+test("pin: landing at the end pins a page the reader had left, and short of it unpins", () => {
+  const away = { pinned: false, lastY: 300, reader: true };
+  assert.deepEqual(pinAfter([{ type: "landed", y: 2000, gap: 1 }], away), { pinned: true, lastY: 2000, reader: false });
+  assert.equal(pinAfter([{ type: "landed", y: 1500, gap: 3 }]).pinned, false);
+});
+
+test("pin: a move this script made changes where the page was left, never whether it follows", () => {
+  const away = { pinned: false, lastY: 300, reader: false };
+  assert.deepEqual(pinAfter([{ type: "moved", y: 2000, gap: 0 }], away), { pinned: false, lastY: 2000, reader: false });
+  const following = { pinned: true, lastY: 300, reader: false };
+  assert.deepEqual(pinAfter([{ type: "moved", y: 100, gap: 900 }], following), { pinned: true, lastY: 100, reader: false });
+});
+
+test("pin: only a scroll is ever the reader's; every other event says so even after one", () => {
+  const read = { pinned: false, lastY: 600, reader: true };
+  const others = [
+    { type: "moved", y: 600, gap: 400 },
+    { type: "landed", y: 600, gap: 400 },
+    { type: "swapped", before: 600, y: 600, gap: 400 },
+    { type: "unfolded", y: 600, gap: 400 },
+    { type: "earlier", y: 600, gap: 400 },
+    { type: "sent", y: 600, gap: 400 },
+    { type: "jumped", y: 600, gap: 400 },
+  ];
+  for (const event of others) {
+    assert.equal(pinAfter([event], read).reader, false, event.type);
+  }
+});
+
+test("pin: a fold, an earlier page, sending and the pill claim no position, as a swap that moved nothing", () => {
+  const at = { pinned: false, lastY: 700, reader: false };
+  for (const type of ["unfolded", "earlier", "sent", "jumped"]) {
+    assert.equal(pinAfter([{ type, y: 1234, gap: 0 }], at).lastY, 700, type);
+  }
+});
+
 test("pin: an event it does not know is refused, not ignored", () => {
   assert.throws(() => logic.pin({ pinned: true, lastY: 0, reader: false }, { type: "shrug", y: 0, gap: 0 }));
 });

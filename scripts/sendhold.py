@@ -1,17 +1,18 @@
-"""Drive one slow answer in headless Firefox: while the key is in flight, a stream event and a
-redraw held back under the thumb both land, and the page must still send the key once, keep Back
-and End disabled until the answer is back, and then show what the key did."""
+"""Drive one slow answer and one slow prompt in headless Firefox. While the key is in flight, a
+stream event and a redraw held back under the thumb both land, and the page must still send the key
+once, keep Back and End disabled until the answer is back, and then show what the key did. While
+the prompt is in flight, a finger on Back or End reaches nothing and a tap on Back stays on the page,
+and once the prompt's outcome shows, both are live again."""
 
 import threading
-import time
 from collections.abc import Callable
 from pathlib import Path
 
 from firefox import Marionette, phone_window
-from pydantic import JsonValue
+from pydantic import JsonValue, TypeAdapter
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from tests.catalogue import AGENT, PERMISSION, WORKING, State, build, capture, herd
+from tests.catalogue import AGENT, IDLE, PERMISSION, WORKING, State, build, capture, herd
 from tests.waiting import eventually
 from tests.webfakes import (
     AGENT_GET,
@@ -35,6 +36,8 @@ SLOW_SECONDS = 2.0
 # How long the outcome must stay once drawn: past app.js's 250ms idle wait, when a redraw held
 # back under the thumb comes due.
 STAYS_SECONDS = 1.0
+# How long a tap on Back is watched for a navigation it should not start.
+LEAVE_SECONDS = 1.5
 OPTION = "#answer .button--option"
 
 # Every change to the body's sending class, and every read that finished, stamped on one clock.
@@ -70,20 +73,47 @@ if (option) option.click();
 return { live: live.length, sending: document.body.classList.contains("is-sending") };
 """
 OUTCOME = "return !!document.querySelector('#answer .banner[data-hp-sent]');"
+# Each way off the page that is on screen, and whether a finger at its middle would land on it.
+REACH = r"""
+return [...document.querySelectorAll(".leave")].flatMap((a) => {
+  const r = a.getBoundingClientRect();
+  const x = r.left + r.width / 2, y = r.top + r.height / 2;
+  if (!r.width || y < 0 || y > window.innerHeight || x < 0 || x > window.innerWidth) return [];
+  const hit = document.elementFromPoint(x, y);
+  return [{ name: a.textContent.trim(), live: !!hit && a.contains(hit) }];
+});
+"""
+COMPOSER = "#composer textarea"
+TYPE_AND_SEND = r"""
+document.querySelector("#composer textarea").value = arguments[0];
+document.querySelector("#composer button[type=submit]").click();
+return performance.now();
+"""
+# A tap on Back that pointer-events would not stop: what is left is the script's own guard.
+TAP_BACK = r"""
+window.__hp.from = location.href;
+document.querySelector(".leave.topbar__back").click();
+"""
+# A page left behind takes its marks with it, so a missing mark is a page that left.
+STAYED = "return !!window.__hp && location.href === window.__hp.from;"
+PROMPT_OUTCOME = "return !!document.querySelector('#composer .banner[data-hp-sent]');"
+PROMPT = "agent.prompt"
+_EACH = TypeAdapter(list[dict[str, JsonValue]])
 GAPS = "return window.__hp.marks.filter(([t, on]) => t >= arguments[0] && !on).length;"
 
 
 class Writes:
-    """The real app behind a count of the key posts that reach it."""
+    """The real app behind a count of the posts to one route that reach it."""
 
-    def __init__(self, app: ASGIApp) -> None:
+    def __init__(self, app: ASGIApp, route: str = "/keys") -> None:
         self.app = app
+        self.route = route
         self.posts = 0
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        """Count a key post, then serve it."""
+        """Count a post to the route, then serve it."""
         if scope["type"] == "http" and scope["method"] == "POST":
-            self.posts += str(scope["path"]).endswith("/keys")
+            self.posts += str(scope["path"]).endswith(self.route)
         await self.app(scope, receive, send)
 
 
@@ -104,6 +134,17 @@ def asking() -> dict[str, Reply]:
     }
 
 
+def idle() -> dict[str, Reply]:
+    """The tapped agent idle at its prompt, with a runner that takes a prompt."""
+    frame = herd(p4="idle")
+    return {
+        SNAPSHOT: frame,
+        READ: read_frame(capture(IDLE)),
+        AGENT_GET: agent_info(frame),
+        PROMPT: {"id": "x", "result": {"type": "ok"}},
+    }
+
+
 def landed(wire: FakeWire) -> None:
     """Once the key is let go, the question goes and the agent works."""
     frame = herd(p4="working")
@@ -113,12 +154,7 @@ def landed(wire: FakeWire) -> None:
 
 
 def _until(driver: Marionette, script: str, *args: object) -> bool:
-    deadline = time.monotonic() + WAIT_SECONDS
-    while time.monotonic() < deadline:
-        if driver.script(script, *args):
-            return True
-        time.sleep(0.05)
-    return False
+    return eventually(lambda: bool(driver.script(script, *args)), seconds=WAIT_SECONDS)
 
 
 def _number(driver: Marionette, script: str) -> int:
@@ -136,16 +172,26 @@ def _hold_back_a_redraw(driver: Marionette) -> list[str]:
     return []
 
 
+def _reach(driver: Marionette) -> dict[str, bool]:
+    """Each way off the page on screen, by its label: whether a finger there would take it."""
+    each = _EACH.validate_python(driver.script(REACH) or [])
+    return {str(e.get("name")): bool(e.get("live")) for e in each}
+
+
 def _in_flight(driver: Marionette) -> tuple[bool, bool]:
     """Watch the slow key: (a live control was offered, Back and End were ever re-enabled)."""
     offered = released = False
-    until = time.monotonic() + SLOW_SECONDS
-    while time.monotonic() < until:
+
+    def look() -> bool:
+        nonlocal offered, released
         seen = driver.script(LIVE)
         if isinstance(seen, dict):
             offered = offered or bool(seen.get("live"))
             released = released or not seen.get("sending")
-        time.sleep(0.05)
+        released = released or any(_reach(driver).values())
+        return False
+
+    eventually(look, seconds=SLOW_SECONDS)
     return offered, released
 
 
@@ -184,26 +230,90 @@ def walk(driver: Marionette, base: str, writes: Writes, release: threading.Event
     return problems
 
 
-def run(
-    driver: Marionette, base: str, mount: Callable[[ASGIApp], None], scratch: Path
+def _prompt_held(driver: Marionette, hold: Hold) -> list[str]:
+    """While the prompt is out: no way off the page takes a finger, and a tap on Back stays."""
+    if not hold.taken.wait(WAIT_SECONDS):
+        return ["prompt hold: the prompt never reached the runner"]
+    # A read finishing mid-send must release nothing: the view redraws while the prompt is out.
+    reads = _number(driver, READS)
+    driver.script(STALE, "#agent-view")
+    problems: list[str] = []
+    reached: set[str] = set()
+    off = 0
+
+    def look() -> bool:
+        nonlocal off
+        reached.update(name for name, live in _reach(driver).items() if live)
+        off += not driver.script("return document.body.classList.contains('is-sending');")
+        return False
+
+    eventually(look, seconds=SLOW_SECONDS)
+    if _number(driver, READS) <= reads:
+        problems.append("prompt hold: the view never redrew while the prompt was out")
+    if reached or off:
+        problems.append(f"prompt hold: Back and End took a finger mid-send ({sorted(reached)})")
+    driver.script(TAP_BACK)
+    # Leaving waits on the stream's close first, so give a navigation time to begin.
+    if eventually(lambda: not driver.script(STAYED), seconds=LEAVE_SECONDS):
+        problems.append("prompt hold: a tap on Back left the page while the prompt was out")
+    return problems
+
+
+def walk_prompt(driver: Marionette, base: str, writes: Writes, hold: Hold) -> list[str]:
+    """Send a prompt while the runner is slow: nothing leaves the page until its outcome shows."""
+    driver.send("WebDriver:Navigate", {"url": f"{base}{AGENT}"})
+    if not _until(driver, READY, COMPOSER):
+        return ["prompt hold: the composer never drew"]
+    driver.script(INSTRUMENT)
+    if not any(_reach(driver).values()):
+        return ["prompt hold: no way off the page took a finger before the send"]
+    driver.script(TYPE_AND_SEND, "run the tests again")
+    problems = _prompt_held(driver, hold)
+    if problems and not driver.script(STAYED):
+        return problems
+    hold.release.set()
+    if not _until(driver, PROMPT_OUTCOME):
+        problems.append("prompt hold: the prompt's outcome never showed")
+    elif not all(_reach(driver).values()):
+        problems.append("prompt hold: Back and End stayed disabled after the outcome showed")
+    if writes.posts != 1:
+        problems.append(f"prompt hold: one tap sent {writes.posts} prompt posts")
+    return problems
+
+
+def _in_window(
+    driver: Marionette, go: Callable[[], list[str]], release: threading.Event
 ) -> list[str]:
-    """The walk on a fresh app in its own phone window; empty when the key went once."""
-    home = scratch / "send-hold"
-    home.mkdir(parents=True)
-    state = State("send hold", f"{AGENT}?tab=pane", OPTION, asking)
-    rig = build(state, home)
-    hold = Hold(landed, ceiling=WAIT_SECONDS)
-    release = hold.release
-    rig.wire.after[SEND_KEYS] = hold
-    writes = Writes(rig.http.app)
-    mount(writes)
     first = driver.handles()[0]
     phone_window(driver, WIDTH, HEIGHT)
     try:
-        problems = walk(driver, base, writes, release)
+        return go()
     finally:
         release.set()
         driver.send("WebDriver:CloseWindow", {})
         driver.send("WebDriver:SwitchToWindow", {"handle": first})
+
+
+def run(
+    driver: Marionette, base: str, mount: Callable[[ASGIApp], None], scratch: Path
+) -> list[str]:
+    """Both walks, each on a fresh app in its own phone window; empty when each write went once."""
+    home = scratch / "send-hold"
+    home.mkdir(parents=True)
+    rig = build(State("send hold", f"{AGENT}?tab=pane", OPTION, asking), home)
+    hold = Hold(landed, ceiling=WAIT_SECONDS)
+    rig.wire.after[SEND_KEYS] = hold
+    writes = Writes(rig.http.app)
+    mount(writes)
+    problems = _in_window(driver, lambda: walk(driver, base, writes, hold.release), hold.release)
     print("  walked send hold", flush=True)
+    home = scratch / "prompt-hold"
+    home.mkdir(parents=True)
+    rig = build(State("prompt hold", AGENT, COMPOSER, idle), home)
+    held = Hold(ceiling=WAIT_SECONDS)
+    rig.wire.after[PROMPT] = held
+    prompts = Writes(rig.http.app, "/prompt")
+    mount(prompts)
+    problems += _in_window(driver, lambda: walk_prompt(driver, base, prompts, held), held.release)
+    print("  walked prompt hold", flush=True)
     return problems

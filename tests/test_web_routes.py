@@ -19,18 +19,24 @@ from herdr_pwa.engine import (
     TranscriptPage,
     TranscriptTurn,
 )
+from herdr_pwa.files.roots import root_id
+from herdr_pwa.protocol import WRITE_METHODS
 from herdr_pwa.web.chat import WORKING_VERBS, chat_view, working_verb
 from herdr_pwa.web.security import CSP
+from tests.filefakes import make_repo, stand_in
 from tests.webfakes import (
     IDLE_SESSION,
     READ,
     SNAPSHOT,
     WORKING_SESSION,
+    Reply,
+    Rig,
     agents_of,
     assistant_says,
     build_rig,
     human_says,
     read_frame,
+    routes_of,
     snapshot_frame,
     write_transcript,
 )
@@ -525,3 +531,107 @@ def test_the_catching_up_note_is_a_function_of_the_status_alone() -> None:
         view = chat_view(page, working="s:1" if status is AgentStatus.WORKING else "")
         assert view.catching_up is (status is AgentStatus.WORKING), status
         assert bool(view.verb) is view.catching_up, status
+
+
+# ---- A GET never writes anything that matters ---------------------------------------------
+
+
+def _get_walk(repo: Path) -> dict[str, tuple[str, ...]]:
+    """Each GET route, by its template, and the URLs that walk it."""
+    base = f"/files/{root_id(repo)}"
+    agent = f"/agent/{IDLE_SESSION}"
+    return {
+        "/healthz": ("/healthz",),
+        "/static/{name}": ("/static/app.js",),
+        "/": ("/",),
+        "/feed": ("/feed",),
+        "/agent/{session}": (agent, f"{agent}?tab=chat", f"{agent}?tab=pane"),
+        "/agent/{session}/chat": (f"{agent}/chat",),
+        "/agent/{session}/pane": (f"{agent}/pane",),
+        "/agent/{session}/stats": (f"{agent}/stats",),
+        "/agent/{session}/compose": (f"{agent}/compose",),
+        "/agent/{session}/answer": (f"{agent}/answer",),
+        "/agent/{session}/close": (f"{agent}/close",),
+        "/agent/{session}/files": (
+            f"/agent/{WORKING_SESSION}/files",
+            f"/agent/{WORKING_SESSION}/files?path=README.md",
+        ),
+        "/workspaces": ("/workspaces",),
+        "/starting/{pane}": ("/starting/w1:p3", "/starting/w9:p9"),
+        "/new": ("/new",),
+        "/workspaces/new": ("/workspaces/new",),
+        "/workspaces/{workspace_id}/rename": ("/workspaces/w1/rename",),
+        "/workspaces/{workspace_id}/close": ("/workspaces/w1/close",),
+        "/files": ("/files",),
+        "/files/{root_id}": (base,),
+        "/files/{root_id}/tree": (f"{base}/tree",),
+        "/files/{root_id}/find": (f"{base}/find?q=a",),
+        "/files/{root_id}/file": (f"{base}/file?path=README.md",),
+        "/files/{root_id}/diff": (f"{base}/diff?path=src/app/server.py",),
+        "/files/{root_id}/raw": (f"{base}/raw?path=assets/logo.png",),
+        "/files/{root_id}/watch": (f"{base}/watch?path=README.md&v=1",),
+        "/push": ("/push",),
+        "/push/status": ("/push/status",),
+        "/push/key": ("/push/key",),
+        "/push/prefs": ("/push/prefs",),
+        "/events": ("/events?topic=feed", f"/events?topic=agent:{IDLE_SESSION}"),
+        "/sw.js": ("/sw.js",),
+        "/manifest.webmanifest": ("/manifest.webmanifest",),
+        "/offline": ("/offline",),
+        "/apple-touch-icon.png": ("/apple-touch-icon.png",),
+        "/apple-touch-icon-precomposed.png": ("/apple-touch-icon-precomposed.png",),
+        "/apple-touch-icon-120x120.png": ("/apple-touch-icon-120x120.png",),
+        "/apple-touch-icon-120x120-precomposed.png": ("/apple-touch-icon-120x120-precomposed.png",),
+    }
+
+
+def _finished(status: str, seq: int, repo: Path) -> dict[str, JsonValue]:
+    frame = stand_in(snapshot_frame(), repo)
+    for raw in agents_of(frame):
+        if IDLE_SESSION in str(raw.get("agent_session")):
+            raw["agent_status"] = status
+            raw["state_change_seq"] = seq
+    return frame
+
+
+def _state(directory: Path) -> dict[str, bytes]:
+    return {
+        str(p.relative_to(directory)): p.read_bytes() for p in directory.rglob("*") if p.is_file()
+    }
+
+
+def _idle_card(rig: Rig) -> str:
+    feed = rig.http.get("/feed", headers=FRAGMENT).text
+    found = re.search(r'card card--(\w+)"[^>]*>\s*<a[^>]*href="/agent/' + IDLE_SESSION, feed)
+    assert found is not None, feed
+    return found.group(1)
+
+
+def test_no_get_writes_anything_that_matters(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path / "work" / "demo-service")
+    ok: dict[str, JsonValue] = {"id": "x", "result": {"type": "ok"}}
+    replies: dict[str, Reply] = {SNAPSHOT: _finished("working", 20, repo), READ: read_frame("$ ")}
+    # A write the runner would take, so one sent from a GET is counted, not refused.
+    replies.update(dict.fromkeys(WRITE_METHODS, ok))
+    rig = build_rig(tmp_path, replies, events_lifetime=0.3)
+    walk = _get_walk(repo)
+    gets = {r.path for r in routes_of(rig) if "GET" in (r.methods or ())}
+    # A new GET route fails here until it is walked.
+    assert set(walk) == gets
+    # The agent finished after the phone's ledger saw it work, so it is news until read.
+    assert _idle_card(rig) == "working"
+    rig.wire.replies[SNAPSHOT] = _finished("done", 21, repo)
+    rig.clock.sleep(60.0)
+    assert _idle_card(rig) == "done"
+    before = _state(rig.settings.state_dir)
+    # Each stream answers once and ends: every look at the clock ages it a second.
+    rig.clock.step = 1.0
+    for urls in walk.values():
+        for url in urls:
+            response = rig.http.get(url, follow_redirects=False)
+            assert response.status_code < 500, (url, response.status_code)
+    rig.clock.step = 0.0
+    assert not set(rig.wire.calls) & WRITE_METHODS, rig.wire.calls
+    # Opening the agent's page and every region on it did not mark the finish read.
+    assert _idle_card(rig) == "done"
+    assert _state(rig.settings.state_dir) == before
