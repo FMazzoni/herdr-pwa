@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Final
 
 from fastapi.responses import HTMLResponse
-from jinja2 import Environment, FileSystemLoader, StrictUndefined
+from jinja2 import DictLoader, Environment, StrictUndefined
 from markupsafe import Markup
 
 from herdr_pwa.web.assets import Assets
@@ -15,7 +15,7 @@ FRAGMENT_HEADER: Final = "HP-Fragment"
 
 
 class Pages:
-    """Renders templates into HTML responses; every template autoescapes."""
+    """Renders the templates read at construction into HTML responses; every one autoescapes."""
 
     def __init__(
         self,
@@ -26,8 +26,10 @@ class Pages:
         fallback: int = 20,
     ) -> None:
         # autoescape=True rather than select_autoescape, so no file extension can opt out.
+        # Read once, like the static files: a merge onto disk must not reach old Python in memory.
         self.env = Environment(
-            loader=FileSystemLoader(directory),
+            loader=DictLoader(_read_all(directory)),
+            auto_reload=False,
             autoescape=True,
             undefined=StrictUndefined,
             trim_blocks=True,
@@ -67,3 +69,11 @@ class Pages:
             status_code=status,
             headers={**(headers or {}), FRAGMENT_HEADER: "1"},
         )
+
+
+def _read_all(directory: Path) -> dict[str, str]:
+    return {
+        path.relative_to(directory).as_posix(): path.read_text(encoding="utf-8")
+        for path in sorted(directory.rglob("*"))
+        if path.is_file()
+    }

@@ -17,6 +17,7 @@ from herdr_pwa.push import DeliveryLog, VapidKeyError, health_line
 from herdr_pwa.settings import Settings
 from herdr_pwa.web.app import create_app
 from herdr_pwa.web.seams import Seams
+from herdr_pwa.web.started import check_tree, record_started
 from herdr_pwa.writes.lifecycle import Availability, availability, record_service_path, service_path
 
 log = logging.getLogger(__name__)
@@ -51,7 +52,10 @@ def harness_lines(recorded: str | None) -> list[str]:
 
 
 def doctor(settings: Settings, seams: Seams) -> int:
-    """Compare the live runner's snapshot protocol with the pin; non-zero on drift or silence."""
+    """Check the runner's protocol against the pin and the service's code against the disk.
+
+    Non-zero on protocol drift, a silent runner, or a tree that moved since the service started.
+    """
     engine = settings.engine()
     lines = [f"pinned protocol: {EXPECTED_PROTOCOL}"]
     try:
@@ -70,7 +74,9 @@ def doctor(settings: Settings, seams: Seams) -> int:
     lines.append(health_line(health, now=seams.wall()))
     # Informational too: a harness the service cannot see is one the form silently cannot offer.
     lines.extend(harness_lines(service_path(settings.state_dir.expanduser())))
-    healthy = live == EXPECTED_PROTOCOL
+    tree = check_tree(settings.state_dir.expanduser())
+    lines.append(tree.line)
+    healthy = live == EXPECTED_PROTOCOL and not tree.stale
     lines.append("doctor: OK" if healthy else "doctor: FAIL")
     seams.write("\n".join(lines) + "\n")
     return 0 if healthy else 1
@@ -140,6 +146,7 @@ def serve(settings: Settings, port: int | None, seams: Seams) -> None:
     if warning:
         log.warning(warning)
     record_service_path(settings.state_dir.expanduser())
+    record_started(settings.state_dir.expanduser(), seams.wall())
     uvicorn.run(
         create_app(settings, seams),
         host=settings.host,
