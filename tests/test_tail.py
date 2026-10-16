@@ -5,8 +5,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from pydantic import JsonValue
+
 from herdr_pwa.engine import Ask, HistoryState, Speaker, TailCache, TranscriptTurn, chat_window
-from herdr_pwa.jsontypes import JsonObject
 from tests.engine_seam import is_message, read_page
 from tests.webfakes import build_rig
 
@@ -15,15 +16,20 @@ SESSION = "6ae1e031-ddb4-4684-ab07-68073f7fec47"
 SCREENSHOT = "A" * (1_400_000)
 
 
-def _record(kind: str, uuid: str, content: object) -> JsonObject:
-    message: JsonObject = {"role": kind, "content": content}  # pyright: ignore[reportAssignmentType]
-    record: JsonObject = {"type": kind, "uuid": uuid, "timestamp": "t", "message": message}
+def _record(kind: str, uuid: str, content: object) -> dict[str, JsonValue]:
+    message: dict[str, JsonValue] = {"role": kind, "content": content}  # pyright: ignore[reportAssignmentType]
+    record: dict[str, JsonValue] = {
+        "type": kind,
+        "uuid": uuid,
+        "timestamp": "t",
+        "message": message,
+    }
     if kind == "user" and isinstance(content, str):
         record["promptSource"] = "typed"
     return record
 
 
-def _call(n: int, *, image: bool = False) -> list[JsonObject]:
+def _call(n: int, *, image: bool = False) -> list[dict[str, JsonValue]]:
     """One tool call and its result; an image result carries a screenshot inline."""
     use = {"type": "tool_use", "id": f"tu{n}", "name": "Bash", "input": {"command": f"run {n}"}}
     body: object = (
@@ -35,9 +41,11 @@ def _call(n: int, *, image: bool = False) -> list[JsonObject]:
     return [_record("assistant", f"c{n}", [use]), _record("user", f"r{n}", [result])]
 
 
-def tool_heavy(messages: int, *, calls: int = 6, image_every: int = 0) -> list[JsonObject]:
+def tool_heavy(
+    messages: int, *, calls: int = 6, image_every: int = 0
+) -> list[dict[str, JsonValue]]:
     """Messages each followed by a burst of tool calls, as an agent at work writes them."""
-    records: list[JsonObject] = []
+    records: list[dict[str, JsonValue]] = []
     n = 0
     for m in range(messages):
         if m % 5 == 0:
@@ -51,13 +59,13 @@ def tool_heavy(messages: int, *, calls: int = 6, image_every: int = 0) -> list[J
     return records
 
 
-def write(path: Path, records: list[JsonObject]) -> Path:
+def write(path: Path, records: list[dict[str, JsonValue]]) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("".join(json.dumps(r) + "\n" for r in records))
     return path
 
 
-def append(path: Path, records: list[JsonObject]) -> int:
+def append(path: Path, records: list[dict[str, JsonValue]]) -> int:
     data = "".join(json.dumps(r) + "\n" for r in records).encode()
     with path.open("ab") as handle:
         handle.write(data)

@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import cast
 
 import pytest
-from pydantic import BaseModel, JsonValue
+from pydantic import BaseModel, JsonValue, TypeAdapter
 
 from herdr_pwa import protocol
 from herdr_pwa.engine import (
@@ -34,7 +34,6 @@ from herdr_pwa.engine import (
     as_pane_id,
     as_session_id,
 )
-from herdr_pwa.jsontypes import JsonObject, loads
 from tests._jsonpath import at, obj
 from tests._wire_support import FakeTransport, Reply, TickingClock, no_sleep
 from tests.engine_seam import (
@@ -84,27 +83,29 @@ SETTINGS = EngineSettings(socket_path=Path("/nonexistent/herdr-pwa-test.sock"))
 DRIFTED = protocol.EXPECTED_PROTOCOL + 1
 
 
-def snapshot_frame(protocol_number: int | None = None) -> JsonObject:
-    payload = obj(loads(SNAPSHOT_JSON))
+def snapshot_frame(protocol_number: int | None = None) -> dict[str, JsonValue]:
+    payload = obj(TypeAdapter(JsonValue).validate_json(SNAPSHOT_JSON))
     if protocol_number is not None:
         obj(payload, "result", "snapshot")["protocol"] = protocol_number
     return payload
 
 
-def raw_agent(**overrides: JsonValue) -> JsonObject:
-    raw = dict(obj(loads(SNAPSHOT_JSON), "result", "snapshot", "agents", 0))
+def raw_agent(**overrides: JsonValue) -> dict[str, JsonValue]:
+    raw = dict(
+        obj(TypeAdapter(JsonValue).validate_json(SNAPSHOT_JSON), "result", "snapshot", "agents", 0)
+    )
     raw.update(overrides)
     return raw
 
 
-def agent_frame(**overrides: JsonValue) -> JsonObject:
+def agent_frame(**overrides: JsonValue) -> dict[str, JsonValue]:
     return {
         "id": "x",
         "result": {"type": "agent_info", "agent": raw_agent(**overrides)},
     }
 
 
-def read_frame(text: str) -> JsonObject:
+def read_frame(text: str) -> dict[str, JsonValue]:
     return {
         "id": "x",
         "result": {
@@ -314,7 +315,7 @@ def test_a_read_answering_no_text_is_invalid() -> None:
         eng.read(P3)
 
 
-def decoded_frame(text: bytes) -> JsonObject:
+def decoded_frame(text: bytes) -> dict[str, JsonValue]:
     """A reply frame carrying ``text``, round-tripped through the real wire."""
     line = json.dumps(read_frame("\x00PLACEHOLDER\x00")).encode()
     framed = line.replace(b"\\u0000PLACEHOLDER\\u0000", text)
@@ -356,7 +357,7 @@ def test_a_colour_read_is_parsed_whole_never_beside_an_older_text_read() -> None
     # The text read is a moment older: the transcript above the dialog has since moved.
     older = (capture / "detection.txt").read_text(encoding="utf-8").replace("Done.", "Working.")
 
-    def answer(params: JsonObject) -> JsonObject:
+    def answer(params: dict[str, JsonValue]) -> dict[str, JsonValue]:
         return read_frame(ansi if params["format"] == "ansi" else older)
 
     eng, wire = build({READ: answer})
@@ -762,7 +763,7 @@ def test_a_request_type_that_pins_no_single_method_is_refused() -> None:
     class Bogus(BaseModel):
         id: str
         method: str
-        params: JsonObject
+        params: dict[str, JsonValue]
 
     with pytest.raises(InvalidResponse):
         method_of(Bogus)
@@ -906,7 +907,7 @@ def _pyright(path: Path) -> JsonValue:
     )
     if not done.stdout.strip():
         pytest.skip(f"pyright did not run: {done.stderr[:400]}")
-    return loads(done.stdout)
+    return TypeAdapter(JsonValue).validate_json(done.stdout)
 
 
 def test_a_session_id_cannot_reach_a_write_verb(tmp_path: Path) -> None:
@@ -1010,7 +1011,7 @@ def test_the_identity_re_check_is_opt_in() -> None:
 PROCESS_INFO = method_of(wire_request.PaneProcessInfoRequest)
 
 
-def process_info_frame(*, settled: bool = True) -> JsonObject:
+def process_info_frame(*, settled: bool = True) -> dict[str, JsonValue]:
     """A pane whose only foreground process is its own shell -- or one still running something, which is exactly what makes ``agent.start`` fail with ``agent_pane_busy`` on 2 of 5 unguarded attempts."""
     running: list[JsonValue] = [{"pid": 4242, "name": "bash", "argv": ["/bin/bash"]}]
     if not settled:
@@ -1029,7 +1030,7 @@ def process_info_frame(*, settled: bool = True) -> JsonObject:
     }
 
 
-def started_frame(session: str | None = None) -> JsonObject:
+def started_frame(session: str | None = None) -> dict[str, JsonValue]:
     agent = raw_agent(pane_id="w1:p9")
     if session is None:
         agent.pop("agent_session", None)
@@ -1046,7 +1047,7 @@ def started_frame(session: str | None = None) -> JsonObject:
     }
 
 
-def tab_created_frame() -> JsonObject:
+def tab_created_frame() -> dict[str, JsonValue]:
     return {
         "id": "x",
         "result": {
@@ -1111,12 +1112,12 @@ def test_a_pane_that_never_settles_refuses_the_start_rather_than_hanging(
 
 def test_a_busy_pane_is_the_one_write_this_client_retries() -> None:
     """And it is not a violation of the never-retry rule."""
-    attempts: list[JsonObject | Exception] = [
+    attempts: list[dict[str, JsonValue] | Exception] = [
         EngineError("busy", code=PANE_BUSY_CODE),
         started_frame("s-1"),
     ]
 
-    def answer(_: JsonObject) -> JsonObject:
+    def answer(_: dict[str, JsonValue]) -> dict[str, JsonValue]:
         reply = attempts.pop(0)
         if isinstance(reply, Exception):
             raise reply

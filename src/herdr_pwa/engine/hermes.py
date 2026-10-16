@@ -1,16 +1,14 @@
 """Hermes Agent's SQLite store, read as one conversation."""
 
-import sqlite3
 from collections.abc import Sequence
-from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import ClassVar, Final, Self, cast, override
-from urllib.parse import quote
+from typing import Annotated, ClassVar, Final, override
 
-from pydantic import JsonValue
+from pydantic import BaseModel, ConfigDict, Json, TypeAdapter, ValidationError
 
 from herdr_pwa.diff import tool_diff
+from herdr_pwa.engine.store import Row, SessionStore, consult
 from herdr_pwa.engine.transcript import (
     MAX_PAGE_BYTES,
     MAX_PROSE_CHARS,
@@ -21,6 +19,7 @@ from herdr_pwa.engine.transcript import (
     ModelRef,
     SessionUsage,
     Speaker,
+    ToolInput,
     TranscriptAdapter,
     TranscriptPage,
     TranscriptTurn,
@@ -28,23 +27,13 @@ from herdr_pwa.engine.transcript import (
     remember,
     tool_summary,
 )
-from herdr_pwa.jsontypes import JsonObject, get_object, loads, objects
-
-type _Row = tuple[object, ...]
-
+from herdr_pwa.validation import Text, or_default
 
 HERMES_ROOT: Final = "~/.hermes"
 
 HERMES_DB: Final = "state.db"
 
-_BUSY_SECONDS: Final = 0.25
-
 _ROW_BYTES: Final = 512
-
-
-def _readonly(path: Path) -> str:
-    """*path* as the only URI this module ever hands SQLite."""
-    return f"file:{quote(str(path))}?mode=ro"
 
 
 def _stamp(value: object) -> str:
@@ -57,29 +46,38 @@ def _stamp(value: object) -> str:
         return ""
 
 
-def _calls(blob: object) -> list[JsonObject]:
+class _Function(BaseModel):
+    """What one tool call invoked, and with what."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    name: Text = None
+    # Hermes writes the arguments as JSON text inside the JSON; an older row wrote the object.
+    arguments: Annotated[ToolInput | Json[ToolInput] | None, or_default(None)] = None
+
+
+class _ToolCall(BaseModel):
+    """One entry of a row's ``tool_calls`` array."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    id: Text = None
+    call_id: Text = None
+    function: Annotated[_Function | None, or_default(None)] = None
+
+
+_CALLS: Final = TypeAdapter(list[Annotated[_ToolCall | None, or_default(None)]])
+
+
+def _calls(blob: object) -> list[_ToolCall]:
     """The ``tool_calls`` column as a list, or empty for anything unreadable."""
     if not isinstance(blob, str) or not blob.strip():
         return []
     try:
-        loaded = loads(blob)
-    except (TypeError, ValueError):
+        found = _CALLS.validate_json(blob)
+    except ValidationError:
         return []
-    return objects(loaded)
-
-
-def _arguments(call: JsonObject) -> JsonValue:
-    """The arguments of one tool call, decoded: Hermes writes them as JSON text."""
-    function = get_object(call, "function")
-    raw = function.get("arguments") if function is not None else None
-    if isinstance(raw, dict):
-        return raw
-    if not isinstance(raw, str) or not raw.strip():
-        return None
-    try:
-        return loads(raw)
-    except (TypeError, ValueError):
-        return None
+    return [call for call in found if call is not None]
 
 
 def _as_int(value: object) -> int:
@@ -89,111 +87,40 @@ def _as_int(value: object) -> int:
     raise TypeError(f"not a number: {type(value).__name__}")
 
 
-def _fetched(cursor: sqlite3.Cursor) -> list[_Row]:
-    """Every row of *cursor*, typed as the plain tuples sqlite3 returns by default."""
-    return cast(list[_Row], cursor.fetchall())
+def _stream(db: SessionStore) -> list[int]:
+    """Every message id for this session, oldest first."""
+    return [_as_int(row[0]) for row in db.rows(_STREAM_SQL, db.session)]
 
 
-class _LockedError(Exception):
-    """The store is being written and would not answer inside the busy wait."""
+def _rows(db: SessionStore, ids: Sequence[int]) -> dict[int, Row]:
+    """The full record behind each of *ids*, keyed by id."""
+    if not ids:
+        return {}
+    holes = ",".join("?" * len(ids))
+    # SQLite cannot bind a variable-length IN list; `holes` is only `?` placeholders.
+    columns = "id, role, content, tool_call_id, tool_calls, tool_name, timestamp"
+    sql = f"select {columns} from messages where session_id = ? and id in ({holes})"  # noqa: S608
+    return {_as_int(row[0]): row for row in db.rows(sql, db.session, *ids)}
 
 
-def _locked(exc: sqlite3.Error) -> bool:
-    """Is this failure the writer holding the store, not a broken one?"""
-    text = str(exc).lower()
-    return "locked" in text or "busy" in text
+def _info(db: SessionStore) -> tuple[str, str]:
+    """``(title, model)`` off the session's own row, empty when it has none."""
+    found = db.first(_INFO_SQL, db.session)
+    if found is None:
+        return "", ""
+    title, model = found
+    return str(title or ""), str(model or "")
 
 
-class _Db:
-    """The store, opened read-only and never locked."""
+def _origin(db: SessionStore) -> str:
+    """The ``cwd`` Hermes recorded on the session's own row."""
+    found = db.first(_ORIGIN_SQL, db.session)
+    return str(found[0] or "").strip() if found else ""
 
-    def __init__(self, connection: sqlite3.Connection, session: str) -> None:
-        self._db = connection
-        self._session = session
 
-    @classmethod
-    def open(cls, path: Path, session: str) -> Self | None:
-        """*path* if it is a store we recognise and *session* is in it."""
-        try:
-            resolved = path.expanduser().resolve(strict=True)
-        except OSError:
-            return None
-        try:
-            connection = sqlite3.connect(_readonly(resolved), uri=True, timeout=_BUSY_SECONDS)
-            connection.execute("select id from sessions limit 0").close()
-            held = cast(
-                _Row | None,
-                connection.execute(
-                    "select 1 from sessions where id = ? limit 1", (session,)
-                ).fetchone(),
-            )
-        except ValueError:
-            return None
-        except OSError:
-            return None
-        except sqlite3.Error as exc:
-            if _locked(exc):
-                raise _LockedError from exc
-            return None
-        if held is None:
-            connection.close()
-            return None
-        return cls(connection, session)
-
-    def stream(self) -> list[int]:
-        """Every message id for this session, oldest first."""
-        return [_as_int(row[0]) for row in self._ask(_STREAM_SQL)]
-
-    def rows(self, ids: Sequence[int]) -> dict[int, _Row]:
-        """The full record behind each of *ids*, keyed by id."""
-        if not ids:
-            return {}
-        holes = ",".join("?" * len(ids))
-        # SQLite cannot bind a variable-length IN list; `holes` is only `?` placeholders.
-        columns = "id, role, content, tool_call_id, tool_calls, tool_name, timestamp"
-        sql = f"select {columns} from messages where session_id = ? and id in ({holes})"  # noqa: S608
-        try:
-            found = _fetched(self._db.execute(sql, (self._session, *ids)))
-        except sqlite3.Error as exc:
-            if _locked(exc):
-                raise _LockedError from exc
-            return {}
-        return {_as_int(row[0]): row for row in found}
-
-    def info(self) -> tuple[str, str]:
-        """``(title, model)`` off the session's own row, empty when it has none."""
-        found = self._ask(_INFO_SQL)
-        if not found:
-            return "", ""
-        title, model = found[0]
-        return str(title or ""), str(model or "")
-
-    def origin(self) -> str:
-        """The ``cwd`` Hermes recorded on the session's own row."""
-        found = self._ask(_ORIGIN_SQL)
-        return str(found[0][0] or "").strip() if found else ""
-
-    def usage(self) -> list[_Row]:
-        """Every ``session_model_usage`` row for this session."""
-        return self._ask(_USAGE_SQL)
-
-    def clock(self) -> _Row:
-        """``(prompts, newest prompt, newest message)`` as the store holds them."""
-        found = self._ask(_CLOCK_SQL)
-        return found[0] if found else (0, None, None)
-
-    def close(self) -> None:
-        """Drop the connection."""
-        self._db.close()
-
-    def _ask(self, sql: str) -> list[_Row]:
-        """One parameterised read, or an empty result when the store refuses."""
-        try:
-            return _fetched(self._db.execute(sql, (self._session,)))
-        except sqlite3.Error as exc:
-            if _locked(exc):
-                raise _LockedError from exc
-            return []
+def _clock(db: SessionStore) -> Row:
+    """``(prompts, newest prompt, newest message)`` as the store holds them."""
+    return db.first(_CLOCK_SQL, db.session) or (0, None, None)
 
 
 _STREAM_SQL: Final = "select id from messages where session_id = ? and active = 1 order by id"
@@ -218,7 +145,7 @@ _INFO_SQL: Final = "select title, model from sessions where id = ? limit 1"
 _COST_UNKNOWN: Final = frozenset({"", "none", "unknown"})
 
 
-def _turn(row: _Row) -> TranscriptTurn | None:
+def _turn(row: Row) -> TranscriptTurn | None:
     """One ``messages`` row as a chat turn, or ``None`` to drop it."""
     identifier, role, content, call_id, calls, tool_name, stamp = row
     uuid = str(identifier)
@@ -249,29 +176,27 @@ def _turn(row: _Row) -> TranscriptTurn | None:
 
 
 def _call_turn(
-    calls: list[JsonObject], *, uuid: str, ts: str, tool_name: object
+    calls: list[_ToolCall], *, uuid: str, ts: str, tool_name: object
 ) -> TranscriptTurn | None:
     """The FIRST tool call of an assistant row, collapsed the way Claude's is."""
     if not calls:
         return None
     first = calls[0]
-    function = get_object(first, "function")
-    named = function.get("name") if function is not None else None
-    params = _arguments(first)
-    summary, cut = tool_summary(params)
+    function = first.function or _Function()
+    summary, cut = tool_summary(function.arguments)
     return TranscriptTurn(
         uuid=uuid,
         speaker=Speaker.tool,
         text=summary,
         ts=ts,
-        tool=str(named or tool_name or ""),
+        tool=str(function.name or tool_name or ""),
         truncated=cut,
-        call=str(first.get("id") or first.get("call_id") or ""),
-        diff=tool_diff(params),
+        call=first.id or first.call_id or "",
+        diff=tool_diff(function.arguments),
     )
 
 
-def _charged(row: _Row | None) -> int:
+def _charged(row: Row | None) -> int:
     """What one row costs the page budget: its text, plus a floor for the rest."""
     if row is None:
         return _ROW_BYTES
@@ -279,13 +204,15 @@ def _charged(row: _Row | None) -> int:
     return text + _ROW_BYTES
 
 
-def _page(db: _Db, *, gather: Gather, before: int | None, max_bytes: int) -> TranscriptPage:
+def _page(
+    db: SessionStore, *, gather: Gather, before: int | None, max_bytes: int
+) -> TranscriptPage:
     """Turns until *gather* is full, ending at frontier *before*, oldest first."""
-    stream = db.stream()
+    stream = _stream(db)
     size = len(stream)
     end = size if before is None else max(0, min(before, size))
     limit = gather.limit
-    rows = db.rows(stream[max(0, end - limit) : end])
+    rows = _rows(db, stream[max(0, end - limit) : end])
     positions = range(end, max(0, end - limit), -1)
     turns, last = _take(stream, rows, positions, gather=gather, max_bytes=max_bytes)
     cursor = end if last is None else last - 1
@@ -300,14 +227,14 @@ def _page(db: _Db, *, gather: Gather, before: int | None, max_bytes: int) -> Tra
     )
 
 
-def _since(db: _Db, *, after: int, limit: int, max_bytes: int) -> TranscriptPage:
+def _since(db: SessionStore, *, after: int, limit: int, max_bytes: int) -> TranscriptPage:
     """Whatever the store has grown past frontier *after*, oldest first."""
-    stream = db.stream()
+    stream = _stream(db)
     size = len(stream)
     start = max(0, after)
     if start > size:
         return TranscriptPage(size=size, end=size, reset=True, state=HistoryState.empty)
-    rows = db.rows(stream[start : start + limit])
+    rows = _rows(db, stream[start : start + limit])
     positions = range(start + 1, min(size, start + limit) + 1)
     turns, last = _take(stream, rows, positions, gather=Gather(limit), max_bytes=max_bytes)
     end = start if last is None else last
@@ -322,7 +249,7 @@ def _since(db: _Db, *, after: int, limit: int, max_bytes: int) -> TranscriptPage
 
 
 def _take(
-    stream: list[int], rows: dict[int, _Row], positions: range, *, gather: Gather, max_bytes: int
+    stream: list[int], rows: dict[int, Row], positions: range, *, gather: Gather, max_bytes: int
 ) -> tuple[list[TranscriptTurn], int | None]:
     """Turns at *positions* in walk order, and the last position the budget paid for."""
     spent = 0
@@ -338,15 +265,15 @@ def _take(
     return gather.turns, last
 
 
-def _row_turn(row: _Row | None) -> TranscriptTurn | None:
+def _row_turn(row: Row | None) -> TranscriptTurn | None:
     """A row as a turn; a missing row is no turn."""
     return None if row is None else _turn(row)
 
 
-def _tally(db: _Db) -> SessionUsage:
+def _tally(db: SessionStore) -> SessionUsage:
     """What *session* has spent, off the per-model rollup Hermes already keeps."""
     tally = SessionUsage(state=HistoryState.ok, logs=1)
-    for row in db.usage():
+    for row in db.rows(_USAGE_SQL, db.session):
         model, provider, calls, prompt, produced, cached, written, thought = row[:8]
         remember(tally, ModelRef(str(model or ""), str(provider or "")))
         tally.messages += _as_int(calls or 0)
@@ -356,7 +283,7 @@ def _tally(db: _Db) -> SessionUsage:
         tally.cache_creation_tokens += _as_int(written or 0)
         tally.thinking_tokens += _as_int(thought or 0)
         tally.cost += _money(*row[8:11])
-    prompts, asked, latest = db.clock()
+    prompts, asked, latest = _clock(db)
     tally.prompts = _as_int(prompts or 0)
     tally.turn_started = _stamp(asked)
     tally.last_at = _stamp(latest)
@@ -373,10 +300,10 @@ def _money(actual: object, estimated: object, status: object) -> float:
     return 0.0
 
 
-def _open(roots: Sequence[Path], session: str) -> _Db | None:
+def _open(roots: Sequence[Path], session: str) -> SessionStore | None:
     """The first root that holds *session*, or ``None``."""
     for base in roots:
-        found = _Db.open(Path(base) / HERMES_DB, session)
+        found = SessionStore.open(Path(base) / HERMES_DB, table="sessions", session=session)
         if found is not None:
             return found
     return None
@@ -401,16 +328,13 @@ class HermesAdapter(TranscriptAdapter):
     ) -> TranscriptPage:
         """Up to *limit* turns, or *messages* messages, ending at *before*, oldest first."""
         # `expect` is ignored: one file holds every session, so it cannot move under a cursor.
-        try:
-            db = _open(roots, session)
-            if db is None:
-                return TranscriptPage(state=HistoryState.absent)
-            with closing(db):
-                gather = Gather(limit, messages)
-                return _page(db, gather=gather, before=before, max_bytes=max_bytes)
-        except _LockedError:
-            # The writer holds the store; the page says so rather than looking empty.
-            return TranscriptPage(state=HistoryState.unreadable)
+        gather = Gather(limit, messages)
+        return consult(
+            lambda: _open(roots, session),
+            lambda db: _page(db, gather=gather, before=before, max_bytes=max_bytes),
+            absent=TranscriptPage(state=HistoryState.absent),
+            locked=TranscriptPage(state=HistoryState.unreadable),
+        )
 
     @override
     def since(
@@ -424,45 +348,30 @@ class HermesAdapter(TranscriptAdapter):
         expect: str = "",
     ) -> TranscriptPage:
         """Whatever the store has grown past frontier *after*, oldest first."""
-        try:
-            db = _open(roots, session)
-            if db is None:
-                return TranscriptPage(state=HistoryState.absent)
-            with closing(db):
-                return _since(db, after=after, limit=limit, max_bytes=max_bytes)
-        except _LockedError:
-            return TranscriptPage(state=HistoryState.unreadable)
+        return consult(
+            lambda: _open(roots, session),
+            lambda db: _since(db, after=after, limit=limit, max_bytes=max_bytes),
+            absent=TranscriptPage(state=HistoryState.absent),
+            locked=TranscriptPage(state=HistoryState.unreadable),
+        )
 
     def origin(self, session: str, *, roots: Sequence[Path]) -> str:
         """The directory Hermes recorded *session* as started in, or ``""``."""
-        try:
-            db = _open(roots, session)
-            if db is None:
-                return ""
-            with closing(db):
-                return db.origin()
-        except _LockedError:
-            return ""
+        return consult(lambda: _open(roots, session), _origin, absent="", locked="")
 
     def info(self, session: str, *, roots: Sequence[Path] = ()) -> tuple[str, str]:
         """``(title, model)`` off *session*'s own row. Never raises."""
         where = roots or [Path(root) for root in self.default_roots]
-        db = _open(where, session)
-        if db is None:
-            return "", ""
-        with closing(db):
-            return db.info()
+        return consult(lambda: _open(where, session), _info, absent=("", ""), locked=("", ""))
 
     @override
     def tally(
         self, session: str, *, roots: Sequence[Path], max_bytes: int = MAX_USAGE_BYTES
     ) -> SessionUsage:
         """What this session has spent. Hermes records no money, so cost stays 0."""
-        try:
-            db = _open(roots, session)
-            if db is None:
-                return SessionUsage(state=HistoryState.absent)
-            with closing(db):
-                return _tally(db)
-        except _LockedError:
-            return SessionUsage(state=HistoryState.unreadable)
+        return consult(
+            lambda: _open(roots, session),
+            _tally,
+            absent=SessionUsage(state=HistoryState.absent),
+            locked=SessionUsage(state=HistoryState.unreadable),
+        )

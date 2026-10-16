@@ -3,7 +3,8 @@
 import re
 from pathlib import Path
 
-from herdr_pwa.jsontypes import JsonObject
+from pydantic import JsonValue
+
 from herdr_pwa.web.chat import ChatTurn, ToolRun, fold_tools
 from tests.webfakes import WORKING_SESSION, assistant_says, build_rig, human_says, write_transcript
 
@@ -45,14 +46,14 @@ def test_a_single_call_is_a_run_of_one_that_does_not_fold() -> None:
     assert run.key == "tu7"
 
 
-def _call(n: int, *, failed: bool = False) -> list[JsonObject]:
-    use: JsonObject = {
+def _call(n: int, *, failed: bool = False) -> list[dict[str, JsonValue]]:
+    use: dict[str, JsonValue] = {
         "type": "tool_use",
         "id": f"tu{n}",
         "name": "Bash",
         "input": {"command": f"pytest -k c{n}"},
     }
-    result: JsonObject = {
+    result: dict[str, JsonValue] = {
         "type": "tool_result",
         "tool_use_id": f"tu{n}",
         "content": f"out {n}",

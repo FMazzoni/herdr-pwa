@@ -16,6 +16,7 @@ from pathlib import Path
 from queue import Empty, Queue
 
 import uvicorn
+from pydantic import JsonValue, TypeAdapter
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -639,6 +640,9 @@ def report(tally: Tally, *, whole: bool, runs: int) -> int:
 
 # A task is one size over a slice of the states, or a walk; workers take them from one queue.
 Task = dict[str, object]
+
+# One task or one answer on the worker pipe, a JSON object per line.
+_LINE = TypeAdapter(dict[str, JsonValue])
 WALKS = {
     HISTORY: backnav,
     CHAT_END: chatend,
@@ -696,7 +700,7 @@ def worker() -> int:
         browser() as driver,
     ):
         for n, line in enumerate(sys.stdin):
-            task: Task = json.loads(line)
+            task: Task = dict(_LINE.validate_json(line))
             try:
                 tally = _do(task, driver, base, switch, Path(scratch) / str(n))
             except BrowserError as exc:
@@ -764,7 +768,7 @@ def drive(work: list[Task], jobs: int) -> Tally:
                 if not line:
                     tally.problems.append(f"{_label(task)}: the worker died before it answered")
                     return
-                _merge(tally, json.loads(line))
+                _merge(tally, dict(_LINE.validate_json(line)))
         stdin.close()
         if process.wait() != 0:
             with lock:

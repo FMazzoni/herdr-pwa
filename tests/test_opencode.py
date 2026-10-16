@@ -5,10 +5,10 @@ import sqlite3
 from pathlib import Path
 
 import pytest
-from pydantic import JsonValue
+from pydantic import JsonValue, TypeAdapter
 
 from herdr_pwa.engine import HistoryState, ModelRef, Speaker, TranscriptPage
-from herdr_pwa.jsontypes import JsonObject, as_object, loads, objects
+from tests._jsonpath import at
 from tests.engine_seam import (
     MAX_RESULT_CHARS,
     OPENCODE_DB,
@@ -18,7 +18,7 @@ from tests.engine_seam import (
     SessionInfo,
     adapter_for,
     history,
-    opencode_readonly_uri,
+    readonly_uri,
     usage,
 )
 
@@ -27,21 +27,18 @@ SESSION = "ses_3fd62ba5bffemIxWVhRda5wgS7"
 SUBAGENT = "ses_3fd74bed6ffeiF11LRsQnRVHWJ"
 
 
-def record(path: Path) -> JsonObject:
+# A captured record as opencode wrote it, every field kept: these hold the capture's shape.
+RECORD = TypeAdapter(dict[str, JsonValue])
+
+
+def record(path: Path) -> dict[str, JsonValue]:
     """One captured JSON file, which is always an object."""
-    found = as_object(loads(path.read_text()))
-    assert found is not None
-    return found
+    return RECORD.validate_json(path.read_text())
 
 
 def dig(value: JsonValue, *keys: str) -> JsonValue:
     """``value[k1][k2]...``, raising as subscripting would on a missing member."""
-    for key in keys:
-        holder = as_object(value)
-        if holder is None:
-            raise TypeError(f"not an object at {key!r}")
-        value = holder[key]
-    return value
+    return at(value, *keys)
 
 
 def text(value: JsonValue, *keys: str) -> str:
@@ -83,7 +80,7 @@ def test_the_capture_is_a_normalised_store_not_a_log() -> None:
     parts = list((STORE / "part").iterdir())
     assert len(parts) > len(list((STORE / "message" / SESSION).iterdir()))
     for path in STORE.rglob("*.json"):
-        assert isinstance(loads(path.read_text()), dict)
+        assert record(path) is not None
 
 
 def test_the_capture_covers_every_part_type_the_reader_branches_on() -> None:
@@ -288,17 +285,17 @@ def test_a_byte_budget_makes_the_tally_a_floor_rather_than_a_lie(store: Path) ->
 SCHEMA = (STORE / "schema.sql").read_text()
 
 
-def _rows() -> dict[str, list[JsonObject]]:
-    found = as_object(loads((STORE / "db-rows.json").read_text()))
-    assert found is not None
-    return {table: objects(records) for table, records in found.items()}
+def _rows() -> dict[str, list[dict[str, JsonValue]]]:
+    return TypeAdapter(dict[str, list[dict[str, JsonValue]]]).validate_json(
+        (STORE / "db-rows.json").read_text()
+    )
 
 
 ROWS = _rows()
 PROBE = "ses_fdea0efeaffeE9p6Qfs2Po8KCv"
 
 
-def build(path: Path, rows: dict[str, list[JsonObject]]) -> Path:
+def build(path: Path, rows: dict[str, list[dict[str, JsonValue]]]) -> Path:
     """A database with opencode's own schema, holding exactly *rows*."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(path) as db:
@@ -314,15 +311,15 @@ def build(path: Path, rows: dict[str, list[JsonObject]]) -> Path:
     return path
 
 
-def mirrored(rows: dict[str, list[JsonObject]]) -> dict[str, list[JsonObject]]:
+def mirrored(rows: dict[str, list[dict[str, JsonValue]]]) -> dict[str, list[dict[str, JsonValue]]]:
     """The 95-file capture as the rows opencode would have written for it."""
-    out: dict[str, list[JsonObject]] = dict(rows)
+    out: dict[str, list[dict[str, JsonValue]]] = dict(rows)
     out["session"] = [
         *out["session"],
         {**rows["session"][0], "id": SESSION, "slug": SESSION, "title": SESSION},
     ]
-    messages: list[JsonObject] = []
-    parts: list[JsonObject] = []
+    messages: list[dict[str, JsonValue]] = []
+    parts: list[dict[str, JsonValue]] = []
     for path in sorted((STORE / "message" / SESSION).iterdir()):
         message = record(path)
         stamp = dig(message, "time", "created")
@@ -367,9 +364,7 @@ def database(tmp_path: Path) -> Path:
 def test_the_captured_rows_keep_their_ids_in_columns_not_in_the_blob() -> None:
     """The file layout carries the ids inside the record and the table does not."""
     for row in ROWS["part"]:
-        blob = as_object(loads(str(row["data"])))
-        assert blob is not None
-        assert "id" not in blob
+        assert "id" not in RECORD.validate_json(str(row["data"]))
         assert str(row["id"]).startswith("prt_")
 
 
@@ -432,7 +427,7 @@ def test_the_database_is_opened_through_a_uri_that_cannot_write(
     database: Path,
 ) -> None:
     """``mode=ro`` refuses a write at the SQLite layer, not by this module's manners."""
-    uri = opencode_readonly_uri(database / OPENCODE_DB)
+    uri = readonly_uri(database / OPENCODE_DB)
     assert uri.startswith("file:")
     assert uri.endswith("?mode=ro")
     with sqlite3.connect(uri, uri=True) as db, pytest.raises(sqlite3.OperationalError):
@@ -487,7 +482,9 @@ def test_the_model_column_is_json_and_carries_the_provider_too(
     database: Path,
 ) -> None:
     """Measured on the live store: ``{"id": ..., "providerID": ...}``, not a name."""
-    assert dig(loads(str(ROWS["session"][0]["model"])), "id") == "MiniMaxAI/MiniMax-M3"
+    assert (
+        dig(RECORD.validate_json(str(ROWS["session"][0]["model"])), "id") == "MiniMaxAI/MiniMax-M3"
+    )
     assert OpencodeAdapter().info(PROBE, roots=[database]).model == ModelRef(
         "MiniMaxAI/MiniMax-M3", "togetherai"
     )
@@ -497,7 +494,7 @@ def test_a_serving_variant_beside_the_model_is_not_shown_as_one(
     tmp_path: Path,
 ) -> None:
     """A ``variant`` is a knob on the same model, and the banner has one line to spend."""
-    row: JsonObject = {
+    row: dict[str, JsonValue] = {
         **ROWS["session"][0],
         "model": json.dumps(
             {"id": "zai-org/GLM-5.2", "providerID": "togetherai", "variant": "low"}
@@ -608,3 +605,16 @@ def test_a_locked_store_reads_fine_once_the_writer_is_gone(database: Path) -> No
         holder.rollback()
         holder.close()
     assert history(PROBE, agent_kind="opencode", root=database).state is HistoryState.ok
+
+
+def test_info_never_raises_while_the_store_is_held(database: Path) -> None:
+    """Its docstring promises as much; a name asked mid-write is simply not known yet."""
+    holder = sqlite3.connect(database / OPENCODE_DB)
+    holder.execute("begin exclusive")
+    try:
+        assert OpencodeAdapter().info(PROBE, roots=[database]) == SessionInfo()
+        assert OpencodeAdapter().origin(PROBE, roots=[database]) == ""
+    finally:
+        holder.rollback()
+        holder.close()
+    assert OpencodeAdapter().info(PROBE, roots=[database]).title

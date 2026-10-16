@@ -8,7 +8,9 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Final
 
-from herdr_pwa.jsontypes import JsonObject, as_object
+from pydantic import BaseModel, ConfigDict, Field
+
+from herdr_pwa.validation import Flag, Text
 
 # The harness's own wrapper, never shown: it is context for the model, not conversation.
 _REMINDER: Final = re.compile(r"<system-reminder>.*?</system-reminder>", re.DOTALL)
@@ -35,6 +37,19 @@ _KINDS: Final = {"Agent": "Agent", "Background command": "Command", "Task": "Tas
 _EXIT: Final = re.compile(r"exit code (-?\d+)")
 # What the harness puts in an agent's result in place of the report it delivers as a message.
 _RELAYED: Final = re.compile(r"\AThis agent(?:'s report was delivered| has not reported yet)")
+
+
+class RecordOrigin(BaseModel):
+    """A user record's ``origin``: who wrote it, and for a peer, who sent it and what."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    kind: Text = None
+    body: Text = None
+    name: Text = None
+    sender: Text = Field(default=None, validation_alias="from")
+    sender_task: Text = Field(default=None, validation_alias="senderTaskId")
+    handback: Flag = None
 
 
 class Hidden(Enum):
@@ -169,19 +184,16 @@ def _peer_from_tag(text: str) -> PeerMessage | None:
     )
 
 
-def _peer(origin: JsonObject, text: str) -> PeerMessage | None:
+def _peer(origin: RecordOrigin, text: str) -> PeerMessage | None:
     tagged = _peer_from_tag(text)
-    body = origin.get("body")
-    if not isinstance(body, str):
+    body = origin.body
+    if body is None:
         return tagged
-    name = origin.get("name") or origin.get("from")
-    sender = name if isinstance(name, str) else ""
-    task = origin.get("senderTaskId") or origin.get("from")
     return PeerMessage(
-        sender=sender or (tagged.sender if tagged else ""),
+        sender=origin.name or origin.sender or (tagged.sender if tagged else ""),
         body=_report(body),
-        report=origin.get("handback") is True or body.startswith(_HANDBACK_FRAME),
-        task=task if isinstance(task, str) else "",
+        report=origin.handback is True or body.startswith(_HANDBACK_FRAME),
+        task=origin.sender_task or origin.sender or "",
     )
 
 
@@ -193,18 +205,17 @@ def _by_tag(text: str) -> Injected | None:
     return _peer_from_tag(text)
 
 
-def injected(record: JsonObject, content: str, *, human: bool) -> Injected | None:
+def injected(origin: RecordOrigin | None, content: str, *, human: bool) -> Injected | None:
     """What a string user record is if the harness wrote it, or ``None`` to treat it as text.
 
     Classified by ``origin.kind`` first, then, for a record no person typed, by the leading
     tag, which is all an older record carries.
     """
-    origin = as_object(record.get("origin")) or {}
-    kind = origin.get("kind")
+    kind = origin.kind if origin is not None else None
     text = without_reminders(content)
     if kind == "task-notification":
         return _task(text) or HIDDEN
-    if kind == "peer":
+    if origin is not None and kind == "peer":
         return _peer(origin, text) or HIDDEN
     if human:
         return None

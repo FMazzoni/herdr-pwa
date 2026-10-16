@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 
-from herdr_pwa.tailscale import SERVE_CONFIG_PATH, STATUS_PATH, LocalApi
+from herdr_pwa.tailscale import SERVE_CONFIG_PATH, STATUS_PATH, LocalApi, serve_config
 
 NODE = "host.tailnet123.ts.net"
 LOGIN = "operator@example.com"
@@ -79,7 +79,7 @@ class FakeTailscaled:
             return Canned(status=self.post_status, body="refused")
         if request.headers.get("if-match") != self.etag():
             return Canned(status=412, body="etag mismatch")
-        self.serve_config = json.loads(request.body)
+        self.serve_config = serve_config(request.body)
         return Canned()
 
 

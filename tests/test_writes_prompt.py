@@ -4,10 +4,10 @@ import threading
 from pathlib import Path
 
 import pytest
+from pydantic import JsonValue
 
 from herdr_pwa.audit import AuditUnavailableError, Entry, Write
 from herdr_pwa.engine import EngineUnavailable, as_session_id, screen_digest
-from herdr_pwa.jsontypes import JsonObject
 from herdr_pwa.writes.guard import (
     MAX_PROMPT_CHARS,
     NO_ECHO_MECHANISM,
@@ -383,7 +383,7 @@ def test_a_prompt_from_a_second_tab_mid_send_is_refused_not_typed_twice(tmp_path
     r = idle_rig(tmp_path, SETTLED, echoed("\u276f hello there"))
     second: list[PromptSent | Refused] = []
 
-    def other_tab(herd: FakeHerd, params: JsonObject) -> None:
+    def other_tab(herd: FakeHerd, params: dict[str, JsonValue]) -> None:
         del herd.after["agent.read"], params
         second.append(send_prompt(r.writer, PromptAsk(S1, "hello there")))
 
@@ -417,7 +417,7 @@ def test_in_flight_is_held_across_threads_until_the_write_ends() -> None:
     assert seen == [True]
 
 
-def _lost(_herd: FakeHerd, _params: JsonObject) -> None:
+def _lost(_herd: FakeHerd, _params: dict[str, JsonValue]) -> None:
     lost = EngineUnavailable("the runner closed the connection while answering")
     lost.after_send = True
     raise lost

@@ -3,9 +3,9 @@
 from pathlib import Path
 
 import pytest
+from pydantic import JsonValue
 
 from herdr_pwa.engine import BlockedPrompt, EngineUnavailable
-from herdr_pwa.jsontypes import JsonObject
 from herdr_pwa.writes.answer import KeyAsk, KeySent, send_key, send_starting_key
 from herdr_pwa.writes.keys import (
     allowed_keys,
@@ -40,7 +40,7 @@ def blocked_rig(tmp_path: Path, screen: str = PERMISSION) -> Rig:
     return rig(tmp_path, herd)
 
 
-def answered(herd: FakeHerd, _params: JsonObject) -> None:
+def answered(herd: FakeHerd, _params: dict[str, JsonValue]) -> None:
     """What the TUI does with a key that answers: the dialog goes and the agent works."""
     herd.agents[P3]["agent_status"] = "working"
 
@@ -249,7 +249,7 @@ def test_an_interrupt_drawn_under_a_question_that_has_gone_still_goes(tmp_path: 
     assert herd.writes(SEND_KEYS) == [{"target": "w1:p3", "keys": ["ctrl-c"]}]
 
 
-def _lost_after_send(_herd: FakeHerd, _params: JsonObject) -> None:
+def _lost_after_send(_herd: FakeHerd, _params: dict[str, JsonValue]) -> None:
     """herdr typed the key, then the connection dropped before its answer came back."""
     lost = EngineUnavailable("the runner closed the connection while answering")
     lost.after_send = True
@@ -273,7 +273,7 @@ def test_a_second_tab_answering_while_the_first_is_mid_write_is_refused(tmp_path
     r.herd.after[SEND_KEYS] = answered
     second: list[KeySent | Refused] = []
 
-    def other_tab(herd: FakeHerd, params: JsonObject) -> None:
+    def other_tab(herd: FakeHerd, params: dict[str, JsonValue]) -> None:
         # Runs inside the first tab's write, right after it read the question to check against.
         del herd.after["agent.read"], params
         second.append(send_key(r.writer, KeyAsk(S1, "1", drawn_from=FINGERPRINT)))

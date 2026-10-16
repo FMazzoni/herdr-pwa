@@ -21,10 +21,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from firefox import Marionette, phone_window
+from pydantic import JsonValue
 from settle import READER_STILL_MS, settle
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from herdr_pwa.jsontypes import JsonObject
 from herdr_pwa.web.events import Hub
 from tests.catalogue import (
     AGENT,
@@ -348,9 +348,9 @@ def waiting_pill(driver: Marionette, base: str, tab: Tab, _rig: Rig, _home: Path
     return []
 
 
-def _tool_chat(turns: int) -> list[JsonObject]:
+def _tool_chat(turns: int) -> list[dict[str, JsonValue]]:
     """A long chat whose last exchange is a tool call with a long result, then a short reply."""
-    call: JsonObject = {
+    call: dict[str, JsonValue] = {
         "type": "assistant",
         "uuid": "call",
         "timestamp": "2026-10-10T10:00:01.000Z",
@@ -362,7 +362,7 @@ def _tool_chat(turns: int) -> list[JsonObject]:
         },
     }
     output = "\n".join(f"test {n:03d} passed" for n in range(RESULT_LINES))
-    result: JsonObject = {
+    result: dict[str, JsonValue] = {
         "type": "user",
         "uuid": "res",
         "timestamp": "2026-10-10T10:00:02.000Z",
@@ -409,9 +409,9 @@ def _swapped(seen: object) -> bool:
     return isinstance(seen, dict) and bool(seen.get("swaps")) and not seen.get("busy")
 
 
-def _call(n: int, *, failed: bool = False) -> list[JsonObject]:
+def _call(n: int, *, failed: bool = False) -> list[dict[str, JsonValue]]:
     """One tool call and its result, with a result long enough to scroll when it is open."""
-    call: JsonObject = {
+    call: dict[str, JsonValue] = {
         "type": "assistant",
         "uuid": f"call{n}",
         "timestamp": "2026-10-10T10:00:01.000Z",
@@ -428,7 +428,7 @@ def _call(n: int, *, failed: bool = False) -> list[JsonObject]:
         },
     }
     output = "\n".join(f"case{n} line {k:03d}" for k in range(RESULT_LINES // 4))
-    result: JsonObject = {
+    result: dict[str, JsonValue] = {
         "type": "user",
         "uuid": f"res{n}",
         "timestamp": "2026-10-10T10:00:02.000Z",
@@ -447,7 +447,7 @@ def _call(n: int, *, failed: bool = False) -> list[JsonObject]:
     return [call, result]
 
 
-def _burst_chat(calls: int) -> list[JsonObject]:
+def _burst_chat(calls: int) -> list[dict[str, JsonValue]]:
     """A long chat, then ``calls`` tool calls in a row with one failing, then the reply."""
     records = list(long_chat(TURNS))
     for n in range(calls):

@@ -1,11 +1,11 @@
 """A file change in the Chat tab, computed here and drawn by templates/diff.html."""
 
 from difflib import unified_diff
-from typing import Final
+from typing import Annotated, Final
 
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
-from herdr_pwa.jsontypes import JsonObject, as_array, as_object
+from herdr_pwa.validation import Flag, Text, or_default
 
 MAX_DIFF_LINES: Final = 60
 
@@ -20,10 +20,8 @@ _DEL: Final = "del"
 _SAME: Final = "same"
 _HUNK: Final = "hunk"
 
-_OLD_KEYS: Final = ("old_string", "oldString")
-_NEW_KEYS: Final = ("new_string", "newString")
-_PATH_KEYS: Final = ("file_path", "filePath", "notebook_path", "path")
-_WHOLE_KEYS: Final = ("content",)
+_OLD = AliasChoices("old_string", "oldString")
+_NEW = AliasChoices("new_string", "newString")
 
 
 class DiffLine(BaseModel):
@@ -46,34 +44,51 @@ class FileDiff(BaseModel):
     whole: bool = Field(default=False, description="A write: the file's new contents.")
 
 
-def _first(params: JsonObject, keys: tuple[str, ...]) -> str | None:
-    """The first of *keys* present in *params* whose value is a string."""
-    for key in keys:
-        value = params.get(key)
-        if isinstance(value, str):
-            return value
-    return None
+class _Edit(BaseModel):
+    """One replacement of a multi-edit call."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    old: Text = Field(default=None, validation_alias=_OLD)
+    new: Text = Field(default=None, validation_alias=_NEW)
 
 
-def _pairs(params: JsonObject) -> tuple[list[tuple[str, str]], bool]:
+class EditArgs(BaseModel):
+    """A tool call's arguments as far as a file change goes, however a harness spells them."""
+
+    # Every harness names these its own way; what none of them says is simply None.
+    model_config = ConfigDict(extra="ignore")
+
+    old: Text = Field(default=None, validation_alias=_OLD)
+    new: Text = Field(default=None, validation_alias=_NEW)
+    content: Text = None
+    file_path: Text = Field(default=None, validation_alias=AliasChoices("file_path", "filePath"))
+    notebook_path: Text = None
+    path: Text = None
+    edits: Annotated[list[Annotated[_Edit | None, or_default(None)]] | None, or_default(None)] = (
+        None
+    )
+    replace_all: Flag = None
+
+    @property
+    def names_a_file(self) -> bool:
+        """Whether any spelling of a file's path is present."""
+        return any(p is not None for p in (self.file_path, self.notebook_path, self.path))
+
+
+def _pairs(args: EditArgs) -> tuple[list[tuple[str, str]], bool]:
     """Every (old, new) this call changes, and whether it is a whole-file write."""
-    edits = params.get("edits")
-    if isinstance(edits, list):
+    if args.edits is not None:
         found = [
-            (old, new)
-            for edit in map(as_object, as_array(edits))
-            if edit is not None
-            and (old := _first(edit, _OLD_KEYS)) is not None
-            and (new := _first(edit, _NEW_KEYS)) is not None
+            (edit.old, edit.new)
+            for edit in args.edits
+            if edit is not None and edit.old is not None and edit.new is not None
         ]
         return found, False
-    old = _first(params, _OLD_KEYS)
-    new = _first(params, _NEW_KEYS)
-    if old is not None and new is not None:
-        return [(old, new)], False
-    whole = _first(params, _WHOLE_KEYS)
-    if whole is not None and _first(params, _PATH_KEYS) is not None:
-        return [("", whole)], True
+    if args.old is not None and args.new is not None:
+        return [(args.old, args.new)], False
+    if args.content is not None and args.names_a_file:
+        return [("", args.content)], True
     return [], False
 
 
@@ -135,10 +150,9 @@ def _classify(raw: str) -> tuple[str, str]:
     return _SAME, raw[1:] if raw.startswith(" ") else raw
 
 
-def tool_diff(params: object) -> FileDiff | None:
-    """What *params* changes, or ``None`` if this call changes no file."""
+def tool_diff(args: EditArgs | None) -> FileDiff | None:
+    """What *args* changes, or ``None`` if this call changes no file."""
     # Decided by the arguments, never the tool name, so a new spelling of "edit" needs no branch.
-    args = as_object(params)
     if args is None:
         return None
     pairs, whole = _pairs(args)
@@ -154,6 +168,6 @@ def tool_diff(params: object) -> FileDiff | None:
         removed=removed,
         clipped=len(kept) < len(rows),
         counted=counted,
-        every=args.get("replace_all") is True,
+        every=args.replace_all is True,
         whole=whole,
     )

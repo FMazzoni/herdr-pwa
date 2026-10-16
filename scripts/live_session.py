@@ -17,6 +17,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from pydantic import JsonValue, TypeAdapter, ValidationError
+
 SESSION = "hp-test"  # anything but this name is a foot-gun
 
 COLS, ROWS = 200, 50  # wide enough that the TUI lays out real panes
@@ -28,6 +30,10 @@ INHERITED = (
     "HERDR_TAB_ID",
     "HERDR_WORKSPACE_ID",
 )  # the variables that tell a process it is already inside a session
+
+
+# The herdr CLI prints one JSON object per call.
+_REPLY = TypeAdapter(dict[str, JsonValue])
 
 
 def session_dir(session: str) -> Path:
@@ -68,8 +74,8 @@ def api(session: str, *args: str, check: bool = True) -> dict[str, Any]:
     if check and done.returncode != 0:
         raise SystemExit(f"herdr {' '.join(args)} failed:\n{done.stdout}{done.stderr}")
     try:
-        return json.loads(done.stdout)
-    except json.JSONDecodeError:
+        return _REPLY.validate_json(done.stdout)
+    except ValidationError:
         return {"raw": done.stdout, "stderr": done.stderr, "code": done.returncode}
 
 

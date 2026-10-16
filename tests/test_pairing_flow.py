@@ -10,7 +10,6 @@ from fastapi.testclient import TestClient
 from pydantic import JsonValue, TypeAdapter
 
 from herdr_pwa.engine import EngineSettings, HerdrClient
-from herdr_pwa.jsontypes import JsonObject
 from herdr_pwa.pairing import pair, qr_text
 from herdr_pwa.push import Subscription, SubscriptionStore
 from herdr_pwa.settings import Settings
@@ -23,7 +22,7 @@ from tests.webfakes import SNAPSHOT, WORKING_PANE, FakeWire, agents_of, snapshot
 DEADLINE = 10.0
 
 
-def blocked_frame() -> JsonObject:
+def blocked_frame() -> dict[str, JsonValue]:
     frame = snapshot_frame()
     for agent in agents_of(frame):
         if agent.get("pane_id") == WORKING_PANE:
@@ -57,8 +56,8 @@ def test_a_scripted_phone_pairs_installs_subscribes_and_is_pushed_to(tmp_path: P
     def factory(engine: EngineSettings) -> HerdrClient:
         return HerdrClient(engine, transport=wire)
 
-    sent: list[JsonObject] = []
-    payload: TypeAdapter[JsonObject] = TypeAdapter(dict[str, JsonValue])
+    sent: list[dict[str, JsonValue]] = []
+    payload: TypeAdapter[dict[str, JsonValue]] = TypeAdapter(dict[str, JsonValue])
 
     def deliver(subscription: Subscription, data: str) -> None:
         del subscription

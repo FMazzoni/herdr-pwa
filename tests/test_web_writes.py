@@ -1,12 +1,12 @@
 """Every write route over a fake herd: what it sends, what it refuses, and at which status."""
 
-import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import JsonValue, TypeAdapter
 
 from herdr_pwa.audit import Record, records
 from herdr_pwa.engine import (
@@ -16,7 +16,6 @@ from herdr_pwa.engine import (
     HerdrClient,
     screen_digest,
 )
-from herdr_pwa.jsontypes import JsonObject
 from herdr_pwa.settings import Settings
 from herdr_pwa.web.app import create_app
 from herdr_pwa.writes.keys import control_token
@@ -124,7 +123,7 @@ def test_a_destructive_prompt_is_held_with_its_reason_then_sent(tmp_path: Path) 
     assert len(w.herd.writes("agent.prompt")) == 1
 
 
-def _lost_after_send(_herd: FakeHerd, _params: JsonObject) -> None:
+def _lost_after_send(_herd: FakeHerd, _params: dict[str, JsonValue]) -> None:
     lost = EngineUnavailable("the runner closed the connection while answering")
     lost.after_send = True
     raise lost
@@ -361,7 +360,8 @@ def test_a_sheet_write_under_htmx_replaces_rather_than_redirects(tmp_path: Path)
     assert "location" not in made.headers
     assert "HX-Redirect" not in made.headers
     assert made.headers["hx-reswap"] == "none"
-    assert json.loads(made.headers["hx-trigger"]) == {"hp:opened": {"where": "/workspaces#w7"}}
+    trigger = TypeAdapter(JsonValue).validate_json(made.headers["hx-trigger"])
+    assert trigger == {"hp:opened": {"where": "/workspaces#w7"}}
 
 
 def test_every_form_that_navigates_is_a_sheet(tmp_path: Path) -> None:
@@ -589,7 +589,7 @@ def test_the_doors_destructive_confirm_is_tied_to_the_screen_it_was_asked_about(
     assert w.herd.writes("agent.prompt") == []
 
 
-def _exits(herd: FakeHerd, _params: JsonObject) -> None:
+def _exits(herd: FakeHerd, _params: dict[str, JsonValue]) -> None:
     """The write ended the agent: its pane is gone from the herd by the time the page is drawn."""
     _ = herd.agents.pop(P3, None)
 

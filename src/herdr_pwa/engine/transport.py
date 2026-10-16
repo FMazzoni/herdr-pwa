@@ -18,7 +18,9 @@ from pydantic import JsonValue, TypeAdapter, ValidationError
 
 from herdr_pwa.engine.generated import ErrorBody, SuccessResponse
 from herdr_pwa.engine.generated.success_response import SubscriptionStartedResponseResult
-from herdr_pwa.jsontypes import JsonObject
+
+# One herdr socket frame, decoded: the shape the generated models then validate.
+type Frame = dict[str, JsonValue]
 
 log = logging.getLogger(__name__)
 
@@ -156,7 +158,7 @@ def _error_body(error: JsonValue) -> ErrorBody:
         return ErrorBody(code="engine_error", message=f"the runner reported {error!r:.200}")
 
 
-def raise_for_error_frame(payload: JsonObject) -> None:
+def raise_for_error_frame(payload: Frame) -> None:
     """Map a peer-reported error frame onto the taxonomy, or return."""
     error = payload.get("error")
     if not isinstance(error, dict):
@@ -193,7 +195,7 @@ def _why_unreachable(path: Path, exc: OSError) -> str:
 _FRAME: TypeAdapter[JsonValue] = TypeAdapter(JsonValue)
 
 
-def _decode(line: bytes) -> JsonObject:
+def _decode(line: bytes) -> Frame:
     """Bytes to object, with both ways of not being one mapped."""
     try:
         payload = _FRAME.validate_json(line.decode("utf-8", errors="replace"))
@@ -204,7 +206,7 @@ def _decode(line: bytes) -> JsonObject:
     return payload
 
 
-def _confirms_subscription(payload: JsonObject) -> bool:
+def _confirms_subscription(payload: Frame) -> bool:
     try:
         root = SuccessResponse.model_validate(payload).result.root
     except ValidationError:
@@ -237,11 +239,11 @@ class Transport(Protocol):
     def call(
         self,
         method: str,
-        params: JsonObject,
+        params: Frame,
         *,
         timeout: float | None = None,
         idempotent: bool = True,
-    ) -> JsonObject:
+    ) -> Frame:
         """Issue one request and return its parsed reply object."""
         ...
 
@@ -301,11 +303,11 @@ class SocketTransport:
     def call(
         self,
         method: str,
-        params: JsonObject,
+        params: Frame,
         *,
         timeout: float | None = None,
         idempotent: bool = True,
-    ) -> JsonObject:
+    ) -> Frame:
         """Issue one request, return its reply object, raise on anything else."""
         budget = self.timeout if timeout is None else timeout
         if self._pid != os.getpid():  # forked without the hook running
@@ -322,9 +324,7 @@ class SocketTransport:
 
     # -- the exchange ------------------------------------------------------
 
-    def _call_locked(
-        self, method: str, params: JsonObject, budget: float, *, idempotent: bool
-    ) -> JsonObject:
+    def _call_locked(self, method: str, params: Frame, budget: float, *, idempotent: bool) -> Frame:
         """One exchange; never retried, since one request per connection is what herdr speaks."""
         call = _Call(method, self._clock() + budget, budget, idempotent)
         try:
@@ -333,7 +333,7 @@ class SocketTransport:
             # One request per connection, because that is what herdr speaks.
             self._drop()
 
-    def _exchange(self, params: JsonObject, call: _Call) -> JsonObject:
+    def _exchange(self, params: Frame, call: _Call) -> Frame:
         request_id = f"{self._prefix}:{next(self._ids)}"
         frame = json.dumps(
             {"id": request_id, "method": call.method, "params": params},
@@ -362,7 +362,7 @@ class SocketTransport:
             exc.after_send = not call.idempotent
             raise
 
-    def _receive(self, sock: socket.socket, request_id: str, call: _Call) -> JsonObject:
+    def _receive(self, sock: socket.socket, request_id: str, call: _Call) -> Frame:
         """Read frames until the one addressed to ``request_id`` arrives."""
         for _ in range(MAX_STRAY_FRAMES):
             payload = self._decode(self._read_frame(sock, call))
@@ -544,7 +544,7 @@ class EventStream:
         sock = self._sock
         return sock if sock is not None else self._subscribe()
 
-    def __iter__(self) -> Iterator[JsonObject]:
+    def __iter__(self) -> Iterator[Frame]:
         """Yield each event frame, subscribing first, until the runner or `close` ends it."""
         sock = self.open()
         try:

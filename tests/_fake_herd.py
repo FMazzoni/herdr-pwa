@@ -4,7 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from pydantic import JsonValue
+from pydantic import JsonValue, TypeAdapter
 
 from herdr_pwa.audit import AuditLog, Origin, Record, Recorder, records
 from herdr_pwa.engine import (
@@ -15,15 +15,16 @@ from herdr_pwa.engine import (
     as_pane_id,
     as_session_id,
 )
-from herdr_pwa.jsontypes import JsonObject, as_object, loads
 from herdr_pwa.writes.outcome import Pacing
 from herdr_pwa.writes.resolve import Writer
 from tests._jsonpath import obj
 
 FIXTURES = Path(__file__).parent / "fixtures"
-SNAPSHOT: JsonObject = obj(loads((FIXTURES / "snapshot.example.json").read_text()))
-_TEMPLATE_AGENT: JsonObject = obj(SNAPSHOT, "result", "snapshot", "agents", 4)
-_TEMPLATE_WORKSPACE: JsonObject = obj(SNAPSHOT, "result", "snapshot", "workspaces", 3)
+SNAPSHOT: dict[str, JsonValue] = obj(
+    TypeAdapter(JsonValue).validate_json((FIXTURES / "snapshot.example.json").read_text())
+)
+_TEMPLATE_AGENT: dict[str, JsonValue] = obj(SNAPSHOT, "result", "snapshot", "agents", 4)
+_TEMPLATE_WORKSPACE: dict[str, JsonValue] = obj(SNAPSHOT, "result", "snapshot", "workspaces", 3)
 
 S1 = as_session_id("6ae1e031-ddb4-4684-ab07-68073f7fec47")
 S2 = as_session_id("a36eed14-ff20-48e5-9b50-b8b846cbf977")
@@ -56,11 +57,11 @@ def capture(name: str, source: str = "detection") -> str:
     return (FIXTURES / name / f"{source}.txt").read_text()
 
 
-def ok() -> JsonObject:
+def ok() -> dict[str, JsonValue]:
     return {"id": "x", "result": {"type": "ok"}}
 
 
-def _target(params: JsonObject) -> str:
+def _target(params: dict[str, JsonValue]) -> str:
     value = params.get("target") or params.get("pane_id") or ""
     return value if isinstance(value, str) else ""
 
@@ -80,23 +81,29 @@ class FakeClock:
         self.now += seconds
 
 
-type Hook = Callable[["FakeHerd", JsonObject], None]
+type Hook = Callable[["FakeHerd", dict[str, JsonValue]], None]
 
 
 @dataclass
 class FakeHerd:
     """Answers the socket methods the writes use, from state a test arranges."""
 
-    agents: dict[str, JsonObject] = field(default_factory=dict[str, JsonObject])
-    workspaces: dict[str, JsonObject] = field(default_factory=dict[str, JsonObject])
+    agents: dict[str, dict[str, JsonValue]] = field(default_factory=dict[str, dict[str, JsonValue]])
+    workspaces: dict[str, dict[str, JsonValue]] = field(
+        default_factory=dict[str, dict[str, JsonValue]]
+    )
     # Successive reads per pane; the last one repeats.
     screens: dict[str, list[str]] = field(default_factory=dict[str, list[str]])
     fail: dict[str, Exception] = field(default_factory=dict[str, Exception])
     # Run after a write is taken, to model what the TUI did with it.
     after: dict[str, Hook] = field(default_factory=dict[str, Hook])
     # agent.get may answer for a different agent than the snapshot: a recycled pane.
-    holders: dict[str, JsonObject] = field(default_factory=dict[str, JsonObject])
-    calls: list[tuple[str, JsonObject]] = field(default_factory=list[tuple[str, JsonObject]])
+    holders: dict[str, dict[str, JsonValue]] = field(
+        default_factory=dict[str, dict[str, JsonValue]]
+    )
+    calls: list[tuple[str, dict[str, JsonValue]]] = field(
+        default_factory=list[tuple[str, dict[str, JsonValue]]]
+    )
     protocol: int = 22
     started_session: str = ""
 
@@ -134,11 +141,11 @@ class FakeHerd:
     def call(
         self,
         method: str,
-        params: JsonObject,
+        params: dict[str, JsonValue],
         *,
         timeout: float | None = None,
         idempotent: bool = True,
-    ) -> JsonObject:
+    ) -> dict[str, JsonValue]:
         del timeout, idempotent
         self.calls.append((method, dict(params)))
         if method in self.fail:
@@ -152,12 +159,12 @@ class FakeHerd:
     def close(self) -> None:
         pass
 
-    def writes(self, method: str) -> list[JsonObject]:
+    def writes(self, method: str) -> list[dict[str, JsonValue]]:
         """The params of every call to ``method``."""
         return [params for name, params in self.calls if name == method]
 
-    def _answer(self, method: str, params: JsonObject) -> JsonObject:
-        handlers: dict[str, Callable[[JsonObject], JsonObject]] = {
+    def _answer(self, method: str, params: dict[str, JsonValue]) -> dict[str, JsonValue]:
+        handlers: dict[str, Callable[[dict[str, JsonValue]], dict[str, JsonValue]]] = {
             "session.snapshot": self._session_snapshot,
             "agent.get": self._agent_get,
             "agent.read": self._agent_read,
@@ -172,7 +179,7 @@ class FakeHerd:
         handler = handlers.get(method)
         return ok() if handler is None else handler(params)
 
-    def _session_snapshot(self, _params: JsonObject) -> JsonObject:
+    def _session_snapshot(self, _params: dict[str, JsonValue]) -> dict[str, JsonValue]:
         snap = dict(obj(SNAPSHOT, "result", "snapshot"))
         snap.update(
             protocol=self.protocol,
@@ -181,18 +188,18 @@ class FakeHerd:
         )
         return {"id": "x", "result": {"type": "session_snapshot", "snapshot": snap}}
 
-    def _agent_get(self, params: JsonObject) -> JsonObject:
+    def _agent_get(self, params: dict[str, JsonValue]) -> dict[str, JsonValue]:
         pane = _target(params)
         raw = self.holders.get(pane) or self.agents.get(pane)
         if raw is None:
             return {"id": "x", "error": {"code": "agent_not_found", "message": pane}}
         return {"id": "x", "result": {"type": "agent_info", "agent": raw}}
 
-    def _agent_read(self, params: JsonObject) -> JsonObject:
+    def _agent_read(self, params: dict[str, JsonValue]) -> dict[str, JsonValue]:
         pane = _target(params)
         queue = self.screens.get(pane) or [""]
         text = queue.pop(0) if len(queue) > 1 else queue[0]
-        read: JsonObject = {
+        read: dict[str, JsonValue] = {
             "format": "text",
             "pane_id": pane,
             "revision": 1,
@@ -204,13 +211,13 @@ class FakeHerd:
         }
         return {"id": "x", "result": {"type": "pane_read", "read": read}}
 
-    def _pane_close(self, params: JsonObject) -> JsonObject:
+    def _pane_close(self, params: dict[str, JsonValue]) -> dict[str, JsonValue]:
         _ = self.agents.pop(_target(params), None)
         return ok()
 
-    def _pane_process_info(self, params: JsonObject) -> JsonObject:
-        shell: JsonObject = {"pid": 4242, "name": "bash", "argv": ["/bin/bash"]}
-        info: JsonObject = {
+    def _pane_process_info(self, params: dict[str, JsonValue]) -> dict[str, JsonValue]:
+        shell: dict[str, JsonValue] = {"pid": 4242, "name": "bash", "argv": ["/bin/bash"]}
+        info: dict[str, JsonValue] = {
             "pane_id": _target(params),
             "shell_pid": 4242,
             "foreground_process_group_id": 4242,
@@ -218,10 +225,10 @@ class FakeHerd:
         }
         return {"id": "x", "result": {"type": "pane_process_info", "process_info": info}}
 
-    def _tab_create(self, params: JsonObject) -> JsonObject:
+    def _tab_create(self, params: dict[str, JsonValue]) -> dict[str, JsonValue]:
         workspace = str(params.get("workspace_id") or "w1")
         pane = f"{workspace}:p9"
-        root: JsonObject = {
+        root: dict[str, JsonValue] = {
             "pane_id": pane,
             "terminal_id": "term_9",
             "workspace_id": workspace,
@@ -230,7 +237,7 @@ class FakeHerd:
             "agent_status": "unknown",
             "revision": 0,
         }
-        tab: JsonObject = {
+        tab: dict[str, JsonValue] = {
             "tab_id": f"{workspace}:t9",
             "workspace_id": workspace,
             "number": 9,
@@ -241,13 +248,13 @@ class FakeHerd:
         }
         return {"id": "x", "result": {"type": "tab_created", "tab": tab, "root_pane": root}}
 
-    def _agent_start(self, params: JsonObject) -> JsonObject:
+    def _agent_start(self, params: dict[str, JsonValue]) -> dict[str, JsonValue]:
         pane = _target(params)
         self.put(pane, self.started_session, status="idle", workspace=pane.split(":")[0])
         raw = self.agents[pane]
         return {"id": "x", "result": {"type": "agent_started", "agent": raw, "argv": ["x"]}}
 
-    def _workspace_create(self, params: JsonObject) -> JsonObject:
+    def _workspace_create(self, params: dict[str, JsonValue]) -> dict[str, JsonValue]:
         self.add_workspace("w7", str(params.get("label") or ""))
         made = self.workspaces["w7"]
         root = obj(self._tab_create({"workspace_id": "w7"}), "result")
@@ -261,13 +268,13 @@ class FakeHerd:
             },
         }
 
-    def _workspace_rename(self, params: JsonObject) -> JsonObject:
-        found = as_object(self.workspaces.get(str(params.get("workspace_id"))))
-        if found is not None:
+    def _workspace_rename(self, params: dict[str, JsonValue]) -> dict[str, JsonValue]:
+        found = self.workspaces.get(str(params.get("workspace_id")))
+        if isinstance(found, dict):
             found["label"] = str(params.get("label") or "")
         return ok()
 
-    def _workspace_close(self, params: JsonObject) -> JsonObject:
+    def _workspace_close(self, params: dict[str, JsonValue]) -> dict[str, JsonValue]:
         wid = str(params.get("workspace_id"))
         _ = self.workspaces.pop(wid, None)
         for pane in [p for p, a in self.agents.items() if a.get("workspace_id") == wid]:

@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import pytest
+from pydantic import JsonValue
 
 from herdr_pwa.engine import (
     AgentStatus,
@@ -17,7 +18,6 @@ from herdr_pwa.engine import (
     TranscriptPage,
     TranscriptTurn,
 )
-from herdr_pwa.jsontypes import JsonObject
 from herdr_pwa.web.chat import chat_view
 from herdr_pwa.web.security import CSP
 from tests.webfakes import (
@@ -38,7 +38,7 @@ HOSTILE = '<script>alert("x")</script>'
 FRAGMENT = {"HX-Request": "true"}
 
 
-def _hostile_frame() -> JsonObject:
+def _hostile_frame() -> dict[str, JsonValue]:
     frame = snapshot_frame()
     for agent in agents_of(frame):
         if agent.get("pane_id") == "w1:p3":

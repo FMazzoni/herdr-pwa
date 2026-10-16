@@ -6,9 +6,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from pydantic import JsonValue, TypeAdapter
 
 from herdr_pwa.engine import HistoryState, ModelRef, SessionUsage, UsageCache
-from herdr_pwa.jsontypes import JsonObject, as_object, loads
 from herdr_pwa.web.stats import (
     Stats,
     duration,
@@ -185,7 +185,7 @@ def test_token_counts_at_a_glance() -> None:
 # ---- each harness, from its own store ---------------------------------------------------------
 
 
-def said(uuid: str, stamp: str, text: str = "go") -> JsonObject:
+def said(uuid: str, stamp: str, text: str = "go") -> dict[str, JsonValue]:
     return {
         "type": "user",
         "uuid": uuid,
@@ -195,7 +195,7 @@ def said(uuid: str, stamp: str, text: str = "go") -> JsonObject:
     }
 
 
-def answered(message: str, stamp: str, *, prompt: int, out: int) -> JsonObject:
+def answered(message: str, stamp: str, *, prompt: int, out: int) -> dict[str, JsonValue]:
     return {
         "type": "assistant",
         "uuid": f"r-{message}",
@@ -276,8 +276,7 @@ def test_opencode_shows_the_cost_its_messages_record(tmp_path: Path) -> None:
     for source in OPENCODE.rglob("*.json"):
         target = store / source.relative_to(OPENCODE)
         target.parent.mkdir(parents=True, exist_ok=True)
-        record = as_object(loads(source.read_text()))
-        assert record is not None
+        record = TypeAdapter(dict[str, JsonValue]).validate_json(source.read_text())
         if source.parent.parent.name == "message" and record.get("role") == "assistant":
             record["cost"] = 0.21
         target.write_text(json.dumps(record))

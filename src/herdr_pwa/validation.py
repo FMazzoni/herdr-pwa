@@ -1,8 +1,16 @@
 """What every owned model shares: fields that fall back instead of failing, and one error line."""
 
-from typing import cast
+from typing import Annotated, cast
 
-from pydantic import ValidationError, ValidatorFunctionWrapHandler, WrapValidator
+from pydantic import (
+    StrictBool,
+    StrictFloat,
+    StrictInt,
+    StrictStr,
+    ValidationError,
+    ValidatorFunctionWrapHandler,
+    WrapValidator,
+)
 
 
 def or_default(default: object) -> WrapValidator:
@@ -21,6 +29,13 @@ def or_default(default: object) -> WrapValidator:
         return validated
 
     return WrapValidator(validate)
+
+
+# A field of a format we do not own: its value when it has the shape we read, else None.
+type Text = Annotated[StrictStr | None, or_default(None)]
+type Count = Annotated[StrictInt | None, or_default(None)]
+type Number = Annotated[StrictInt | StrictFloat | None, or_default(None)]
+type Flag = Annotated[StrictBool | None, or_default(None)]
 
 
 def summary(exc: ValidationError) -> str:
