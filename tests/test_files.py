@@ -3,17 +3,15 @@
 import os
 import threading
 import time
-from collections.abc import Generator, Iterator, Sequence
+from collections.abc import Generator, Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Final, cast
+from typing import Final
 
 import httpx2 as httpx
 import pytest
 import uvicorn
-from fastapi import APIRouter, FastAPI
 from fastapi.routing import APIRoute
-from starlette.routing import BaseRoute
 
 from herdr_pwa.files import fuzzy
 from herdr_pwa.files.git import Git
@@ -36,6 +34,7 @@ from tests.webfakes import (
     Rig,
     assistant_says,
     build_rig,
+    routes_of,
     snapshot_frame,
     write_transcript,
 )
@@ -740,20 +739,8 @@ def test_a_forged_from_is_dropped_not_linked(tmp_path: Path, repo: Path) -> None
 # ---- the gate, the cache and the verbs ------------------------------------------------------
 
 
-def _all_routes(routes: Sequence[BaseRoute]) -> list[APIRoute]:
-    found: list[APIRoute] = []
-    for route in routes:
-        if isinstance(route, APIRoute):
-            found.append(route)
-        # An included router keeps its own table behind it.
-        inner = getattr(route, "original_router", None)
-        if isinstance(inner, APIRouter):
-            found += _all_routes(inner.routes)
-    return found
-
-
 def _explorer_routes(rig: Rig) -> list[APIRoute]:
-    routes = _all_routes(cast(FastAPI, rig.http.app).routes)
+    routes = routes_of(rig)
     return [r for r in routes if r.path.startswith("/files") or r.path.endswith("/files")]
 
 

@@ -3,12 +3,15 @@
 import copy
 import json
 import threading
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from fastapi import APIRouter, FastAPI
+from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 from pydantic import JsonValue, TypeAdapter
+from starlette.routing import BaseRoute
 
 from herdr_pwa.engine import EngineSettings, HerdrClient
 from herdr_pwa.settings import Settings
@@ -198,6 +201,25 @@ def build_rig(
     app = create_app(settings, Seams(clock=clock, pacing=pacing, client_factory=factory))
     http = TestClient(app, headers=IDENTITY if headers is None else headers)
     return Rig(wire, clock, http, settings)
+
+
+def _routes_in(routes: Sequence[BaseRoute]) -> list[APIRoute]:
+    found: list[APIRoute] = []
+    for route in routes:
+        if isinstance(route, APIRoute):
+            found.append(route)
+        # An included router keeps its own table behind it.
+        inner = getattr(route, "original_router", None)
+        if isinstance(inner, APIRouter):
+            found += _routes_in(inner.routes)
+    return found
+
+
+def routes_of(rig: Rig) -> list[APIRoute]:
+    """Every route the rig's app answers, those of included routers too."""
+    app = rig.http.app
+    assert isinstance(app, FastAPI)
+    return _routes_in(app.routes)
 
 
 def write_transcript(root: Path, session: str, records: list[dict[str, JsonValue]]) -> None:
