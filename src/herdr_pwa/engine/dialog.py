@@ -560,6 +560,17 @@ class BlockedPrompt(BaseModel):
         return bool(self.options)
 
     @property
+    def wants_colour(self) -> bool:
+        """True when a colour read of the same screen could change this parse.
+
+        A refused run the screen's own hints still vouch for may have a cursor
+        drawn only as colour, and a buttons row shows its focus only that way.
+        """
+        return self.shape is MenuShape.BUTTONS or (
+            self.drew_rows and bool(self.hints) and not self.options
+        )
+
+    @property
     def answerable(self) -> bool:
         """True when there is anything to answer with beyond the generic keypad."""
         return bool(self.hints)
@@ -631,11 +642,16 @@ class BlockedPrompt(BaseModel):
             corroborated=corroborated or bool(buttons),
             hints=hints,
         )
-        if not parsed.options:
-            return parsed
-        bar = shape is MenuShape.BUTTONS
-        rows = (buttons_at,) * len(buttons) if bar else tuple(i for i, _, _ in run or ())
-        return _located(parsed, screen.colour, rows)
+        return _located(parsed, screen.colour, _option_lines(parsed, run, buttons_at))
+
+
+def _option_lines(
+    prompt: BlockedPrompt, run: list[tuple[int, int, str]] | None, buttons_at: int
+) -> tuple[int, ...]:
+    """The line each of *prompt*'s options was parsed from."""
+    if prompt.shape is MenuShape.BUTTONS:
+        return (buttons_at,) * len(prompt.options)
+    return tuple(i for i, _, _ in run or ())
 
 
 @dataclass(frozen=True, slots=True)
@@ -878,6 +894,8 @@ def _focused_index(bgs: list[str]) -> int:
 
 def _located[P: BlockedPrompt](prompt: P, colour: tuple[str, ...], rows: tuple[int, ...]) -> P:
     """The same prompt with the focused choice read off the line each choice was parsed from."""
+    if not prompt.options:
+        return prompt
     bgs = [
         _label_bg(colour[at], option.label) for option, at in zip(prompt.options, rows, strict=True)
     ]
