@@ -92,6 +92,16 @@ def answer_context(agent: Agent, prompt: BlockedPrompt | None) -> dict[str, obje
     }
 
 
+def answer_region(web: WebState, agent: Agent) -> dict[str, object]:
+    """The answer region as it stands now, for its own route and for the page that opens with it."""
+    return answer_context(agent, _question(web, agent))
+
+
+def composer_region(web: WebState, agent: Agent) -> dict[str, object]:
+    """An empty composer that claims the screen it was drawn over."""
+    return {"agent": agent, "screen": _screen_now(web, agent), "text": ""}
+
+
 @dataclass(frozen=True, slots=True)
 class Said:
     """The banner a sent key earns: its colour, the claim, the reason, and whether to go look."""
@@ -236,8 +246,7 @@ def build(web: WebState) -> APIRouter:
     @router.get("/agent/{session}/compose")
     def composer(session: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
         agent = find_agent(web, identity_of(session))
-        context = {"agent": agent, "screen": _screen_now(web, agent), "text": ""}
-        return web.pages.fragment("compose.html", context)
+        return web.pages.fragment("compose.html", composer_region(web, agent))
 
     @router.post("/agent/{session}/prompt")
     def prompt(  # pyright: ignore[reportUnusedFunction]
@@ -252,7 +261,7 @@ def build(web: WebState) -> APIRouter:
     @router.get("/agent/{session}/answer")
     def answer(session: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
         agent = find_agent(web, identity_of(session))
-        return web.pages.fragment("answer.html", answer_context(agent, _question(web, agent)))
+        return web.pages.fragment("answer.html", answer_region(web, agent))
 
     @router.post("/agent/{session}/keys")
     def keys(  # pyright: ignore[reportUnusedFunction]

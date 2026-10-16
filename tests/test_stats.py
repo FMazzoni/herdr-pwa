@@ -21,7 +21,15 @@ from herdr_pwa.web.stats import (
     window_of,
 )
 from tests import test_hermes
-from tests.webfakes import WORKING_SESSION, build_rig, write_transcript
+from tests.webfakes import (
+    READ,
+    SNAPSHOT,
+    WORKING_SESSION,
+    build_rig,
+    read_frame,
+    snapshot_frame,
+    write_transcript,
+)
 
 NOW = datetime(2026, 10, 11, 12, 0, tzinfo=UTC).timestamp()
 FOUR_MINUTES_AGO = "2026-10-11T11:56:00.000Z"
@@ -332,7 +340,7 @@ def _transcript(tmp_path: Path) -> None:
 @pytest.mark.parametrize("tab", ["chat", "pane"])
 def test_the_strip_sits_in_the_bar_on_chat_and_pane(tmp_path: Path, tab: str) -> None:
     _transcript(tmp_path)
-    rig = build_rig(tmp_path)
+    rig = build_rig(tmp_path, {SNAPSHOT: snapshot_frame(), READ: read_frame("$ ")})
     strip = _strip(rig.http.get(f"/agent/{WORKING_SESSION}?tab={tab}").text)
     assert f'data-hp-topic="stats:{WORKING_SESSION}"' in strip
     assert f'hx-get="/agent/{WORKING_SESSION}/stats"' in strip

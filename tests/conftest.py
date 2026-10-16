@@ -26,6 +26,8 @@ def _isolated_home(
     monkeypatch.setenv("HOME", str(home))
     for name in [key for key in os.environ if key.startswith("HP_")]:
         monkeypatch.delenv(name)
+    # A started app warms its caches on a thread of its own; no test races one it did not ask for.
+    monkeypatch.setenv("HP_PREWARM", "false")
     return home
 
 
