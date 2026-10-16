@@ -27,7 +27,7 @@ from herdr_pwa.engine.transcript import (
     remember,
     tool_summary,
 )
-from herdr_pwa.validation import Text, or_default
+from herdr_pwa.validation import OR_NONE, Text
 
 HERMES_ROOT: Final = "~/.hermes"
 
@@ -53,7 +53,7 @@ class _Function(BaseModel):
 
     name: Text = None
     # Hermes writes the arguments as JSON text inside the JSON; an older row wrote the object.
-    arguments: Annotated[ToolInput | Json[ToolInput] | None, or_default(None)] = None
+    arguments: Annotated[ToolInput | Json[ToolInput] | None, OR_NONE] = None
 
 
 class _ToolCall(BaseModel):
@@ -63,10 +63,10 @@ class _ToolCall(BaseModel):
 
     id: Text = None
     call_id: Text = None
-    function: Annotated[_Function | None, or_default(None)] = None
+    function: Annotated[_Function | None, OR_NONE] = None
 
 
-_CALLS: Final = TypeAdapter(list[Annotated[_ToolCall | None, or_default(None)]])
+_CALLS: Final = TypeAdapter(list[Annotated[_ToolCall | None, OR_NONE]])
 
 
 def _calls(blob: object) -> list[_ToolCall]:

@@ -21,7 +21,7 @@ from herdr_pwa.engine.notices import (
     injected,
     without_reminders,
 )
-from herdr_pwa.validation import Count, Flag, Text, or_default
+from herdr_pwa.validation import OR_NONE, Count, Flag, Text
 
 CLAUDE_TRANSCRIPT_ROOT: Final = "~/.claude/projects"
 
@@ -214,7 +214,7 @@ class _Block(BaseModel):
     text: Text = None
     id: Text = None
     name: Text = None
-    input: Annotated[ToolInput | None, or_default(None)] = None
+    input: Annotated[ToolInput | None, OR_NONE] = None
     tool_use_id: Text = None
     is_error: Flag = None
     # Kept whole: a result that is not text and images is shown as the JSON it was.
@@ -248,7 +248,7 @@ class _Usage(BaseModel):
     output_tokens: Count = None
     cache_creation_input_tokens: Count = None
     cache_read_input_tokens: Count = None
-    output_tokens_details: Annotated[_Details | None, or_default(None)] = None
+    output_tokens_details: Annotated[_Details | None, OR_NONE] = None
 
 
 class _Message(BaseModel):
@@ -256,12 +256,10 @@ class _Message(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    content: Annotated[
-        str | list[Annotated[_Block | None, or_default(None)]] | None, or_default(None)
-    ] = None
+    content: Annotated[str | list[Annotated[_Block | None, OR_NONE]] | None, OR_NONE] = None
     id: Text = None
     model: Text = None
-    usage: Annotated[_Usage | None, or_default(None)] = None
+    usage: Annotated[_Usage | None, OR_NONE] = None
 
 
 class _Kind(BaseModel):
@@ -294,19 +292,19 @@ class ClaudeRecord(BaseModel):
     subtype: Text = None
     cwd: Text = None
     is_meta: Flag = Field(default=None, validation_alias="isMeta")
-    message: Annotated[_Message | None, or_default(None)] = None
-    origin: Annotated[RecordOrigin | None, or_default(None)] = None
-    prompt_source: Annotated[str | _Kind | None, or_default(None)] = Field(
+    message: Annotated[_Message | None, OR_NONE] = None
+    origin: Annotated[RecordOrigin | None, OR_NONE] = None
+    prompt_source: Annotated[str | _Kind | None, OR_NONE] = Field(
         default=None, validation_alias="promptSource"
     )
     session: Text = Field(default=None, validation_alias="sessionId")
     # A background session's stamp is spelled the other way.
     stamp: Text = Field(default=None, validation_alias="session_id")
     session_kind: Text = Field(default=None, validation_alias="sessionKind")
-    forked_from: Annotated[_Fork | None, or_default(None)] = Field(
+    forked_from: Annotated[_Fork | None, OR_NONE] = Field(
         default=None, validation_alias="forkedFrom"
     )
-    compact_metadata: Annotated[_Opaque | None, or_default(None)] = Field(
+    compact_metadata: Annotated[_Opaque | None, OR_NONE] = Field(
         default=None, validation_alias="compactMetadata"
     )
     is_compact_summary: Flag = Field(default=None, validation_alias="isCompactSummary")

@@ -3,6 +3,7 @@
 from typing import Annotated, cast
 
 from pydantic import (
+    GetCoreSchemaHandler,
     StrictBool,
     StrictFloat,
     StrictInt,
@@ -11,6 +12,7 @@ from pydantic import (
     ValidatorFunctionWrapHandler,
     WrapValidator,
 )
+from pydantic_core import CoreSchema, core_schema
 
 
 def or_default(default: object) -> WrapValidator:
@@ -31,11 +33,24 @@ def or_default(default: object) -> WrapValidator:
     return WrapValidator(validate)
 
 
+class _OrNone:
+    """`or_default(None)` decided inside pydantic-core, with no Python call per field."""
+
+    def __get_pydantic_core_schema__(
+        self, source: object, handler: GetCoreSchemaHandler
+    ) -> CoreSchema:
+        # Measured on a 67MB transcript: the Python wrap per field cost a page read ~10%.
+        return core_schema.with_default_schema(handler(source), default=None, on_error="default")
+
+
+# Use as ``Annotated[Model | None, OR_NONE] = None``: a value of the wrong shape reads as absent.
+OR_NONE = _OrNone()
+
 # A field of a format we do not own: its value when it has the shape we read, else None.
-type Text = Annotated[StrictStr | None, or_default(None)]
-type Count = Annotated[StrictInt | None, or_default(None)]
-type Number = Annotated[StrictInt | StrictFloat | None, or_default(None)]
-type Flag = Annotated[StrictBool | None, or_default(None)]
+type Text = Annotated[StrictStr | None, OR_NONE]
+type Count = Annotated[StrictInt | None, OR_NONE]
+type Number = Annotated[StrictInt | StrictFloat | None, OR_NONE]
+type Flag = Annotated[StrictBool | None, OR_NONE]
 
 
 def summary(exc: ValidationError) -> str:

@@ -30,7 +30,7 @@ from herdr_pwa.engine.transcript import (
     one_line,
     remember,
 )
-from herdr_pwa.validation import Count, Flag, Number, Text, or_default
+from herdr_pwa.validation import OR_NONE, Count, Flag, Number, Text
 
 OPENCODE_ROOT: Final = "~/.local/share/opencode"
 
@@ -87,7 +87,7 @@ class _Times(BaseModel):
     created: Number = None
 
 
-type _When = Annotated[_Times | None, or_default(None)]
+type _When = Annotated[_Times | None, OR_NONE]
 
 
 class _State(BaseModel):
@@ -95,7 +95,7 @@ class _State(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    input: Annotated[_ToolInput | None, or_default(None)] = None
+    input: Annotated[_ToolInput | None, OR_NONE] = None
     status: Text = None
     error: Text = None
     output: Text = None
@@ -114,7 +114,7 @@ class _MentionSource(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     value: Text = None
-    text: Annotated[_Said | None, or_default(None)] = None
+    text: Annotated[_Said | None, OR_NONE] = None
 
 
 class _Part(BaseModel):
@@ -128,9 +128,9 @@ class _Part(BaseModel):
     synthetic: Flag = None
     tool: Text = None
     call: Text = Field(default=None, validation_alias="callID")
-    state: Annotated[_State | None, or_default(None)] = None
+    state: Annotated[_State | None, OR_NONE] = None
     time: _When = None
-    source: Annotated[_MentionSource | None, or_default(None)] = None
+    source: Annotated[_MentionSource | None, OR_NONE] = None
     filename: Text = None
     name: Text = None
 
@@ -150,7 +150,7 @@ class _Tokens(BaseModel):
     input: Count = None
     output: Count = None
     reasoning: Count = None
-    cache: Annotated[_Cache | None, or_default(None)] = None
+    cache: Annotated[_Cache | None, OR_NONE] = None
 
 
 class _MessageRecord(BaseModel):
@@ -161,7 +161,7 @@ class _MessageRecord(BaseModel):
     role: Text = None
     time: _When = None
     cost: Number = None
-    tokens: Annotated[_Tokens | None, or_default(None)] = None
+    tokens: Annotated[_Tokens | None, OR_NONE] = None
     model: Text = Field(default=None, validation_alias="modelID")
     provider: Text = Field(default=None, validation_alias="providerID")
 

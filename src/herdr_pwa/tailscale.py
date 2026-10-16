@@ -9,7 +9,7 @@ from typing import Annotated, Final
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter, ValidationError
 
-from herdr_pwa.validation import Text, is_not_json, or_default
+from herdr_pwa.validation import OR_NONE, Text, is_not_json, or_default
 
 # LocalAPI refuses any request whose Host is not this exact name (its CSRF guard).
 LOCALAPI_HOST = "local-tailscaled.sock"
@@ -138,9 +138,7 @@ class _Node(BaseModel):
 
     dns_name: Text = Field(default=None, validation_alias="DNSName")
     # A number in Self, while the User table's keys are the same number as a string.
-    user_id: Annotated[int | str | None, or_default(None)] = Field(
-        default=None, validation_alias="UserID"
-    )
+    user_id: Annotated[int | str | None, OR_NONE] = Field(default=None, validation_alias="UserID")
 
 
 class _User(BaseModel):
@@ -155,8 +153,8 @@ class TailnetStatus(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     backend_state: Text = Field(default=None, validation_alias="BackendState")
-    node: Annotated[_Node | None, or_default(None)] = Field(default=None, validation_alias="Self")
-    users: Annotated[dict[str, Annotated[_User | None, or_default(None)]], or_default({})] = Field(
+    node: Annotated[_Node | None, OR_NONE] = Field(default=None, validation_alias="Self")
+    users: Annotated[dict[str, Annotated[_User | None, OR_NONE]], or_default({})] = Field(
         default={}, validation_alias="User"
     )
 

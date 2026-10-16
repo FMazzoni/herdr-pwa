@@ -5,7 +5,7 @@ from typing import Annotated, Final
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
-from herdr_pwa.validation import Flag, Text, or_default
+from herdr_pwa.validation import OR_NONE, Flag, Text
 
 MAX_DIFF_LINES: Final = 60
 
@@ -65,9 +65,7 @@ class EditArgs(BaseModel):
     file_path: Text = Field(default=None, validation_alias=AliasChoices("file_path", "filePath"))
     notebook_path: Text = None
     path: Text = None
-    edits: Annotated[list[Annotated[_Edit | None, or_default(None)]] | None, or_default(None)] = (
-        None
-    )
+    edits: Annotated[list[Annotated[_Edit | None, OR_NONE]] | None, OR_NONE] = None
     replace_all: Flag = None
 
     @property
