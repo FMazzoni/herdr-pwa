@@ -20,6 +20,7 @@ const OFFLINE_URL = "/offline";
 const PRECACHE = [
   "/static/app.css",
   "/static/hp.js",
+  "/static/backnav.js",
   "/static/sendhold.js",
   "/static/geometry.js",
   "/static/chatend.js",
