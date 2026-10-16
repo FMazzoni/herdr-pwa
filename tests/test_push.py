@@ -10,9 +10,10 @@ import pytest
 import pywebpush
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+from pydantic import ValidationError
 from pywebpush import WebPushException
 
-from herdr_pwa import jsonio, push
+from herdr_pwa import push
 from herdr_pwa.push import (
     EVENT_BLOCKED,
     EVENT_CLEAR,
@@ -56,6 +57,10 @@ def raw_subscription(
 ) -> dict[str, object]:
     point = bytes([0x04]) + bytes(range(64))
     return {"endpoint": endpoint, "keys": {"p256dh": b64u(point), "auth": b64u(auth)}}
+
+
+def subscribed(endpoint: str = ENDPOINT, *, auth: bytes = bytes(range(16))) -> Subscription:
+    return Subscription.model_validate(raw_subscription(endpoint, auth=auth))
 
 
 def mode(path: Path) -> int:
@@ -174,7 +179,7 @@ def store(tmp_path: Path) -> SubscriptionStore:
 
 def test_the_store_starts_empty_and_round_trips_at_0600(store: SubscriptionStore) -> None:
     assert store.list_all() == []
-    added = store.add(raw_subscription())
+    added = store.add(subscribed())
     assert store.list_all() == [added]
     assert mode(store.path) == 0o600
 
@@ -182,17 +187,17 @@ def test_the_store_starts_empty_and_round_trips_at_0600(store: SubscriptionStore
 def test_resubscribing_a_device_updates_its_keys_and_keeps_its_stamp(tmp_path: Path) -> None:
     clock = Clock()
     store = SubscriptionStore(tmp_path, clock=clock)
-    first = store.add(raw_subscription())
+    first = store.add(subscribed())
     clock.advance(60)
-    second = store.add(raw_subscription(auth=bytes(16)))
+    second = store.add(subscribed(auth=bytes(16)))
     assert len(store.list_all()) == 1
     assert second.added_at == first.added_at
-    assert second.auth != first.auth
+    assert second.keys.auth != first.keys.auth
 
 
 def test_remove_forgets_one_device_and_is_idempotent(store: SubscriptionStore) -> None:
-    _ = store.add(raw_subscription())
-    _ = store.add(raw_subscription("https://push.example.invalid/two"))
+    _ = store.add(subscribed())
+    _ = store.add(subscribed("https://push.example.invalid/two"))
     assert store.remove(ENDPOINT)
     assert not store.remove(ENDPOINT)
     assert [one.endpoint for one in store.list_all()] == ["https://push.example.invalid/two"]
@@ -214,16 +219,14 @@ def test_remove_forgets_one_device_and_is_idempotent(store: SubscriptionStore) -
         {**raw_subscription(), "expirationTime": "soon"},
     ],
 )
-def test_a_malformed_subscription_is_refused(store: SubscriptionStore, raw: object) -> None:
-    with pytest.raises(SubscriptionError):
-        _ = store.add(raw)
+def test_a_malformed_subscription_is_refused(raw: object) -> None:
+    with pytest.raises(ValidationError):
+        _ = Subscription.model_validate(raw)
 
 
 def test_one_bad_record_does_not_hide_the_good_ones(store: SubscriptionStore) -> None:
-    good = store.add(raw_subscription())
-    entries = jsonio.as_list(jsonio.child(jsonio.loads(store.path.read_text()), "subscriptions"))
-    assert entries is not None
-    entries.insert(0, {"endpoint": "nope"})
+    good = store.add(subscribed())
+    entries = [{"endpoint": "nope"}, good.model_dump(mode="json", by_alias=True)]
     _ = store.path.write_text(json.dumps({"version": 1, "subscriptions": entries}))
     assert store.list_all() == [good]
 
@@ -236,12 +239,12 @@ def test_a_corrupt_store_is_loud(store: SubscriptionStore, content: str) -> None
 
 
 def test_a_failed_write_keeps_the_previous_store(store: SubscriptionStore) -> None:
-    _ = store.add(raw_subscription())
+    _ = store.add(subscribed())
     before = store.path.read_text()
     # A directory where the temporary file must go makes the write itself fail.
     store.path.with_name(store.path.name + ".tmp").mkdir()
-    with pytest.raises(SubscriptionError):
-        _ = store.add(raw_subscription("https://push.example.invalid/two"))
+    with pytest.raises(IsADirectoryError):
+        _ = store.add(subscribed("https://push.example.invalid/two"))
     assert store.path.read_text() == before
 
 
@@ -318,7 +321,7 @@ def test_pywebpush_signs_and_encrypts_with_this_key(
         .public_bytes(Encoding.X962, PublicFormat.UncompressedPoint)
     )
     device = {"endpoint": ENDPOINT, "keys": {"p256dh": b64u(point), "auth": b64u(bytes(16))}}
-    subscription = Subscription.parse(device)
+    subscription = Subscription.model_validate(device)
     data = encode_payload(
         build_payload(Notice(event=EVENT_BLOCKED, title="t", body="secret"), now=0)
     )
@@ -355,7 +358,7 @@ def test_one_failing_device_does_not_stop_the_others_and_the_gone_are_pruned(
     store = SubscriptionStore(tmp_path)
     endpoints = [f"https://push.example.invalid/{n}" for n in ("gone", "broken", "fine", "expired")]
     for endpoint in endpoints:
-        _ = store.add(raw_subscription(endpoint))
+        _ = store.add(subscribed(endpoint))
     devices = Devices(
         {
             endpoints[0]: DeliveryError("gone", status=410),

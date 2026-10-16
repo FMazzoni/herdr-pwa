@@ -2,10 +2,11 @@ import json
 import stat
 from dataclasses import replace
 from pathlib import Path
+from typing import TypedDict
 
 import pytest
+from pydantic import JsonValue, TypeAdapter
 
-from herdr_pwa import jsonio
 from herdr_pwa.managed import ManagedHerd, carries_mark
 from herdr_pwa.notify import (
     Change,
@@ -26,6 +27,14 @@ from tests.fakes import Agent, Clock
 A = "11111111-1111-4111-8111-111111111111"
 B = "22222222-2222-4222-8222-222222222222"
 C = "33333333-3333-4333-8333-333333333333"
+
+
+class SeenFile(TypedDict):
+    version: int
+    seen: dict[str, JsonValue]
+
+
+SEEN_FILE: TypeAdapter[SeenFile] = TypeAdapter(SeenFile)
 
 
 def agent(session: str = A, status: str = "working", *, seq: int = 0, **fields: str) -> Agent:
@@ -360,8 +369,7 @@ def test_the_seen_ledger_persists_at_0600_and_caps_its_size(tmp_path: Path) -> N
     clock.advance(1)
     reloaded.observe([agent("s599", "idle", seq=3)])
     assert reloaded.unread_sessions() == {"s599"}
-    stored = jsonio.as_dict(jsonio.child(jsonio.loads(seen.path.read_text()), "seen"))
-    assert stored is not None
+    stored = SEEN_FILE.validate_json(seen.path.read_text())["seen"]
     assert len(stored) == 512
     assert stat.S_IMODE(seen.path.stat().st_mode) == 0o600
 

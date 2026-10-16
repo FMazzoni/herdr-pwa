@@ -1,16 +1,22 @@
 """Web Push: the alerts page, the VAPID key, device subscriptions, preferences and snooze."""
 
 import asyncio
-import json
-from typing import Final
+from typing import Annotated, Final
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
+from pydantic import (
+    BaseModel,
+    StrictBool,
+    StrictFloat,
+    StrictStr,
+    StringConstraints,
+    ValidationError,
+)
 
-from herdr_pwa import jsonio
 from herdr_pwa.notify_state import MAX_DND_SECONDS, InterruptStore
-from herdr_pwa.push import SubscriptionError, SubscriptionStore
-from herdr_pwa.statedir import StateError
+from herdr_pwa.push import Subscription, SubscriptionError, SubscriptionStore
+from herdr_pwa.validation import or_default, summary
 from herdr_pwa.web.deps import WebState, viewer_guard
 from herdr_pwa.web.notifier import PushState
 
@@ -20,7 +26,21 @@ PUSH_OFF: Final = "push is switched off on this server (HP_PUSH_ENABLED=0)"
 
 
 class BadBody(Exception):  # noqa: N818 - named for the answer it becomes
-    """The request body is not the JSON object the route needs."""
+    """The request body is too big to be what the route needs."""
+
+
+class _Unsubscribe(BaseModel):
+    endpoint: Annotated[StrictStr, StringConstraints(min_length=1)]
+
+
+class _Kinds(BaseModel):
+    # A key that was not sent, or is not a boolean, leaves that preference alone.
+    blocked: Annotated[StrictBool | None, or_default(None)] = None
+    done: Annotated[StrictBool | None, or_default(None)] = None
+
+
+class _Snooze(BaseModel):
+    seconds: StrictFloat
 
 
 def _json(body: dict[str, object], status: int = 200) -> JSONResponse:
@@ -36,24 +56,17 @@ def _bad(detail: str) -> JSONResponse:
     return _json({"error": detail}, 400)
 
 
-async def _object(request: Request) -> dict[str, object]:
+async def _body[M: BaseModel](request: Request, model: type[M]) -> M:
     raw = await request.body()
     if len(raw) > MAX_BODY_BYTES:
         raise BadBody(f"body is over {MAX_BODY_BYTES} bytes")
-    try:
-        parsed = jsonio.loads(raw.decode("utf-8", errors="replace"))
-    except json.JSONDecodeError as exc:
-        raise BadBody(f"body is not JSON: {exc}") from exc
-    document = jsonio.as_dict(parsed)
-    if document is None:
-        raise BadBody("expected a JSON object")
-    return document
+    return model.model_validate_json(raw.decode("utf-8", errors="replace"))
 
 
 def _devices(store: SubscriptionStore) -> int:
     try:
         return len(store.list_all())
-    except SubscriptionError:
+    except (SubscriptionError, OSError):
         return 0
 
 
@@ -68,11 +81,6 @@ def _policy(store: InterruptStore) -> dict[str, object]:
         "now": now,
         "maxSnooze": MAX_DND_SECONDS,
     }
-
-
-def _tristate(value: object) -> bool | None:
-    # A key that was not sent leaves that preference alone.
-    return value if isinstance(value, bool) else None
 
 
 def _loop_status(push: PushState) -> dict[str, object]:
@@ -130,8 +138,10 @@ def _page_routes(router: APIRouter, web: WebState, push: PushState | None) -> No
 
 async def _subscribe(push: PushState, request: Request) -> JSONResponse:
     try:
-        stored = push.stores.devices.add(await _object(request))
-    except (BadBody, SubscriptionError) as exc:
+        stored = push.stores.devices.add(await _body(request, Subscription))
+    except ValidationError as exc:
+        return _bad(summary(exc))
+    except (BadBody, SubscriptionError, OSError) as exc:
         return _bad(str(exc))
     devices = _devices(push.stores.devices)
     # The echoed endpoint is the server's confirmation; only then does the page say "on".
@@ -141,33 +151,32 @@ async def _subscribe(push: PushState, request: Request) -> JSONResponse:
 
 async def _unsubscribe(push: PushState, request: Request) -> JSONResponse:
     try:
-        endpoint = jsonio.as_str((await _object(request)).get("endpoint"))
-        if not endpoint:
-            raise BadBody("endpoint must be a non-empty string")  # noqa: TRY301 - one answer
+        endpoint = (await _body(request, _Unsubscribe)).endpoint
         removed = push.stores.devices.remove(endpoint)
-    except (BadBody, SubscriptionError) as exc:
+    except ValidationError as exc:
+        return _bad(summary(exc))
+    except (BadBody, SubscriptionError, OSError) as exc:
         return _bad(str(exc))
     return _json({"removed": removed, "devices": _devices(push.stores.devices)})
 
 
 async def _set_prefs(push: PushState, request: Request) -> JSONResponse:
     try:
-        body = await _object(request)
-        _ = push.stores.interrupts.set_kinds(
-            blocked=_tristate(body.get("blocked")), done=_tristate(body.get("done"))
-        )
-    except (BadBody, StateError, OSError) as exc:
+        kinds = await _body(request, _Kinds)
+        _ = push.stores.interrupts.set_kinds(blocked=kinds.blocked, done=kinds.done)
+    except ValidationError as exc:
+        return _bad(summary(exc))
+    except (BadBody, OSError) as exc:
         return _bad(str(exc))
     return _json(_policy(push.stores.interrupts))
 
 
 async def _snooze(push: PushState, request: Request) -> JSONResponse:
     try:
-        seconds = jsonio.as_float((await _object(request)).get("seconds"))
-        if seconds is None:
-            raise BadBody("'seconds' must be a number")  # noqa: TRY301 - one answer
-        policy = push.stores.interrupts.snooze(seconds)
-    except (BadBody, StateError, OSError) as exc:
+        policy = push.stores.interrupts.snooze((await _body(request, _Snooze)).seconds)
+    except ValidationError as exc:
+        return _bad(summary(exc))
+    except (BadBody, OSError) as exc:
         return _bad(str(exc))
     if policy.dnd_until and push.notifier is not None:
         # The clear goes out over the network, so it runs off the event loop.

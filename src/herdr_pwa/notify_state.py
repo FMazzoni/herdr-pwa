@@ -2,18 +2,27 @@
 seen, and which kinds of alert the user lets through. Every file is 0600 in the state dir.
 """
 
-import json
 import logging
 import threading
 import time
 from collections.abc import Callable, Iterable, Mapping
-from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Protocol, Self
+from typing import Annotated, Literal, Protocol
 
-from herdr_pwa import jsonio, statedir
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    StrictBool,
+    StrictFloat,
+    StrictInt,
+    StrictStr,
+    ValidationError,
+)
+
+from herdr_pwa import statedir
 from herdr_pwa.push import EVENT_BLOCKED, EVENT_DONE
-from herdr_pwa.statedir import StateError
+from herdr_pwa.validation import or_default
 
 log = logging.getLogger(__name__)
 
@@ -28,21 +37,33 @@ SEEN_MAX_ENTRIES = 512
 Clock = Callable[[], float]
 
 
-def _write(path: Path, document: Mapping[str, object]) -> None:
+class _StateFile(BaseModel):
+    """What every file here shares: a version this build reads, or the file is not used."""
+
+    version: Literal[1]
+
+
+def _write(path: Path, document: _StateFile) -> None:
     _ = statedir.ensure_dir(path.parent)
-    statedir.write_secret(path, json.dumps(document, indent=2) + "\n")
+    statedir.write_secret(path, document.model_dump_json(indent=2) + "\n")
 
 
-def _read_document(path: Path) -> dict[str, object] | None:
+def _read[F: _StateFile](path: Path, model: type[F]) -> F | None:
     try:
         text = statedir.read_text(path)
-        document = None if text is None else jsonio.as_dict(jsonio.loads(text))
-    except (StateError, json.JSONDecodeError) as exc:
+        return None if text is None else model.model_validate_json(text)
+    except (OSError, ValidationError) as exc:
         log.warning("cannot use %s (%s); starting from nothing", path, exc)
         return None
-    if document is None or document.get("version") != 1:
-        return None
-    return document
+
+
+class _LedgerFile(_StateFile):
+    """notify.json; a status that is not a string is dropped, the rest kept."""
+
+    updated_at: StrictFloat
+    statuses: Annotated[
+        dict[str, Annotated[StrictStr | None, or_default(None)]], or_default({})
+    ] = {}
 
 
 class StatusLedger:
@@ -57,22 +78,20 @@ class StatusLedger:
 
     def load(self) -> dict[str, str] | None:
         """The prior to diff against, or None for absent, corrupt or stale: prime instead."""
-        document = _read_document(self.path)
-        if document is None:
-            return None
-        updated_at = jsonio.as_float(document.get("updated_at"))
+        document = _read(self.path, _LedgerFile)
         # A status from an hour ago is one the user already dealt with at the desk.
-        if updated_at is None or self._clock() - updated_at > self._max_age:
+        if document is None or self._clock() - document.updated_at > self._max_age:
             return None
-        statuses = jsonio.as_dict(document.get("statuses")) or {}
-        return {key: value for key, value in statuses.items() if isinstance(value, str)}
+        return {key: value for key, value in document.statuses.items() if value is not None}
 
     def save(self, statuses: Mapping[str, str]) -> None:
         """Write the prior for the next tick and the next process; never raises."""
-        document = {"version": 1, "updated_at": round(self._clock(), 3), "statuses": dict(statuses)}
+        document = _LedgerFile(
+            version=1, updated_at=round(self._clock(), 3), statuses=dict(statuses)
+        )
         try:
             _write(self.path, document)
-        except (OSError, StateError) as exc:
+        except OSError as exc:
             log.warning("cannot write %s: %s; a restart will prime", self.path, exc)
 
 
@@ -86,13 +105,14 @@ class SeenAgent(Protocol):
     def state_change_seq(self) -> int: ...
 
 
-@dataclass(frozen=True, slots=True)
-class SeenRecord:
+class SeenRecord(BaseModel):
     """When an agent last moved, and when the phone last showed it."""
 
-    seq: int
-    active_at: float
-    seen_at: float
+    model_config = ConfigDict(frozen=True)
+
+    seq: StrictInt
+    active_at: StrictFloat
+    seen_at: StrictFloat
 
     @property
     def unread(self) -> bool:
@@ -100,13 +120,10 @@ class SeenRecord:
         return self.active_at > self.seen_at
 
 
-def _seen_record(raw: object) -> SeenRecord | None:
-    seq = jsonio.as_int(jsonio.child(raw, "seq"))
-    active = jsonio.as_float(jsonio.child(raw, "active_at"))
-    seen = jsonio.as_float(jsonio.child(raw, "seen_at"))
-    if seq is None or active is None or seen is None:
-        return None
-    return SeenRecord(seq, active, seen)
+class _SeenFile(_StateFile):
+    """seen.json; a record missing any of its three numbers is dropped, the rest kept."""
+
+    seen: Annotated[dict[str, Annotated[SeenRecord | None, or_default(None)]], or_default({})] = {}
 
 
 class SeenLedger:
@@ -135,9 +152,13 @@ class SeenLedger:
             return
         record = records.get(agent.session)
         if record is None:
-            records[agent.session] = SeenRecord(agent.state_change_seq, now, now)
+            records[agent.session] = SeenRecord(
+                seq=agent.state_change_seq, active_at=now, seen_at=now
+            )
         elif record.seq != agent.state_change_seq:
-            records[agent.session] = SeenRecord(agent.state_change_seq, now, record.seen_at)
+            records[agent.session] = record.model_copy(
+                update={"seq": agent.state_change_seq, "active_at": now}
+            )
         else:
             return
         self._dirty = True
@@ -149,8 +170,8 @@ class SeenLedger:
         now = self._clock()
         with self._lock:
             records = self._loaded()
-            record = records.get(session) or SeenRecord(0, now, now)
-            records[session] = replace(record, seen_at=now)
+            record = records.get(session) or SeenRecord(seq=0, active_at=now, seen_at=now)
+            records[session] = record.model_copy(update={"seen_at": now})
             self._dirty = True
             self._trim(records)
         self._maybe_flush()
@@ -165,15 +186,12 @@ class SeenLedger:
         with self._lock:
             if not self._dirty:
                 return
-            seen = {
-                key: {"seq": one.seq, "active_at": one.active_at, "seen_at": one.seen_at}
-                for key, one in self._loaded().items()
-            }
+            document = _SeenFile(version=1, seen=dict(self._loaded()))
             self._dirty = False
             self._flushed_at = self._clock()
         try:
-            _write(self.path, {"version": 1, "seen": seen})
-        except (OSError, StateError) as exc:
+            _write(self.path, document)
+        except OSError as exc:
             log.warning("cannot write %s: %s; 'seen' is in memory only", self.path, exc)
 
     def _maybe_flush(self) -> None:
@@ -182,10 +200,8 @@ class SeenLedger:
 
     def _loaded(self) -> dict[str, SeenRecord]:
         if self._records is None:
-            document = _read_document(self.path) or {}
-            raw = jsonio.as_dict(document.get("seen")) or {}
-            parsed = {key: _seen_record(value) for key, value in raw.items()}
-            self._records = {key: one for key, one in parsed.items() if one is not None}
+            document = _read(self.path, _SeenFile) or _SeenFile(version=1)
+            self._records = {key: one for key, one in document.seen.items() if one is not None}
         return self._records
 
     def _trim(self, records: dict[str, SeenRecord]) -> None:
@@ -198,13 +214,18 @@ class SeenLedger:
         self._dirty = True
 
 
-@dataclass(frozen=True, slots=True)
-class Interrupts:
+def _not_negative(until: float) -> float:
+    return max(0.0, until)
+
+
+class Interrupts(BaseModel):
     """Which kinds may interrupt, and until when finishes are snoozed; defaults blocked on, done off."""
 
-    blocked: bool = True
-    done: bool = False
-    dnd_until: float = 0.0
+    model_config = ConfigDict(frozen=True)
+
+    blocked: Annotated[StrictBool, or_default(True)] = True
+    done: Annotated[StrictBool, or_default(False)] = False
+    dnd_until: Annotated[StrictFloat, or_default(0.0), AfterValidator(_not_negative)] = 0.0
 
     def snoozed(self, now: float) -> bool:
         """The do-not-disturb window is still in the future."""
@@ -220,17 +241,11 @@ class Interrupts:
         # A clear retracts; suppressing one leaves a stale alert on the lock screen.
         return True
 
-    @classmethod
-    def parse(cls, raw: object) -> Self:
-        """Defaults for whatever is missing or malformed."""
-        blocked = jsonio.child(raw, "blocked")
-        done = jsonio.child(raw, "done")
-        until = jsonio.as_float(jsonio.child(raw, "dnd_until")) or 0.0
-        return cls(
-            blocked=blocked if isinstance(blocked, bool) else True,
-            done=done if isinstance(done, bool) else False,
-            dnd_until=max(0.0, until),
-        )
+
+class _InterruptsFile(_StateFile):
+    """interrupts.json; whatever is missing or malformed takes its default."""
+
+    interrupts: Annotated[Interrupts, or_default(Interrupts())] = Interrupts()
 
 
 class InterruptStore:
@@ -242,34 +257,31 @@ class InterruptStore:
 
     def load(self) -> Interrupts:
         """What is on disk, or the defaults; an unreadable store is not fatal."""
-        document = _read_document(self.path)
-        return Interrupts.parse(None if document is None else document.get("interrupts"))
+        document = _read(self.path, _InterruptsFile)
+        return Interrupts() if document is None else document.interrupts
 
     def save(self, interrupts: Interrupts) -> Interrupts:
-        """Persist the preferences; raises StateError or OSError when they cannot be kept."""
-        body = {
-            "blocked": interrupts.blocked,
-            "done": interrupts.done,
-            "dnd_until": interrupts.dnd_until,
-        }
-        _write(self.path, {"version": 1, "interrupts": body})
+        """Persist the preferences; raises OSError when they cannot be kept."""
+        _write(self.path, _InterruptsFile(version=1, interrupts=interrupts))
         return interrupts
 
     def set_kinds(self, *, blocked: bool | None = None, done: bool | None = None) -> Interrupts:
         """Change which kinds may ever fire, leaving the snooze alone."""
         current = self.load()
         return self.save(
-            replace(
-                current,
-                blocked=current.blocked if blocked is None else blocked,
-                done=current.done if done is None else done,
+            current.model_copy(
+                update={
+                    "blocked": current.blocked if blocked is None else blocked,
+                    "done": current.done if done is None else done,
+                }
             )
         )
 
     def snooze(self, seconds: float) -> Interrupts:
         """Start, or end at 0, a do-not-disturb window clamped to twelve hours."""
         span = min(max(0.0, seconds), float(MAX_DND_SECONDS))
-        return self.save(replace(self.load(), dnd_until=self._clock() + span if span else 0.0))
+        until = self._clock() + span if span else 0.0
+        return self.save(self.load().model_copy(update={"dnd_until": until}))
 
     def current(self) -> tuple[Interrupts, float]:
         """The policy and the clock reading it is judged against, taken together."""

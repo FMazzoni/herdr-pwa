@@ -10,8 +10,10 @@ from typing import Final
 import uvicorn
 
 from herdr_pwa import auth, devreport, pairing, tailscale
+from herdr_pwa.audit import AuditUnavailableError
 from herdr_pwa.engine import EngineError, HerdrClient
 from herdr_pwa.protocol import EXPECTED_PROTOCOL
+from herdr_pwa.push import VapidKeyError
 from herdr_pwa.settings import Settings
 from herdr_pwa.web.app import create_app
 from herdr_pwa.web.deps import ClientFactory
@@ -163,7 +165,8 @@ def main(argv: list[str] | None = None) -> int:
     port: int | None = args.port  # pyright: ignore[reportAny]
     try:
         serve(settings, port)
-    except (auth.AuthError, NonLoopbackBindError) as exc:
+    # A key or audit log that cannot be used stops the box serving; say why, not a traceback.
+    except (auth.AuthError, NonLoopbackBindError, VapidKeyError, AuditUnavailableError) as exc:
         sys.stderr.write(f"serve: {exc}\n")
         return 1
     return 0

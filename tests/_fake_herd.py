@@ -6,7 +6,7 @@ from pathlib import Path
 
 from pydantic import JsonValue
 
-from herdr_pwa.audit import AuditLog, Origin, Recorder, records
+from herdr_pwa.audit import AuditLog, Origin, Record, Recorder, records
 from herdr_pwa.engine import (
     EngineSettings,
     HerdrClient,
@@ -285,7 +285,7 @@ class Rig:
     state: Path
 
     @property
-    def audit_records(self) -> list[dict[str, object]]:
+    def audit_records(self) -> list[Record]:
         """Every audit record written so far, oldest first."""
         return records(self.state, limit=0)
 

@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Final
 
 import pytest
-from pydantic import JsonValue
+from pydantic import JsonValue, TypeAdapter
 
 from herdr_pwa.engine import (
     EngineError,
@@ -30,7 +30,7 @@ from herdr_pwa.engine import (
     TargetNotFound,
     Transport,
 )
-from herdr_pwa.jsontypes import JsonObject, as_object, loads
+from herdr_pwa.jsontypes import JsonObject
 from tests._jsonpath import at
 from tests.engine_seam import (
     BACKOFF_CAP,
@@ -46,6 +46,7 @@ SRC = Path(__file__).resolve().parent.parent / "src" / "herdr_pwa"
 
 # Short enough that a timeout test is quick, long enough for a loaded CI box.
 FAST = 0.4
+REQUEST: TypeAdapter[JsonObject] = TypeAdapter(dict[str, JsonValue])
 
 Handler = Callable[[JsonObject, socket.socket], JsonObject | bytes | None]
 
@@ -105,8 +106,8 @@ class FakeHerdr:
                 buffer += chunk
                 while b"\n" in buffer:
                     line, _, buffer = buffer.partition(b"\n")
-                    request = as_object(loads(line))
-                    assert request is not None, "the client sent a frame that is not an object"
+                    # A frame that is not an object fails here, loudly, as the client's bug.
+                    request = REQUEST.validate_json(line)
                     self.requests.append(request)
                     self.per_connection[index] += 1
                     if not self._answer(conn, request):

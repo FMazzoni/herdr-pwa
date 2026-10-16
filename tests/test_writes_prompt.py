@@ -170,6 +170,7 @@ def test_a_recycled_pane_is_caught_on_the_wire_and_nothing_is_typed(tmp_path: Pa
     assert (result.refusal, result.status) == (Refusal.SESSION_MOVED, 409)
     assert r.herd.writes(PROMPT) == []
     outcome = r.audit_records[-1]
+    assert outcome["phase"] == "outcome"
     assert outcome["result"] == "refused:TargetNotFound"
 
 
@@ -222,6 +223,7 @@ def test_at_a_no_echo_prompt_the_payload_is_not_stored_and_the_bytes_are_the_sam
     assert result.no_echo == NO_ECHO_MECHANISM
     assert r.herd.writes(PROMPT)[0]["text"] == "hunter2-secret"
     attempt = r.audit_records[0]
+    assert attempt["phase"] == "attempt"
     assert attempt["payload"] is None
     assert attempt["payload_omitted"] == "no_echo_prompt"
 

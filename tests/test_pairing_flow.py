@@ -7,8 +7,8 @@ import time
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+from pydantic import JsonValue, TypeAdapter
 
-from herdr_pwa import jsonio
 from herdr_pwa.engine import EngineSettings, HerdrClient
 from herdr_pwa.jsontypes import JsonObject
 from herdr_pwa.pairing import pair, qr_text
@@ -57,13 +57,12 @@ def test_a_scripted_phone_pairs_installs_subscribes_and_is_pushed_to(tmp_path: P
     def factory(engine: EngineSettings) -> HerdrClient:
         return HerdrClient(engine, transport=wire)
 
-    sent: list[dict[str, object]] = []
+    sent: list[JsonObject] = []
+    payload: TypeAdapter[JsonObject] = TypeAdapter(dict[str, JsonValue])
 
     def deliver(subscription: Subscription, data: str) -> None:
         del subscription
-        parsed = jsonio.as_dict(jsonio.loads(data))
-        assert parsed is not None
-        sent.append(parsed)
+        sent.append(payload.validate_json(data))
 
     app = create_app(settings_for(tmp_path), factory, deliver=deliver)
     # The phone, as tailscale serve presents it: same Host, identity header injected.
