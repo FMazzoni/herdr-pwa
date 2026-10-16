@@ -30,7 +30,7 @@ from herdr_pwa.web.chat import is_long
 from herdr_pwa.web.failures import FAILURES, failure_for
 from herdr_pwa.web.markdown import TAGS, MdNode, render_tree
 from herdr_pwa.web.naming import card_question, card_title, display_title, page_title
-from herdr_pwa.web.render import Pages
+from herdr_pwa.web.render import Pages, read_templates
 from herdr_pwa.web.routers.compose import key_name, said
 from herdr_pwa.web.seams import Seams
 from herdr_pwa.web.started import STARTED_FILENAME, StartedTree, fingerprint, record_started
@@ -223,7 +223,7 @@ def test_assets_hash_every_static_file() -> None:
 def test_a_template_changed_on_disk_after_start_is_not_what_is_served(tmp_path: Path) -> None:
     # New markup under old view models is a 500 under StrictUndefined; a restart shows it instead.
     _ = (tmp_path / "t.html").write_text("old {{ x }}")
-    pages = Pages(Assets.load(), directory=tmp_path)
+    pages = Pages(Assets.load(), read_templates(tmp_path))
     assert pages.render("t.html", {"x": 1}) == "old 1"
     _ = (tmp_path / "t.html").write_text("new {{ y }}")
     _ = (tmp_path / "u.html").write_text("added")

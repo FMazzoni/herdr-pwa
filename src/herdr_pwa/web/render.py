@@ -15,20 +15,20 @@ FRAGMENT_HEADER: Final = "HP-Fragment"
 
 
 class Pages:
-    """Renders the templates read at construction into HTML responses; every one autoescapes."""
+    """Renders the templates it is handed, by name, into HTML responses; every one autoescapes."""
 
     def __init__(
         self,
         assets: Assets,
-        directory: Path = TEMPLATES_DIR,
+        templates: Mapping[str, str],
         *,
         device_report: bool = False,
         fallback: int = 20,
     ) -> None:
         # autoescape=True rather than select_autoescape, so no file extension can opt out.
-        # Read once, like the static files: a merge onto disk must not reach old Python in memory.
+        # Held in memory, like the static files: a merge onto disk must not reach old Python.
         self.env = Environment(
-            loader=DictLoader(_read_all(directory)),
+            loader=DictLoader(dict(templates)),
             auto_reload=False,
             autoescape=True,
             undefined=StrictUndefined,
@@ -71,7 +71,8 @@ class Pages:
         )
 
 
-def _read_all(directory: Path) -> dict[str, str]:
+def read_templates(directory: Path) -> dict[str, str]:
+    """Every template under ``directory`` by its name, read once at startup."""
     return {
         path.relative_to(directory).as_posix(): path.read_text(encoding="utf-8")
         for path in sorted(directory.rglob("*"))

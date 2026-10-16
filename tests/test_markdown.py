@@ -9,7 +9,7 @@ from herdr_pwa.web import mathml
 from herdr_pwa.web.assets import Assets
 from herdr_pwa.web.markdown import CLASSES, TAGS, MdNode, render_tree
 from herdr_pwa.web.mathml import MATH_ATTRS
-from herdr_pwa.web.render import Pages
+from herdr_pwa.web.render import TEMPLATES_DIR, Pages, read_templates
 
 EVERYTHING = r"""# Title
 
@@ -49,7 +49,9 @@ def _walk(nodes: tuple[MdNode, ...]) -> list[MdNode]:
 
 
 def _html(text: str) -> str:
-    template = Pages(Assets.load()).env.from_string('{% from "md.html" import md %}{{ md(nodes) }}')
+    template = Pages(Assets.load(), read_templates(TEMPLATES_DIR)).env.from_string(
+        '{% from "md.html" import md %}{{ md(nodes) }}'
+    )
     return template.render(nodes=render_tree(text))
 
 
@@ -297,7 +299,7 @@ def test_a_path_and_line_becomes_a_reference_to_the_file(text: str, refs: list[s
 
 def test_a_file_reference_links_only_under_the_route_it_is_given() -> None:
     nodes = render_tree("open src/app/server.py:42 now")
-    pages = Pages(Assets.load())
+    pages = Pages(Assets.load(), read_templates(TEMPLATES_DIR))
     plain = pages.env.from_string('{% from "md.html" import md %}{{ md(nodes) }}')
     linked = pages.env.from_string(
         '{% from "md.html" import md %}{{ md(nodes, files="/agent/s/files") }}'
