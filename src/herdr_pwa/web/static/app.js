@@ -992,6 +992,16 @@
     return true;
   }
 
+  /* A write's answer is newer than a read its region put off, and draws what the write did;
+   * the read, fetched after it, would redraw that outcome away. */
+  function superseded(detail) {
+    var target = detail.target;
+    var at = target && detail.shouldSwap ? deferred.indexOf(target.id) : -1;
+    if (at !== -1) {
+      deferred.splice(at, 1);
+    }
+  }
+
   function isRead(detail) {
     return !!(detail.requestConfig && detail.requestConfig.verb === "get");
   }
@@ -1006,6 +1016,7 @@
 
   document.addEventListener("htmx:beforeSwap", function (event) {
     if (!isRead(event.detail)) {
+      superseded(event.detail);
       return;
     }
     /* A scroll is told of on the next frame, and a read can land before it: the reader who has
