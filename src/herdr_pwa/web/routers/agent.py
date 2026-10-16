@@ -55,7 +55,9 @@ def read_chat(
     # Every page reaches the newest turn, an earlier one included, so each says what is on its way.
     talking = still_talking(agent_status(web, agent))
     drawn = start is not None or before is not None
-    return chat_view(page, working=talking, doubt=said, drawn=drawn)
+    # herdr bumps the sequence on every status change, so it names one working stretch.
+    working = f"{agent.session}:{agent.state_change_seq}" if talking else ""
+    return chat_view(page, working=working, doubt=said, drawn=drawn)
 
 
 def read_pane(web: WebState, agent: Agent) -> panetext.PaneView:

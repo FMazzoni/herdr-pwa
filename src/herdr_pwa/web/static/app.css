@@ -122,6 +122,11 @@
   /* How far the strip's 44px tap box reaches under its drawn ~28px line; a negative margin of
      the same takes it back out of the layout, so the line stays quiet and the tap stays 44px. */
   --strip-reach: 16px;
+  /* The working line's three dots: their size and spacing, one beat of the wave, its low ebb. */
+  --working-dot: 0.22em;
+  --working-gap: 0.22em;
+  --working-beat: 1.6s;
+  --working-ebb: 0.25;
 
   /* Code in chat prose: one colour per kind of token, drawn from the terminal palette. */
   --code-keyword: var(--ansi-magenta);
@@ -202,6 +207,14 @@ html { -webkit-tap-highlight-color: transparent; }
 .chat__notes { display: contents; }
 /* The catching-up note sits at the bottom of the log, where the waiting eye is. */
 .chat__note { color: var(--ink-3); font-size: var(--text-meta); text-align: center; padding: var(--space-6) var(--space-4); }
+/* One line whatever the verb, so the turn landing is the only thing that moves the log. */
+.chat__working { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Three dots in the working colour, a slow wave through them; still under Reduce Motion. */
+.working { display: inline-flex; gap: var(--working-gap); margin-left: var(--working-gap); }
+.working__dot { width: var(--working-dot); height: var(--working-dot); border-radius: var(--radius-round); background: var(--working); animation: working-wave var(--working-beat) ease-in-out infinite; }
+.working__dot:nth-child(2) { animation-delay: calc(var(--working-beat) / 6); }
+.working__dot:nth-child(3) { animation-delay: calc(var(--working-beat) / 3); }
+@keyframes working-wave { 0%, 60%, 100% { opacity: var(--working-ebb); } 30% { opacity: 1; } }
 
 /* Freshness: everything but live dims the claim the cards make. */
 .feed.is-stale .cards { opacity: 0.55; }
