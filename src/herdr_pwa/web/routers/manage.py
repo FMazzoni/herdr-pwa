@@ -20,11 +20,12 @@ from herdr_pwa.web.writing import (
     ticked,
 )
 from herdr_pwa.writes.lifecycle import (
-    HARNESSES,
     AgentStarted,
     StartRequest,
+    launch_of,
     offered_kinds,
     start_agent,
+    stranded_kinds,
 )
 from herdr_pwa.writes.refusal import Refusal, Refused
 from herdr_pwa.writes.workspaces import (
@@ -41,7 +42,9 @@ def _new_context(snapshot: Snapshot, values: dict[str, str]) -> dict[str, object
     focused = next((w.workspace_id for w in snapshot.workspaces if w.focused), "")
     return {
         "kinds": kinds,
-        "models": {kind: HARNESSES[kind].models for kind in kinds},
+        "models": {kind: launch.models for kind in kinds if (launch := launch_of(kind))},
+        # Installed for the user but not on this service's PATH: said, not silently left out.
+        "stranded": stranded_kinds(),
         "workspaces": snapshot.workspaces,
         "cwds": sorted({a.cwd for a in snapshot.agents if a.cwd}),
         "values": {"workspace": focused, "kind": kinds[0] if kinds else "", **values},

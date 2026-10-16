@@ -447,6 +447,23 @@ def _on_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *kinds: str) -> No
     monkeypatch.setenv("PATH", str(bin_dir))
 
 
+def test_the_new_agent_form_says_which_installed_harness_this_service_cannot_see(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _on_path(tmp_path, monkeypatch, "opencode")
+    mine = tmp_path / "home" / ".local" / "bin"
+    mine.mkdir(parents=True)
+    _ = (mine / "claude").write_text("#!/bin/sh\n")
+    (mine / "claude").chmod(0o700)
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    herd = FakeHerd()
+    herd.add_workspace("w1")
+    page = web(tmp_path, herd).http.get("/new").text
+    assert f"claude is installed at {mine / 'claude'} but isn't on this service's PATH" in page
+    assert '<option value="claude"' not in page
+    assert '<option value="opencode"' in page
+
+
 def test_the_new_agent_form_has_a_way_back_and_a_first_prompt(tmp_path: Path) -> None:
     herd = FakeHerd()
     herd.add_workspace("w1")

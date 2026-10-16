@@ -10,7 +10,13 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Final
 
-from herdr_pwa.engine import HistoryState, ModelRef, SessionUsage
+from herdr_pwa.engine import (
+    Harness,
+    HistoryState,
+    ModelRef,
+    SessionUsage,
+    harness_of,
+)
 
 # Context windows published for models that have no larger variant, so a percentage of them is
 # true. A model not listed here shows its context in tokens, with no percentage and no bar.
@@ -153,9 +159,8 @@ def _newest(usage: SessionUsage) -> ModelRef:
     return usage.models[-1] if usage.models else ModelRef()
 
 
-def _context(kind: str, usage: SessionUsage) -> _Context | None:
-    # hermes draws a context figure on screen and stores nothing behind it.
-    if kind == "hermes" or not usage.context_tokens:
+def _context(harness: Harness | None, usage: SessionUsage) -> _Context | None:
+    if (harness is not None and not harness.stores_context) or not usage.context_tokens:
         return None
     return _Context(usage.context_tokens, window_of(_newest(usage).model))
 
@@ -196,13 +201,13 @@ class _Found:
 
 
 def _found(reading: Reading) -> _Found:
-    kind, usage, now = reading.kind, reading.usage, reading.now
+    harness, usage, now = harness_of(reading.agent_kind), reading.usage, reading.now
     return _Found(
         model=_newest(usage),
-        context=_context(kind, usage),
+        context=_context(harness, usage),
         turn=_turn(reading),
-        # Zero is the tally's word for "the harness recorded no money"; claude records none.
-        cost=usage.cost if kind != "claude" else 0.0,
+        # Zero is the tally's word for "the harness recorded no money".
+        cost=usage.cost if harness is None or harness.prices_itself else 0.0,
         usage=usage,
         idle=_seconds_since(usage.last_at, now) if usage.last_at else None,
     )

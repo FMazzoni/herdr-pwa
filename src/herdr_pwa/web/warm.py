@@ -3,7 +3,7 @@
 import logging
 import threading
 
-from herdr_pwa.engine import MAX_TAIL_FILES, EngineError
+from herdr_pwa.engine import MAX_TAIL_FILES, EngineError, has_byte_frontier
 from herdr_pwa.web.deps import WebState
 from herdr_pwa.web.routers.agent import read_chat, read_stats
 
@@ -11,7 +11,9 @@ log = logging.getLogger(__name__)
 
 
 def warm(web: WebState) -> int:
-    """Fill the tail and usage caches and the render caches for the most urgent Claude agents.
+    """Fill the tail and usage caches and the render caches for the most urgent cached agents.
+
+    Only an agent whose log grows by appended bytes is held by those caches, so only it is warmed.
 
     Returns how many agents were warmed. Never raises: a cold cache costs latency, never a page.
     """
@@ -22,9 +24,9 @@ def warm(web: WebState) -> int:
         return 0
     # Most urgent first, as the snapshot ranks them; past the tail cache's room a warm file would
     # only push out another.
-    claude = [a for a in agents if a.session and (a.agent or "").strip().lower() == "claude"]
+    held = [a for a in agents if a.session and has_byte_frontier(a.agent)]
     warmed = 0
-    for agent in claude[:MAX_TAIL_FILES]:
+    for agent in held[:MAX_TAIL_FILES]:
         try:
             read_stats(web, agent)
             chat = read_chat(web, agent)

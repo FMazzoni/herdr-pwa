@@ -14,11 +14,13 @@ from herdr_pwa.engine.transcript import (
     MAX_RESULT_CHARS,
     MAX_USAGE_BYTES,
     Gather,
+    Harness,
     HistoryState,
     ModelRef,
     SessionUsage,
     Source,
     Speaker,
+    StartRecipe,
     ToolInput,
     TranscriptAdapter,
     TranscriptPage,
@@ -315,6 +317,8 @@ class HermesAdapter(TranscriptAdapter):
     """Hermes's history: one SQLite store, paged by POSITION not byte."""
 
     default_roots: ClassVar[tuple[str, ...]] = (HERMES_ROOT,)
+    # It draws a context figure on its status bar and stores nothing behind it.
+    harness: ClassVar[Harness] = Harness("hermes", StartRecipe("hermes"), stores_context=False)
 
     @override
     def page(self, source: Source, window: Window) -> TranscriptPage:

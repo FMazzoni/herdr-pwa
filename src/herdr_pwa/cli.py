@@ -3,6 +3,7 @@
 import argparse
 import ipaddress
 import logging
+import os
 import sys
 from typing import Final
 
@@ -10,12 +11,13 @@ import uvicorn
 
 from herdr_pwa import auth, devreport, pairing, tailscale
 from herdr_pwa.audit import AuditUnavailableError
-from herdr_pwa.engine import EngineError
+from herdr_pwa.engine import HERDR_KINDS, EngineError, harness_kinds
 from herdr_pwa.protocol import EXPECTED_PROTOCOL
 from herdr_pwa.push import DeliveryLog, VapidKeyError, health_line
 from herdr_pwa.settings import Settings
 from herdr_pwa.web.app import create_app
 from herdr_pwa.web.seams import Seams
+from herdr_pwa.writes.lifecycle import Availability, availability, record_service_path, service_path
 
 log = logging.getLogger(__name__)
 
@@ -24,6 +26,28 @@ def _verdict(found: int | None) -> str:
     if found is None:
         return "FAIL (unknown)"
     return "ok" if found == EXPECTED_PROTOCOL else f"FAIL (pinned {EXPECTED_PROTOCOL})"
+
+
+def _harness_line(found: Availability) -> str:
+    if found.offered:
+        return f"  {found.kind}: offered, at {found.found}"
+    if found.known and found.stranded:
+        return f"  {found.kind}: installed at {found.stranded}, not on the service's PATH  WARN"
+    if found.known:
+        return f"  {found.kind}: not installed"
+    where = found.found or found.stranded
+    return f"  {found.kind}: no harness here" + (f" (installed at {where})" if where else "")
+
+
+def harness_lines(recorded: str | None) -> list[str]:
+    """Every kind herdr runs, judged on the service's PATH (*recorded*) or, without it, this one."""
+    if recorded is None:
+        head = "harnesses (the service never recorded its PATH, so judged on this shell's):"
+        path = os.environ.get("PATH", os.defpath)
+    else:
+        head, path = "harnesses, on the service's PATH:", recorded
+    kinds = (*harness_kinds(), *(k for k in HERDR_KINDS if k not in harness_kinds()))
+    return [head, *(_harness_line(availability(kind, path)) for kind in kinds)]
 
 
 def doctor(settings: Settings, seams: Seams) -> int:
@@ -44,6 +68,8 @@ def doctor(settings: Settings, seams: Seams) -> int:
     # Informational: a box that never delivered is worth seeing, but the runner decides the verdict.
     health = DeliveryLog(settings.state_dir.expanduser()).load()
     lines.append(health_line(health, now=seams.wall()))
+    # Informational too: a harness the service cannot see is one the form silently cannot offer.
+    lines.extend(harness_lines(service_path(settings.state_dir.expanduser())))
     healthy = live == EXPECTED_PROTOCOL
     lines.append("doctor: OK" if healthy else "doctor: FAIL")
     seams.write("\n".join(lines) + "\n")
@@ -113,6 +139,7 @@ def serve(settings: Settings, port: int | None, seams: Seams) -> None:
     warning = auth.unpinned_warning(access)
     if warning:
         log.warning(warning)
+    record_service_path(settings.state_dir.expanduser())
     uvicorn.run(
         create_app(settings, seams),
         host=settings.host,

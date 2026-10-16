@@ -39,7 +39,7 @@ def _seal(path: Path, end: int) -> bytes:
 
 
 class UsageCache:
-    """Per Claude log, the lineage's tally; a refresh reads only the lines appended since."""
+    """Per appended-to log, the lineage's tally; a refresh reads only the lines appended since."""
 
     def __init__(self, *, files: int = MAX_FILES, max_bytes: int = MAX_USAGE_BYTES) -> None:
         self._files: OrderedDict[str, _Held] = OrderedDict()
@@ -49,8 +49,8 @@ class UsageCache:
 
     def read(self, source: Source) -> SessionUsage:
         """*source*'s tally. Never raises; a harness with no store answers ``unsupported``."""
-        if source.kind != "claude":
-            # opencode and hermes keep a rollup or a table: one query, nothing to grow.
+        if not transcript.has_byte_frontier(source.kind):
+            # A rollup or a table answers in one query, with nothing appended to grow by.
             return transcript.usage(source)
         path = ClaudeAdapter.log(source)
         if path is None:

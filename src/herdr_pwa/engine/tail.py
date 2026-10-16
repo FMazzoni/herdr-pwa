@@ -222,7 +222,7 @@ def _uncached(source: Source, ask: Ask) -> TranscriptPage:
 
 def chat_window(source: Source, *, ask: Ask, tails: TailCache) -> TranscriptPage:
     """What the Chat tab shows: the asked window of *source*'s conversation. Never raises."""
-    if source.kind != "claude":
+    if not transcript.has_byte_frontier(source.kind):
         return _uncached(source, ask)
     path = ClaudeAdapter.log(source)
     if path is None:

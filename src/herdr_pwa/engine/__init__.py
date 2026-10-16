@@ -44,13 +44,19 @@ from herdr_pwa.engine.model import (
 )
 from herdr_pwa.engine.tail import MAX_TAIL_FILES, Ask, TailCache, chat_window
 from herdr_pwa.engine.transcript import (
+    HERDR_KINDS,
+    Harness,
     HistoryState,
     ModelRef,
     SessionUsage,
     Source,
     Speaker,
+    StartRecipe,
     TranscriptPage,
     TranscriptTurn,
+    harness_kinds,
+    harness_of,
+    has_byte_frontier,
     locate,
     session_origin,
 )
@@ -70,6 +76,7 @@ from herdr_pwa.engine.transport import (
 from herdr_pwa.engine.usage import UsageCache
 
 __all__ = [
+    "HERDR_KINDS",
     "INTERRUPT_KEY",
     "MAX_TAIL_FILES",
     "NOT_READY_CODE",
@@ -90,6 +97,7 @@ __all__ = [
     "EngineTimeout",
     "EngineUnavailable",
     "EventStream",
+    "Harness",
     "HerdrClient",
     "HistoryState",
     "InvalidRequest",
@@ -112,6 +120,7 @@ __all__ = [
     "SnapshotCache",
     "Source",
     "Speaker",
+    "StartRecipe",
     "StartedAgent",
     "TailCache",
     "TargetNotFound",
@@ -123,6 +132,9 @@ __all__ = [
     "as_pane_id",
     "as_session_id",
     "chat_window",
+    "harness_kinds",
+    "harness_of",
+    "has_byte_frontier",
     "locate",
     "rank",
     "screen_digest",

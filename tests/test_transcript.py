@@ -8,9 +8,18 @@ from pathlib import Path
 import pytest
 from pydantic import JsonValue, TypeAdapter
 
-from herdr_pwa.engine import HistoryState, Source, Speaker, TranscriptPage, locate
+from herdr_pwa.engine import (
+    HERDR_KINDS,
+    HistoryState,
+    Source,
+    Speaker,
+    TranscriptPage,
+    harness_kinds,
+    harness_of,
+    has_byte_frontier,
+    locate,
+)
 from tests.engine_seam import (
-    AGENT_KINDS,
     MAX_NOTE_CHARS,
     MAX_PROSE_CHARS,
     MAX_RESULT_CHARS,
@@ -388,10 +397,22 @@ def test_a_provider_with_no_adapter_simply_has_no_history(
     assert history(Source.of(SESSION, agent_kind="cursor", root=transcript_root)).turns == []
 
 
-def test_the_registry_and_the_kinds_agree() -> None:
-    """AGENT_KINDS may not drift from the adapter registry."""
-    assert set(AGENT_KINDS) == {"claude", "opencode", "hermes"}
-    assert all(adapter_for(kind) is not None for kind in AGENT_KINDS)
+def test_the_registry_is_keyed_by_each_adapters_own_kind() -> None:
+    """One registry: the kinds are the adapters' own, and every one is a kind herdr runs."""
+    assert harness_kinds() == ("claude", "opencode", "hermes")
+    for kind in harness_kinds():
+        harness = harness_of(kind)
+        assert harness is not None
+        assert harness.kind == kind
+        assert adapter_for(kind) is not None
+        assert kind in HERDR_KINDS
+
+
+def test_only_a_byte_paged_log_is_grown_by_appended_bytes() -> None:
+    """The tail and usage caches ask this; a kind with no adapter has no such log."""
+    assert [k for k in harness_kinds() if has_byte_frontier(k)] == ["claude"]
+    assert not has_byte_frontier("cursor")
+    assert not has_byte_frontier(None)
 
 
 def test_a_qualified_root_is_searched_only_by_the_harness_it_names(
