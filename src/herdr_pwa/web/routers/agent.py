@@ -14,7 +14,7 @@ from herdr_pwa import panetext
 from herdr_pwa.engine import Agent, AgentStatus, Ask, EngineError, chat_window
 from herdr_pwa.web.chat import ChatView, chat_view
 from herdr_pwa.web.deps import WebState, hidden_tick, viewer_guard
-from herdr_pwa.web.herd import find_agent
+from herdr_pwa.web.herd import agent_status, find_agent
 from herdr_pwa.web.naming import page_title
 from herdr_pwa.web.routers.compose import answer_region, composer_region
 from herdr_pwa.web.stats import Stats, stats_for
@@ -32,7 +32,7 @@ def read_stats(web: WebState, agent: Agent) -> Stats:
         agent_kind=agent.agent or "",
         root=web.settings.transcript_roots or None,
     )
-    return stats_for(agent.agent or "", agent.status.value, usage, now=web.wall())
+    return stats_for(agent.agent or "", agent_status(web, agent).value, usage, now=web.wall())
 
 
 def read_chat(
@@ -89,6 +89,7 @@ def build(web: WebState) -> APIRouter:
         heading = page_title(agent.title, agent.agent, agent.target)
         context = {
             "agent": agent,
+            "agent_status": agent_status(web, agent),
             "tab": chosen,
             "tabs": TABS,
             "heading": heading,

@@ -17,6 +17,7 @@ from herdr_pwa.engine import (
     TailCache,
     UsageCache,
 )
+from herdr_pwa.notify_state import SeenLedger
 from herdr_pwa.settings import Settings
 from herdr_pwa.web.failures import PageHidden
 from herdr_pwa.web.render import Pages
@@ -45,6 +46,8 @@ class WebState:
     usage: UsageCache = field(default_factory=UsageCache)
     # Wall time, for how long ago a stamp in a transcript was; injected so tests hold it still.
     wall: Callable[[], float] = field(default=time.time)
+    # What the phone has shown; absent with push off, and then nothing is ever read.
+    seen: SeenLedger | None = None
 
     def snapshot(self) -> CachedValue[Snapshot]:
         """The shared snapshot, fetched only if nobody else is fetching it."""

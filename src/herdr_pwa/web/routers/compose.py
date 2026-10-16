@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from herdr_pwa import auth
-from herdr_pwa.decisions import decide_screen
+from herdr_pwa.decisions import decide_screen, page_status
 from herdr_pwa.engine import (
     INTERRUPT_KEY,
     Agent,
@@ -22,7 +22,7 @@ from herdr_pwa.engine import (
 )
 from herdr_pwa.web.deps import WebState, viewer_guard
 from herdr_pwa.web.failures import AgentGone, refused
-from herdr_pwa.web.herd import find_agent
+from herdr_pwa.web.herd import find_agent, unread_of
 from herdr_pwa.web.writing import (
     FormBody,
     address_of,
@@ -70,17 +70,13 @@ def _question(web: WebState, agent: Agent) -> BlockedPrompt | None:
         return None
 
 
-# Said, not drawn as a herdr state: the question went, and herdr has not yet said what replaced it.
-UPDATING: Final = "updating"
-
-
-def shown_status(agent: Agent, sent: KeySent | None = None) -> str:
-    """The status word the agent page shows: herdr's, or "updating" over a question just answered."""
+def shown_status(web: WebState, agent: Agent, sent: KeySent | None = None) -> str:
+    """The status word the agent page shows, with what the phone has read and any key just sent."""
     answered = sent is not None and sent.evidence is Evidence.GONE
-    return UPDATING if answered and agent.status is AgentStatus.BLOCKED else agent.status.value
+    return page_status(agent, unread_of(web, (agent,)), answered=answered)
 
 
-def answer_context(agent: Agent, prompt: BlockedPrompt | None) -> dict[str, object]:
+def answer_context(agent: Agent, prompt: BlockedPrompt | None, status: str) -> dict[str, object]:
     """What the answer region draws; its digits come from the function the write checks with."""
     allowed = allowed_keys(prompt)
     decision = decide_screen(prompt) if prompt is not None else None
@@ -95,7 +91,7 @@ def answer_context(agent: Agent, prompt: BlockedPrompt | None) -> dict[str, obje
         "pad": [k for k in pad_keys(prompt) if k not in hinted],
         "interrupt": INTERRUPT_KEY,
         "cadence": ANSWER_CADENCE,
-        "status": shown_status(agent),
+        "status": status,
         "about": _asked_about(prompt),
     }
 
@@ -109,7 +105,7 @@ def _asked_about(prompt: BlockedPrompt | None) -> tuple[str, ...]:
 
 def answer_region(web: WebState, agent: Agent) -> dict[str, object]:
     """The answer region as it stands now, for its own route and for the page that opens with it."""
-    return answer_context(agent, _question(web, agent))
+    return answer_context(agent, _question(web, agent), shown_status(web, agent))
 
 
 def composer_region(web: WebState, agent: Agent) -> dict[str, object]:
@@ -196,7 +192,8 @@ def _key(web: WebState, writer: Writer, session: SessionId, values: dict[str, st
     if isinstance(result, Refused):
         raise_if_gone(result)
         agent = _after(web, session, prior)
-        context = {**answer_context(agent, result.prompt), "key": ask.key.strip().lower()}
+        shown = shown_status(web, agent)
+        context = {**answer_context(agent, result.prompt, shown), "key": ask.key.strip().lower()}
         return refused(web.pages, "answer.html", context, result)
     return _answered(web, _after(web, session, prior), result)
 
@@ -214,10 +211,9 @@ def _answered(web: WebState, agent: Agent, result: KeySent) -> HTMLResponse:
     # Controls come back drawn from the screen the key made, never the one it was aimed at.
     agent = _fresh(web, agent)
     context = {
-        **answer_context(agent, result.prompt),
+        **answer_context(agent, result.prompt, shown_status(web, agent, result)),
         "sent": result,
         "said": said(result),
-        "status": shown_status(agent, result),
     }
     return web.pages.fragment("answer.html", context, headers={"HX-Trigger": "hp:poke"})
 

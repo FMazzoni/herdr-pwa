@@ -18,6 +18,7 @@ from herdr_pwa.notify_state import MAX_DND_SECONDS, InterruptStore
 from herdr_pwa.push import Subscription, SubscriptionError, SubscriptionStore
 from herdr_pwa.validation import or_default, summary
 from herdr_pwa.web.deps import WebState, viewer_guard
+from herdr_pwa.web.herd import mark_read
 from herdr_pwa.web.notifier import PushState
 
 # A PushSubscription is well under 1 KiB; anything far bigger is not one.
@@ -200,7 +201,7 @@ def _device_routes(router: APIRouter, push: PushState | None) -> None:
         return _off() if push is None else await _unsubscribe(push, request)
 
 
-def _preference_routes(router: APIRouter, push: PushState | None) -> None:
+def _preference_routes(router: APIRouter, web: WebState, push: PushState | None) -> None:
     @router.get("/prefs")
     def prefs() -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         return _off() if push is None else _json(_policy(push.stores.interrupts))
@@ -217,7 +218,7 @@ def _preference_routes(router: APIRouter, push: PushState | None) -> None:
     def seen(session: str) -> Response:  # pyright: ignore[reportUnusedFunction]
         # The loaded page says it was read; the GET that served it does not.
         if push is not None:
-            push.stores.seen.mark_seen(session)
+            mark_read(web, session)
         return Response(status_code=204)
 
 
@@ -226,5 +227,5 @@ def build(web: WebState, push: PushState | None = None) -> APIRouter:
     router = APIRouter(prefix="/push", dependencies=[Depends(viewer_guard(web))])
     _page_routes(router, web, push)
     _device_routes(router, push)
-    _preference_routes(router, push)
+    _preference_routes(router, web, push)
     return router

@@ -8,6 +8,8 @@ from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Protocol, Self
 
+from herdr_pwa.decisions import read_status
+from herdr_pwa.engine import AgentStatus
 from herdr_pwa.notify_state import Interrupts, SeenLedger, StatusLedger
 from herdr_pwa.push import (
     EVENT_BLOCKED,
@@ -69,6 +71,35 @@ class Change:
     event: str
     agent: AgentView | None = None
     replaces: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class _Shown:
+    """An agent as the phone shows it: the same fields, its status after the read rule."""
+
+    session: str
+    target: str
+    status: str
+    title: str
+    workspace: str
+    project: str
+    state_change_seq: int
+
+
+def _shown(agent: AgentView, unread: Mapping[str, bool] | None) -> AgentView:
+    # The rule is the feed's own: a finish the phone has already shown is idle.
+    status = read_status(AgentStatus.coerce(agent.status), str(agent.session), unread)
+    if status.value == str(agent.status):
+        return agent
+    return _Shown(
+        agent.session,
+        agent.target,
+        status.value,
+        agent.title,
+        agent.workspace,
+        agent.project,
+        agent.state_change_seq,
+    )
 
 
 def _status_of(agent: AgentView) -> str:
@@ -455,12 +486,16 @@ class Planner:
         """Decide one tick against the herd as just read."""
         # Observed every tick, priming included, so a finish has a "before" to be unread against.
         self._observe(agents)
-        current = statuses_of(agents)
-        prior = self._prior_for(current)
+        prior = self._prior_for(statuses_of(agents))
         if prior is None:
             return Step(primed=True)
+        unread = self._unread()
+        # A finish read on the phone is idle here too, so the alert it raised is taken down.
+        read = _read_map(agents, unread)
+        agents = [_shown(one, read) for one in agents]
+        current = statuses_of(agents)
         self._restore(prior, agents)
-        found = transitions(prior, agents, unread=self._unread())
+        found = transitions(prior, agents, unread=unread or frozenset())
         changes = self._permitted(self._quiet(found))
         if len(changes) < len(found) and self._hooks.health is not None:
             self._hooks.health.quieted(len(found) - len(changes))
@@ -509,13 +544,14 @@ class Planner:
         except Exception:
             log.exception("the seen ledger raised; only herdr's done will fire")
 
-    def _unread(self) -> frozenset[str]:
+    def _unread(self) -> frozenset[str] | None:
+        # None when nothing says what was read: then no finish is taken for read either.
         seen = self._seen()
         try:
-            return frozenset() if seen is None else frozenset(seen.unread_sessions())
+            return None if seen is None else frozenset(seen.unread_sessions())
         except Exception:
             log.exception("the seen ledger raised; only herdr's done will fire")
-            return frozenset()
+            return None
 
     def _quiet(self, changes: list[Change]) -> list[Change]:
         reader = self._hooks.is_managed
@@ -533,6 +569,15 @@ class Planner:
             log.exception("the interrupt store raised; the phone is still told")
             return changes
         return [one for one in changes if interrupts.allows(one.event, now=now)]
+
+
+def _read_map(
+    agents: Sequence[AgentView], unread: frozenset[str] | None
+) -> Mapping[str, bool] | None:
+    # Every session was just observed, so one missing from the unread set has been read.
+    if unread is None:
+        return None
+    return {str(one.session): one.session in unread for one in agents if one.session}
 
 
 def _managed_finish(change: Change, is_managed: Callable[[str], bool]) -> bool:

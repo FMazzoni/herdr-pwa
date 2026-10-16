@@ -138,14 +138,18 @@ class SeenLedger:
         self._flushed_at: float = 0.0
 
     def observe(self, agents: Iterable[SeenAgent]) -> None:
-        """Note every agent whose state counter moved as active now."""
+        """Note every agent whose state counter moved as active now, and write it in due course."""
+        self.note(agents)
+        self._maybe_flush()
+
+    def note(self, agents: Iterable[SeenAgent]) -> None:
+        """As observe, in memory only: a read of the herd writes nothing; a write or exit keeps it."""
         now = self._clock()
         with self._lock:
             records = self._loaded()
             for agent in agents:
                 self._observe_one(records, agent, now)
             self._trim(records)
-        self._maybe_flush()
 
     def _observe_one(self, records: dict[str, SeenRecord], agent: SeenAgent, now: float) -> None:
         if not agent.session:
@@ -180,6 +184,11 @@ class SeenLedger:
         """Every session whose last activity postdates the phone's last look."""
         with self._lock:
             return {key for key, record in self._loaded().items() if record.unread}
+
+    def unread_map(self) -> dict[str, bool]:
+        """Every session the ledger knows, and whether its last activity is still unread."""
+        with self._lock:
+            return {key: record.unread for key, record in self._loaded().items()}
 
     def flush(self) -> None:
         """Write now, debounce or not; called on shutdown."""

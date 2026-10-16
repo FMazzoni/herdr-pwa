@@ -12,7 +12,7 @@
 {% set multi = decision and decision.shape.value == "multi-select" %}
 {# An outcome keeps the region where the question was, so what a tap did is where the thumb is. #}
 {% set waiting = asked or blocked or sent is defined or refused is defined %}
-<section id="answer" class="answer{% if not waiting %} answer--quiet{% endif %}" data-hp-poll="{{ base }}/answer" hx-get="{{ base }}/answer" hx-target="this" hx-swap="outerHTML" data-hp-topic="agent:{{ agent.session }}"
+<section id="answer" class="answer{% if not waiting %} answer--quiet{% endif %}" data-hp-poll="{{ base }}/answer" hx-get="{{ base }}/answer" hx-target="this" hx-swap="outerHTML" data-hp-topic="agent:{{ agent.session }}" data-hp-status="{{ status }}"
          {#- A sent key's outcome stays up until its own timer, so the stream cannot wipe it the moment
              the screen moves; otherwise the stream says when to look. #}
          {% if sent is defined %}hx-trigger="every {{ cadence * 2 }}s, hp:poke from:body"{% elif refused is not defined %}hx-trigger="hp:stale, hp:poke from:body"{% else %}hx-trigger="hp:poke from:body"{% endif %}>

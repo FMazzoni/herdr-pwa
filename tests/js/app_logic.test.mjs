@@ -137,6 +137,14 @@ test("events: only whole blocks are read, and the unfinished rest waits for more
   assert.deepEqual(plain(logic.blocks(text, text.length)), { blocks: [], from: text.length });
 });
 
+test("seen: an open page says it saw a finish once, on the redraw that first shows it done", () => {
+  assert.equal(logic.finishedNow("working", "done"), true);
+  assert.equal(logic.finishedNow("blocked", "done"), true);
+  assert.equal(logic.finishedNow("done", "done"), false);
+  assert.equal(logic.finishedNow("done", "idle"), false);
+  assert.equal(logic.finishedNow("working", "idle"), false);
+});
+
 test("backoff: doubles from one second to a thirty-second cap and stays there", () => {
   const waits = [];
   let ms = logic.RETRY_FIRST_MS;
