@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Final
 
+from herdr_pwa.clock import ago
 from herdr_pwa.engine import (
     CONTEXT,
     Agent,
@@ -321,14 +322,6 @@ def cadence_for(agents: Iterable[Agent]) -> int:
     return WORKING_CADENCE if working else IDLE_CADENCE
 
 
-def _age_label(age: float) -> str:
-    if age < 60:  # noqa: PLR2004 -- seconds in a minute
-        return f"{age:.0f}s ago"
-    if age < 3600:  # noqa: PLR2004 -- seconds in an hour
-        return f"{age / 60:.0f}m ago"
-    return f"{age / 3600:.0f}h ago"
-
-
 def _condition(age: float | None, cadence: int, *, failing: bool) -> Condition:
     if age is not None and age > DISCONNECTED_AFTER:
         return Condition.OFFLINE
@@ -343,7 +336,7 @@ def freshness(age: float | None, cadence: int, error: str | None) -> Freshness:
     """The feed's freshness, given the snapshot's age and the last refresh's failure class."""
     return Freshness(
         age=age,
-        age_label="" if age is None else _age_label(age),
+        age_label="" if age is None else ago(age),
         condition=_condition(age, cadence, failing=error is not None),
         disconnected=age is not None and age > DISCONNECTED_AFTER,
         degraded=error is not None,

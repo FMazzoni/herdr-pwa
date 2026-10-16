@@ -512,18 +512,49 @@ def _spent(
     return record
 
 
-def usage_chat() -> list[dict[str, JsonValue]]:
-    """The chat fixture, its prompt sent four minutes ago and its answers carrying usage."""
+# A turn two days and three hours old: an orchestrating session whose newest typed prompt is days
+# behind it, which is how the strip met a day-scale turn.
+LONG_TURN_MINUTES: Final = (2 * 24 + 3) * 60
+
+
+# Claude Code on Bedrock records the provider's model id, which no label shortens.
+BEDROCK_MODEL: Final = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+
+
+def usage_chat(turn_minutes: float = 4, model: str = "") -> list[dict[str, JsonValue]]:
+    """The chat fixture, its prompt sent ``turn_minutes`` ago and its answers carrying usage."""
     records = _chat()
-    records[0]["timestamp"] = _ago(4)
-    _spent(records[1], "m1", prompt=118_000, out=2_100)
-    _spent(records[3], "m2", prompt=124_000, out=36_000)
+    records[0]["timestamp"] = _ago(turn_minutes)
+    for record in (
+        _spent(records[1], "m1", prompt=118_000, out=2_100),
+        _spent(records[3], "m2", prompt=124_000, out=36_000),
+    ):
+        if model:
+            obj(record, "message")["model"] = model
     return records
 
 
 def _usage_transcript(rig: Rig) -> None:
     """Write the usage chat as the state is built, so its turn is four minutes old when shot."""
     write_transcript(rig.settings.state_dir.parent / "transcripts", WORKING_SESSION, usage_chat())
+
+
+def _long_turn_transcript(rig: Rig) -> None:
+    """The usage chat with its turn running for days, as an orchestrating session's does."""
+    write_transcript(
+        rig.settings.state_dir.parent / "transcripts",
+        WORKING_SESSION,
+        usage_chat(LONG_TURN_MINUTES),
+    )
+
+
+def _crowded_transcript(rig: Rig) -> None:
+    """A days-long turn on a model id too long to share a narrow strip with every other fact."""
+    write_transcript(
+        rig.settings.state_dir.parent / "transcripts",
+        WORKING_SESSION,
+        usage_chat(LONG_TURN_MINUTES, BEDROCK_MODEL),
+    )
 
 
 OPENCODE_STORE: Final = FIXTURES / "transcript" / "opencode"
@@ -1407,6 +1438,22 @@ STATS: Final = (
         title="Chat with the stats strip: model, context meter, the running turn, output",
     ),
     State(
+        "usage-long-turn",
+        f"{AGENT}?tab=chat",
+        "#agent-stats .meter",
+        runner(_stressed),
+        prime=_long_turn_transcript,
+        title="The stats strip on a turn two days old: the time in its largest unit, on one line",
+    ),
+    State(
+        "usage-crowded",
+        f"{AGENT}?tab=chat",
+        "#agent-stats .stats__model",
+        runner(_stressed),
+        prime=_crowded_transcript,
+        title="A strip with more facts than a narrow line holds: the last ones wait in the sheet",
+    ),
+    State(
         "usage-open",
         f"{AGENT}?tab=chat",
         "#agent-stats details[open] .stats__rows",
@@ -1544,6 +1591,8 @@ V2_ONLY: Final = (
     "chat-notice-command",
     "pane-long",
     "usage-chat",
+    "usage-long-turn",
+    "usage-crowded",
     *(s.name for s in FILES),
 )
 

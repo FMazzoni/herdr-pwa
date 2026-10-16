@@ -31,7 +31,7 @@ from pydantic import (
 from pywebpush import WebPushException
 
 from herdr_pwa import statedir
-from herdr_pwa.clock import Clock
+from herdr_pwa.clock import Clock, ago
 from herdr_pwa.validation import is_not_json, or_default, summary
 
 log = logging.getLogger(__name__)
@@ -523,13 +523,8 @@ class DeliveryRecord(BaseModel):
 
 
 def _ago(at: float, now: float) -> str:
-    if not at:
-        return "never"
-    seconds = max(0, int(now - at))
-    for unit, size in (("d", 86400), ("h", 3600), ("m", 60)):
-        if seconds >= size:
-            return f"{seconds // size}{unit} ago"
-    return f"{seconds}s ago"
+    # A zero stamp is the record's word for "this never happened".
+    return ago(now - at) if at else "never"
 
 
 def health_line(record: DeliveryRecord | None, *, now: float) -> str:

@@ -4,9 +4,9 @@ import zlib
 from dataclasses import dataclass
 from typing import Final
 
+from herdr_pwa.clock import duration
 from herdr_pwa.engine import HistoryState, Speaker, TranscriptPage, TranscriptTurn, is_api_error
 from herdr_pwa.web.markdown import MdNode, render_tree
-from herdr_pwa.web.stats import duration
 
 _STATE_NOTES = {
     HistoryState.empty: "Nothing has been said yet.",
