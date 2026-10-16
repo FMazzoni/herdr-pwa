@@ -189,6 +189,21 @@ requestAnimationFrame(frame);
 # Only how long to wait before calling the dock stuck; a dock that follows does so in frames.
 DOCK_CEILING_MS = 5000
 
+# A tap's outcome lasts only until its region's own poll (twice the answer cadence, 10s), and a
+# loaded page can take longer than that to settle: once the tap is answered and its proof drawn,
+# every further htmx request is refused, so the screen judged is the outcome, not what replaced it.
+HOLD_PROOF = r"""
+const ready = arguments[0];
+let answered = false;
+document.addEventListener("htmx:afterRequest", (event) => {
+  const config = event.detail.requestConfig;
+  if (config && config.verb !== "get") answered = true;
+}, true);
+document.addEventListener("htmx:beforeRequest", (event) => {
+  if (answered && document.querySelector(ready)) event.preventDefault();
+}, true);
+"""
+
 # A tap can grow the dock too (a focused composer is taller), and the app re-measures it on the
 # resize observer's next frame: wait that out, frame by frame, before the room for it is judged.
 DOCK_KEPT = r"""
@@ -447,7 +462,8 @@ def _loaded(driver: Marionette, state: State, base: str) -> list[str]:
         seen = _wait(driver, state.armed, base)
         if not (seen.get("ready") and seen.get("settled")):
             return _load_problems(seen, state.armed, scripted=True)
-        driver.script(state.act)
+        # One script, so the gap between the armed look and the tap is what it always was.
+        driver.script(("" if state.in_flight else HOLD_PROOF) + state.act, state.ready)
     seen = _wait(driver, state.ready, base, settle=not state.in_flight)
     return _load_problems(seen, state.ready, scripted=state.scripted)
 
