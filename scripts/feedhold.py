@@ -80,9 +80,7 @@ def _probe(driver: Marionette, watched: str = "") -> dict[str, object]:
 def _wait(
     driver: Marionette, done: Callable[[dict[str, object]], bool], watched: str = ""
 ) -> dict[str, object]:
-    if not eventually(
-        lambda: bool(seen := _probe(driver, watched)) and done(seen), seconds=WAIT_SECONDS
-    ):
+    if not eventually(lambda: bool(seen := _probe(driver, watched)) and done(seen), WAIT_SECONDS):
         return {}
     settle(driver)
     return _probe(driver, watched)

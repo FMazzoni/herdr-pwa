@@ -238,9 +238,7 @@ def test_the_loop_ticks_until_stopped_and_survives_a_bad_tick(
         task = asyncio.create_task(loop.notifier.run(stop))
         # The bad tick has run and been logged; the loop is still going after it.
         failed = "notifier tick failed"
-        await until_async(
-            lambda: True if failed in caplog.messages or task.done() else None, seconds=5.0
-        )
+        await until_async(lambda: failed in caplog.messages or task.done(), 5.0)
         assert not task.done(), "a bad tick ended the loop"
         assert loop.notifier.state.running
         stop.set()

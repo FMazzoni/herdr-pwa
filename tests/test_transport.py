@@ -37,12 +37,16 @@ from tests.engine_seam import (
     MAX_STRAY_FRAMES,
     SocketTransport,
 )
-from tests.waiting import eventually
+from tests.waiting import eventually, until
 
 SRC = Path(__file__).resolve().parent.parent / "src" / "herdr_pwa"
 
 # Short enough that a timeout test is quick, long enough for a loaded CI box.
 FAST = 0.4
+# A dribbling peer's pause between bytes: each recv returns inside any per-recv timeout.
+DRIBBLE_GAP = 0.02
+# How long a hang-up may take to reach a socket that keeps sending into it.
+HANG_UP_SECONDS = 2.0
 REQUEST: TypeAdapter[dict[str, JsonValue]] = TypeAdapter(dict[str, JsonValue])
 
 Handler = Callable[[dict[str, JsonValue], socket.socket], dict[str, JsonValue] | bytes | None]
@@ -446,7 +450,8 @@ def test_a_dribbling_peer_cannot_outlast_the_deadline(
                 conn.sendall(b" ")
             except OSError:
                 return
-            time.sleep(0.02)
+            # Pacing, not waiting: the peer's slowness between bytes is what is under test.
+            time.sleep(DRIBBLE_GAP)
 
     serve(sock_path, handler, request)
     wire = transport(sock_path, timeout=0.3)
@@ -962,13 +967,13 @@ def test_a_second_request_on_one_connection_is_refused(server: FakeHerdr, sock_p
         conn.sendall(_line({"id": "a", "method": "agent.list", "params": {}}))
         assert b"\n" in conn.recv(65536)
 
-        def send_again() -> None:
-            for _ in range(3):  # the RST may land between the first and second
-                conn.sendall(_line({"id": "b", "method": "agent.list", "params": {}}))
-                time.sleep(0.05)
+        def send_again() -> bool:
+            # Raises once the hang-up has landed, which may be after the first send or later.
+            conn.sendall(_line({"id": "b", "method": "agent.list", "params": {}}))
+            return False
 
         with pytest.raises(OSError):  # noqa: PT011 - EPIPE or ECONNRESET, whichever lands first
-            send_again()
+            _ = until(send_again, HANG_UP_SECONDS)
     finally:
         conn.close()
     assert len(server.requests) == 1, "the second request reached the fake"
@@ -1306,7 +1311,7 @@ def test_a_refused_subscription_gives_the_descriptor_back(
         with pytest.raises(TargetNotFound):
             list(stream(sock_path))
     # The fake's own end closes on its thread, after the client is done; wait for it, not a leak.
-    settled = eventually(lambda: open_fds() <= before, seconds=5.0)
+    settled = eventually(lambda: open_fds() <= before, 5.0)
     assert settled, f"a refused subscription leaked its connection: {open_fds()} > {before}"
 
 

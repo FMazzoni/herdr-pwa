@@ -3,7 +3,6 @@
 The human step, scanning the code and allowing notifications, is the only part left out.
 """
 
-import time
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -17,6 +16,7 @@ from herdr_pwa.web.app import create_app
 from herdr_pwa.web.seams import Seams
 from tests.fakes import LOGIN, NODE, status_route, tailscaled
 from tests.test_push import raw_subscription
+from tests.waiting import eventually
 from tests.webfakes import SNAPSHOT, WORKING_PANE, FakeWire, agents_of, snapshot_frame
 
 # Bounds a wait on the background loop; the loop itself runs every few milliseconds.
@@ -78,12 +78,9 @@ def test_a_scripted_phone_pairs_installs_subscribes_and_is_pushed_to(tmp_path: P
         assert answer.json() == {"endpoint": device["endpoint"], "devices": 1, "armed": True}
 
         # Give the loop its priming tick on a calm herd, then block an agent.
-        deadline = time.monotonic() + DEADLINE
-        while not (tmp_path / "state" / "notify.json").exists() and time.monotonic() < deadline:
-            time.sleep(0.01)
+        _ = eventually((tmp_path / "state" / "notify.json").exists, DEADLINE)
         wire.replies[SNAPSHOT] = blocked_frame()
-        while not sent and time.monotonic() < deadline:
-            time.sleep(0.01)
+        _ = eventually(lambda: bool(sent), DEADLINE)
     assert sent, "the loop never pushed the blocked agent"
     assert sent[0]["event"] == "blocked"
     assert str(sent[0]["title"]).startswith("needs you")

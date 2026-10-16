@@ -2,7 +2,6 @@
 
 import os
 import threading
-import time
 from collections.abc import Generator, Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -28,6 +27,7 @@ from herdr_pwa.web.highlight import highlight
 from herdr_pwa.web.mdnode import MdNode
 from herdr_pwa.web.routers import files as files_router
 from tests.filefakes import booby_trap, git, make_repo, stand_in, trapped_submodule
+from tests.waiting import until
 from tests.webfakes import (
     SNAPSHOT,
     WORKING_SESSION,
@@ -41,6 +41,8 @@ from tests.webfakes import (
 
 SECRET_TEXT: Final = "do-not-show-me"  # noqa: S105 - the fixture's planted value
 FROM: Final = f"from={WORKING_SESSION}"
+# How long a uvicorn thread on loopback may take to bind.
+SERVE_SECONDS: Final = 10.0
 
 
 @pytest.fixture(scope="module")
@@ -512,9 +514,7 @@ def _serving(rig: Rig) -> Generator[str]:
     server = uvicorn.Server(config)
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()
-    deadline = time.monotonic() + 10
-    while not server.started and time.monotonic() < deadline:
-        time.sleep(0.02)
+    _ = until(lambda: server.started, SERVE_SECONDS)
     try:
         yield f"http://127.0.0.1:{server.servers[0].sockets[0].getsockname()[1]}"
     finally:

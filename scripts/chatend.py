@@ -15,7 +15,6 @@ to it, and the line they are reading stays where it was across every redraw, eve
 before their scroll is heard."""
 
 import json
-import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -40,6 +39,7 @@ from tests.catalogue import (
     runner,
     tool_heavy_chat,
 )
+from tests.waiting import STEP as POLL
 from tests.waiting import eventually
 from tests.webfakes import (
     READ,
@@ -516,14 +516,16 @@ def burst(driver: Marionette, base: str, tab: Tab, _rig: Rig, home: Path) -> lis
 def _redrawn(driver: Marionette, tab: Tab, ids: list[str]) -> list[str]:
     """Redraw ``ids``; the fold the reader closed must still be closed once they land."""
     driver.script(REDRAW, ids)
-    deadline = time.monotonic() + WAIT_SECONDS
-    after: object = None
-    while time.monotonic() < deadline:
-        after = driver.script(REDRAWN, ids)
-        if isinstance(after, dict) and after.get("fresh") and not after.get("busy"):
-            break
-        time.sleep(0.1)
-    if not isinstance(after, dict) or not after.get("fresh"):
+    after: dict[str, object] = {}
+
+    def fresh() -> bool:
+        nonlocal after
+        found = driver.script(REDRAWN, ids)
+        after = found if isinstance(found, dict) else {}
+        return bool(after.get("fresh")) and not after.get("busy")
+
+    _ = eventually(fresh, WAIT_SECONDS)
+    if not after.get("fresh"):
         return [f"{tab.name}: {' and '.join(ids)} never redrew"]
     if after.get("open"):
         return [
@@ -567,35 +569,23 @@ return { ...window.__hpStrip, busy: !!busy, there: !!document.getElementById("ag
 STRIP_STALE = "htmx.trigger(document.getElementById('agent-stats'), 'hp:stale');"
 
 
-def _strip_until(
-    driver: Marionette, done: Callable[[dict[str, object]], bool]
-) -> dict[str, object]:
-    deadline = time.monotonic() + WAIT_SECONDS
-    while time.monotonic() < deadline:
-        seen = driver.script(READ_STRIP)
-        if isinstance(seen, dict) and done(seen):
-            return seen
-        time.sleep(0.1)
-    return {}
-
-
 def strip_under_finger(
     driver: Marionette, base: str, tab: Tab, _rig: Rig, _home: Path
 ) -> list[str]:
     """The stats strip's redraw waits while a finger is down, and lands once it lifts."""
     driver.send("WebDriver:Navigate", {"url": base + tab.state.path})
-    if not _strip_until(driver, lambda s: bool(s.get("there")) and not s.get("busy")):
+    if not _read_until(driver, READ_STRIP, lambda s: bool(s.get("there")) and not s.get("busy")):
         return [f"{tab.name}: the strip never drew"]
     driver.script(FINGER, "touchstart")
     driver.script(STRIP_STALE)
-    held = _strip_until(driver, lambda s: _num(s, "answered") >= 1 and not s.get("busy"))
+    held = _read_until(driver, READ_STRIP, lambda s: _num(s, "answered") >= 1 and not s.get("busy"))
     if not held:
         return [f"{tab.name}: the strip's read never came back"]
     problems: list[str] = []
     if _num(held, "swaps"):
         problems.append(f"{tab.name}: the strip was redrawn under a finger")
     driver.script(FINGER, "touchend")
-    if not _strip_until(driver, lambda s: _num(s, "swaps") >= 1):
+    if not _read_until(driver, READ_STRIP, lambda s: _num(s, "swaps") >= 1):
         problems.append(f"{tab.name}: the strip's redraw never landed after the finger lifted")
     return problems
 
@@ -621,18 +611,6 @@ return { heard: window.__hpHeard, swaps: window.__hpSwaps, scrollY: window.scrol
 UNHEARD_PX = 400
 
 
-def _heard_until(
-    driver: Marionette, done: Callable[[dict[str, object]], bool]
-) -> dict[str, object]:
-    deadline = time.monotonic() + WAIT_SECONDS
-    while time.monotonic() < deadline:
-        seen = driver.script(HEARD)
-        if isinstance(seen, dict) and done(seen):
-            return seen
-        time.sleep(0.1)
-    return {}
-
-
 def unheard_scroll(driver: Marionette, base: str, tab: Tab, rig: Rig, home: Path) -> list[str]:
     """A write's swap that lands before the reader's scroll is heard does not keep them pinned."""
     driver.send("WebDriver:Navigate", {"url": base + tab.state.path})
@@ -640,11 +618,11 @@ def unheard_scroll(driver: Marionette, base: str, tab: Tab, rig: Rig, home: Path
     if not seen or not seen.get("scrollable"):
         return [f"{tab.name}: never drew a page tall enough to scroll"]
     up = driver.script(UNHEARD, UNHEARD_PX)
-    if not _heard_until(driver, lambda s: _num(s, "heard") >= 1):
+    if not _read_until(driver, HEARD, lambda s: _num(s, "heard") >= 1):
         return [f"{tab.name}: the reader's scroll was never heard"]
     tab.grow(rig, home, 1)
     driver.script(POKE)
-    after = _heard_until(driver, lambda s: _num(s, "swaps") >= 1 and not s.get("busy"))
+    after = _read_until(driver, HEARD, lambda s: _num(s, "swaps") >= 1 and not s.get("busy"))
     if not after or not isinstance(up, int | float):
         return [f"{tab.name}: the poll never redrew the chat"]
     if abs(_num(after, "scrollY") - up) > DRIFT:
@@ -808,8 +786,23 @@ def _hub(rig: Rig) -> Hub:
     return hub
 
 
-def _until(done: Callable[[], bool], seconds: float = WAIT_SECONDS) -> bool:
-    return eventually(done, seconds=seconds)
+def _until(done: Callable[[], bool], ceiling: float = WAIT_SECONDS, step: float = POLL) -> bool:
+    return eventually(done, ceiling, step=step)
+
+
+def _read_until(
+    driver: Marionette, script: str, done: Callable[[dict[str, object]], bool]
+) -> dict[str, object]:
+    """What ``script`` reads once ``done`` holds of it; empty if it never does."""
+    seen: dict[str, object] = {}
+
+    def look() -> bool:
+        nonlocal seen
+        found = driver.script(script)
+        seen = found if isinstance(found, dict) else {}
+        return done(seen)
+
+    return seen if eventually(look, WAIT_SECONDS) else {}
 
 
 def _append(home: Path, text: str, uuid: str) -> str:
@@ -1031,12 +1024,17 @@ def _walked(driver: Marionette) -> dict[str, object]:
 def _redraw_while(driver: Marionette, tab: Tab, rig: Rig, home: Path) -> int:
     """Redraw the region on a cadence until the reader's walk is done; the last count drawn."""
     n = 1
-    deadline = time.monotonic() + WAIT_SECONDS
-    while not _walked(driver).get("done") and time.monotonic() < deadline:
+
+    def walked() -> bool:
+        nonlocal n
+        if _walked(driver).get("done"):
+            return True
         tab.grow(rig, home, n)
         driver.script(POKE)
-        time.sleep(REDRAW_SECONDS)
         n += 1
+        return False
+
+    _ = eventually(walked, WAIT_SECONDS, step=REDRAW_SECONDS)
     return n
 
 
@@ -1044,7 +1042,6 @@ def _poked(driver: Marionette, newest: str) -> bool:
     if newest in str(_probe(driver).get("text", "")):
         return True
     driver.script(POKE)
-    time.sleep(REDRAW_SECONDS)
     return False
 
 
@@ -1088,7 +1085,8 @@ def scrolling_up(
         newest = tab.grow(rig, home, n)
         # A poke while a redraw is in flight is dropped (htmx's default sync), so poke until
         # the newest line is drawn.
-        if not _until(lambda: _poked(driver, newest)) or not _wait_for(driver, newest):
+        poked = _until(lambda: _poked(driver, newest), step=REDRAW_SECONDS)
+        if not poked or not _wait_for(driver, newest):
             return [f"{tab.name}: the redraw after the reader stopped never landed"]
         walk = _walked(driver)
         if not walk.get("swaps"):
@@ -1327,7 +1325,8 @@ def keyboard_up(driver: Marionette, base: str, tab: Tab, rig: Rig, home: Path) -
     driver.script(SCROLL_UP, STEP, 50, KEYBOARD_STEPS)
     n = _redraw_while(driver, tab, rig, home)
     newest = tab.grow(rig, home, n)
-    if not _until(lambda: _poked(driver, newest)) or not _wait_for(driver, newest):
+    poked = _until(lambda: _poked(driver, newest), step=REDRAW_SECONDS)
+    if not poked or not _wait_for(driver, newest):
         return [f"{tab.name}: the redraw after the reader stopped never landed"]
     found = driver.script(READ_KEYBOARD)
     kb = found if isinstance(found, dict) else {}

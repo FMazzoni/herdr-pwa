@@ -8,7 +8,6 @@ import subprocess
 import sys
 import tempfile
 import threading
-import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -60,6 +59,8 @@ FIELDS = "input:not([type=hidden]), textarea, select"
 # be measured on the device, so a sideways scroller must at least start inside the gutter.
 EDGE_INSET = 16
 READY_SECONDS = 15.0
+# How long a uvicorn thread on loopback may take to bind.
+SERVE_SECONDS = 10.0
 
 SCROLL_ALLOWED: dict[str, str] = {
     ".prose pre": (
@@ -389,7 +390,7 @@ class Switch:
         problems: list[str] = []
         # The tap is drawn as out before it reaches the runner: let go early, it would land late.
         # Its proof can be drawn before the write leaves, so one that never came is said here.
-        if not eventually(lambda: all(h.taken.is_set() for h in held), seconds=READY_SECONDS):
+        if not eventually(lambda: all(h.taken.is_set() for h in held), READY_SECONDS):
             problems.append(
                 f"a held write never reached the runner within {READY_SECONDS:.0f}s, so the "
                 "state's tap may never have been sent"
@@ -397,7 +398,7 @@ class Switch:
         for hold in held:
             hold.release.set()
         # The in-flight claim is one per process, so a write still out refuses the next tap.
-        if not eventually(lambda: self.writing == 0, seconds=READY_SECONDS):
+        if not eventually(lambda: self.writing == 0, READY_SECONDS):
             problems.append(
                 "a write was still out when the next state mounted, so its tap may be refused"
             )
@@ -420,11 +421,11 @@ def serve(switch: Switch) -> Iterator[str]:
     server = uvicorn.Server(config)
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()
-    deadline = time.monotonic() + 10
-    while not server.started:
-        if time.monotonic() > deadline or not thread.is_alive():
-            raise RuntimeError("the geometry server never started")
-        time.sleep(0.05)
+
+    # A thread that has died will never start the server, so stop looking.
+    _ = eventually(lambda: server.started or not thread.is_alive(), SERVE_SECONDS)
+    if not server.started:
+        raise RuntimeError("the geometry server never started")
     try:
         yield f"http://127.0.0.1:{port}"
     finally:
@@ -449,17 +450,18 @@ def install(switch: Switch, state: State, scratch: Path) -> list[str]:
 def _wait(
     driver: Marionette, selector: str, base: str, *, settle: bool = True
 ) -> dict[str, object]:
-    deadline = time.monotonic() + READY_SECONDS
     seen: dict[str, object] = {}
-    while time.monotonic() < deadline:
+
+    def loaded() -> bool:
+        nonlocal seen
         found = driver.script(PROBE_LOADED, selector, base)
         seen = found if isinstance(found, dict) else {}
         # A state held mid-tap never settles: its proof alone is enough.
         if not settle:
             seen["settled"] = True
-        if (seen.get("ready") and seen.get("settled")) or seen.get("errorPage"):
-            break
-        time.sleep(0.05)
+        return bool((seen.get("ready") and seen.get("settled")) or seen.get("errorPage"))
+
+    _ = eventually(loaded, READY_SECONDS)
     return seen
 
 
@@ -649,9 +651,7 @@ def _grow_text(driver: Marionette, scale: float, *, settle: bool = True) -> bool
     """Set the page's text ``scale`` times its default; whether the dock followed it by itself."""
     kept = driver.script_async(GROW_TEXT, scale, DOCK_CEILING_MS) is True
     if settle:
-        eventually(
-            lambda: bool(driver.script(f"return ({HTMX_SETTLED})();")), seconds=READY_SECONDS
-        )
+        eventually(lambda: bool(driver.script(f"return ({HTMX_SETTLED})();")), READY_SECONDS)
     return kept
 
 

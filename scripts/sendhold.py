@@ -13,7 +13,7 @@ from pydantic import JsonValue, TypeAdapter
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from tests.catalogue import AGENT, IDLE, PERMISSION, WORKING, State, build, capture, herd
-from tests.waiting import eventually
+from tests.waiting import eventually, holds, watch
 from tests.webfakes import (
     AGENT_GET,
     READ,
@@ -154,7 +154,7 @@ def landed(wire: FakeWire) -> None:
 
 
 def _until(driver: Marionette, script: str, *args: object) -> bool:
-    return eventually(lambda: bool(driver.script(script, *args)), seconds=WAIT_SECONDS)
+    return eventually(lambda: bool(driver.script(script, *args)), WAIT_SECONDS)
 
 
 def _number(driver: Marionette, script: str) -> int:
@@ -182,16 +182,15 @@ def _in_flight(driver: Marionette) -> tuple[bool, bool]:
     """Watch the slow key: (a live control was offered, Back and End were ever re-enabled)."""
     offered = released = False
 
-    def look() -> bool:
+    def look() -> None:
         nonlocal offered, released
         seen = driver.script(LIVE)
         if isinstance(seen, dict):
             offered = offered or bool(seen.get("live"))
             released = released or not seen.get("sending")
         released = released or any(_reach(driver).values())
-        return False
 
-    eventually(look, seconds=SLOW_SECONDS)
+    watch(look, SLOW_SECONDS)
     return offered, released
 
 
@@ -219,7 +218,7 @@ def walk(driver: Marionette, base: str, writes: Writes, release: threading.Event
     release.set()
     if not _until(driver, OUTCOME):
         problems.append("send hold: the key's outcome never showed")
-    elif eventually(lambda: not driver.script(OUTCOME), seconds=STAYS_SECONDS):
+    elif not holds(lambda: driver.script(OUTCOME), STAYS_SECONDS):
         problems.append("send hold: the key's outcome showed, then a held-back redraw took it away")
     if writes.posts != 1:
         problems.append(f"send hold: one tap sent {writes.posts} key posts")
@@ -241,20 +240,19 @@ def _prompt_held(driver: Marionette, hold: Hold) -> list[str]:
     reached: set[str] = set()
     off = 0
 
-    def look() -> bool:
+    def look() -> None:
         nonlocal off
         reached.update(name for name, live in _reach(driver).items() if live)
         off += not driver.script("return document.body.classList.contains('is-sending');")
-        return False
 
-    eventually(look, seconds=SLOW_SECONDS)
+    watch(look, SLOW_SECONDS)
     if _number(driver, READS) <= reads:
         problems.append("prompt hold: the view never redrew while the prompt was out")
     if reached or off:
         problems.append(f"prompt hold: Back and End took a finger mid-send ({sorted(reached)})")
     driver.script(TAP_BACK)
     # Leaving waits on the stream's close first, so give a navigation time to begin.
-    if eventually(lambda: not driver.script(STAYED), seconds=LEAVE_SECONDS):
+    if not holds(lambda: driver.script(STAYED), LEAVE_SECONDS):
         problems.append("prompt hold: a tap on Back left the page while the prompt was out")
     return problems
 
