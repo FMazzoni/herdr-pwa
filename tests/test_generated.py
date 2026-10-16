@@ -189,6 +189,7 @@ def test_generated_files_record_the_vendored_schema_digest() -> None:
         assert digest in module.read_text(encoding="utf-8"), module.name
 
 
+@pytest.mark.filterwarnings("error")
 def test_committed_generated_code_is_not_stale(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
