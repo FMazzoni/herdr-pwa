@@ -310,6 +310,70 @@ def long_chat(turns: int = 24) -> list[JsonObject]:
     return records
 
 
+# Real records Claude Code wrote into an orchestrator's log, scrubbed of paths, mail and hosts.
+NOTICES: Final = FIXTURES / "transcript" / "notices" / "notices.jsonl"
+
+
+def notice_records() -> list[JsonObject]:
+    """The scrubbed records, in the order they were written."""
+    found = (as_object(loads(line)) for line in NOTICES.read_text().splitlines())
+    return [record for record in found if record is not None]
+
+
+def _origin_kind(record: JsonObject) -> str:
+    origin = as_object(record.get("origin")) or {}
+    kind = origin.get("kind")
+    return kind if isinstance(kind, str) else ""
+
+
+def notices_of(kind: str, *, report: bool | None = None) -> list[JsonObject]:
+    """The fixture's records of one ``origin.kind``, peers narrowed to hand-backs or not."""
+    found = [r for r in notice_records() if _origin_kind(r) == kind]
+    if report is None:
+        return found
+    return [
+        r for r in found if ((as_object(r.get("origin")) or {}).get("handback") is True) == report
+    ]
+
+
+def failed_notice(status: str = "failed", uuid: str = "failed-notice") -> JsonObject:
+    """A real task notification with its status rewritten, since every one recorded completed."""
+    record = as_object(loads(json.dumps(notices_of("task-notification")[0]))) or {}
+    message = as_object(record.get("message")) or {}
+    text = str(message["content"]).replace(
+        "<status>completed</status>", f"<status>{status}</status>"
+    )
+    message["content"] = text.replace(" finished</summary>", f" {status}</summary>")
+    record["uuid"] = uuid
+    return record
+
+
+def task_notice_chat() -> list[JsonObject]:
+    """A prompt, the three tasks it started finishing, and the agent's answer."""
+    humans = notices_of("human")
+    # The answer without its usage: five days of turn time on the strip is the log's age, not news.
+    answer = "Three surveys are back; the audit says lift the engine and slim it."
+    return [humans[0], *notices_of("task-notification"), assistant_says(answer, uuid="a-tasks")]
+
+
+def failed_notice_chat() -> list[JsonObject]:
+    """A prompt, then one task that completed, one that failed and one that was killed."""
+    done = notices_of("task-notification")[0]
+    return [notices_of("human")[0], done, failed_notice(), failed_notice("killed", "killed-notice")]
+
+
+def report_chat() -> list[JsonObject]:
+    """A prompt and a long hand-back report a subagent sent in answer, a bulleted list in it."""
+    reports = notices_of("peer", report=True)
+    return [notices_of("human")[1], next(r for r in reports if "The scroll-anchor fix is merged" in json.dumps(r))]
+
+
+def peer_message_chat() -> list[JsonObject]:
+    """A prompt, then a message another session sent in."""
+    others = [r for r in notices_of("peer", report=False) if "cross-session" in json.dumps(r)]
+    return [notices_of("human")[1], *others]
+
+
 def _tool_record(kind: str, uuid: str, content: JsonValue) -> JsonObject:
     message: JsonObject = {"role": kind, "content": content}
     return {"type": kind, "uuid": uuid, "timestamp": "2026-10-10T10:00:00.000Z", "message": message}
@@ -729,6 +793,48 @@ AGENT_PAGE: Final = (
         _blocked_on(MENU),
         long_chat(),
         title="Chat: a long transcript under a question, which keeps the first screen",
+    ),
+    State(
+        "chat-task-notice",
+        f"{AGENT}?tab=chat",
+        ".chat .turn--notice",
+        runner(_stressed),
+        task_notice_chat(),
+        title="Chat: three background tasks finishing, each one quiet line",
+    ),
+    State(
+        "chat-task-failed",
+        f"{AGENT}?tab=chat",
+        ".chat .notice--failed",
+        runner(_stressed),
+        failed_notice_chat(),
+        title="Chat: a task that failed and one that was killed, said in red",
+    ),
+    State(
+        "chat-report",
+        f"{AGENT}?tab=chat",
+        ".chat .turn--peer",
+        runner(_stressed),
+        report_chat(),
+        title="Chat: a subagent's hand-back report, folded",
+    ),
+    State(
+        "chat-report-open",
+        f"{AGENT}?tab=chat",
+        ".chat .turn--peer .turn__more[open]",
+        runner(_stressed),
+        report_chat(),
+        title="Chat: a subagent's hand-back report, opened with Show all",
+        armed=".chat .turn--peer .turn__more summary",
+        act=_click(".chat .turn--peer .turn__more summary"),
+    ),
+    State(
+        "chat-peer-message",
+        f"{AGENT}?tab=chat",
+        ".chat .turn--peer",
+        runner(_stressed),
+        peer_message_chat(),
+        title="Chat: a message another Claude session sent in",
     ),
     State(
         "pane-long",
@@ -1181,6 +1287,11 @@ V2_ONLY: Final = (
     "chat-tools",
     "chat-markdown",
     "chat-blocked",
+    "chat-task-notice",
+    "chat-task-failed",
+    "chat-report",
+    "chat-report-open",
+    "chat-peer-message",
     "pane-long",
     "usage-chat",
     *(s.name for s in FILES),

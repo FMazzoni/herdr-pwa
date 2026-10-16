@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field, JsonValue
 
 from herdr_pwa.diff import FileDiff, tool_diff
 from herdr_pwa.engine.model import SessionId
+from herdr_pwa.engine.notices import Hidden, PeerMessage, TaskNotice, injected, without_reminders
 from herdr_pwa.jsontypes import JsonObject, as_object, loads, objects
 
 CLAUDE_TRANSCRIPT_ROOT: Final = "~/.claude/projects"
@@ -77,6 +78,12 @@ class Speaker(StrEnum):
 
     system = "system"
 
+    # A background task stopped: one quiet line, never a prompt.
+    notice = "notice"
+
+    # Another agent's message or hand-back report, written into this log by the harness.
+    peer = "peer"
+
 
 class TranscriptTurn(BaseModel):
     """One renderable line of conversation."""
@@ -96,6 +103,14 @@ class TranscriptTurn(BaseModel):
     diff: FileDiff | None = None
     # The frontier just before this turn: `before=at` leaves it out, `after=at` starts with it.
     at: int = -1
+    # A task notice's status word and how long the task ran, as the harness recorded them.
+    status: str = ""
+    elapsed_ms: int = 0
+    # Who a peer message is from, and whether it is a subagent's hand-back report.
+    sender: str = ""
+    report: bool = False
+    # A task notice's task id, or the task a peer message came from: what joins the two.
+    task: str = ""
 
 
 def is_message(turn: TranscriptTurn) -> bool:
@@ -720,24 +735,63 @@ def _content(record: JsonObject) -> JsonValue:
     return message.get("content") if message is not None else None
 
 
+def _injected_turn(found: TaskNotice | PeerMessage, uuid: str, ts: str) -> TranscriptTurn:
+    if isinstance(found, TaskNotice):
+        summary, _ = one_line(found.summary)
+        result, cut = clip(found.result, MAX_RESULT_CHARS)
+        return TranscriptTurn(
+            uuid=uuid,
+            speaker=Speaker.notice,
+            text=summary,
+            ts=ts,
+            result=result,
+            result_truncated=cut,
+            failed=found.failed,
+            status=found.status,
+            elapsed_ms=found.elapsed_ms,
+            task=found.task,
+        )
+    body, cut = clip(found.body, MAX_PROSE_CHARS)
+    return TranscriptTurn(
+        uuid=uuid,
+        speaker=Speaker.peer,
+        text=body,
+        ts=ts,
+        truncated=cut,
+        sender=found.sender,
+        report=found.report,
+        task=found.task,
+    )
+
+
+def _user_text(record: JsonObject, content: str, uuid: str, ts: str) -> TranscriptTurn | None:
+    """A user record whose content is one string: a prompt, or something the harness wrote."""
+    human = _is_human(record)
+    found = injected(record, content, human=human)
+    if isinstance(found, Hidden):
+        return None
+    if found is not None:
+        return _injected_turn(found, uuid, ts)
+    if record.get("isMeta"):
+        return None
+    # The cap follows the speaker: injected machinery gets the note cap, as the view shows three lines.
+    text, cut = clip(without_reminders(content), MAX_PROSE_CHARS if human else MAX_NOTE_CHARS)
+    if not text:
+        return None
+    return TranscriptTurn(
+        uuid=uuid,
+        speaker=Speaker.human if human else Speaker.system,
+        text=text,
+        ts=ts,
+        truncated=cut,
+    )
+
+
 def _user_record(record: JsonObject, uuid: str, ts: str) -> TranscriptTurn | None:
     """A ``role: "user"`` record, which is where the whole trap lives."""
     content = _content(record)
     if isinstance(content, str):
-        if record.get("isMeta"):
-            return None
-        # The cap follows the speaker: injected machinery gets the note cap, as the view shows three lines.
-        human = _is_human(record)
-        text, cut = clip(content, MAX_PROSE_CHARS if human else MAX_NOTE_CHARS)
-        if not text:
-            return None
-        return TranscriptTurn(
-            uuid=uuid,
-            speaker=Speaker.human if human else Speaker.system,
-            text=text,
-            ts=ts,
-            truncated=cut,
-        )
+        return _user_text(record, content, uuid, ts)
     meta = bool(record.get("isMeta"))
     for block in _blocks(content):
         turn = _user_block(block, uuid, ts, meta=meta)

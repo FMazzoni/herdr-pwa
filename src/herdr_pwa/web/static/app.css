@@ -390,6 +390,16 @@ html { -webkit-tap-highlight-color: transparent; }
 .tool[open] > .tool__line .tool__text { white-space: pre-wrap; overflow-wrap: anywhere; }
 .tool__failed { flex: none; color: var(--blocked); font-weight: 600; }
 .tool__result { margin: 0 0 var(--space-4); color: var(--ink-2); }
+/* A task that stopped is a tool-like line; one that failed or was killed says so in --blocked. */
+.notice__mark { flex: none; color: var(--ink-3); }
+.notice__text { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); }
+.notice[open] > .tool__line .notice__text { white-space: normal; overflow-wrap: anywhere; }
+.notice__time { flex: none; color: var(--ink-3); }
+.notice--failed .notice__text, .notice--failed .notice__mark { color: var(--blocked); }
+/* Another agent's message: an outlined card, so it never reads as this agent's prose or as You. */
+.turn--peer { background: transparent; border: var(--line-1) solid var(--rule); }
+.peer__head { margin: 0 0 var(--space-3); color: var(--ink-3); font-size: var(--text-meta); }
+.peer__name { color: var(--ink-2); font-weight: 600; }
 .turn__clip { margin: var(--space-2) 0 0; color: var(--ink-3); font-size: var(--text-small); }
 /* A long turn folds to a few lines; the open details below it unfolds it, with or without script. */
 .turn__fold { max-height: calc(var(--fold-lines) * 1.45em); overflow: hidden; }
