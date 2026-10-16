@@ -543,6 +543,72 @@ def _spent(
     return record
 
 
+# One turn of work, its stamps minutes before the shot: a prompt, prose, three tool calls, and
+# then the stage it is at: a tool still running, thinking after the last result, gone quiet,
+# asking for approval, or done.
+TURN_STAGES: Final = ("tool", "thinking", "quiet", "asking", "done")
+# How long the "done" turn ran, prompt to answer: 4m 12s.
+TURN_WORKED_SECONDS: Final = 252
+
+
+def _at(
+    record: dict[str, JsonValue], seconds_ago: float, message: str = ""
+) -> dict[str, JsonValue]:
+    """``record`` stamped ``seconds_ago``; an answer also carries the usage every answer does."""
+    record["timestamp"] = _ago(seconds_ago / 60)
+    if message:
+        body = obj(record, "message")
+        body.update(id=message, model="claude-haiku-4-5-20251001", usage={"output_tokens": 40})
+    return record
+
+
+def _call(
+    n: int, name: str, args: dict[str, JsonValue], seconds_ago: float
+) -> dict[str, JsonValue]:
+    use: dict[str, JsonValue] = {"type": "tool_use", "id": f"st{n}", "name": name, "input": args}
+    return _at(_tool_record("assistant", f"sc{n}", [use]), seconds_ago, f"sm{n}")
+
+
+def _result(n: int, text: str, seconds_ago: float) -> dict[str, JsonValue]:
+    result: dict[str, JsonValue] = {"type": "tool_result", "tool_use_id": f"st{n}", "content": text}
+    return _at(_tool_record("user", f"sr{n}", [result]), seconds_ago)
+
+
+def turn_chat(stage: str) -> list[dict[str, JsonValue]]:
+    """A turn at ``stage`` (one of ``TURN_STAGES``), stamped against the wall clock now."""
+    # Quiet is the thinking stage left alone for three minutes.
+    late = 180.0 if stage == "quiet" else 0.0
+    start = late + (TURN_WORKED_SECONDS if stage == "done" else 150.0)
+    records = [
+        _at(human_says("Run the chat tests and fix whatever fails.", uuid="sh"), start),
+        _at(assistant_says("Reading the transcript adapter first.", uuid="sa1"), start - 5, "sm0"),
+        _call(1, "Read", {"file_path": "/repo/src/herdr_pwa/engine/transcript.py"}, start - 8),
+        _result(1, "1800 lines", start - 9),
+        _call(2, "Edit", {"file_path": "/repo/src/herdr_pwa/web/chat.py"}, start - 40),
+        _result(2, "The file was updated.", start - 41),
+        _call(3, "Bash", {"command": "uv run pytest -q tests/test_chat_fold.py"}, late + 20),
+    ]
+    if stage in ("thinking", "quiet", "done"):
+        records.append(_result(3, "12 passed in 0.4s", late + 15))
+    if stage == "done":
+        records.append(_at(assistant_says("All twelve pass now.", uuid="sa2"), 0, "sm9"))
+    return records
+
+
+def _turn_at(stage: str) -> Prime:
+    """Write the turn as the state is built, so its stamps are seconds old when shot."""
+
+    def prime(rig: Rig) -> None:
+        roots = rig.settings.state_dir.parent / "transcripts"
+        write_transcript(roots, WORKING_SESSION, turn_chat(stage))
+
+    return prime
+
+
+def _working_as(status: str) -> Callable[[], dict[str, JsonValue]]:
+    return lambda: _set(snapshot_frame(), WORKING_PANE, agent_status=status)
+
+
 # A turn two days and three hours old: an orchestrating session whose newest typed prompt is days
 # behind it, which is how the strip met a day-scale turn.
 LONG_TURN_MINUTES: Final = (2 * 24 + 3) * 60
@@ -1610,7 +1676,50 @@ FILES: Final = (
     ),
 )
 
-STATES: Final = (*FEED, *AGENT_PAGE, *TAPPED, *ANSWERED, *LIFECYCLE, *STATS, *FILES)
+TURNS: Final = (
+    State(
+        "chat-working-tool",
+        f"{AGENT}?tab=chat",
+        "#chat-note",
+        runner(_working_as("working")),
+        prime=_turn_at("tool"),
+        title="Chat while a tool runs: the bubble names the tool",
+    ),
+    State(
+        "chat-working-thinking",
+        f"{AGENT}?tab=chat",
+        "#chat-note",
+        runner(_working_as("working")),
+        prime=_turn_at("thinking"),
+        title="Chat while the agent thinks between tools: the turn's one verb",
+    ),
+    State(
+        "chat-working-quiet",
+        f"{AGENT}?tab=chat",
+        "#chat-note",
+        runner(_working_as("working")),
+        prime=_turn_at("quiet"),
+        title="Chat with a working agent that has written nothing for three minutes",
+    ),
+    State(
+        "chat-needs-you",
+        f"{AGENT}?tab=chat",
+        "#answer .answer__question",
+        runner(_working_as("blocked"), capture(PERMISSION)),
+        prime=_turn_at("asking"),
+        title="Chat with the agent stopped on a permission question",
+    ),
+    State(
+        "chat-worked",
+        f"{AGENT}?tab=chat",
+        ".chat .turn--agent",
+        runner(_working_as("done")),
+        prime=_turn_at("done"),
+        title="Chat after a turn ends: how long it worked and how many tools it called",
+    ),
+)
+
+STATES: Final = (*FEED, *AGENT_PAGE, *TAPPED, *ANSWERED, *LIFECYCLE, *STATS, *FILES, *TURNS)
 
 # Screens this app draws that the old app had no name for.
 V2_ONLY: Final = (
@@ -1647,6 +1756,7 @@ V2_ONLY: Final = (
     "usage-long-turn",
     "usage-crowded",
     *(s.name for s in FILES),
+    *(s.name for s in TURNS),
 )
 
 _RIG: Final = "the rig can answer a key, but no state stages the runner into this outcome yet"
