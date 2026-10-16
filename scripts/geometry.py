@@ -386,15 +386,22 @@ class Switch:
     def let_go(self) -> list[str]:
         """Release every held write and wait for every write to be answered; what never was."""
         held, self.held = self.held, []
+        problems: list[str] = []
         # The tap is drawn as out before it reaches the runner: let go early, it would land late.
-        # One never made is already its state's failure, and then nothing is out.
-        _ = eventually(lambda: all(h.taken.is_set() for h in held), seconds=READY_SECONDS)
+        # Its proof can be drawn before the write leaves, so one that never came is said here.
+        if not eventually(lambda: all(h.taken.is_set() for h in held), seconds=READY_SECONDS):
+            problems.append(
+                f"a held write never reached the runner within {READY_SECONDS:.0f}s, so the "
+                "state's tap may never have been sent"
+            )
         for hold in held:
             hold.release.set()
         # The in-flight claim is one per process, so a write still out refuses the next tap.
-        if eventually(lambda: self.writing == 0, seconds=READY_SECONDS):
-            return []
-        return ["a write was still out when the next state mounted, so its tap may be refused"]
+        if not eventually(lambda: self.writing == 0, seconds=READY_SECONDS):
+            problems.append(
+                "a write was still out when the next state mounted, so its tap may be refused"
+            )
+        return problems
 
 
 @contextmanager
@@ -462,6 +469,9 @@ def _loaded(driver: Marionette, state: State, base: str) -> list[str]:
         seen = _wait(driver, state.armed, base)
         if not (seen.get("ready") and seen.get("settled")):
             return _load_problems(seen, state.armed, scripted=True)
+        # A proof already on the page passes whether or not the tap drew anything.
+        if driver.script("return document.querySelector(arguments[0]) !== null;", state.ready):
+            return [f"{state.ready} is on the page before the tap, so it cannot prove the tap"]
         # One script, so the gap between the armed look and the tap is what it always was.
         driver.script(("" if state.in_flight else HOLD_PROOF) + state.act, state.ready)
     seen = _wait(driver, state.ready, base, settle=not state.in_flight)

@@ -1328,7 +1328,7 @@ TAPPED: Final = (
     State(
         "agent-interrupt",
         f"{AGENT}?tab=pane",
-        "#answer [role=alert]",
+        "#answer .keys__stop--armed",
         _blocked_on(PERMISSION),
         title="Agent page: ctrl-c, armed",
         armed="#answer .button--danger",
@@ -1356,7 +1356,8 @@ TAPPED: Final = (
     State(
         "agent-key-refused",
         f"{AGENT}?tab=pane",
-        "#answer [role=alert]",
+        # The region always carries the hidden no-reply notice, which is also an alert.
+        "#answer [role=alert]:not([data-hp-lost])",
         _blocked_on(PERMISSION),
         title="Agent page: the screen moved underneath a tapped option",
         armed="#answer .button--option",
