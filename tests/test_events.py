@@ -244,7 +244,7 @@ def test_an_append_whose_time_lands_before_its_bytes_is_still_one_stale_chat(
 
 async def _looked(hub: Hub, looks: int) -> None:
     """Wait until the watcher has looked ``looks`` times: the first look is the baseline."""
-    await until_async(lambda: True if hub.looks >= looks else None, seconds=WAIT)
+    await until_async(lambda: hub.looks >= looks, WAIT)
 
 
 def test_an_appended_transcript_is_stale_for_the_stats_strip_too(tmp_path: Path) -> None:

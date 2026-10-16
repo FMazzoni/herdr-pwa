@@ -12,11 +12,15 @@ import struct
 import subprocess
 import sys
 import termios
-import time
 from pathlib import Path
 from typing import Any
 
-from herdr_pwa.engine.transport import EngineError, Frame, SocketTransport
+# Run as a file, so the repo root (where tests/ lives) is not on the path by itself.
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from herdr_pwa.engine.transport import EngineError, Frame, SocketTransport  # noqa: E402
+from tests.waiting import GaveUpError, eventually, until  # noqa: E402
 
 SESSION = "hp-test"  # anything but this name is a foot-gun
 
@@ -34,6 +38,11 @@ INHERITED = (
 START_WAIT_MS = 30_000
 # Long enough for that wait and the reply after it.
 CALL_SECONDS = START_WAIT_MS / 1000 + 10
+# How long a stopped server may take to let go of its socket.
+STOP_SECONDS = 10.0
+# Each look at the socket or the agents is a herdr call, so look less often than at a page.
+LOOK_STEP = 0.25
+SETTLE_STEP = 1.0
 
 
 def session_dir(session: str) -> Path:
@@ -140,12 +149,9 @@ def up(session: str, timeout: float = 30.0) -> int:
             start_new_session=True,
             env=clean_env(),
         )
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        if listening(path):
-            print(f"session {session!r} listening at {path}")
-            return 0
-        time.sleep(0.25)
+    if eventually(lambda: listening(path), timeout, step=LOOK_STEP):
+        print(f"session {session!r} listening at {path}")
+        return 0
     print(
         f"session {session!r} did not come up within {timeout}s; see {log}",
         file=sys.stderr,
@@ -160,11 +166,9 @@ def down(session: str) -> int:
         return 0
     # The server may hang up instead of answering a stop, which is the stop working.
     api(session, "server.stop", check=False)
-    for _ in range(40):
-        if not listening(path):
-            print(f"session {session!r} stopped")
-            return 0
-        time.sleep(0.25)
+    if eventually(lambda: not listening(path), STOP_SECONDS, step=LOOK_STEP):
+        print(f"session {session!r} stopped")
+        return 0
     print(f"session {session!r} did not stop", file=sys.stderr)
     return 1
 
@@ -216,9 +220,10 @@ def pane_text(session: str, target: str) -> str:
 
 def settle(session: str, target: str, timeout: float = 60.0) -> str | None:
     """Wait for a session UUID, answering the trust prompt if that is the hold-up."""
-    deadline = time.monotonic() + timeout
     trusted = False
-    while time.monotonic() < deadline:
+
+    def registered() -> str | None:
+        nonlocal trusted
         for agent in agents(session):
             if agent["pane_id"] == target:
                 uuid = (agent.get("agent_session") or {}).get("value")
@@ -227,8 +232,12 @@ def settle(session: str, target: str, timeout: float = 60.0) -> str | None:
         if not trusted and "trust this folder" in pane_text(session, target):
             api(session, "agent.send_keys", {"target": target, "keys": ["Enter"]}, check=False)
             trusted = True
-        time.sleep(1.0)
-    return None
+        return None
+
+    try:
+        return until(registered, timeout, step=SETTLE_STEP)
+    except GaveUpError:
+        return None
 
 
 def agent(session: str, name: str, kind: str, model: str, cwd: str) -> int:

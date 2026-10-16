@@ -4,7 +4,6 @@ The gesture itself belongs to iOS and no Linux engine reproduces it; what it doe
 is the browser's, and that is what is driven here, in a top-level window.
 """
 
-import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -20,6 +19,7 @@ from herdr_pwa.web.app import create_app
 from herdr_pwa.web.seams import Seams
 from tests._fake_herd import P3, P5, S1, S2, FakeHerd
 from tests.filefakes import make_repo
+from tests.waiting import eventually
 
 WAIT_SECONDS = 15.0
 # A fresh profile's first install, on a swapping box, has outrun 15s; this waits on the box.
@@ -75,14 +75,16 @@ class Walk:
 
     def wait(self, path: str, ready: str, search: str | None = None) -> dict[str, object]:
         """Wait until the window is at ``path`` with ``ready`` drawn; say so if it never is."""
-        deadline = time.monotonic() + WAIT_SECONDS
         seen: dict[str, object] = {}
-        while time.monotonic() < deadline:
+
+        def there() -> bool:
+            nonlocal seen
             seen = self.where(ready)
             here = seen.get("path") == path and (search is None or seen.get("search") == search)
-            if here and seen.get("ready"):
-                return seen
-            time.sleep(0.1)
+            return bool(here and seen.get("ready"))
+
+        if eventually(there, WAIT_SECONDS):
+            return seen
         self.problems.append(
             f"{self.name}: never reached {path}{search or ''} with {ready} drawn; "
             f"stuck at {seen.get('path')}{seen.get('search', '')}"
@@ -119,12 +121,8 @@ class Walk:
 
     def settled(self) -> None:
         """Wait out the worker's first install; a page leaving mid-install is not cached."""
-        deadline = time.monotonic() + SETTLE_SECONDS
-        while time.monotonic() < deadline:
-            if self.driver.script(CONTROLLED):
-                return
-            time.sleep(0.1)
-        self.problems.append(f"{self.name}: the service worker never took control of the feed")
+        if not eventually(lambda: bool(self.driver.script(CONTROLLED)), SETTLE_SECONDS):
+            self.problems.append(f"{self.name}: the service worker never took control of the feed")
 
     def back_to_feed(self, after: str) -> dict[str, object]:
         """Go back once; the feed is the only acceptable landing."""

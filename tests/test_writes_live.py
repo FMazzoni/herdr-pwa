@@ -97,13 +97,13 @@ def _claude_session(writer: Writer, pane: PaneId) -> SessionId:
             say("send_starting_key enter", repr(tapped))
         return None
 
-    return until(settled, seconds=90, step=2.0)
+    return until(settled, 90, step=2.0)
 
 
 def _wait_status(client: HerdrClient, pane: PaneId, *wanted: AgentStatus) -> Agent:
     return until(
         lambda: a if (a := agent_at(client, pane)) and a.status in wanted else None,
-        seconds=120,
+        120,
         step=1.0,
     )
 
@@ -112,7 +112,7 @@ def _replied(client: HerdrClient, pane: PaneId, word: str) -> str:
     # The prompt itself shows the word once; the reply is the second copy.
     return until(
         lambda: s if (s := client.read(pane, VISIBLE_READ)).count(word) >= 2 else None,
-        seconds=120,
+        120,
         step=1.0,
     )
 
@@ -183,7 +183,7 @@ def _late_identity_round(writer: Writer, workspace: str, cwd: Path) -> None:
     assert isinstance(first, PromptSent)
     _ = until(
         lambda: a.session or None if (a := agent_at(client, hermes.pane)) else None,
-        seconds=60,
+        60,
         step=1.0,
     )
     show(client, hermes.pane, "send_first_prompt hermes")

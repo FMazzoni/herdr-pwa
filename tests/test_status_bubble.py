@@ -319,10 +319,10 @@ def test_a_status_change_with_no_new_line_is_stale_for_the_chat(tmp_path: Path) 
     async def scenario() -> set[str]:
         listener = hub.join(frozenset({topic}))
         hub.stream(listener)
-        await until_async(lambda: True if hub.looks >= 1 else None, seconds=5.0)
+        await until_async(lambda: hub.looks >= 1, 5.0)
         rig.wire.replies[SNAPSHOT] = _status("blocked")
         rig.clock.sleep(60.0)
-        await until_async(lambda: True if listener.pending else None, seconds=5.0)
+        await until_async(lambda: bool(listener.pending), 5.0)
         heard = set(listener.pending)
         await hub.close()
         return heard

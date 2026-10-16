@@ -7,17 +7,21 @@ import shutil
 import socket
 import subprocess
 import tempfile
-import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
 from pydantic import JsonValue, TypeAdapter
 
+from tests.waiting import eventually
+
 BINARY = "firefox"
 # A popup has no toolbar, so it can be narrower than the 500px a normal window stops at.
 OPENER_WIDTH = 600
 CONNECT_SECONDS = 60.0
+# Each look at the port is a fresh connect, so look less often than at a page.
+CONNECT_STEP = 0.25
+POPUP_SECONDS = 10.0
 
 PREFS = {
     "browser.shell.checkDefaultBrowser": "false",
@@ -128,14 +132,18 @@ def version() -> str:
 
 
 def _connect(port: int, process: subprocess.Popen[bytes]) -> Marionette:
-    deadline = time.monotonic() + CONNECT_SECONDS
-    while True:
-        try:
-            return Marionette(port)
-        except OSError:
-            if process.poll() is not None or time.monotonic() > deadline:
-                raise BrowserError("Firefox never opened its Marionette port") from None
-            time.sleep(0.25)
+    driver: Marionette | None = None
+
+    def opened() -> bool:
+        nonlocal driver
+        with contextlib.suppress(OSError):
+            driver = Marionette(port)
+        # A browser that has exited will never open the port, so stop looking.
+        return driver is not None or process.poll() is not None
+
+    if not eventually(opened, CONNECT_SECONDS, step=CONNECT_STEP) or driver is None:
+        raise BrowserError("Firefox never opened its Marionette port")
+    return driver
 
 
 @contextmanager
@@ -172,11 +180,15 @@ def phone_window(driver: Marionette, width: int, height: int) -> str:
         width,
         height,
     )
-    deadline = time.monotonic() + 10
-    while not (opened := set(driver.handles()) - before):
-        if time.monotonic() > deadline:
-            raise BrowserError("the popup window never opened")
-        time.sleep(0.1)
+    opened: set[str] = set()
+
+    def appeared() -> bool:
+        nonlocal opened
+        opened = set(driver.handles()) - before
+        return bool(opened)
+
+    if not eventually(appeared, POPUP_SECONDS):
+        raise BrowserError("the popup window never opened")
     handle = opened.pop()
     driver.send("WebDriver:SwitchToWindow", {"handle": handle})
     inner = driver.script("return window.innerWidth;")
