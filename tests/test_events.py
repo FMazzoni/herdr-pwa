@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 from collections.abc import AsyncIterator, Mapping
 from pathlib import Path
 from typing import cast
@@ -203,6 +204,37 @@ def test_an_appended_transcript_is_one_stale_chat(tmp_path: Path) -> None:
     heard, again = asyncio.run(scenario())
     assert heard == [topic]
     assert again == set()
+
+
+def test_an_append_whose_time_lands_before_its_bytes_is_still_one_stale_chat(
+    tmp_path: Path,
+) -> None:
+    """Linux stamps a write's mtime before it copies the bytes and grows the size, so a look
+    can fall between the two. The chat read then is the one before the write, and the look
+    after it would tell the page again: two refreshes for one change. Here the time moves
+    alone first, as a touch, and then the bytes arrive."""
+    write_transcript(tmp_path / "transcripts", WORKING_SESSION, long_chat(6))
+    hub, _rig = _hub(tmp_path)
+    log = next((tmp_path / "transcripts").rglob(f"{WORKING_SESSION}.jsonl"))
+    topic = f"chat:{WORKING_SESSION}"
+
+    async def scenario() -> tuple[set[str], list[str]]:
+        listener = hub.join(frozenset({topic}))
+        stream = hub.stream(listener)
+        await _looked(hub, 1)
+        stamped = log.stat().st_mtime_ns + 1_000_000_000
+        os.utime(log, ns=(stamped, stamped))
+        await _looked(hub, hub.looks + 2)
+        early = set(listener.pending)
+        with log.open("a") as handle:
+            handle.write(json.dumps(assistant_says("appended", uuid="z9")) + "\n")
+        heard = await _said(stream, topic)
+        await hub.close()
+        return early, heard
+
+    early, heard = asyncio.run(scenario())
+    assert early == set()
+    assert heard == [topic]
 
 
 async def _looked(hub: Hub, looks: int) -> None:

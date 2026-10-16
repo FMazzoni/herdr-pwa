@@ -184,12 +184,26 @@ def _probe(driver: Marionette) -> dict[str, object]:
     return found if isinstance(found, dict) else {}
 
 
+def _idle(driver: Marionette) -> dict[str, object]:
+    """The probe once nothing is in flight: the stream may start a redraw at any moment, and a
+    page caught mid-request has no place to measure."""
+    seen: dict[str, object] = {}
+
+    def found() -> bool:
+        nonlocal seen
+        seen = _probe(driver)
+        return bool(seen)
+
+    _until(found)
+    return seen
+
+
 def _wait_for(driver: Marionette, text: str) -> dict[str, object]:
     """Wait until the newest line says ``text`` and nothing is in flight, then let it settle."""
     if not _until(lambda: text in str(_probe(driver).get("text", ""))):
         return {}
     settle(driver)
-    return _probe(driver)
+    return _idle(driver)
 
 
 def _num(seen: dict[str, object], key: str) -> float:
@@ -223,7 +237,7 @@ def _print(rig: Rig, _home: Path, n: int) -> str:
 def _scrolled_up_stays(driver: Marionette, tab: Tab, rig: Rig, home: Path) -> list[str]:
     driver.script("window.scrollTo(0, 200);")
     settle(driver, READER_STILL_MS)
-    before = _num(_probe(driver), "scrollY")
+    before = _num(_idle(driver), "scrollY")
     newest = tab.grow(rig, home, 2)
     driver.script(POKE)
     after = _num(_wait_for(driver, newest), "scrollY")

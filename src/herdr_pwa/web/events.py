@@ -306,7 +306,9 @@ class Hub:
         except OSError:
             watch.path = None
             return None
-        return (str(watch.path), stat.st_ino, stat.st_size, stat.st_mtime_ns)
+        # No mtime: a write stamps it before its bytes land, and a look between the two would
+        # tell the page about a change it cannot read yet, then tell it again.
+        return (str(watch.path), stat.st_ino, stat.st_size)
 
 
 def _on(loop: asyncio.AbstractEventLoop) -> bool:
