@@ -22,6 +22,8 @@ from tests._fake_herd import P3, P5, S1, S2, FakeHerd
 from tests.filefakes import make_repo
 
 WAIT_SECONDS = 15.0
+# A fresh profile's first install, on a swapping box, has outrun 15s; this waits on the box.
+SETTLE_SECONDS = 60.0
 # Spelled as the templates' urlencode spells it, which is also what location.pathname reports.
 DOOR = f"/starting/{quote(P5)}"
 LOGIN = "backnav@example.com"
@@ -117,7 +119,7 @@ class Walk:
 
     def settled(self) -> None:
         """Wait out the worker's first install; a page leaving mid-install is not cached."""
-        deadline = time.monotonic() + WAIT_SECONDS
+        deadline = time.monotonic() + SETTLE_SECONDS
         while time.monotonic() < deadline:
             if self.driver.script(CONTROLLED):
                 return
