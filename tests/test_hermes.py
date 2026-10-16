@@ -8,11 +8,12 @@ from pathlib import Path
 
 import pytest
 
-from herdr_pwa.engine import HistoryState, Speaker, TranscriptTurn
+from herdr_pwa.engine import HistoryState, Source, Speaker, TranscriptTurn
 from tests.engine_seam import (
     AGENT_KINDS,
     HERMES_DB,
     HermesAdapter,
+    Window,
     adapter_for,
     fold_tool_results,
     readonly_uri,
@@ -102,7 +103,7 @@ def roots(tmp_path: Path) -> list[Path]:
 
 def turns(roots: list[Path]) -> list[TranscriptTurn]:
     """The turns of one page, for the assertions that only care about those."""
-    return HermesAdapter().page(SESSION, roots=roots).turns
+    return HermesAdapter().page(Source(SESSION, roots), Window()).turns
 
 
 def test_hermes_is_a_kind_the_chat_tab_can_answer_for() -> None:
@@ -161,9 +162,9 @@ def test_a_page_ends_where_it_says_it_does_and_the_next_one_resumes_there(
     roots: list[Path],
 ) -> None:
     adapter = HermesAdapter()
-    tail = adapter.page(SESSION, roots=roots, limit=2)
+    tail = adapter.page(Source(SESSION, roots), Window(limit=2))
     assert tail.has_more
-    head = adapter.page(SESSION, roots=roots, limit=2, before=tail.cursor)
+    head = adapter.page(Source(SESSION, roots), Window(limit=2, before=tail.cursor))
     assert head.end == tail.cursor
     assert {t.uuid for t in head.turns}.isdisjoint({t.uuid for t in tail.turns})
 
@@ -171,9 +172,9 @@ def test_a_page_ends_where_it_says_it_does_and_the_next_one_resumes_there(
 def test_since_reads_only_what_arrived_after_the_frontier(roots: list[Path]) -> None:
     """This is what makes the chat APPEND rather than re-render."""
     adapter = HermesAdapter()
-    whole = adapter.page(SESSION, roots=roots)
-    assert adapter.since(SESSION, roots=roots, after=whole.end).turns == []
-    grown = adapter.since(SESSION, roots=roots, after=0)
+    whole = adapter.page(Source(SESSION, roots), Window())
+    assert adapter.since(Source(SESSION, roots), Window(after=whole.end)).turns == []
+    grown = adapter.since(Source(SESSION, roots), Window(after=0))
     assert [t.uuid for t in grown.turns] == [t.uuid for t in whole.turns]
 
 
@@ -181,21 +182,21 @@ def test_a_frontier_past_the_end_reports_a_reset_rather_than_guessing(
     roots: list[Path],
 ) -> None:
     """A cursor bigger than the store means the held cursor means nothing."""
-    page = HermesAdapter().since(SESSION, roots=roots, after=10_000)
+    page = HermesAdapter().since(Source(SESSION, roots), Window(after=10_000))
     assert page.reset
     assert page.turns == []
 
 
 def test_a_session_in_no_store_is_absent_rather_than_empty(roots: list[Path]) -> None:
     """``absent`` and ``empty`` are different sentences on the screen."""
-    page = HermesAdapter().page("20260101_000000_zzzzzz", roots=roots)
+    page = HermesAdapter().page(Source("20260101_000000_zzzzzz", roots), Window())
     assert page.state is HistoryState.absent
 
 
 def test_a_session_with_no_messages_is_empty_rather_than_absent(
     roots: list[Path],
 ) -> None:
-    page = HermesAdapter().page(OTHER, roots=roots)
+    page = HermesAdapter().page(Source(OTHER, roots), Window())
     assert page.state is HistoryState.empty
 
 
@@ -214,7 +215,7 @@ def test_one_sessions_page_never_reaches_another_sessions_rows(
 
 
 def test_a_directory_with_no_store_is_absent(tmp_path: Path) -> None:
-    assert HermesAdapter().page(SESSION, roots=[tmp_path]).state is HistoryState.absent
+    assert HermesAdapter().page(Source(SESSION, [tmp_path]), Window()).state is HistoryState.absent
 
 
 def test_a_file_that_is_not_hermes_is_refused_rather_than_read(
@@ -223,7 +224,7 @@ def test_a_file_that_is_not_hermes_is_refused_rather_than_read(
     """A database with the right NAME and the wrong schema is not a store."""
     with sqlite3.connect(tmp_path / HERMES_DB) as db:
         db.execute("create table something_else (id text)")
-    assert HermesAdapter().page(SESSION, roots=[tmp_path]).state is HistoryState.absent
+    assert HermesAdapter().page(Source(SESSION, [tmp_path]), Window()).state is HistoryState.absent
 
 
 def test_the_store_is_opened_read_only(roots: list[Path]) -> None:
@@ -248,7 +249,7 @@ def test_usage_is_summed_off_the_rollup_hermes_already_keeps(
             " values (?, 'a-model', 'custom', 3, 100, 20, 40)",
             (SESSION,),
         )
-    spent = HermesAdapter().tally(SESSION, roots=[tmp_path])
+    spent = HermesAdapter().tally(Source(SESSION, [tmp_path]))
     assert spent.messages == 3
     assert spent.input_tokens == 100
     assert spent.output_tokens == 20
@@ -259,7 +260,7 @@ def test_usage_is_summed_off_the_rollup_hermes_already_keeps(
 def test_cost_stays_zero_because_hermes_records_no_money(tmp_path: Path) -> None:
     """Zero means UNKNOWN here, and a price table would be a worse answer."""
     build(tmp_path / HERMES_DB)
-    assert HermesAdapter().tally(SESSION, roots=[tmp_path]).cost == 0.0
+    assert HermesAdapter().tally(Source(SESSION, [tmp_path])).cost == 0.0
 
 
 def named(path: Path, title: str, model: str = "a-model") -> None:
@@ -275,13 +276,13 @@ def test_the_title_hermes_generated_beats_a_shell_prompt(tmp_path: Path) -> None
     """A hermes pane's terminal title is `user@host:cwd`, which says nothing."""
     path = build(tmp_path / HERMES_DB)
     named(path, "Plan the migration")
-    assert HermesAdapter().info(SESSION, roots=[tmp_path])[0] == "Plan the migration"
+    assert HermesAdapter().info(Source(SESSION, [tmp_path]))[0] == "Plan the migration"
 
 
 def test_a_session_with_no_store_has_no_title_rather_than_raising(
     tmp_path: Path,
 ) -> None:
-    assert HermesAdapter().info(SESSION, roots=[tmp_path]) == ("", "")
+    assert HermesAdapter().info(Source(SESSION, [tmp_path])) == ("", "")
 
 
 def spend(path: Path, **columns: object) -> None:
@@ -314,7 +315,7 @@ def test_reasoning_and_cache_writes_are_read_rather_than_left_at_zero(
     """Both are columns hermes fills; a real session had 88625 reasoning tokens."""
     path = build(tmp_path / HERMES_DB)
     spend(path)
-    spent = HermesAdapter().tally(SESSION, roots=[tmp_path])
+    spent = HermesAdapter().tally(Source(SESSION, [tmp_path]))
     assert spent.thinking_tokens == 7
     assert spent.cache_creation_tokens == 5
 
@@ -323,13 +324,13 @@ def test_money_is_reported_only_where_hermes_says_it_knows(tmp_path: Path) -> No
     """`cost_status` is the authority, not the column: it writes 0.0 either way."""
     path = build(tmp_path / HERMES_DB)
     spend(path, cost_status="unknown", estimated_cost_usd=1.5)
-    assert HermesAdapter().tally(SESSION, roots=[tmp_path]).cost == 0.0
+    assert HermesAdapter().tally(Source(SESSION, [tmp_path])).cost == 0.0
 
 
 def test_a_priced_row_is_reported(tmp_path: Path) -> None:
     path = build(tmp_path / HERMES_DB)
     spend(path, cost_status="actual", actual_cost_usd=2.5, estimated_cost_usd=1.5)
-    assert HermesAdapter().tally(SESSION, roots=[tmp_path]).cost == 2.5
+    assert HermesAdapter().tally(Source(SESSION, [tmp_path])).cost == 2.5
 
 
 @contextmanager
@@ -348,18 +349,20 @@ def test_a_locked_store_reads_as_unreadable_not_empty(roots: list[Path]) -> None
     """A writer holding the store must not read as "nothing said yet"."""
     adapter = HermesAdapter()
     with held(roots[0] / HERMES_DB):
-        page = adapter.page(SESSION, roots=roots)
+        page = adapter.page(Source(SESSION, roots), Window())
         assert page.state is HistoryState.unreadable
         assert not page.turns
-        assert adapter.since(SESSION, roots=roots, after=0).state is HistoryState.unreadable
-        assert adapter.tally(SESSION, roots=roots).state is HistoryState.unreadable
-        assert adapter.origin(SESSION, roots=roots) == ""
-    assert adapter.page(SESSION, roots=roots).state is HistoryState.ok
+        assert (
+            adapter.since(Source(SESSION, roots), Window(after=0)).state is HistoryState.unreadable
+        )
+        assert adapter.tally(Source(SESSION, roots)).state is HistoryState.unreadable
+        assert adapter.origin(Source(SESSION, roots)) == ""
+    assert adapter.page(Source(SESSION, roots), Window()).state is HistoryState.ok
 
 
 def test_info_never_raises_while_the_store_is_held(roots: list[Path]) -> None:
     """Its docstring promises as much; a title asked mid-write is simply not known yet."""
     named(roots[0] / HERMES_DB, "Plan the migration")
     with held(roots[0] / HERMES_DB):
-        assert HermesAdapter().info(SESSION, roots=roots) == ("", "")
-    assert HermesAdapter().info(SESSION, roots=roots)[0] == "Plan the migration"
+        assert HermesAdapter().info(Source(SESSION, roots)) == ("", "")
+    assert HermesAdapter().info(Source(SESSION, roots))[0] == "Plan the migration"

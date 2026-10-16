@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from pydantic import JsonValue, TypeAdapter
 
-from herdr_pwa.engine import HistoryState, ModelRef, SessionUsage, UsageCache
+from herdr_pwa.engine import HistoryState, ModelRef, SessionUsage, Source, UsageCache
 from herdr_pwa.web.stats import (
     Stats,
     duration,
@@ -226,14 +226,14 @@ def test_claude_maps_its_transcript_and_grows_by_what_is_appended(tmp_path: Path
         ],
     )
     cache = UsageCache()
-    first = cache.read(WORKING_SESSION, agent_kind="claude", root=str(root))
+    first = cache.read(Source.of(WORKING_SESSION, agent_kind="claude", root=str(root)))
     assert (first.messages, first.prompts, first.context_tokens) == (1, 2, 40_000)
     assert first.turn_started == FOUR_MINUTES_AGO
     with _log(root).open("a") as log:
         log.write(json.dumps(answered("m2", "2026-10-11T11:58:00Z", prompt=50_000, out=2_000)))
         # Half a line is still being written: it is not read until it is whole.
         log.write("\n" + json.dumps(answered("m3", "2026-10-11T11:59:00Z", prompt=1, out=1))[:40])
-    grown = cache.read(WORKING_SESSION, agent_kind="claude", root=str(root))
+    grown = cache.read(Source.of(WORKING_SESSION, agent_kind="claude", root=str(root)))
     assert (grown.messages, grown.output_tokens, grown.context_tokens) == (2, 3_000, 50_000)
     assert grown.last_at == "2026-10-11T11:58:00Z"
     stats = stats_for("claude", "working", grown, now=NOW)
@@ -246,21 +246,27 @@ def test_claude_reads_a_rewritten_log_afresh_rather_than_splicing(tmp_path: Path
     root = tmp_path / "transcripts"
     write_transcript(root, WORKING_SESSION, [answered("m1", FOUR_MINUTES_AGO, prompt=9, out=500)])
     cache = UsageCache()
-    assert cache.read(WORKING_SESSION, agent_kind="claude", root=str(root)).output_tokens == 500
+    assert (
+        cache.read(Source.of(WORKING_SESSION, agent_kind="claude", root=str(root))).output_tokens
+        == 500
+    )
     write_transcript(root, WORKING_SESSION, [answered("m9", FOUR_MINUTES_AGO, prompt=9, out=70)])
-    assert cache.read(WORKING_SESSION, agent_kind="claude", root=str(root)).output_tokens == 70
+    assert (
+        cache.read(Source.of(WORKING_SESSION, agent_kind="claude", root=str(root))).output_tokens
+        == 70
+    )
 
 
 def test_a_prompt_copied_into_a_fork_is_counted_once(tmp_path: Path) -> None:
     root = tmp_path / "transcripts"
     write_transcript(root, WORKING_SESSION, [said("u1", FOUR_MINUTES_AGO)] * 3)
-    found = UsageCache().read(WORKING_SESSION, agent_kind="claude", root=str(root))
+    found = UsageCache().read(Source.of(WORKING_SESSION, agent_kind="claude", root=str(root)))
     assert found.prompts == 1
 
 
 def test_opencode_maps_its_store_with_no_cost_when_it_recorded_none() -> None:
     """The captured session's messages all say cost 0: no source, so no cost and no zero."""
-    found = usage(OPENCODE_SESSION, agent_kind="opencode", root=OPENCODE)
+    found = usage(Source.of(OPENCODE_SESSION, agent_kind="opencode", root=OPENCODE))
     assert found.prompts > 0
     assert found.turn_started
     stats = stats_for("opencode", "working", found, now=found_now(found.turn_started, 90))
@@ -280,7 +286,7 @@ def test_opencode_shows_the_cost_its_messages_record(tmp_path: Path) -> None:
         if source.parent.parent.name == "message" and record.get("role") == "assistant":
             record["cost"] = 0.21
         target.write_text(json.dumps(record))
-    found = usage(OPENCODE_SESSION, agent_kind="opencode", root=store)
+    found = usage(Source.of(OPENCODE_SESSION, agent_kind="opencode", root=store))
     stats = stats_for("opencode", "idle", found, now=NOW)
     assert stats.spend.startswith("$")
     assert labels(stats)["Cost"] == stats.spend
@@ -293,7 +299,7 @@ def found_now(stamp: str, seconds: float) -> float:
 def test_hermes_maps_its_rollup_and_its_messages(tmp_path: Path) -> None:
     path = test_hermes.build(tmp_path / HERMES_DB)
     test_hermes.spend(path, cost_status="actual", actual_cost_usd=2.5)
-    found = usage(test_hermes.SESSION, agent_kind="hermes", root=tmp_path)
+    found = usage(Source.of(test_hermes.SESSION, agent_kind="hermes", root=tmp_path))
     assert found.prompts == 1
     assert found.turn_started
     stats = stats_for("hermes", "working", found, now=found_now(found.turn_started, 30))
@@ -306,7 +312,7 @@ def test_hermes_maps_its_rollup_and_its_messages(tmp_path: Path) -> None:
 def test_hermes_with_no_priced_row_shows_no_cost(tmp_path: Path) -> None:
     path = test_hermes.build(tmp_path / HERMES_DB)
     test_hermes.spend(path, cost_status="unknown", estimated_cost_usd=1.5)
-    found = usage(test_hermes.SESSION, agent_kind="hermes", root=tmp_path)
+    found = usage(Source.of(test_hermes.SESSION, agent_kind="hermes", root=tmp_path))
     stats = stats_for("hermes", "idle", found, now=NOW)
     assert "Cost" not in labels(stats)
     assert stats.spend == "20 out"
@@ -317,7 +323,7 @@ def test_hermes_counts_only_live_prompts(tmp_path: Path) -> None:
     path = test_hermes.build(tmp_path / HERMES_DB)
     with sqlite3.connect(path) as db:
         db.execute("update messages set active = 0 where session_id = ?", (test_hermes.SESSION,))
-    found = usage(test_hermes.SESSION, agent_kind="hermes", root=tmp_path)
+    found = usage(Source.of(test_hermes.SESSION, agent_kind="hermes", root=tmp_path))
     assert found.prompts == 0
     assert found.turn_started == ""
 

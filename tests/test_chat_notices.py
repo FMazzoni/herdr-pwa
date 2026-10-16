@@ -33,6 +33,7 @@ from tests.engine_seam import (
     PeerMessage,
     RecordOrigin,
     TaskNotice,
+    Window,
     injected,
     is_message,
     read_page,
@@ -57,7 +58,7 @@ def _turns(records: list[dict[str, JsonValue]], tmp_path: Path) -> list[Transcri
     tmp_path.mkdir(parents=True, exist_ok=True)
     path = tmp_path / "log.jsonl"
     path.write_text("".join(json.dumps(r) + "\n" for r in records))
-    return read_page(path, limit=400).turns
+    return read_page(path, Window(limit=400)).turns
 
 
 def _copy(record: dict[str, JsonValue]) -> dict[str, JsonValue]:
@@ -237,7 +238,7 @@ def test_none_of_them_is_a_message_a_page_counts(tmp_path: Path) -> None:
 def test_a_page_of_one_message_reaches_past_every_notice_and_card(tmp_path: Path) -> None:
     path = tmp_path / "log.jsonl"
     path.write_text("".join(json.dumps(r) + "\n" for r in notice_records()))
-    page = read_page(path, limit=400, messages=1)
+    page = read_page(path, Window(limit=400, messages=1))
     assert [t.speaker for t in page.turns] == [Speaker.agent, *[Speaker.peer] * 6, *TAIL]
 
 

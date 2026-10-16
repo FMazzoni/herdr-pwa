@@ -9,10 +9,11 @@ from typing import Final
 from herdr_pwa.engine import transcript
 from herdr_pwa.engine.transcript import (
     MAX_USAGE_BYTES,
+    ClaudeAdapter,
     HistoryState,
     LiveTally,
     SessionUsage,
-    TranscriptRoots,
+    Source,
     grow_claude,
     tally_claude,
 )
@@ -46,12 +47,12 @@ class UsageCache:
         self._max_bytes = max_bytes
         self._lock = threading.Lock()
 
-    def read(self, session: str, *, agent_kind: str, root: TranscriptRoots = None) -> SessionUsage:
-        """*session*'s tally. Never raises; a harness with no store answers ``unsupported``."""
-        if agent_kind.strip().lower() != "claude":
+    def read(self, source: Source) -> SessionUsage:
+        """*source*'s tally. Never raises; a harness with no store answers ``unsupported``."""
+        if source.kind != "claude":
             # opencode and hermes keep a rollup or a table: one query, nothing to grow.
-            return transcript.usage(session, agent_kind=agent_kind, root=root)
-        path = transcript.locate(session, root=root)
+            return transcript.usage(source)
+        path = ClaudeAdapter.log(source)
         if path is None:
             return SessionUsage(state=HistoryState.absent)
         try:

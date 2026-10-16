@@ -7,8 +7,16 @@ from pathlib import Path
 
 from pydantic import JsonValue
 
-from herdr_pwa.engine import Ask, HistoryState, Speaker, TailCache, TranscriptTurn, chat_window
-from tests.engine_seam import is_message, read_page
+from herdr_pwa.engine import (
+    Ask,
+    HistoryState,
+    Source,
+    Speaker,
+    TailCache,
+    TranscriptTurn,
+    chat_window,
+)
+from tests.engine_seam import Window, is_message, read_page
 from tests.webfakes import build_rig
 
 SESSION = "6ae1e031-ddb4-4684-ab07-68073f7fec47"
@@ -81,7 +89,7 @@ def said(turns: list[TranscriptTurn]) -> list[str]:
 
 def test_a_page_counts_messages_and_carries_the_tool_calls_between_them(tmp_path: Path) -> None:
     log = write(tmp_path / "log.jsonl", tool_heavy(60))
-    page = read_page(log, limit=400, messages=20)
+    page = read_page(log, Window(limit=400, messages=20))
     assert said(page.turns) == [
         f"{'Prompt' if m % 5 == 0 else 'Message'} {m}" for m in range(40, 60)
     ]
@@ -95,19 +103,19 @@ def test_a_page_counts_messages_and_carries_the_tool_calls_between_them(tmp_path
 def test_counting_turns_alone_shows_a_couple_of_messages(tmp_path: Path) -> None:
     """What the old limit did on a tool-heavy log: forty turns, three messages."""
     log = write(tmp_path / "log.jsonl", tool_heavy(60))
-    assert len(said(read_page(log, limit=40).turns)) == 3
+    assert len(said(read_page(log, Window(limit=40)).turns)) == 3
 
 
 def test_a_screenshot_longer_than_the_read_window_does_not_end_the_page(tmp_path: Path) -> None:
     log = write(tmp_path / "log.jsonl", tool_heavy(30, image_every=3))
     assert log.stat().st_size > 20 * len(SCREENSHOT)
-    page = read_page(log, limit=400, messages=20, max_bytes=64 * 1024 * 1024)
+    page = read_page(log, Window(limit=400, messages=20, max_bytes=64 * 1024 * 1024))
     assert len(said(page.turns)) == 20
 
 
 def test_an_inline_image_is_named_not_dumped(tmp_path: Path) -> None:
     log = write(tmp_path / "log.jsonl", tool_heavy(1, calls=3, image_every=3))
-    page = read_page(log, limit=400)
+    page = read_page(log, Window(limit=400))
     results = [t for t in page.turns if t.tool == "result"]
     assert [r.text for r in results][-1] == "[image]"
     assert all("AAAA" not in r.text for r in results)
@@ -157,7 +165,7 @@ def test_a_rewritten_file_is_read_again(tmp_path: Path) -> None:
 
 def test_load_earlier_is_the_page_just_above_with_nothing_lost_or_doubled(tmp_path: Path) -> None:
     log = write(tmp_path / "log.jsonl", tool_heavy(50))
-    whole = read_page(log, limit=10_000)
+    whole = read_page(log, Window(limit=10_000))
     tails = TailCache()
     newest = tails.window(log, Ask(messages=20))
     both = tails.window(log, Ask(messages=20, before=newest.cursor))
@@ -173,7 +181,7 @@ def test_a_page_held_at_its_start_survives_a_fresh_cache(tmp_path: Path) -> None
     """After a restart the reader's start is read again from disk, earlier pages included."""
     log = write(tmp_path / "log.jsonl", tool_heavy(50))
     earlier = TailCache().window(
-        log, Ask(messages=20, before=read_page(log, limit=400, messages=20).cursor)
+        log, Ask(messages=20, before=read_page(log, Window(limit=400, messages=20)).cursor)
     )
     fresh = TailCache().window(log, Ask(messages=20, start=earlier.cursor))
     assert [t.uuid for t in fresh.turns] == [t.uuid for t in earlier.turns]
@@ -195,12 +203,9 @@ def test_chat_window_starts_over_when_the_conversation_moved(tmp_path: Path) -> 
     root = tmp_path / "transcripts"
     write(root / "-tmp" / f"{SESSION}.jsonl", tool_heavy(30))
     page = chat_window(
-        SESSION,
-        agent_kind="claude",
+        Source.of(SESSION, agent_kind="claude", root=str(root), log="another-file"),
         ask=Ask(messages=20, start=5),
         tails=TailCache(),
-        log="another-file",
-        root=str(root),
     )
     assert page.moved
     assert len(said(page.turns)) == 20
@@ -210,17 +215,17 @@ def test_chat_window_folds_results_and_names_a_missing_log(tmp_path: Path) -> No
     root = tmp_path / "transcripts"
     write(root / "-tmp" / f"{SESSION}.jsonl", tool_heavy(3))
     page = chat_window(
-        SESSION, agent_kind="claude", ask=Ask(messages=20), tails=TailCache(), root=str(root)
+        Source.of(SESSION, agent_kind="claude", root=str(root)),
+        ask=Ask(messages=20),
+        tails=TailCache(),
     )
     calls = [t for t in page.turns if t.speaker is Speaker.tool]
     assert calls
     assert all(c.result.startswith("output") for c in calls)
     gone = chat_window(
-        "5b609dba-d756-493a-a3fc-b4e09bf0a183",
-        agent_kind="claude",
+        Source.of("5b609dba-d756-493a-a3fc-b4e09bf0a183", agent_kind="claude", root=str(root)),
         ask=Ask(messages=20),
         tails=TailCache(),
-        root=str(root),
     )
     assert gone.state is HistoryState.absent
 
@@ -233,7 +238,9 @@ def test_a_file_rewritten_in_place_is_not_spliced(tmp_path: Path) -> None:
     tails.window(log, Ask(messages=20))
     inserted = [*records[:5], _record("assistant", "mid", [{"type": "text", "text": "Mid"}])]
     log.write_text("".join(json.dumps(r) + "\n" for r in [*inserted, *records[5:]]))
-    assert said(tails.window(log, Ask(messages=20)).turns) == said(read_page(log, limit=400).turns)
+    assert said(tails.window(log, Ask(messages=20)).turns) == said(
+        read_page(log, Window(limit=400)).turns
+    )
 
 
 # The route

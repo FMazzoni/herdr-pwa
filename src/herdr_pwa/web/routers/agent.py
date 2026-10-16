@@ -12,7 +12,7 @@ from markupsafe import Markup
 
 from herdr_pwa import panetext
 from herdr_pwa.decisions import still_talking
-from herdr_pwa.engine import Agent, Ask, EngineError, chat_window
+from herdr_pwa.engine import Agent, Ask, EngineError, Source, chat_window
 from herdr_pwa.web.chat import ChatView, chat_view
 from herdr_pwa.web.deps import WebState, hidden_tick, viewer_guard
 from herdr_pwa.web.herd import agent_status, find_agent
@@ -31,9 +31,7 @@ KEEP_DRAWN: Final = {"HX-Retarget": "#chat-note", "HX-Reswap": "outerHTML"}
 def read_stats(web: WebState, agent: Agent) -> Stats:
     """The stats strip for *agent*, from its harness's own record."""
     usage = web.usage.read(
-        agent.session,
-        agent_kind=agent.agent or "",
-        root=web.settings.transcript_roots or None,
+        Source.of(agent.session, agent_kind=agent.agent, root=web.settings.transcript_roots or None)
     )
     return stats_for(agent.agent or "", agent_status(web, agent).value, usage, now=web.wall())
 
@@ -48,14 +46,10 @@ def read_chat(
 ) -> ChatView:
     """The Chat tab's window: the newest page of messages, or the one the reader asked for."""
     ask = Ask(messages=web.settings.chat_messages, start=start, before=before)
-    page = chat_window(
-        agent.session,
-        agent_kind=agent.agent,
-        ask=ask,
-        tails=web.tails,
-        log=log,
-        root=web.settings.transcript_roots or None,
+    source = Source.of(
+        agent.session, agent_kind=agent.agent, root=web.settings.transcript_roots or None, log=log
     )
+    page = chat_window(source, ask=ask, tails=web.tails)
     said = doubt(agent, web.settings.transcript_roots)
     # Every page reaches the newest turn, an earlier one included, so each says what is on its way.
     talking = still_talking(agent_status(web, agent))
