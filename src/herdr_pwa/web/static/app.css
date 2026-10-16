@@ -103,6 +103,10 @@
      overwrites the two px values; these are what the page reserves without script. */
   --dock-h: 88px;
   --kb: 0px;
+  /* How far the composer's colour runs below it while the keyboard is up, under iOS's translucent
+     accessory pill. Fixed and tall, not --kb: --kb is 0 whenever iOS has panned the band to the
+     layout viewport's bottom, and the pill then sits below that edge. */
+  --keyboard-backdrop: 50lvh;
   --composer-grow: 5.5em;
   /* The narrowest the prompt field gets before the Send button moves under it. */
   --composer-min: 8em;
@@ -743,6 +747,17 @@ textarea { resize: vertical; min-height: 4.5em; }
   border-top: var(--line-1) solid var(--rule);
 }
 .is-keyboard .composer { padding-bottom: var(--space-4); }
+/* A fixed box's overflow never scrolls the page, so this runs past the viewport's bottom freely. */
+.is-keyboard .composer::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: var(--keyboard-backdrop);
+  background: var(--surface);
+  pointer-events: none;
+}
 /* Floats just above the dock, and above the keyboard with it, while a question waits below. */
 .jump {
   position: fixed;
