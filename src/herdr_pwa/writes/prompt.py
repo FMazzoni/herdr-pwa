@@ -188,7 +188,7 @@ def send_prompt(writer: Writer, ask: PromptAsk) -> PromptSent | Refused:
 
 
 def _send_prompt(writer: Writer, ask: PromptAsk) -> PromptSent | Refused:
-    agent = agent_now(writer.client, ask.session, expected_target=ask.expected_target, verb=_VERB)
+    agent = agent_now(writer, ask.session, expected_target=ask.expected_target, verb=_VERB)
     if isinstance(agent, Refused):
         return agent
     refused = _text_refusal(ask.text)

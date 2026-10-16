@@ -19,6 +19,7 @@ from herdr_pwa.web.naming import page_title
 from herdr_pwa.web.routers.compose import answer_region, composer_region
 from herdr_pwa.web.stats import Stats, stats_for
 from herdr_pwa.web.writing import first_note
+from herdr_pwa.writes.resolve import doubt
 
 # Files is a tab too, but its pages are the explorer's, reached through /agent/<session>/files.
 TABS: Final = ("chat", "pane")
@@ -52,7 +53,8 @@ def read_chat(
         log=log,
         root=web.settings.transcript_roots or None,
     )
-    return chat_view(page, working=agent.status is AgentStatus.WORKING)
+    said = doubt(agent, web.settings.transcript_roots)
+    return chat_view(page, working=agent.status is AgentStatus.WORKING, doubt=said)
 
 
 def read_pane(web: WebState, agent: Agent) -> panetext.PaneView:

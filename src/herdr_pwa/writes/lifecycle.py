@@ -279,9 +279,7 @@ def end_agent(writer: Writer, ask: EndAsk) -> AgentEnded | Refused:
 
 
 def _end_agent(writer: Writer, ask: EndAsk) -> AgentEnded | Refused:
-    agent = agent_now(
-        writer.client, ask.session, expected_target=ask.expected_target, verb="closed"
-    )
+    agent = agent_now(writer, ask.session, expected_target=ask.expected_target, verb="closed")
     if isinstance(agent, Refused):
         return agent
     if not ask.confirmed:

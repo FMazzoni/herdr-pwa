@@ -1,5 +1,6 @@
 """What the dashboard decides about a screen and a herd, as typed records the views render."""
 
+import posixpath
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
@@ -216,6 +217,35 @@ def decide_screen(prompt: BlockedPrompt) -> ScreenDecision:
         asked=prompt.asked,
         is_choice=prompt.is_choice,
         focus=prompt.focus,
+    )
+
+
+def _within(inner: str, outer: str) -> bool:
+    """Is *inner* the directory *outer* or one below it? Compared as paths, not as prefixes."""
+    return inner == outer or inner.startswith(outer.rstrip("/") + "/")
+
+
+def _related(one: str, other: str) -> bool:
+    """Does either directory contain the other?"""
+    return _within(one, other) or _within(other, one)
+
+
+def identity_doubt(origin: str, cwds: Iterable[str]) -> str:
+    """Why the session a pane reports may not be the agent running there, or ``""`` if no reason.
+
+    *origin* is where the session's own store says it was started; *cwds* are where herdr says
+    the pane runs. A session started somewhere unrelated to the pane was reported by something
+    else that carries the pane's id, a nested harness for one. Nothing known is not a doubt.
+    """
+    started = posixpath.normpath(origin.strip()) if origin.strip() else ""
+    here = [posixpath.normpath(cwd.strip()) for cwd in cwds if cwd.strip()]
+    if not started or not here or any(_related(started, cwd) for cwd in here):
+        return ""
+    return (
+        f"This pane reports a session that was started in {started}, but the pane runs in "
+        f"{here[0]}. Something else in the pane may have reported its own session, so what "
+        "is shown here may not be this agent's, and nothing is sent to it until the pane "
+        "reports a session that started where it runs."
     )
 
 

@@ -133,6 +133,10 @@ class _Store(Protocol):
         """The session's own record: what it is CALLED and what it is set to."""
         ...
 
+    def origin(self) -> str:
+        """The directory the session's own record says it was started in."""
+        ...
+
     def close(self) -> None:
         """Release whatever the store held open."""
         ...
@@ -193,11 +197,29 @@ class _Files:
             projects = sorted((self._base / "session").iterdir())
         except OSError:
             return SessionInfo()
+        record = self._own(projects)
+        return (
+            SessionInfo() if record is None else SessionInfo(title=one_line(record.get("title"))[0])
+        )
+
+    def origin(self) -> str:
+        """The ``directory`` of the session's own JSON."""
+        if not _ID.match(self._session):
+            return ""
+        try:
+            projects = sorted((self._base / "session").iterdir())
+        except OSError:
+            return ""
+        record = self._own(projects)
+        return "" if record is None else _text(record.get("directory"))
+
+    def _own(self, projects: list[Path]) -> JsonObject | None:
+        """The session's own JSON, under whichever project directory holds it."""
         for project in projects:
             record, _ = self._file(project / f"{self._session}.json")
             if record is not None:
-                return SessionInfo(title=one_line(record.get("title"))[0])
-        return SessionInfo()
+                return record
+        return None
 
     def close(self) -> None:
         """Nothing was held open."""
@@ -294,6 +316,11 @@ class _Db:
         return SessionInfo(
             title=one_line(title)[0], model=_model_ref(rest[0]) if rest else ModelRef()
         )
+
+    def origin(self) -> str:
+        """The session row's ``directory`` column."""
+        found = self._named("directory")
+        return _text(found[0]) if found else ""
 
     def _named(self, columns: str) -> _Row | None:
         """The session's own row, or ``None`` -- a store without *columns* included."""
@@ -701,6 +728,17 @@ class OpencodeAdapter(TranscriptAdapter):
                 return _tally(store, max_bytes=max_bytes)
         except _LockedError:
             return SessionUsage(state=HistoryState.unreadable)
+
+    def origin(self, session: str, *, roots: Sequence[Path]) -> str:
+        """The directory opencode recorded *session* as started in, or ``""``."""
+        try:
+            store = _open(roots, session)
+        except _LockedError:
+            return ""
+        if store is None:
+            return ""
+        with closing(store):
+            return store.origin()
 
     def info(self, session: str, *, roots: Sequence[Path] = ()) -> SessionInfo:
         """What *session*'s own record calls it and what it is set to. Never raises."""

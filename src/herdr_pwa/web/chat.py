@@ -83,6 +83,8 @@ class ChatView:
     more: bool = False
     # The agent is working, so the turn it is producing now lands here when it is done.
     catching_up: bool = False
+    # Why the session the pane reports may not be the agent there; shown above everything.
+    doubt: str = ""
 
 
 def fold_tools(turns: tuple[ChatTurn, ...]) -> tuple[ChatTurn | ToolRun, ...]:
@@ -207,7 +209,7 @@ def _carrying(notice: TranscriptTurn, reports: list[TranscriptTurn]) -> Transcri
     return notice.model_copy(update={"result": text, "result_truncated": cut})
 
 
-def chat_view(page: TranscriptPage, *, working: bool = False) -> ChatView:
+def chat_view(page: TranscriptPage, *, working: bool = False, doubt: str = "") -> ChatView:
     """The Chat tab's content for one transcript page.
 
     *working* is the agent's own status, not a guess from the page: turns land
@@ -223,4 +225,5 @@ def chat_view(page: TranscriptPage, *, working: bool = False) -> ChatView:
         log=page.log,
         more=page.has_more,
         catching_up=working,
+        doubt=doubt,
     )

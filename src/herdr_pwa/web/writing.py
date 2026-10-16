@@ -64,7 +64,9 @@ def writer_for(web: WebState, request: Request, identity: auth.Identity) -> Writ
         client_ip=request.client.host if request.client else "",
         forwarded_for=request.headers.get("x-forwarded-for", ""),
     )
-    return Writer(web.client, Recorder(web.audit, origin), web.pacing)
+    return Writer(
+        web.client, Recorder(web.audit, origin), web.pacing, web.settings.transcript_roots
+    )
 
 
 def agent_url(session: str) -> str:

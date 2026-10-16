@@ -137,7 +137,7 @@ def send_key(writer: Writer, ask: KeyAsk) -> KeySent | Refused:
 
 
 def _send_key(writer: Writer, ask: KeyAsk) -> KeySent | Refused:
-    agent = agent_now(writer.client, ask.session, expected_target=ask.expected_target, verb=_VERB)
+    agent = agent_now(writer, ask.session, expected_target=ask.expected_target, verb=_VERB)
     if isinstance(agent, Refused):
         return agent
     key = ask.key.strip().lower()
