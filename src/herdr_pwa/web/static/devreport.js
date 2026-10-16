@@ -140,6 +140,26 @@
     return out;
   }
 
+  // What the dock drew: where the composer and top bar sit, and the lift and keyboard class it set.
+  function docked() {
+    var root = document.documentElement;
+    var out = {
+      kb: root.style.getPropertyValue("--kb"),
+      keyboard: root.classList.contains("is-keyboard"),
+    };
+    var composer = document.getElementById("composer");
+    if (composer) {
+      var c = composer.getBoundingClientRect();
+      out.composer = { top: round(c.top), bottom: round(c.bottom) };
+    }
+    var top = document.querySelector(".topbar");
+    if (top) {
+      var t = top.getBoundingClientRect();
+      out.topbar = { top: round(t.top), bottom: round(t.bottom) };
+    }
+    return out;
+  }
+
   function viewport() {
     var vv = window.visualViewport;
     var out = {
@@ -147,6 +167,10 @@
       innerHeight: window.innerHeight,
       clientWidth: document.documentElement.clientWidth,
       scrollY: round(window.scrollY),
+      // The layout viewport, which the dock measures the keyboard against; innerHeight is not it on iOS.
+      clientHeight: document.documentElement.clientHeight,
+      standalone: window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true,
+      dock: docked(),
     };
     if (vv) {
       out.vv = {
