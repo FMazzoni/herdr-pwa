@@ -186,3 +186,13 @@ test("defer: a read waits only for a busy reader, and only in a region found aga
   assert.equal(logic.defers({ id: "", polled: true }, true), false);
   assert.equal(logic.defers({ id: "composer", polled: false }, true), false);
 });
+
+test("lost: a read waits out the rest of the no-reply notice's reading time, and only while it is up", () => {
+  const least = logic.LOST_READ_MS;
+  assert.ok(least >= 5000, "shorter than the 5s poll it has to outlast");
+  assert.equal(logic.lostHold(-1), 0);
+  assert.equal(logic.lostHold(0), least);
+  assert.equal(logic.lostHold(least - 1500), 1500);
+  assert.equal(logic.lostHold(least), 0);
+  assert.equal(logic.lostHold(least + 60000), 0);
+});

@@ -152,6 +152,16 @@
       return busy && region.polled && !!region.id;
     }
 
+    // The no-reply notice stays up at least this long: past the answer region's 5s poll, so it
+    // can be read before a redraw takes it away.
+    var LOST_READ_MS = 8000;
+
+    /* How much longer a read must wait before it may redraw the answer region, from how long its
+     * no-reply notice has been up (-1: none is up). */
+    function lostHold(shownFor) {
+      return shownFor < 0 ? 0 : Math.max(0, LOST_READ_MS - shownFor);
+    }
+
     return {
       RETRY_FIRST_MS: RETRY_FIRST_MS,
       pin: pin,
@@ -164,6 +174,8 @@
       markAt: markAt,
       nearest: nearest,
       defers: defers,
+      LOST_READ_MS: LOST_READ_MS,
+      lostHold: lostHold,
     };
   })();
   // hp:logic:end
@@ -404,11 +416,18 @@
     }
   });
 
+  // The no-reply notice showing now, and when it came up.
+  var lostShown = { notice: null, at: 0 };
+  var lostTimer = 0;
+
   function lost(event) {
     var elt = event.detail && event.detail.elt;
     var region = elt && elt.closest ? elt.closest("#answer") : null;
     var notice = region ? region.querySelector("[data-hp-lost]") : null;
     if (notice) {
+      if (notice.hidden) {
+        lostShown = { notice: notice, at: Date.now() };
+      }
       notice.hidden = false;
       showOutcome(notice);
     }
@@ -416,6 +435,28 @@
   document.addEventListener("htmx:sendError", lost);
   document.addEventListener("htmx:timeout", lost);
   document.addEventListener("htmx:responseError", lost);
+
+  /* A read that would redraw the notice away before it could be read is dropped, and the region
+   * fetched afresh once it has been up long enough. A tap's own answer is never held. */
+  document.addEventListener("htmx:beforeSwap", function (event) {
+    var target = event.detail.target;
+    if (!target || target.id !== "answer" || !isRead(event.detail)) {
+      return;
+    }
+    var notice = lostShown.notice;
+    var up = !!notice && notice.isConnected && !notice.hidden;
+    var wait = logic.lostHold(up ? Date.now() - lostShown.at : -1);
+    if (wait <= 0) {
+      return;
+    }
+    event.detail.shouldSwap = false;
+    window.clearTimeout(lostTimer);
+    lostTimer = window.setTimeout(function () {
+      if (target.isConnected && typeof window.htmx !== "undefined") {
+        refetch(target);
+      }
+    }, wait);
+  });
 
   /* ---- Live updates: the server names a stale region, and the region fetches itself ----
    * One stream per page names the regions on it (data-hp-topic). An event carries only a

@@ -1,5 +1,6 @@
 """Every route over a fake runner: what it renders, what it refuses, and the headers it sends."""
 
+import re
 from pathlib import Path
 
 import pytest
@@ -210,6 +211,36 @@ def test_a_failure_takes_only_a_plain_region_id_from_the_request(
     response = rig.http.get("/feed", headers={**FRAGMENT, "HX-Target": target})
     assert response.status_code == 503
     assert " id=" not in response.text.split(">", 1)[0]
+
+
+TEMPLATES = Path(__file__).parents[1] / "src" / "herdr_pwa" / "web" / "templates"
+TAG = re.compile(r"<[a-z][^>]*>", re.DOTALL)
+TARGET = re.compile(r'hx-target="([^"]*)"')
+ID = re.compile(r'\sid="([^"]*)"')
+
+
+def region_ids() -> set[str]:
+    """Every element a fragment replaces, by id: a ``this`` target's own, or a ``#id`` target."""
+    found: set[str] = set()
+    for template in TEMPLATES.glob("*.html"):
+        for tag in (m.group(0) for m in TAG.finditer(template.read_text())):
+            target = TARGET.search(tag)
+            own = ID.search(tag)
+            if target and target.group(1).startswith("#"):
+                found.add(target.group(1)[1:])
+            elif target and target.group(1) == "this" and own and own.group(1) != "{{ region }}":
+                found.add(own.group(1))
+    return found
+
+
+def test_every_region_id_the_templates_draw_is_echoed_by_a_failure(tmp_path: Path) -> None:
+    # The echo takes only plain ids; a region outside that shape would lose its id on failure.
+    ids = region_ids()
+    assert {"answer", "agent-view", "composer", "find-results"} <= ids
+    rig = build_rig(tmp_path, {SNAPSHOT: EngineUnavailable("x")})
+    for region in sorted(ids):
+        response = rig.http.get("/feed", headers={**FRAGMENT, "HX-Target": region})
+        assert f'id="{region}"' in response.text.split(">", 1)[0], region
 
 
 def test_a_failed_page_load_is_a_whole_document(tmp_path: Path) -> None:

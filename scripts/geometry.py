@@ -369,12 +369,17 @@ def install(switch: Switch, state: State, scratch: Path) -> None:
     switch.app = build(state, home).http.app
 
 
-def _wait(driver: Marionette, selector: str, base: str) -> dict[str, object]:
+def _wait(
+    driver: Marionette, selector: str, base: str, *, settle: bool = True
+) -> dict[str, object]:
     deadline = time.monotonic() + READY_SECONDS
     seen: dict[str, object] = {}
     while time.monotonic() < deadline:
         found = driver.script(PROBE_LOADED, selector, base)
         seen = found if isinstance(found, dict) else {}
+        # A state held mid-tap never settles: its proof alone is enough.
+        if not settle:
+            seen["settled"] = True
         if (seen.get("ready") and seen.get("settled")) or seen.get("errorPage"):
             break
         time.sleep(0.05)
@@ -388,7 +393,7 @@ def _loaded(driver: Marionette, state: State, base: str) -> list[str]:
         if not (seen.get("ready") and seen.get("settled")):
             return _load_problems(seen, state.armed, scripted=True)
         driver.script(state.act)
-    seen = _wait(driver, state.ready, base)
+    seen = _wait(driver, state.ready, base, settle=not state.in_flight)
     return _load_problems(seen, state.ready, scripted=state.scripted)
 
 
@@ -557,10 +562,13 @@ def judge_bar(found: dict[str, object], where: str, size: "Size", tally: Tally) 
     _judge_strip(bar, where, size, tally)
 
 
-def _grow_text(driver: Marionette, scale: float) -> bool:
+def _grow_text(driver: Marionette, scale: float, *, settle: bool = True) -> bool:
     """Set the page's text ``scale`` times its default; whether the dock followed it by itself."""
     kept = driver.script_async(GROW_TEXT, scale, DOCK_CEILING_MS) is True
-    eventually(lambda: bool(driver.script(f"return ({HTMX_SETTLED})();")), seconds=READY_SECONDS)
+    if settle:
+        eventually(
+            lambda: bool(driver.script(f"return ({HTMX_SETTLED})();")), seconds=READY_SECONDS
+        )
     return kept
 
 
@@ -591,7 +599,7 @@ def run_state(driver: Marionette, state: State, base: str, size: Size, tally: Ta
     if problems:
         tally.problems += [f"{where}: NOT LOADED: {p}" for p in problems]
         return
-    if scale != 1.0 and not _grow_text(driver, scale):
+    if scale != 1.0 and not _grow_text(driver, scale, settle=not state.in_flight):
         tally.problems.append(
             f"{where}: the docked composer was not re-measured after the text grew, so the "
             "room the page keeps for it is the old size"

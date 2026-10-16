@@ -19,6 +19,7 @@ from tests.webfakes import (
     SNAPSHOT,
     WORKING_PANE,
     FakeWire,
+    Hold,
     Reply,
     agents_of,
     read_frame,
@@ -97,17 +98,12 @@ def asking() -> dict[str, Reply]:
     }
 
 
-def slow_key(release: threading.Event) -> Callable[[FakeWire], None]:
-    """The runner holds the key until released, then the question goes and the agent works."""
-
-    def landed(wire: FakeWire) -> None:
-        release.wait(WAIT_SECONDS)
-        frame = herd(p4="working")
-        wire.replies.update(
-            {SNAPSHOT: frame, AGENT_GET: agent_info(frame), READ: read_frame(capture(WORKING))}
-        )
-
-    return landed
+def landed(wire: FakeWire) -> None:
+    """Once the key is let go, the question goes and the agent works."""
+    frame = herd(p4="working")
+    wire.replies.update(
+        {SNAPSHOT: frame, AGENT_GET: agent_info(frame), READ: read_frame(capture(WORKING))}
+    )
 
 
 def _until(driver: Marionette, script: str, *args: object) -> bool:
@@ -191,8 +187,9 @@ def run(
     home.mkdir(parents=True)
     state = State("send hold", f"{AGENT}?tab=pane", OPTION, asking)
     rig = build(state, home)
-    release = threading.Event()
-    rig.wire.after[SEND_KEYS] = slow_key(release)
+    hold = Hold(landed, ceiling=WAIT_SECONDS)
+    release = hold.release
+    rig.wire.after[SEND_KEYS] = hold
     writes = Writes(rig.http.app)
     mount(writes)
     first = driver.handles()[0]

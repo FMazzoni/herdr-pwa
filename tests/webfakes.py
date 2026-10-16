@@ -2,6 +2,7 @@
 
 import copy
 import json
+import threading
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -110,6 +111,34 @@ class FakeWire:
 
     def close(self) -> None:
         return None
+
+
+# How long a held write waits for its release before answering anyway, so no server thread
+# outlives the browser run that left it held.
+HOLD_SECONDS = 60.0
+
+
+@dataclass(frozen=True)
+class Hold:
+    """An ``after`` hook that sits on a write until ``release`` is set, then runs ``then``.
+
+    The write's request stays open meanwhile, so the page can be seen while its tap is out.
+    """
+
+    then: Callable[[FakeWire], None] | None = None
+    ceiling: float = HOLD_SECONDS
+    release: threading.Event = field(default_factory=threading.Event)
+    # Set once the write has reached the runner and is being held.
+    taken: threading.Event = field(default_factory=threading.Event)
+    # Set once the write was let go by ``release``, not by the ceiling.
+    released: threading.Event = field(default_factory=threading.Event)
+
+    def __call__(self, wire: FakeWire) -> None:
+        self.taken.set()
+        if self.release.wait(self.ceiling):
+            self.released.set()
+        if self.then is not None:
+            self.then(wire)
 
 
 @dataclass

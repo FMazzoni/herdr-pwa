@@ -141,6 +141,27 @@ def test_interrupt_takes_two_taps_and_skips_the_fingerprint(tmp_path: Path) -> N
     assert r.herd.writes(SEND_KEYS) == [{"target": "w1:p3", "keys": ["ctrl-c"]}]
 
 
+def test_a_second_tab_s_interrupt_is_refused_mid_interrupt_and_taken_after_it(
+    tmp_path: Path,
+) -> None:
+    # Refused only while the first is out: past it, a second deliberate Ctrl+C is a stubborn
+    # process's usual remedy, and every interrupt is already two taps.
+    r = blocked_rig(tmp_path)
+    interrupt = KeyAsk(S1, "ctrl-c", confirmed=True)
+    late: list[KeySent | Refused] = []
+
+    def other_tab(herd: FakeHerd, params: dict[str, JsonValue]) -> None:
+        del herd.after[SEND_KEYS], params
+        late.append(send_key(r.writer, interrupt))
+
+    r.herd.after[SEND_KEYS] = other_tab
+    _ = sent(send_key(r.writer, interrupt))
+    [mid] = late
+    assert refused(mid).refusal is Refusal.IN_FLIGHT
+    _ = sent(send_key(r.writer, interrupt))
+    assert r.herd.writes(SEND_KEYS) == [{"target": "w1:p3", "keys": ["ctrl-c"]}] * 2
+
+
 def test_interrupt_works_when_the_question_cannot_be_read(tmp_path: Path) -> None:
     r = blocked_rig(tmp_path)
     r.herd.fail["agent.read"] = EngineUnavailable("down")
