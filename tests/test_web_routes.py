@@ -21,7 +21,7 @@ from herdr_pwa.engine import (
 )
 from herdr_pwa.files.roots import root_id
 from herdr_pwa.protocol import WRITE_METHODS
-from herdr_pwa.web.chat import WORKING_VERBS, chat_view, working_verb
+from herdr_pwa.web.chat import WORKING_VERBS, chat_view, working_verbs
 from herdr_pwa.web.security import CSP
 from tests.filefakes import make_repo, stand_in
 from tests.webfakes import (
@@ -413,7 +413,7 @@ def test_the_chat_says_it_is_catching_up_while_the_agent_works(tmp_path: Path) -
 
 
 def _verb_in(body: str) -> str:
-    found = re.search(r'<span aria-hidden="true">(\w+)<span class="working">', body)
+    found = re.search(r'<span class="working__verb">(\w+)&hellip;</span>', body)
     assert found is not None, body
     return found.group(1)
 
@@ -428,11 +428,22 @@ def _working_at(tmp_path: Path, seq: int, revision: int = 1) -> str:
 
 
 def test_the_working_line_says_working_and_hides_its_verb(tmp_path: Path) -> None:
-    """VoiceOver hears one stable word; the verb and the dots are decoration it skips."""
+    """VoiceOver hears one stable word; the verb, and every glyph app.js draws, it skips."""
     body = _working_at(tmp_path, 7)
     assert _verb_in(body) in WORKING_VERBS
-    assert body.count('class="working__dot"') == 3
+    assert '<span class="working" aria-hidden="true">' in body
     assert "It is talking" not in body
+
+
+def test_the_working_line_lists_every_verb_from_the_turns_own(tmp_path: Path) -> None:
+    """app.js moves through the verbs from the one drawn, so a redraw resumes the same order."""
+    body = _working_at(tmp_path, 7)
+    found = re.search(r'data-hp-working="([^"]+)" data-hp-verbs="([^"]+)"', body)
+    assert found is not None, body
+    verbs = found.group(2).split(" ")
+    assert verbs[0] == _verb_in(body)
+    assert sorted(verbs) == sorted(WORKING_VERBS)
+    assert tuple(verbs) == working_verbs(found.group(1))
 
 
 def test_the_working_verb_holds_for_a_turn_and_changes_with_the_next(tmp_path: Path) -> None:
@@ -446,8 +457,9 @@ def test_the_working_verb_holds_for_a_turn_and_changes_with_the_next(tmp_path: P
 
 def test_the_working_verb_is_a_function_of_the_turn_alone() -> None:
     """crc32 of the turn's name, so it survives a restart, unlike Python's salted str hash."""
-    assert working_verb("s:1") == "Gathering"
-    assert {working_verb(f"s:{n}") for n in range(200)} == set(WORKING_VERBS)
+    assert working_verbs("s:1")[0] == "Gathering"
+    assert {working_verbs(f"s:{n}")[0] for n in range(200)} == set(WORKING_VERBS)
+    assert working_verbs("s:1")[1] == WORKING_VERBS[WORKING_VERBS.index("Gathering") + 1]
 
 
 def test_the_catching_up_note_is_gone_when_the_agent_stops(tmp_path: Path) -> None:
@@ -530,7 +542,7 @@ def test_the_catching_up_note_is_a_function_of_the_status_alone() -> None:
     for status in AgentStatus:
         view = chat_view(page, working="s:1" if status is AgentStatus.WORKING else "")
         assert view.catching_up is (status is AgentStatus.WORKING), status
-        assert bool(view.verb) is view.catching_up, status
+        assert bool(view.verbs) is view.catching_up, status
 
 
 # ---- A GET never writes anything that matters ---------------------------------------------

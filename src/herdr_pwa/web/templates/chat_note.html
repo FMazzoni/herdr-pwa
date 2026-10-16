@@ -1,8 +1,10 @@
 {# The notes under the log, a slot of their own: a refresh that cannot read the log redraws only
    this, so the turns the reader has stay drawn and in place. The agent producing a turn the store
-   has not received yet is said in one quiet working line, instead of looking complete; that is
-   purely the agent's status, so it cannot flicker between polls, and its verb is fixed per turn. #}
+   has not received yet is said in one small working line, instead of looking complete; that is
+   purely the agent's status, so it cannot flicker between polls, and its first verb is fixed per turn. #}
 <div id="chat-note" class="chat__notes">
   {%- if chat.held %}<p class="chat__note">The transcript could not be read just now; what is shown is from the last read.</p>{% endif %}
-  {%- if chat.catching_up %}<p class="chat__note chat__working"><span class="sr-only">Working</span><span aria-hidden="true">{{ chat.verb }}<span class="working"><span class="working__dot"></span><span class="working__dot"></span><span class="working__dot"></span></span></span></p>{% endif -%}
+  {#- One small line under the last turn. VoiceOver hears "Working"; the verb is decoration, which
+      app.js animates from the verbs listed here and the stretch they belong to. #}
+  {%- if chat.catching_up %}<p class="chat__working" data-hp-working="{{ chat.turn }}" data-hp-verbs="{{ chat.verbs|join(' ') }}"><span class="sr-only">Working</span><span class="working" aria-hidden="true"><span class="working__verb">{{ chat.verbs[0] }}&hellip;</span></span></p>{% endif -%}
 </div>

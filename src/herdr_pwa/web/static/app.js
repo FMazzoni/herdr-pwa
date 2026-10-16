@@ -162,6 +162,105 @@
       return shownFor < 0 ? 0 : Math.max(0, LOST_READ_MS - shownFor);
     }
 
+    /* The working line. Its times come from app.css's tokens, so a CSS time reads as milliseconds
+     * here: "2.4s" or "800ms", and NaN for anything else. */
+    function millis(text) {
+      var found = /^\s*(\d*\.?\d+)(ms|s)\s*$/.exec(String(text));
+      if (found === null) {
+        return NaN;
+      }
+      return parseFloat(found[1]) * (found[2] === "s" ? 1000 : 1);
+    }
+
+    /* Where the line is `elapsed` ms into its stretch: each verb holds for `hold` ms, the first
+     * `morph` of them spent turning out of the one before. index is the verb shown, from the one
+     * it is turning out of (-1 before the first turn), t how far that turn has gone (1: done). */
+    function verbAt(elapsed, count, times) {
+      var n = Math.floor(Math.max(0, elapsed) / times.hold);
+      var into = Math.max(0, elapsed) - n * times.hold;
+      return {
+        index: n % count,
+        from: n === 0 ? -1 : (n - 1) % count,
+        t: n === 0 ? 1 : Math.min(1, into / times.morph),
+      };
+    }
+
+    /* Which glyph of `from` each glyph of `to` grows out of, or -1: the longest run of letters the
+     * two words share, kept in order, so no two glyphs cross on their way to their new places. */
+    function pairs(from, to) {
+      var rows = [];
+      for (var i = 0; i <= from.length; i++) {
+        rows.push(new Array(to.length + 1).fill(0));
+      }
+      for (i = from.length - 1; i >= 0; i--) {
+        for (var j = to.length - 1; j >= 0; j--) {
+          rows[i][j] = from[i] === to[j] ? rows[i + 1][j + 1] + 1 : Math.max(rows[i + 1][j], rows[i][j + 1]);
+        }
+      }
+      var paired = new Array(to.length).fill(-1);
+      i = 0;
+      j = 0;
+      while (i < from.length && j < to.length) {
+        if (from[i] === to[j]) {
+          paired[j] = i;
+          i++;
+          j++;
+        } else if (rows[i + 1][j] >= rows[i][j + 1]) {
+          i++;
+        } else {
+          j++;
+        }
+      }
+      return paired;
+    }
+
+    // Slow at both ends, so a glyph leaves its place and arrives at the next without a jolt.
+    function ease(t) {
+      return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    }
+
+    // How wide the wave's crest is, as a share of the verb it crosses.
+    var WAVE_REACH = 0.35;
+
+    /* How far the wave lifts a glyph at `x` on a verb `width` wide, `phase` (0 to 1) of the way
+     * through one sweep: 0 to 1, a soft crest that enters on the left and leaves on the right, so
+     * the crest moves at one speed across a wide m and a narrow i alike. */
+    function wave(x, width, phase) {
+      var reach = Math.max(width * WAVE_REACH, 1);
+      var crest = -reach + phase * (width + 2 * reach);
+      var off = Math.abs(x - crest) / reach;
+      return off >= 1 ? 0 : (1 + Math.cos(Math.PI * off)) / 2;
+    }
+
+    /* Where a glyph centred at `x` stands across the crest, for the colour it wears: 0 at the
+     * trailing edge, 1 at the leading edge, so the colours run through the crest as one gradient. */
+    function glow(x, width, phase) {
+      var reach = Math.max(width * WAVE_REACH, 1);
+      var crest = -reach + phase * (width + 2 * reach);
+      return Math.min(1, Math.max(0, (x - crest) / (2 * reach) + 0.5));
+    }
+
+    /* One frame of a verb turning into the next, from where each glyph starts in the old verb and
+     * in the new (fromX, toX) and how they pair. A glyph of the new verb that grows out of one in the old glides from its
+     * place; the rest fade in where they belong, and the old glyphs nothing grew from fade out
+     * where they stood. Each is { x, alpha }; `leaving` is indexed like `from`, null if it stays. */
+    function morphFrame(fromX, toX, paired, t) {
+      var e = ease(t);
+      var kept = new Array(fromX.length).fill(false);
+      var arriving = toX.map(function (x, i) {
+        var source = paired[i];
+        if (source < 0) {
+          return { x: x, alpha: e };
+        }
+        kept[source] = true;
+        return { x: fromX[source] + (x - fromX[source]) * e, alpha: 1 };
+      });
+      var leaving = fromX.map(function (x, i) {
+        return kept[i] ? null : { x: x, alpha: 1 - e };
+      });
+      return { arriving: arriving, leaving: leaving };
+    }
+
     return {
       RETRY_FIRST_MS: RETRY_FIRST_MS,
       pin: pin,
@@ -176,6 +275,13 @@
       defers: defers,
       LOST_READ_MS: LOST_READ_MS,
       lostHold: lostHold,
+      millis: millis,
+      verbAt: verbAt,
+      pairs: pairs,
+      ease: ease,
+      wave: wave,
+      glow: glow,
+      morphFrame: morphFrame,
     };
   })();
   // hp:logic:end
@@ -1628,5 +1734,197 @@
       markSeen();
     }
     shownStatus = status;
+  });
+
+  /* ---- The working line: the verb's glyphs ride a slow wave and flow into the next verb ----
+   * A canvas measures where each glyph of a verb sits without the verb being on the page, so a
+   * glyph can glide from its place in one verb to its place in the next. One frame loop at most,
+   * and only while the line is on screen in a visible page; a swap that takes the line away ends
+   * it. Under Reduce Motion, or with no canvas to measure on, the verb stays still. */
+  var ELLIPSIS = "…";
+  // Three dots of their own rather than one ellipsis glyph, so the wave runs on into each.
+  var DOTS = "...";
+  var stillness = window.matchMedia("(prefers-reduced-motion: reduce)");
+  var working = {
+    line: null, layer: null, key: "", start: 0, seen: false, frame: 0, observer: null,
+    verbs: [], paired: [], times: null, scale: 1, nodes: null, shown: -1,
+  };
+  var measured = new Map();
+  var pen = null;
+
+  // Where each glyph of `text` starts, and the whole width, measured on the canvas in `font`.
+  function glyphPlaces(text, font) {
+    var known = measured.get(font + "\n" + text);
+    if (known) {
+      return known;
+    }
+    // The verbs are one fixed list of plain words, so a code point is a glyph.
+    var glyphs = Array.from(text);
+    pen.font = font;
+    // A prefix's width, kerning and all, is where the next glyph starts.
+    var advance = function (upTo) {
+      return pen.measureText(glyphs.slice(0, upTo).join("")).width;
+    };
+    var places = {
+      glyphs: glyphs,
+      x: glyphs.map(function (_, i) {
+        return i === 0 ? 0 : advance(i);
+      }),
+      width: advance(glyphs.length),
+    };
+    measured.set(font + "\n" + text, places);
+    return places;
+  }
+
+  function workingTimes(line) {
+    var style = window.getComputedStyle(line);
+    var times = {
+      sweep: logic.millis(style.getPropertyValue("--working-sweep")),
+      hold: logic.millis(style.getPropertyValue("--working-hold")),
+      morph: logic.millis(style.getPropertyValue("--working-morph")),
+    };
+    return times.sweep > 0 && times.morph > 0 && times.hold > times.morph ? times : null;
+  }
+
+  function stopWorking() {
+    if (working.frame) {
+      window.cancelAnimationFrame(working.frame);
+      working.frame = 0;
+    }
+    if (working.observer) {
+      working.observer.disconnect();
+      working.observer = null;
+    }
+    if (working.layer) {
+      working.layer.parentNode.classList.remove("is-moving");
+      working.layer.remove();
+    }
+    working.line = null;
+    working.layer = null;
+    working.seen = false;
+  }
+
+  // The glyph spans for a verb turning out of the one before it (from: null when it is not).
+  function glyphNodes(layer, to, from) {
+    var make = function (text) {
+      var node = document.createElement("span");
+      node.className = "working__glyph";
+      node.textContent = text;
+      layer.appendChild(node);
+      return node;
+    };
+    layer.replaceChildren();
+    return {
+      arriving: to.glyphs.map(make),
+      leaving: from ? from.glyphs.map(make) : [],
+    };
+  }
+
+  function placeGlyph(node, x, alpha, lift, side) {
+    node.style.setProperty("--glyph-x", (x * working.scale).toFixed(2) + "px");
+    node.style.setProperty("--glyph-alpha", alpha.toFixed(3));
+    node.style.setProperty("--glyph-wave", lift.toFixed(3));
+    // The crest's colours, three stops as two blends: the first two, then that and the third.
+    node.style.setProperty("--glyph-near", Math.min(1, side * 2).toFixed(3));
+    node.style.setProperty("--glyph-far", Math.max(0, side * 2 - 1).toFixed(3));
+  }
+
+  function drawWorking(now) {
+    var w = working;
+    var at = logic.verbAt(now - w.start, w.verbs.length, w.times);
+    var to = w.verbs[at.index];
+    var from = at.t < 1 ? w.verbs[at.from] : null;
+    if (at.index !== w.shown || (from === null) !== (w.nodes.leaving.length === 0)) {
+      w.nodes = glyphNodes(w.layer, to, from);
+      w.shown = at.index;
+    }
+    var phase = ((now - w.start) % w.times.sweep) / w.times.sweep;
+    var turning = from ? logic.morphFrame(from.x, to.x, w.paired[at.index], at.t) : null;
+    to.x.forEach(function (x, i) {
+      var spot = turning ? turning.arriving[i] : { x: x, alpha: 1 };
+      // Sampled at the glyph's middle, so a wide m and a narrow i take the colour under them.
+      var middle = spot.x + ((i + 1 < to.x.length ? to.x[i + 1] : to.width) - x) / 2;
+      var lift = logic.wave(middle, to.width, phase) * logic.ease(at.t);
+      placeGlyph(w.nodes.arriving[i], spot.x, spot.alpha, lift, logic.glow(middle, to.width, phase));
+    });
+    w.nodes.leaving.forEach(function (node, i) {
+      var spot = turning.leaving[i];
+      placeGlyph(node, spot ? spot.x : 0, spot ? spot.alpha : 0, 0, 0);
+    });
+  }
+
+  function runWorking() {
+    var go = working.line !== null && working.seen && !document.hidden;
+    if (go && !working.frame) {
+      working.frame = window.requestAnimationFrame(function (now) {
+        working.frame = 0;
+        if (!working.line || !working.line.isConnected) {
+          stopWorking();
+          return;
+        }
+        drawWorking(now);
+        runWorking();
+      });
+    } else if (!go && working.frame) {
+      window.cancelAnimationFrame(working.frame);
+      working.frame = 0;
+    }
+  }
+
+  function startWorking() {
+    var line = document.querySelector(".chat__working[data-hp-verbs]");
+    if (line === working.line) {
+      return;
+    }
+    stopWorking();
+    var box = line ? line.querySelector(".working") : null;
+    var times = line ? workingTimes(line) : null;
+    pen = pen || document.createElement("canvas").getContext("2d");
+    if (!box || !times || stillness.matches || !pen) {
+      return;
+    }
+    var key = line.getAttribute("data-hp-working") || "";
+    if (key !== working.key) {
+      working.key = key;
+      working.start = window.performance.now();
+    }
+    var style = window.getComputedStyle(box);
+    var font = [style.fontStyle, style.fontWeight, style.fontSize, style.fontFamily].join(" ");
+    var verbs = line.getAttribute("data-hp-verbs").split(" ").map(function (verb) {
+      return glyphPlaces(verb + DOTS, font);
+    });
+    var still = box.querySelector(".working__verb");
+    // One read of the verb the page drew: canvas and the page may pick a system font apart.
+    var drawn = still ? still.getBoundingClientRect().width : 0;
+    var first = glyphPlaces(verbs[0].glyphs.slice(0, -DOTS.length).join("") + ELLIPSIS, font).width;
+    working.scale = drawn > 0 && first > 0 ? drawn / first : 1;
+    working.verbs = verbs;
+    working.times = times;
+    working.paired = verbs.map(function (to, i) {
+      return logic.pairs(verbs[(i - 1 + verbs.length) % verbs.length].glyphs, to.glyphs);
+    });
+    working.line = line;
+    working.layer = document.createElement("span");
+    working.layer.className = "working__glyphs";
+    working.nodes = { arriving: [], leaving: [] };
+    working.shown = -1;
+    box.appendChild(working.layer);
+    box.classList.add("is-moving");
+    // Drawn once now, so the swap that brought the line in never paints it empty.
+    drawWorking(window.performance.now());
+    working.observer = new IntersectionObserver(function (entries) {
+      working.seen = entries[entries.length - 1].isIntersecting;
+      runWorking();
+    });
+    working.observer.observe(line);
+  }
+
+  document.addEventListener("DOMContentLoaded", startWorking);
+  document.addEventListener("htmx:afterSwap", startWorking);
+  document.addEventListener("visibilitychange", runWorking);
+  window.addEventListener("pageshow", runWorking);
+  stillness.addEventListener("change", function () {
+    stopWorking();
+    startWorking();
   });
 })();
