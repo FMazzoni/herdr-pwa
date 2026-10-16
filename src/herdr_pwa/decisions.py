@@ -320,6 +320,11 @@ def still_talking(status: AgentStatus) -> bool:
     return status is AgentStatus.WORKING
 
 
+def needs_you(status: AgentStatus) -> bool:
+    """Whether the agent is stopped on something only a person can answer."""
+    return status is AgentStatus.BLOCKED
+
+
 def gone_quiet(quiet: float | None) -> bool:
     """Whether a working turn's log has been still long enough to say so instead of working."""
     return quiet is not None and quiet >= QUIET_AFTER

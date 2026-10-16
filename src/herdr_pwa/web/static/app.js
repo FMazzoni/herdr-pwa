@@ -1752,8 +1752,8 @@
   // The state last told to VoiceOver, so a redraw of the same state says nothing.
   var bubbleState = null;
 
-  function attrNumber(node, name) {
-    var raw = node.getAttribute(name);
+  // A number the server wrote into an attribute, or null where it wrote none.
+  function attrNumber(raw) {
     return raw === null || raw === "" ? null : Number(raw);
   }
 
@@ -1921,9 +1921,9 @@
       b.start = b.drawnAt;
     }
     b.node = node;
-    b.ran = attrNumber(node, "data-hp-ran");
-    b.quiet = attrNumber(node, "data-hp-quiet");
-    b.after = attrNumber(node, "data-hp-quiet-after");
+    b.ran = attrNumber(node.getAttribute("data-hp-ran"));
+    b.quiet = attrNumber(node.getAttribute("data-hp-quiet"));
+    b.after = attrNumber(node.getAttribute("data-hp-quiet-after"));
     b.motion = motionOf(node);
     if (node.getAttribute("data-hp-bubble") === "working" && b.motion && !stillness.matches) {
       b.glyphs = layGlyphs(node, b.motion);

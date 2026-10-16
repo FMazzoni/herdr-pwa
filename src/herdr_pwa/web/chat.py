@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Final
 
 from herdr_pwa.clock import duration, duration_said, elapsed
-from herdr_pwa.decisions import QUIET_AFTER, gone_quiet, still_talking
+from herdr_pwa.decisions import QUIET_AFTER, gone_quiet, needs_you, still_talking
 from herdr_pwa.engine import (
     AgentStatus,
     HistoryState,
@@ -428,7 +428,7 @@ def _status(
 ) -> tuple[Bubble | None, Receipt | None]:
     if still_talking(turning.status):
         return _working(items, turning), None
-    if turning.status is AgentStatus.BLOCKED:
+    if needs_you(turning.status):
         return _blocked(turning), None
     return None, _receipt(items, turning.times.took)
 

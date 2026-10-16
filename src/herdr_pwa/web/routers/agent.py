@@ -11,9 +11,9 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from markupsafe import Markup
 
 from herdr_pwa import panetext
+from herdr_pwa.decisions import needs_you
 from herdr_pwa.engine import (
     Agent,
-    AgentStatus,
     Ask,
     EngineError,
     SessionUsage,
@@ -76,7 +76,7 @@ def _turning(web: WebState, agent: Agent) -> Turning:
         status=status,
         # herdr bumps the sequence on every status change, so it names one working stretch.
         stretch=f"{agent.session}:{agent.state_change_seq}",
-        asked=asked_by(web, agent) if status is AgentStatus.BLOCKED else "",
+        asked=asked_by(web, agent) if needs_you(status) else "",
         times=turn_times(_usage(web, agent), web.wall()),
     )
 

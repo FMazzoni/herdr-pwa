@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel, JsonValue, TypeAdapter
 
 from herdr_pwa.clock import elapsed
-from herdr_pwa.decisions import QUIET_AFTER, gone_quiet
+from herdr_pwa.decisions import QUIET_AFTER, gone_quiet, needs_you
 from herdr_pwa.engine import (
     AgentStatus,
     HistoryState,
@@ -68,6 +68,10 @@ def test_a_turn_has_gone_quiet_only_past_the_threshold() -> None:
     assert not gone_quiet(None)
     assert not gone_quiet(QUIET_AFTER - 0.5)
     assert gone_quiet(QUIET_AFTER)
+
+
+def test_only_a_blocked_agent_needs_you() -> None:
+    assert [s for s in AgentStatus if needs_you(s)] == [AgentStatus.BLOCKED]
 
 
 def _stamp(seconds_ago: float) -> str:

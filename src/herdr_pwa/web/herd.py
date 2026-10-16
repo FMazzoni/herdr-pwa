@@ -11,6 +11,7 @@ from herdr_pwa.decisions import (
     agent_row,
     decide_herd,
     effective_status,
+    needs_you,
 )
 from herdr_pwa.engine import (
     Agent,
@@ -71,7 +72,7 @@ def agent_status(web: WebState, agent: Agent) -> AgentStatus:
 
 def asked_by(web: WebState, agent: Agent) -> str:
     """What *agent*'s feed card says it is asking, from the same cached read; ``""`` for none."""
-    blocked = agent.status is AgentStatus.BLOCKED and bool(agent.session)
+    blocked = needs_you(agent.status) and bool(agent.session)
     prompt = _prompt(web, agent) if blocked else None
     return card_question(agent_row(agent, overlay_of(web, (agent,)), prompt))
 
