@@ -1098,6 +1098,75 @@ def scrolling_up(
     return walk
 
 
+# The keyboard as an iPhone reports it in a device report with the keyboard up: innerHeight
+# and scrollY are the visible band's, which sits inside a taller layout viewport whose bottom the
+# composer is fixed to. Here the window is the band, so innerHeight and scrollY are real; only
+# the layout viewport's height and the band's offset in it are told. Not an iPhone: it checks
+# that the dock is measured against the numbers WebKit gives, not how iOS moves anything.
+KEYBOARD_PX = 413
+KEYBOARD_STEPS = 40
+KEYBOARD = r"""
+const [layout] = arguments;
+const root = document.documentElement;
+const view = window.visualViewport;
+const band = window.innerHeight;
+const kb = { top: layout - band, wrong: [], shut: [], frames: 0 };
+window.__hpKb = kb;
+document.querySelector("#composer textarea").focus({ preventScroll: true });
+Object.defineProperty(root, "clientHeight", { configurable: true, get: () => layout });
+Object.defineProperty(view, "offsetTop", { configurable: true, get: () => kb.top });
+// The band pans inside the layout viewport, which moves only once the band reaches its edge.
+let layoutTop = Math.max(0, root.scrollHeight - layout);
+const pan = () => {
+  layoutTop = Math.min(Math.max(layoutTop, scrollY + band - layout), scrollY);
+  layoutTop = Math.min(Math.max(layoutTop, 0), Math.max(0, root.scrollHeight - layout));
+  kb.top = scrollY - layoutTop;
+  view.dispatchEvent(new Event("scroll"));
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    kb.frames += 1;
+    const lift = parseFloat(root.style.getPropertyValue("--kb")) || 0;
+    const want = layout - band - kb.top;
+    if (Math.abs(lift - want) > 1) kb.wrong.push([Math.round(kb.top), lift, Math.round(want)]);
+    if (!root.classList.contains("is-keyboard")) kb.shut.push(Math.round(kb.top));
+  }));
+};
+addEventListener("scroll", pan, { passive: true });
+view.dispatchEvent(new Event("resize"));
+pan();
+return true;
+"""
+READ_KEYBOARD = "return window.__hpKb || {};"
+
+
+def keyboard_up(driver: Marionette, base: str, tab: Tab, rig: Rig, home: Path) -> list[str]:
+    """With the keyboard up, scroll up through the chat while it is redrawn: the composer rides
+    the band's bottom edge at every step, the keyboard reads as open throughout, and the reader
+    is neither pulled back nor moved."""
+    driver.send("WebDriver:Navigate", {"url": base + tab.state.path})
+    seen = _wait_for(driver, tab.newest)
+    if not seen or not seen.get("scrollable"):
+        return [f"{tab.name}: never drew a page taller than the band"]
+    driver.script(KEYBOARD, HEIGHT)
+    driver.script(SCROLL_UP, STEP, 50, KEYBOARD_STEPS)
+    n = _redraw_while(driver, tab, rig, home)
+    newest = tab.grow(rig, home, n)
+    if not _until(lambda: _poked(driver, newest)) or not _wait_for(driver, newest):
+        return [f"{tab.name}: the redraw after the reader stopped never landed"]
+    found = driver.script(READ_KEYBOARD)
+    kb = found if isinstance(found, dict) else {}
+    problems = _walk_problems(tab.name, _walked(driver), STEP * KEYBOARD_STEPS)
+    if not _num(kb, "frames"):
+        problems.append(f"{tab.name}: the band never moved")
+    if kb.get("wrong"):
+        problems.append(
+            f"{tab.name}: the composer was not lifted to the band's bottom edge "
+            f"([band offset, lift, wanted]): {kb['wrong'][:4]}"
+        )
+    if kb.get("shut"):
+        problems.append(f"{tab.name}: the keyboard read as closed at band offsets {kb['shut'][:4]}")
+    return problems
+
+
 def _scroll_pane(rig: Rig, _home: Path, n: int) -> str:
     """The terminal scrolls: its oldest line goes and a newer one arrives; return that one."""
     text = "".join(
@@ -1225,6 +1294,10 @@ def _tabs() -> tuple[tuple[Tab, Callable[[Marionette, str, Tab, Rig, Path], list
         (Tab("pane scrolled up", pane, last_line, _scroll_pane), scrolling_up(0.05, 40)),
         (Tab("chat nudged up", chat, last_reply, _reply), scrolling_up(0.4, 10)),
         (Tab("chat scrolled up", chat, last_reply, _reply), scrolling_up(0.05, 40)),
+        (
+            Tab("chat keyboard up", chat, last_reply, _reply, height=HEIGHT - KEYBOARD_PX),
+            keyboard_up,
+        ),
         (Tab("chat question", asking_chat, last_reply, _say), asked),
         (Tab("pane question", asking_pane, "", _print), asked),
         (Tab("chat question waiting", asking_chat, last_reply, _say), waiting_pill),
