@@ -7,11 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from herdr_pwa.engine import generated, model
-from herdr_pwa.engine.generated import request
-from herdr_pwa.engine.generated import success_response as wire
-from herdr_pwa.engine.generated.event import EventKind
+from herdr_pwa.engine import AgentStatus, Snapshot
 from herdr_pwa.jsontypes import JsonObject, JsonValue, as_object, loads
+from herdr_pwa.protocol import EXPECTED_PROTOCOL
+from tests.engine_seam import EventKind, generated
+from tests.engine_seam import wire_request as request
+from tests.engine_seam import wire_response as wire
 
 ROOT = Path(__file__).resolve().parent.parent
 FIXTURES = ROOT / "tests" / "fixtures"
@@ -37,7 +38,7 @@ SCHEMA_DOC = _obj(loads(SCHEMA_PATH.read_text(encoding="utf-8")))
 
 def test_vendored_schema_is_the_protocol_this_build_expects() -> None:
     """The drift signal."""
-    assert SCHEMA_DOC["protocol"] == model.EXPECTED_PROTOCOL == 22
+    assert SCHEMA_DOC["protocol"] == EXPECTED_PROTOCOL == 22
     assert SCHEMA_DOC["schema_version"] == 1
 
 
@@ -86,7 +87,7 @@ def test_snapshot_capture_agrees_with_the_handwritten_model() -> None:
     payload = _obj(_capture("snapshot.example.json"))
     parsed = wire.SuccessResponse.model_validate(payload).result.root
     assert isinstance(parsed, wire.SessionSnapshotResponseResult)
-    hand = model.Snapshot.from_raw(_obj(_obj(payload["result"])["snapshot"]))
+    hand = Snapshot.from_raw(_obj(_obj(payload["result"])["snapshot"]))
 
     assert hand.protocol == parsed.snapshot.protocol
     assert hand.version == parsed.snapshot.version
@@ -98,7 +99,7 @@ def test_snapshot_capture_agrees_with_the_handwritten_model() -> None:
 
 
 def test_generated_agent_status_matches_the_handwritten_enum() -> None:
-    assert [s.value for s in wire.AgentStatus] == [s.value for s in model.AgentStatus]
+    assert [s.value for s in wire.AgentStatus] == [s.value for s in AgentStatus]
 
 
 def test_event_kinds_the_push_path_will_subscribe_to_exist() -> None:

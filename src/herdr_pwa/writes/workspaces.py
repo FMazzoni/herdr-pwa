@@ -4,9 +4,15 @@ from dataclasses import dataclass
 from typing import Final
 
 from herdr_pwa.audit import CLOSE, Write
-from herdr_pwa.engine.client import HerdrClient
-from herdr_pwa.engine.model import Agent, AgentStatus, Snapshot, Workspace, screen_digest
-from herdr_pwa.engine.transport import EngineError
+from herdr_pwa.engine import (
+    Agent,
+    AgentStatus,
+    EngineError,
+    HerdrClient,
+    Snapshot,
+    Workspace,
+    screen_digest,
+)
 from herdr_pwa.writes.refusal import Refusal, Refused, failed_result, refusal_for
 from herdr_pwa.writes.resolve import Writer, attempt, workspace_now
 

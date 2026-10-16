@@ -6,9 +6,7 @@ from dataclasses import dataclass, field
 from typing import Final
 
 from herdr_pwa.audit import OMITTED_NO_ECHO, PROMPT, Write
-from herdr_pwa.engine.client import HerdrClient
-from herdr_pwa.engine.model import AgentStatus, PaneId, SessionId, screen_digest
-from herdr_pwa.engine.transport import EngineError
+from herdr_pwa.engine import AgentStatus, EngineError, HerdrClient, PaneId, SessionId, screen_digest
 from herdr_pwa.writes.guard import (
     asks_a_question,
     destructive_reason,

@@ -6,9 +6,7 @@ from pathlib import Path
 import pytest
 
 from herdr_pwa.audit import AuditLog, Origin, Recorder
-from herdr_pwa.engine.client import HerdrClient
-from herdr_pwa.engine.config import EngineSettings
-from herdr_pwa.engine.model import Agent, AgentStatus, PaneId, SessionId
+from herdr_pwa.engine import Agent, AgentStatus, EngineSettings, HerdrClient, PaneId, SessionId
 from herdr_pwa.writes.answer import KeyAsk, KeySent, send_key, send_starting_key
 from herdr_pwa.writes.keys import control_token
 from herdr_pwa.writes.lifecycle import (

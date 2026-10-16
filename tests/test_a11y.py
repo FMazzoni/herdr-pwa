@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from herdr_pwa.engine.transport import EngineUnavailable
+from herdr_pwa.engine import EngineUnavailable
 from tests.catalogue import BLOCKED, herd
 from tests.webfakes import (
     READ,

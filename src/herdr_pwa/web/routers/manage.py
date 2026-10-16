@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, Response
 
 from herdr_pwa import auth
-from herdr_pwa.engine.model import Snapshot, Workspace
+from herdr_pwa.engine import Snapshot, Workspace
 from herdr_pwa.web.deps import WebState, viewer_guard
 from herdr_pwa.web.failures import refused
 from herdr_pwa.web.writing import (

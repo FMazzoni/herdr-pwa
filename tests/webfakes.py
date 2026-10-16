@@ -9,24 +9,22 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 from pydantic import JsonValue
 
-from herdr_pwa.engine import client as engine_client
-from herdr_pwa.engine.client import HerdrClient
-from herdr_pwa.engine.config import EngineSettings
-from herdr_pwa.engine.generated import request as wire_request
+from herdr_pwa.engine import EngineSettings, HerdrClient
 from herdr_pwa.jsontypes import JsonObject, as_object, loads
 from herdr_pwa.settings import Settings
 from herdr_pwa.web.app import create_app
 from herdr_pwa.writes.outcome import Pacing
+from tests.engine_seam import method_of, wire_request
 
 FIXTURES = Path(__file__).parent / "fixtures"
 SNAPSHOT_FIXTURE = FIXTURES / "snapshot.example.json"
 LOGIN = "operator@example.com"
 IDENTITY = {"Tailscale-User-Login": LOGIN}
 
-SNAPSHOT = engine_client.method_of(wire_request.SessionSnapshotRequest)
-READ = engine_client.method_of(wire_request.AgentReadRequest)
-AGENT_GET = engine_client.method_of(wire_request.AgentGetRequest)
-SEND_KEYS = engine_client.method_of(wire_request.AgentSendKeysRequest)
+SNAPSHOT = method_of(wire_request.SessionSnapshotRequest)
+READ = method_of(wire_request.AgentReadRequest)
+AGENT_GET = method_of(wire_request.AgentGetRequest)
+SEND_KEYS = method_of(wire_request.AgentSendKeysRequest)
 
 # The fixture's working agent, and the first idle one.
 WORKING_SESSION = "6ae1e031-ddb4-4684-ab07-68073f7fec47"

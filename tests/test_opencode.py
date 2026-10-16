@@ -7,25 +7,20 @@ from pathlib import Path
 import pytest
 from pydantic import JsonValue
 
-from herdr_pwa.engine.opencode import (
+from herdr_pwa.engine import HistoryState, ModelRef, Speaker, TranscriptPage
+from herdr_pwa.jsontypes import JsonObject, as_object, loads, objects
+from tests.engine_seam import (
+    MAX_RESULT_CHARS,
     OPENCODE_DB,
     OPENCODE_ROOT,
     OPENCODE_STORAGE_ROOT,
     OpencodeAdapter,
     SessionInfo,
-    _readonly,  # pyright: ignore[reportPrivateUsage]
-)
-from herdr_pwa.engine.transcript import (
-    MAX_RESULT_CHARS,
-    HistoryState,
-    ModelRef,
-    Speaker,
-    TranscriptPage,
     adapter_for,
     history,
+    opencode_readonly_uri,
     usage,
 )
-from herdr_pwa.jsontypes import JsonObject, as_object, loads, objects
 
 STORE = Path(__file__).parent / "fixtures" / "transcript" / "opencode"
 SESSION = "ses_3fd62ba5bffemIxWVhRda5wgS7"
@@ -437,7 +432,7 @@ def test_the_database_is_opened_through_a_uri_that_cannot_write(
     database: Path,
 ) -> None:
     """``mode=ro`` refuses a write at the SQLite layer, not by this module's manners."""
-    uri = _readonly(database / OPENCODE_DB)
+    uri = opencode_readonly_uri(database / OPENCODE_DB)
     assert uri.startswith("file:")
     assert uri.endswith("?mode=ro")
     with sqlite3.connect(uri, uri=True) as db, pytest.raises(sqlite3.OperationalError):

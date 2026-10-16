@@ -10,9 +10,15 @@ from pathlib import Path
 from typing import Final
 
 from herdr_pwa.audit import CLOSE, START, Write
-from herdr_pwa.engine.client import HerdrClient, StartedAgent
-from herdr_pwa.engine.model import AgentStatus, PaneId, SessionId, as_pane_id
-from herdr_pwa.engine.transport import EngineError
+from herdr_pwa.engine import (
+    AgentStatus,
+    EngineError,
+    HerdrClient,
+    PaneId,
+    SessionId,
+    StartedAgent,
+    as_pane_id,
+)
 from herdr_pwa.writes.guard import destructive_reason, unsendable
 from herdr_pwa.writes.outcome import Pacing
 from herdr_pwa.writes.prompt import PromptSent, send_opening_prompt

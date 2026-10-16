@@ -8,11 +8,16 @@ import pytest
 
 from herdr_pwa.cli import doctor
 from herdr_pwa.decisions import AgentRow, decide_screen
-from herdr_pwa.engine.client import HerdrClient
-from herdr_pwa.engine.config import EngineSettings
-from herdr_pwa.engine.dialog import BlockedPrompt
-from herdr_pwa.engine.model import AgentStatus, PaneId, SessionId, as_pane_id
-from herdr_pwa.engine.transport import EngineUnavailable
+from herdr_pwa.engine import (
+    AgentStatus,
+    BlockedPrompt,
+    EngineSettings,
+    EngineUnavailable,
+    HerdrClient,
+    PaneId,
+    SessionId,
+    as_pane_id,
+)
 from herdr_pwa.jsontypes import JsonObject
 from herdr_pwa.protocol import EXPECTED_PROTOCOL
 from herdr_pwa.settings import Settings

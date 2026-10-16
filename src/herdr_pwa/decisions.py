@@ -5,8 +5,16 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Final
 
-from herdr_pwa.engine.dialog import BlockedPrompt, KeyHint, MenuShape
-from herdr_pwa.engine.model import Agent, AgentStatus, PaneId, SessionId, rank
+from herdr_pwa.engine import (
+    Agent,
+    AgentStatus,
+    BlockedPrompt,
+    KeyHint,
+    MenuShape,
+    PaneId,
+    SessionId,
+    rank,
+)
 from herdr_pwa.panetext import printed_whole
 
 IDLE_CADENCE: Final = 12

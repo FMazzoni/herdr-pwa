@@ -4,9 +4,15 @@ import logging
 from dataclasses import dataclass
 
 from herdr_pwa.decisions import HerdDecision, decide_herd
-from herdr_pwa.engine.dialog import BlockedPrompt
-from herdr_pwa.engine.model import Agent, AgentStatus, Snapshot, as_session_id
-from herdr_pwa.engine.transport import EngineError, InvalidRequest
+from herdr_pwa.engine import (
+    Agent,
+    AgentStatus,
+    BlockedPrompt,
+    EngineError,
+    InvalidRequest,
+    Snapshot,
+    as_session_id,
+)
 from herdr_pwa.web.deps import WebState
 from herdr_pwa.web.failures import AgentGone
 

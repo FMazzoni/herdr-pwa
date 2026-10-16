@@ -11,7 +11,7 @@ from fastapi.responses import HTMLResponse, Response
 
 from herdr_pwa.auth import AuthError
 from herdr_pwa.decisions import IDLE_CADENCE
-from herdr_pwa.engine.transport import (
+from herdr_pwa.engine import (
     EngineError,
     EngineMisconfigured,
     EngineTimeout,

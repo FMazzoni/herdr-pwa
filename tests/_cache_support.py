@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from herdr_pwa.engine import cache as cache_module
+from tests.engine_seam import cache_module
 
 
 class FollowerGate:

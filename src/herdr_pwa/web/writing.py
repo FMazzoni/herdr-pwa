@@ -10,8 +10,7 @@ from fastapi.responses import RedirectResponse, Response
 
 from herdr_pwa import auth
 from herdr_pwa.audit import Origin, Recorder
-from herdr_pwa.engine.model import PaneId, SessionId, as_pane_id, as_session_id
-from herdr_pwa.engine.transport import InvalidRequest
+from herdr_pwa.engine import InvalidRequest, PaneId, SessionId, as_pane_id, as_session_id
 from herdr_pwa.web.deps import WebState
 from herdr_pwa.web.failures import AgentGone
 from herdr_pwa.writes.prompt import PromptSent

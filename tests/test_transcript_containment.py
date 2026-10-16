@@ -7,7 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from herdr_pwa.engine.transcript import HistoryState, history, locate
+from herdr_pwa.engine import HistoryState, locate
+from tests.engine_seam import history
 
 SESSION = "11111111-2222-3333-4444-555555555555"
 

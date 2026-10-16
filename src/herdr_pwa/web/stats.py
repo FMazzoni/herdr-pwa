@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Final
 
-from herdr_pwa.engine.transcript import HistoryState, ModelRef, SessionUsage
+from herdr_pwa.engine import HistoryState, ModelRef, SessionUsage
 
 # Context windows published for models that have no larger variant, so a percentage of them is
 # true. A model not listed here shows its context in tokens, with no percentage and no bar.

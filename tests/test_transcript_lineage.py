@@ -8,8 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from herdr_pwa.engine.transcript import HistoryState, history, locate
+from herdr_pwa.engine import HistoryState, locate
 from herdr_pwa.jsontypes import JsonObject, as_object, loads
+from tests.engine_seam import history
 
 FIXTURES = Path(__file__).parent / "fixtures" / "transcript" / "lineage"
 

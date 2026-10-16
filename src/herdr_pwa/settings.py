@@ -5,7 +5,7 @@ from pathlib import Path
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from herdr_pwa.engine.config import EngineSettings
+from herdr_pwa.engine import EngineSettings
 from herdr_pwa.protocol import DEFAULT_SOCKET_PATH
 
 

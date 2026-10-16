@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from herdr_pwa.engine.dialog import OPTION_RE, BlockedPrompt, MenuShape
-from herdr_pwa.engine.model import Agent, AgentStatus, as_pane_id, as_session_id
+from herdr_pwa.engine import Agent, AgentStatus, BlockedPrompt, MenuShape, as_pane_id, as_session_id
 from herdr_pwa.jsontypes import JsonObject, as_object, loads
+from tests.engine_seam import OPTION_RE
 
 FIXTURES = Path(__file__).parent / "fixtures"
 

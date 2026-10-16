@@ -16,10 +16,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Final
 
-from herdr_pwa.engine import transcript
-from herdr_pwa.engine.cache import CachedSnapshot
-from herdr_pwa.engine.model import AgentStatus, Snapshot
-from herdr_pwa.engine.transport import EngineError, EventStream
+from herdr_pwa.engine import AgentStatus, CachedSnapshot, EngineError, EventStream, Snapshot, locate
 from herdr_pwa.web.deps import WebState
 
 log = logging.getLogger(__name__)
@@ -296,7 +293,7 @@ class Hub:
         watch = self._watches.get(session)
         if watch is None or watch.path is None or now - watch.found_at > RELOCATE_SECONDS:
             roots = self._web.settings.transcript_roots or None
-            watch = self._watches[session] = _Watch(transcript.locate(session, root=roots), now)
+            watch = self._watches[session] = _Watch(locate(session, root=roots), now)
         if watch.path is None:
             return None
         try:

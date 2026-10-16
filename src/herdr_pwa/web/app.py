@@ -10,8 +10,7 @@ from fastapi.responses import Response
 from starlette.middleware.gzip import GZipMiddleware
 
 from herdr_pwa.audit import AuditLog
-from herdr_pwa.engine.cache import SnapshotCache
-from herdr_pwa.engine.client import HerdrClient
+from herdr_pwa.engine import HerdrClient, SnapshotCache
 from herdr_pwa.push import Deliver
 from herdr_pwa.settings import Settings
 from herdr_pwa.web import failures

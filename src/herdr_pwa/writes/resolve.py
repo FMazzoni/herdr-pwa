@@ -8,9 +8,16 @@ from dataclasses import dataclass, field
 from typing import Final, Protocol
 
 from herdr_pwa.audit import AuditUnavailableError, Entry, Write
-from herdr_pwa.engine.client import HerdrClient
-from herdr_pwa.engine.model import Agent, PaneId, Presence, SessionId, Snapshot, Workspace
-from herdr_pwa.engine.transport import EngineError
+from herdr_pwa.engine import (
+    Agent,
+    EngineError,
+    HerdrClient,
+    PaneId,
+    Presence,
+    SessionId,
+    Snapshot,
+    Workspace,
+)
 from herdr_pwa.writes.outcome import Pacing
 from herdr_pwa.writes.refusal import Refusal, Refused
 

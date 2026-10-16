@@ -6,14 +6,7 @@ import json
 import re
 from pathlib import Path
 
-from herdr_pwa.engine.notices import HIDDEN, PeerMessage, TaskNotice, injected
-from herdr_pwa.engine.transcript import (
-    Speaker,
-    TranscriptTurn,
-    is_message,
-    read_page,
-    tally_claude,
-)
+from herdr_pwa.engine import Speaker, TranscriptTurn
 from herdr_pwa.jsontypes import JsonObject, as_object, loads
 from herdr_pwa.web.chat import joined
 from tests.catalogue import (
@@ -30,6 +23,15 @@ from tests.catalogue import (
     notice_records,
     notices_of,
     report_chat,
+)
+from tests.engine_seam import (
+    HIDDEN,
+    PeerMessage,
+    TaskNotice,
+    injected,
+    is_message,
+    read_page,
+    tally_claude,
 )
 from tests.webfakes import WORKING_SESSION, build_rig, write_transcript
 
