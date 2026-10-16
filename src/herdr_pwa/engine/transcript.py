@@ -103,9 +103,13 @@ class TranscriptTurn(BaseModel):
     diff: FileDiff | None = None
     # The frontier just before this turn: `before=at` leaves it out, `after=at` starts with it.
     at: int = -1
-    # A task notice's status word and how long the task ran, as the harness recorded them.
+    # How a task notice says its task ended ("finished", "exit 0") and how long it ran; its
+    # kind ("Agent", "Command", "Task") rides in `tool`, the label a tool's line leads with.
     status: str = ""
     elapsed_ms: int = 0
+    # A command's ending in the harness's words, and the file its output went to, never read.
+    outcome: str = ""
+    output: str = ""
     # Who a peer message is from, and whether it is a subagent's hand-back report.
     sender: str = ""
     report: bool = False
@@ -737,19 +741,25 @@ def _content(record: JsonObject) -> JsonValue:
 
 def _injected_turn(found: TaskNotice | PeerMessage, uuid: str, ts: str) -> TranscriptTurn:
     if isinstance(found, TaskNotice):
-        summary, _ = one_line(found.summary)
-        result, cut = clip(found.result, MAX_RESULT_CHARS)
+        detail, _ = one_line(found.detail)
+        # A command opens on the whole of what was run; anything else on what it said.
+        shown = found.detail if found.kind == "Command" else found.said
+        result, cut = clip(shown, MAX_RESULT_CHARS)
         return TranscriptTurn(
             uuid=uuid,
             speaker=Speaker.notice,
-            text=summary,
+            text=detail,
             ts=ts,
+            tool=found.kind,
             result=result,
             result_truncated=cut,
             failed=found.failed,
-            status=found.status,
+            status=found.ended,
             elapsed_ms=found.elapsed_ms,
             task=found.task,
+            outcome=found.outcome,
+            # Only a command's spool is its output; an agent's is its whole transcript.
+            output=found.output if found.kind == "Command" else "",
         )
     body, cut = clip(found.body, MAX_PROSE_CHARS)
     return TranscriptTurn(

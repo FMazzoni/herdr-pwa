@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import re
 from dataclasses import dataclass
 from enum import Enum
@@ -20,6 +21,20 @@ _ATTR: Final = re.compile(r'([\w-]+)="([^"]*)"')
 _HANDBACK_FRAME: Final = "[Subagent hand-back]"
 _HANDBACK_INDENT: Final = "  "
 _DONE: Final = "completed"
+# Measured summary shapes, across every local log: Agent "<description>" finished,
+# Agent "<description>" failed: <why>, Agent "<description>" was stopped by Claude,
+# Background command "<command>" completed (exit code 1: No matches found),
+# Background command "<command>" failed with exit code 143, ... was stopped because <why>,
+# and Task "<description>" was stopped by main session.
+_SUMMARY: Final = re.compile(
+    r'\A(Agent|Background command|Task) "(.*?)" '
+    r"((?:was )?(finished|completed|failed|killed|stopped)(?:\W.*)?)\Z",
+    re.DOTALL,
+)
+_KINDS: Final = {"Agent": "Agent", "Background command": "Command", "Task": "Task"}
+_EXIT: Final = re.compile(r"exit code (-?\d+)")
+# What the harness puts in an agent's result in place of the report it delivers as a message.
+_RELAYED: Final = re.compile(r"\AThis agent(?:'s report was delivered| has not reported yet)")
 
 
 class Hidden(Enum):
@@ -41,11 +56,49 @@ class TaskNotice:
     result: str
     # The task's id, which a subagent's hand-back names as who it is from.
     task: str = ""
+    # Where the harness spooled a background task's output; named, never read.
+    output: str = ""
 
     @property
     def failed(self) -> bool:
         """Whether it ended any way but completed (failed, killed)."""
         return bool(self.status) and self.status != _DONE
+
+    @property
+    def kind(self) -> str:
+        """What stopped, as the line names it: ``Agent``, ``Command``, or any other ``Task``."""
+        found = _SUMMARY.match(self.summary)
+        return _KINDS[found.group(1)] if found else "Task"
+
+    @property
+    def detail(self) -> str:
+        """The agent's description or the command run, out of the summary; else the summary."""
+        found = _SUMMARY.match(self.summary)
+        return found.group(2) if found else self.summary
+
+    @property
+    def outcome(self) -> str:
+        """How it ended, in the harness's words, when that says more than one word."""
+        found = _SUMMARY.match(self.summary)
+        if found is None or found.group(3) == found.group(4):
+            return ""
+        said = found.group(3).removeprefix("was ")
+        return said[:1].upper() + said[1:]
+
+    @property
+    def ended(self) -> str:
+        """The word or two the line says it ended with: "finished", "exit 0", "failed, exit 1"."""
+        found = _SUMMARY.match(self.summary)
+        word = found.group(4) if found else self.status
+        code = _EXIT.search(found.group(3)) if found else None
+        if code is None:
+            return word
+        return f"{word}, exit {code.group(1)}" if self.failed else f"exit {code.group(1)}"
+
+    @property
+    def said(self) -> str:
+        """The result worth showing: an agent's is only a pointer at its report when relayed."""
+        return "" if _RELAYED.match(self.result) else self.result
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,8 +121,9 @@ def without_reminders(text: str) -> str:
 
 
 def _tag(body: str, name: str) -> str:
+    """A tag's text, its XML entities decoded here and nowhere else (the page escapes it once)."""
     found = re.search(rf"<{name}>(.*?)</{name}>", body, re.DOTALL)
-    return found.group(1).strip() if found else ""
+    return html.unescape(found.group(1).strip()) if found else ""
 
 
 def _millis(text: str) -> int:
@@ -87,6 +141,7 @@ def _task(text: str) -> TaskNotice | None:
         elapsed_ms=_millis(_tag(body, "duration_ms")),
         result=_tag(body, "result"),
         task=_tag(body, "task-id"),
+        output=_tag(body, "output-file"),
     )
 
 

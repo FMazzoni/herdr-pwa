@@ -348,12 +348,56 @@ def failed_notice(status: str = "failed", uuid: str = "failed-notice") -> JsonOb
     return record
 
 
+def notice_record(uuid: str) -> JsonObject:
+    """The fixture's record whose uuid starts with *uuid*."""
+    return next(r for r in notice_records() if str(r.get("uuid", "")).startswith(uuid))
+
+
+# The fixture's background commands, the notice whose task reported on both sides of it, and
+# the notice whose task had not reported yet (its report is left out of the fixture).
+COMMAND_EXIT_1: Final = "c023cd52"
+COMMAND_EXIT_0: Final = "21e18294"
+REPORTED: Final = "117a9f64"
+REPORTED_BEFORE: Final = "b075cfee"
+REPORTED_AFTER: Final = "ed3ba510"
+UNREPORTED: Final = "1a962ca2"
+
+
+def failed_command() -> JsonObject:
+    """A real background command with the ending a failed one is recorded with."""
+    record = as_object(loads(json.dumps(notice_record(COMMAND_EXIT_1)))) or {}
+    message = as_object(record.get("message")) or {}
+    text = str(message["content"]).replace("<status>completed</status>", "<status>failed</status>")
+    ending = " completed (exit code 1: No matches found)</summary>"
+    message["content"] = text.replace(ending, " failed with exit code 1</summary>")
+    record["uuid"] = "failed-command"
+    return record
+
+
+# A task whose report has no table: a table's hyphenated word breaks in a cell at 200% type, in a
+# card or a notice alike, which is the markdown table's to fix, not this screen's.
+SURVEYED: Final = "a8d1211107eec7f53"
+
+
+def notice_report_chat() -> list[JsonObject]:
+    """A prompt, an agent's notice and its report, one yet to report, and two commands."""
+    task = [r for r in notice_records() if SURVEYED in json.dumps(r)]
+    return [
+        notices_of("human")[1],
+        *task,
+        notice_record(UNREPORTED),
+        notice_record(COMMAND_EXIT_1),
+        failed_command(),
+    ]
+
+
 def task_notice_chat() -> list[JsonObject]:
     """A prompt, the three tasks it started finishing, and the agent's answer."""
     humans = notices_of("human")
     # The answer without its usage: five days of turn time on the strip is the log's age, not news.
     answer = "Three surveys are back; the audit says lift the engine and slim it."
-    return [humans[0], *notices_of("task-notification"), assistant_says(answer, uuid="a-tasks")]
+    tasks = notices_of("task-notification")[:3]
+    return [humans[0], *tasks, assistant_says(answer, uuid="a-tasks")]
 
 
 def failed_notice_chat() -> list[JsonObject]:
@@ -809,6 +853,34 @@ AGENT_PAGE: Final = (
         runner(_stressed),
         failed_notice_chat(),
         title="Chat: a task that failed and one that was killed, said in red",
+    ),
+    State(
+        "chat-notice-report",
+        f"{AGENT}?tab=chat",
+        ".chat .notice--agent[open] .notice__report",
+        runner(_stressed),
+        notice_report_chat(),
+        title="Chat: an agent's notice opened on the report it sent, which has no card of its own",
+        armed=".chat .notice--agent > summary",
+        act=_click(".chat .notice--agent > summary"),
+    ),
+    State(
+        "chat-notice-command",
+        f"{AGENT}?tab=chat",
+        ".chat .notice--command[open] .notice__result",
+        runner(_stressed),
+        notice_report_chat(),
+        title="Chat: a background command's notice opened on the whole command it ran",
+        armed=".chat .notice--command > summary",
+        act=_click(".chat .notice--command > summary"),
+    ),
+    State(
+        "chat-notices",
+        f"{AGENT}?tab=chat",
+        ".chat .notice--command",
+        runner(_stressed),
+        notice_report_chat(),
+        title="Chat: agents and commands that stopped, each a labelled line that opens",
     ),
     State(
         "chat-report",
@@ -1281,6 +1353,9 @@ V2_ONLY: Final = (
     "chat-report",
     "chat-report-open",
     "chat-peer-message",
+    "chat-notices",
+    "chat-notice-report",
+    "chat-notice-command",
     "pane-long",
     "usage-chat",
     *(s.name for s in FILES),
