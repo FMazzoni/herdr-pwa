@@ -61,9 +61,10 @@ _LINK_SCHEMES: Final = ("http://", "https://")
 _LEAF_TEXT: Final = frozenset({"text", "html_block"})
 WIDE_TABLE: Final = 4
 SHORT_CELL: Final = 24
-# A run with no space in it that a browser would still break: after a slash or a dash, which a sha
-# range, a path or a ticket ref is full of.
-_BREAKABLE_RUN: Final = re.compile(r"[^\s/\\\-‐–—]*[/\\\-‐–—]\S*")
+# A run with no space in it that a browser would still break: after a slash, a backslash or a dash
+# (hyphen, en or em), which a sha range, a path or a ticket ref is full of.
+_BREAKS: Final = r"/\\\-\u2010\u2013\u2014"
+_BREAKABLE_RUN: Final = re.compile(rf"[^\s{_BREAKS}]*[{_BREAKS}]\S*")
 _ALIGN: Final = {"text-align:center": "align-center", "text-align:right": "align-right"}
 # The tasklists plugin's checkbox: with raw HTML off, no other inline HTML reaches the tree.
 _TASK_BOX: Final = "task-list-item-checkbox"
