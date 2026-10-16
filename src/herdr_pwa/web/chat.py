@@ -11,6 +11,7 @@ from herdr_pwa.engine import (
     TranscriptPage,
     TranscriptTurn,
     is_api_error,
+    is_compact_summary,
     is_slash_command,
 )
 from herdr_pwa.web.markdown import MdNode, render_tree
@@ -77,6 +78,8 @@ class ChatTurn:
     times: int = 1
     # A slash command the person ran in the harness, opening on what it printed if anything.
     slash: bool = False
+    # The harness's summary of what a compaction dropped, with no /compact line to open from.
+    compacted: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -188,6 +191,7 @@ def _turn(turn: TranscriptTurn) -> ChatTurn:
         api_error=is_api_error(turn),
         times=turn.times,
         slash=is_slash_command(turn),
+        compacted=is_compact_summary(turn),
     )
 
 

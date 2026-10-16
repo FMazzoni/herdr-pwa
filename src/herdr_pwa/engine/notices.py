@@ -133,12 +133,19 @@ class PeerMessage:
 # `<command-message>` and `<command-args>`; what it printed is the next record, on its own.
 _COMMAND: Final = "<command-name>"
 _STDOUT: Final = "local-command-stdout"
+# Not seen in any local log: a failing command's output, assumed to take the stdout shape.
+_STDERR: Final = "local-command-stderr"
 # Measured: what the harness writes for a command that printed nothing (/chrome, /exit).
 _NO_CONTENT: Final = "(no content)"
 # The line's label for a slash command, and for its output when the command is not on the page.
 SLASH: Final = "Ran"
 OUTPUT: Final = "Output"
 SLASH_KINDS: Final = frozenset({SLASH, OUTPUT})
+# The command whose run the harness's compact summary belongs to.
+COMPACT_COMMAND: Final = "/compact"
+# A compact summary's label, and its line in Claude Code's words on the boundary written before it.
+SUMMARY: Final = "Summary"
+SUMMARY_LINE: Final = "Conversation compacted"
 
 
 @dataclass(frozen=True, slots=True)
@@ -156,9 +163,10 @@ class SlashCommand:
 
 @dataclass(frozen=True, slots=True)
 class CommandOutput:
-    """What a slash command printed, terminal styling dropped."""
+    """What a slash command printed, terminal styling dropped, and whether it was its stderr."""
 
     said: str
+    failed: bool = False
 
 
 type Injected = TaskNotice | PeerMessage | SlashCommand | CommandOutput | Hidden
@@ -292,9 +300,10 @@ def _peer(origin: RecordOrigin, text: str) -> PeerMessage | None:
     )
 
 
-def _output(text: str) -> CommandOutput | Hidden:
-    said = plain(_tag(text, _STDOUT)).strip()
-    return CommandOutput(said) if said and said != _NO_CONTENT else HIDDEN
+def _output(text: str, stream: str) -> CommandOutput | Hidden:
+    said = plain(_tag(text, stream)).strip()
+    failed = stream == _STDERR
+    return CommandOutput(said, failed) if said and said != _NO_CONTENT else HIDDEN
 
 
 def _by_tag(text: str) -> Injected | None:
@@ -304,8 +313,9 @@ def _by_tag(text: str) -> Injected | None:
         return _task(text) or HIDDEN
     if text.startswith(_COMMAND):
         return SlashCommand(_tag(text, "command-name"), _tag(text, "command-args"))
-    if text.startswith(f"<{_STDOUT}>"):
-        return _output(text)
+    for stream in (_STDOUT, _STDERR):
+        if text.startswith(f"<{stream}>"):
+            return _output(text, stream)
     return _peer_from_tag(text)
 
 

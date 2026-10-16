@@ -337,6 +337,12 @@ def _records(path: Path) -> list[dict[str, JsonValue]]:
 # Real slash-command records, every shape found locally, each with the caveat before it and the
 # output after it, in the order Claude Code writes them.
 SLASH_COMMANDS: Final = FIXTURES / "transcript" / "notices" / "slash-commands.jsonl"
+# Real /compact runs: the line as sent, the boundary, the summary, the command and what it printed.
+COMPACTION: Final = FIXTURES / "transcript" / "notices" / "compaction.jsonl"
+# Real slash commands Claude Code wrote as `type: system` records rather than user ones.
+SYSTEM_COMMANDS: Final = FIXTURES / "transcript" / "notices" / "system-commands.jsonl"
+# Built, not captured: no local log has a failing command, so its stderr takes the stdout shape.
+COMMAND_STDERR: Final = FIXTURES / "transcript" / "notices" / "command-stderr.jsonl"
 
 
 def notice_records() -> list[dict[str, JsonValue]]:
@@ -352,6 +358,21 @@ def api_error_records() -> list[dict[str, JsonValue]]:
 def slash_command_records() -> list[dict[str, JsonValue]]:
     """The scrubbed slash-command records, in fixture order."""
     return _records(SLASH_COMMANDS)
+
+
+def compaction_records() -> list[dict[str, JsonValue]]:
+    """The scrubbed /compact runs, in fixture order."""
+    return _records(COMPACTION)
+
+
+def system_command_records() -> list[dict[str, JsonValue]]:
+    """The scrubbed slash commands written as system records, in fixture order."""
+    return _records(SYSTEM_COMMANDS)
+
+
+def command_stderr_records() -> list[dict[str, JsonValue]]:
+    """Two failing slash commands, a user record's and a system record's, in fixture order."""
+    return _records(COMMAND_STDERR)
 
 
 def origin_of(record: dict[str, JsonValue]) -> dict[str, JsonValue]:
@@ -1043,6 +1064,16 @@ AGENT_PAGE: Final = (
         act=_click(".chat .notice--ran > summary"),
     ),
     State(
+        "chat-compacted",
+        f"{AGENT}?tab=chat",
+        ".chat .notice--ran[open] .notice__result",
+        runner(_stressed),
+        [*compaction_records(), *system_command_records(), *command_stderr_records()],
+        title="Chat: /compact once, opened on its summary; system-record and failing commands",
+        armed=".chat .notice--ran > summary",
+        act=_click(".chat .notice--ran > summary"),
+    ),
+    State(
         "chat-notices",
         f"{AGENT}?tab=chat",
         ".chat .notice--command",
@@ -1584,6 +1615,7 @@ STATES: Final = (*FEED, *AGENT_PAGE, *TAPPED, *ANSWERED, *LIFECYCLE, *STATS, *FI
 # Screens this app draws that the old app had no name for.
 V2_ONLY: Final = (
     "chat-slash-commands",
+    "chat-compacted",
     "usage-opencode-models",
     "chat-doubted-identity",
     "feed-herd",
