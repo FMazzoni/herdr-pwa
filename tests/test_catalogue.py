@@ -1,6 +1,7 @@
 """The screen catalogue: every named state draws, and the old app's names are all accounted for."""
 
 import re
+import threading
 from pathlib import Path
 
 import pytest
@@ -15,6 +16,7 @@ from tests.catalogue import (
     pick,
     ported,
 )
+from tests.webfakes import SEND_KEYS, Hold
 
 # The fragments a page pulls in on load, which is where a broken screen usually breaks.
 FRAGMENT = re.compile(r'hx-get="([^"]+)"')
@@ -63,3 +65,32 @@ def test_pick_keeps_catalogue_order_and_refuses_an_unknown_name() -> None:
     assert len(pick([])) == len(STATES)
     with pytest.raises(KeyError, match="nope"):
         pick(["nope"])
+
+
+INPUT = re.compile(r'<input type="hidden" name="(\w+)" value="([^"]*)">')
+OPTION_FORM = re.compile(r"<form[^>]*>(?:(?!</form>).)*button--option", re.DOTALL)
+
+
+def test_the_sending_state_holds_its_key_until_released(tmp_path: Path) -> None:
+    [state] = pick(["agent-answer-sending"])
+    rig = build(state, tmp_path)
+    hold = rig.wire.after[SEND_KEYS]
+    assert isinstance(hold, Hold)
+    agent = state.path.split("?")[0]
+    found = OPTION_FORM.search(rig.http.get(f"{agent}/answer").text)
+    assert found is not None
+    fields = dict(INPUT.findall(found.group(0)))
+    same_origin = {"Origin": str(rig.http.base_url).rstrip("/")}
+    answers: list[int] = []
+
+    def tap_it() -> None:
+        answers.append(rig.http.post(f"{agent}/keys", data=fields, headers=same_origin).status_code)
+
+    tap = threading.Thread(target=tap_it)
+    tap.start()
+    assert hold.taken.wait(10), "the key never reached the runner"
+    assert answers == [], "the key answered while it was held"
+    hold.release.set()
+    tap.join(10)
+    assert answers == [200]
+    assert hold.released.is_set(), "the key went before it was released"

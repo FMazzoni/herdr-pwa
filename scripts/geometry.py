@@ -31,6 +31,7 @@ from firefox import BrowserError, Marionette, browser, free_port, phone_window  
 
 from tests.catalogue import STATES, State, build, pick  # noqa: E402
 from tests.waiting import eventually  # noqa: E402
+from tests.webfakes import Hold  # noqa: E402
 
 # The --only name for the back-navigation walks.
 HISTORY = "history"
@@ -322,6 +323,8 @@ class Switch:
 
     def __init__(self) -> None:
         self.app: ASGIApp | None = None
+        # Writes the current state's runner is sitting on, let go when the next state mounts.
+        self.held: list[Hold] = []
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         """Forward one request."""
@@ -366,15 +369,25 @@ def install(switch: Switch, state: State, scratch: Path) -> None:
     """Build a fresh app for ``state`` over its own fake runner and make it current."""
     home = scratch / state.name
     home.mkdir(parents=True)
-    switch.app = build(state, home).http.app
+    # A held write keeps its session's write lock, which would refuse the next state's tap.
+    for hold in switch.held:
+        hold.release.set()
+    rig = build(state, home)
+    switch.held = [hook for hook in rig.wire.after.values() if isinstance(hook, Hold)]
+    switch.app = rig.http.app
 
 
-def _wait(driver: Marionette, selector: str, base: str) -> dict[str, object]:
+def _wait(
+    driver: Marionette, selector: str, base: str, *, settle: bool = True
+) -> dict[str, object]:
     deadline = time.monotonic() + READY_SECONDS
     seen: dict[str, object] = {}
     while time.monotonic() < deadline:
         found = driver.script(PROBE_LOADED, selector, base)
         seen = found if isinstance(found, dict) else {}
+        # A state held mid-tap never settles: its proof alone is enough.
+        if not settle:
+            seen["settled"] = True
         if (seen.get("ready") and seen.get("settled")) or seen.get("errorPage"):
             break
         time.sleep(0.05)
@@ -388,7 +401,7 @@ def _loaded(driver: Marionette, state: State, base: str) -> list[str]:
         if not (seen.get("ready") and seen.get("settled")):
             return _load_problems(seen, state.armed, scripted=True)
         driver.script(state.act)
-    seen = _wait(driver, state.ready, base)
+    seen = _wait(driver, state.ready, base, settle=not state.in_flight)
     return _load_problems(seen, state.ready, scripted=state.scripted)
 
 
@@ -557,10 +570,13 @@ def judge_bar(found: dict[str, object], where: str, size: "Size", tally: Tally) 
     _judge_strip(bar, where, size, tally)
 
 
-def _grow_text(driver: Marionette, scale: float) -> bool:
+def _grow_text(driver: Marionette, scale: float, *, settle: bool = True) -> bool:
     """Set the page's text ``scale`` times its default; whether the dock followed it by itself."""
     kept = driver.script_async(GROW_TEXT, scale, DOCK_CEILING_MS) is True
-    eventually(lambda: bool(driver.script(f"return ({HTMX_SETTLED})();")), seconds=READY_SECONDS)
+    if settle:
+        eventually(
+            lambda: bool(driver.script(f"return ({HTMX_SETTLED})();")), seconds=READY_SECONDS
+        )
     return kept
 
 
@@ -591,7 +607,7 @@ def run_state(driver: Marionette, state: State, base: str, size: Size, tally: Ta
     if problems:
         tally.problems += [f"{where}: NOT LOADED: {p}" for p in problems]
         return
-    if scale != 1.0 and not _grow_text(driver, scale):
+    if scale != 1.0 and not _grow_text(driver, scale, settle=not state.in_flight):
         tally.problems.append(
             f"{where}: the docked composer was not re-measured after the text grew, so the "
             "room the page keeps for it is the old size"

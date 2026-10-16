@@ -23,6 +23,7 @@ from tests.webfakes import (
     WORKING_PANE,
     WORKING_SESSION,
     FakeWire,
+    Hold,
     Reply,
     Rig,
     agents_of,
@@ -116,6 +117,8 @@ class State:
     scripted: bool = True
     prime: Prime | None = None
     settings: dict[str, object] = field(default_factory=dict[str, object])
+    # Proved while its tap is still out, so htmx never settles: wait for ``ready`` alone.
+    in_flight: bool = False
 
 
 def capture(name: str) -> str:
@@ -690,6 +693,11 @@ def _lands(status: str, screen: str) -> Prime:
     return prime
 
 
+def _held_key(rig: Rig) -> None:
+    """The runner sits on a tapped key, so the row's "Sending…" line can be seen."""
+    rig.wire.after[SEND_KEYS] = Hold()
+
+
 AGENT: Final = f"/agent/{WORKING_SESSION}"
 BLOCKED: Final = {"p4": "blocked"}
 DOOR: Final = f"/starting/{WORKING_PANE}"
@@ -1153,6 +1161,17 @@ _TAP_OPTION: Final = _click("#answer .button--option")
 
 ANSWERED: Final = (
     State(
+        "agent-answer-sending",
+        f"{AGENT}?tab=pane",
+        "#answer form.htmx-request .option__sending",
+        _keyed(capture(PERMISSION)),
+        title="Agent page: a tapped option still on its way, the row saying so",
+        armed="#answer .button--option",
+        act=_TAP_OPTION,
+        prime=_held_key,
+        in_flight=True,
+    ),
+    State(
         "agent-answer-confirmed",
         f"{AGENT}?tab=pane",
         "#answer .banner--sent",
@@ -1430,6 +1449,7 @@ STATES: Final = (*FEED, *AGENT_PAGE, *TAPPED, *ANSWERED, *LIFECYCLE, *STATS, *FI
 V2_ONLY: Final = (
     "chat-doubted-identity",
     "feed-herd",
+    "agent-answer-sending",
     "agent-answer-opencode-permission",
     "agent-answer-opencode-question",
     "agent-answer-opencode-listing",

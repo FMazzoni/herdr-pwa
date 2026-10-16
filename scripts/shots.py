@@ -121,7 +121,9 @@ def drive(page: Page, state: State, url: str) -> None:
         page.wait_for_function(HTMX_SETTLED, timeout=READY_MS)
         page.evaluate(f"() => {{ {state.act} }}")
     page.wait_for_selector(state.ready, state="attached", timeout=READY_MS)
-    page.wait_for_function(HTMX_SETTLED, timeout=READY_MS)
+    # A state held mid-tap never settles; its proof is the picture.
+    if not state.in_flight:
+        page.wait_for_function(HTMX_SETTLED, timeout=READY_MS)
 
 
 @dataclass(frozen=True)
