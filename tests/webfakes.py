@@ -16,6 +16,7 @@ from starlette.routing import BaseRoute
 from herdr_pwa.engine import EngineSettings, HerdrClient
 from herdr_pwa.settings import Settings
 from herdr_pwa.web.app import create_app
+from herdr_pwa.web.assets import SCRIPTS, STATIC_DIR
 from herdr_pwa.web.seams import Seams
 from herdr_pwa.writes.outcome import Pacing
 from tests._jsonpath import at, obj
@@ -25,6 +26,12 @@ FIXTURES = Path(__file__).parent / "fixtures"
 SNAPSHOT_FIXTURE = FIXTURES / "snapshot.example.json"
 LOGIN = "operator@example.com"
 IDENTITY = {"Tailscale-User-Login": LOGIN}
+
+
+def client_scripts() -> str:
+    """Every script of this app's own that a page loads, in load order, as one text."""
+    return "\n".join((STATIC_DIR / name).read_text(encoding="utf-8") for name in SCRIPTS)
+
 
 SNAPSHOT = method_of(wire_request.SessionSnapshotRequest)
 READ = method_of(wire_request.AgentReadRequest)

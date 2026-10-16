@@ -37,7 +37,14 @@ from herdr_pwa.web.started import STARTED_FILENAME, StartedTree, fingerprint, re
 from herdr_pwa.writes.answer import KeySent
 from herdr_pwa.writes.lifecycle import record_service_path
 from herdr_pwa.writes.outcome import Evidence, Outcome
-from tests.webfakes import FIXTURES, SNAPSHOT, FakeWire, agents_of, snapshot_frame
+from tests.webfakes import (
+    FIXTURES,
+    SNAPSHOT,
+    FakeWire,
+    agents_of,
+    client_scripts,
+    snapshot_frame,
+)
 
 
 def _tags(nodes: tuple[MdNode, ...]) -> set[str]:
@@ -251,7 +258,7 @@ def test_no_template_or_script_writes_inline_style_or_markup() -> None:
         assert "style=" not in text, path
         assert "|safe" not in text, path
         assert "<script>" not in text, path
-    assert "innerHTML" not in (STATIC_DIR / "app.js").read_text()
+    assert "innerHTML" not in client_scripts()
 
 
 def _doctor(tmp_path: Path, wire: FakeWire, now: float = 0.0) -> tuple[int, str]:

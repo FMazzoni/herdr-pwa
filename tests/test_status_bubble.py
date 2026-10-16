@@ -233,7 +233,7 @@ def test_the_bubble_wears_the_default_presets() -> None:
     assert f'[data-working-palette="{WORKING_PALETTE}"]' in css
     for shipped in ("softer-ember", "ember", "current", "green"):
         assert f'[data-working-palette="{shipped}"]' in css, shipped
-    js = (STATIC / "app.js").read_text()
+    js = (STATIC / "hp.js").read_text()
     table = js[js.index("var MOTIONS = {") :]
     assert re.search(rf'^\s*"?{WORKING_MOTION}"?: \{{', table, re.MULTILINE)
 

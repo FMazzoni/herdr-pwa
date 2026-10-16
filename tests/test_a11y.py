@@ -13,13 +13,14 @@ from tests.webfakes import (
     WORKING_SESSION,
     assistant_says,
     build_rig,
+    client_scripts,
     human_says,
     write_transcript,
 )
 
 STATIC = Path(__file__).resolve().parents[1] / "src" / "herdr_pwa" / "web" / "static"
 CSS = (STATIC / "app.css").read_text(encoding="utf-8")
-JS = (STATIC / "app.js").read_text(encoding="utf-8")
+JS = client_scripts()
 ROOT_BLOCK = CSS[CSS.index(":root {") : CSS.index("}", CSS.index(":root {"))]
 TOKENS: dict[str, str] = {
     m.group(1): m.group(2) for m in re.finditer(r"(--[\w-]+):\s*([^;]+);", ROOT_BLOCK)

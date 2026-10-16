@@ -1,12 +1,12 @@
-/* The decisions app.js makes, asked directly: the marked stretch of the real file is loaded on
- * its own, in a context with no page, no clock and no timers, and each function is handed what a
- * browser would have measured. Run with `node --test tests/js/`; no npm, nothing to install. */
+/* The decisions the page's scripts make, asked directly: the marked stretch of the real file is
+ * loaded on its own, in a context with no page, no clock and no timers, and each function is
+ * handed what a browser would have measured. Run with `node --test tests/js/`; no npm, nothing to install. */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { runInNewContext } from "node:vm";
 
-const APP = new URL("../../src/herdr_pwa/web/static/app.js", import.meta.url);
+const APP = new URL("../../src/herdr_pwa/web/static/hp.js", import.meta.url);
 const source = readFileSync(APP, "utf8");
 const START = "// hp:logic:start";
 const END = "// hp:logic:end";

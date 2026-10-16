@@ -14,11 +14,12 @@
 
 /* The name moves only when PRECACHE does; activate sweeps every other name under the prefix. */
 const CACHE_PREFIX = "herdr-shell-";
-const CACHE_NAME = CACHE_PREFIX + "v3";
+const CACHE_NAME = CACHE_PREFIX + "v4";
 const OFFLINE_URL = "/offline";
 
 const PRECACHE = [
   "/static/app.css",
+  "/static/hp.js",
   "/static/app.js",
   "/static/htmx.min.js",
   "/static/icon.svg",

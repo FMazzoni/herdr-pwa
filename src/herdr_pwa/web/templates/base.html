@@ -16,7 +16,9 @@
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="stylesheet" href="{{ asset('app.css') }}">
 <script src="{{ asset('htmx.min.js') }}" defer></script>
-<script src="{{ asset('app.js') }}" defer></script>
+{% for name in scripts %}
+<script src="{{ asset(name) }}" defer></script>
+{% endfor %}
 {% if device_report %}
 <script src="{{ asset('devreport.js') }}" defer></script>
 {% endif %}

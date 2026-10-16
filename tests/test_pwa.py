@@ -1,5 +1,6 @@
 """The installable shell: the worker's never-cache rule, read and run, plus manifest and headers."""
 
+import hashlib
 import re
 import shutil
 import struct
@@ -9,12 +10,11 @@ from pathlib import Path
 import pytest
 from pydantic import JsonValue, TypeAdapter
 
-from herdr_pwa.web.assets import STATIC_DIR
+from herdr_pwa.web.assets import SCRIPTS, STATIC_DIR
 from herdr_pwa.web.routers.shell import TOUCH_ICONS
-from tests.webfakes import build_rig
+from tests.webfakes import build_rig, client_scripts
 
 WORKER = STATIC_DIR / "sw.js"
-APP_JS = STATIC_DIR / "app.js"
 MANIFEST = STATIC_DIR / "manifest.webmanifest"
 # The manifest and the worker harness's report, read whole as JSON documents.
 _DOCUMENT = TypeAdapter(dict[str, JsonValue])
@@ -22,6 +22,10 @@ HARNESS = Path(__file__).parent / "sw" / "harness.mjs"
 SESSION = "11111111-1111-4111-8111-111111111111"
 SHELL_PREFIXES = ("/static/",)
 SHELL_PATHS = ("/manifest.webmanifest", "/offline")
+# The worker's cache name and a digest of the PRECACHE it was named for. A new list under the old
+# name keeps the old cache on phones that already have it; a new name over the same list throws
+# a good cache away. Move both together.
+CACHE_NAMED_FOR = ("v4", "becf01ceebdb")
 
 
 def precache_paths() -> list[str]:
@@ -40,6 +44,24 @@ def test_the_worker_precaches_only_the_static_shell() -> None:
     assert len(paths) >= 8
     for path in paths:
         assert path.startswith(SHELL_PREFIXES) or path in SHELL_PATHS, path
+
+
+def test_every_script_a_page_runs_is_precached_and_linked_in_order(tmp_path: Path) -> None:
+    precached = precache_paths()
+    for name in SCRIPTS:
+        assert f"/static/{name}" in precached, name
+    page = build_rig(tmp_path).http.get("/").text
+    pattern = re.compile(r'<script src="/static/([^"?]+)\?v=[0-9a-f]+" defer>')
+    linked = [m.group(1) for m in pattern.finditer(page)]
+    assert [name for name in linked if name in SCRIPTS] == list(SCRIPTS)
+    assert linked[0] == "htmx.min.js"
+
+
+def test_the_cache_name_moves_only_when_precache_does() -> None:
+    named = re.search(r'const CACHE_NAME = CACHE_PREFIX \+ "([^"]+)";', WORKER.read_text())
+    assert named is not None
+    listed = hashlib.sha256("\n".join(precache_paths()).encode()).hexdigest()[:12]
+    assert (named.group(1), listed) == CACHE_NAMED_FOR
 
 
 def test_the_worker_names_no_route_that_renders_agent_state() -> None:
@@ -264,7 +286,7 @@ def test_the_update_offer_is_hidden_and_outside_every_polled_region(tmp_path: Pa
 
 
 def test_the_client_script_builds_no_markup_and_registers_the_root_worker() -> None:
-    source = APP_JS.read_text()
+    source = client_scripts()
     for banned in ("innerHTML", "outerHTML =", "insertAdjacentHTML", "eval(", "new Function"):
         assert banned not in source, banned
     assert 'register("/sw.js", { scope: "/" })' in source
@@ -274,7 +296,7 @@ def test_the_client_script_builds_no_markup_and_registers_the_root_worker() -> N
 
 
 def test_the_worker_and_app_post_to_the_same_push_routes() -> None:
-    worker, app = WORKER.read_text(), APP_JS.read_text()
+    worker, app = WORKER.read_text(), client_scripts()
     for route in ("/push/key", "/push/subscribe", "/push/unsubscribe"):
         assert route in worker
         assert route in app
