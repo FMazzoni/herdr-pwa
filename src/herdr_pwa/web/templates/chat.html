@@ -52,7 +52,7 @@
     {% endif %}
   </div>
   {% elif item.speaker == "notice" %}
-  <div class="turn turn--tools turn--notice" data-hp-key="turn:{{ item.key }}"><span class="sr-only">{{ "Harness:" if item.api_error else "Slash command:" if item.slash else "Task:" }}</span>{{ notice_line(item, "/agent/" ~ (agent.session|urlencode) ~ "/files") }}</div>
+  <div class="turn turn--tools turn--notice" data-hp-key="turn:{{ item.key }}"><span class="sr-only">{{ "Harness:" if item.api_error or item.compacted else "Slash command:" if item.slash else "Task:" }}</span>{{ notice_line(item, "/agent/" ~ (agent.session|urlencode) ~ "/files") }}</div>
   {% else %}
   {% set turn = item %}
   <article class="turn turn--{{ turn.speaker }}"{% if turn.key %} data-hp-key="turn:{{ turn.key }}"{% endif %}>

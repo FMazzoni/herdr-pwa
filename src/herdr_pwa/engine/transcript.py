@@ -17,9 +17,12 @@ from herdr_pwa.engine.generated.request import IntegrationTarget
 from herdr_pwa.engine.model import Agent, SessionId
 from herdr_pwa.engine.notices import (
     API_ERROR_KINDS,
+    COMPACT_COMMAND,
     OUTPUT,
     SLASH,
     SLASH_KINDS,
+    SUMMARY,
+    SUMMARY_LINE,
     ApiError,
     CommandOutput,
     Hidden,
@@ -145,6 +148,11 @@ def is_message(turn: TranscriptTurn) -> bool:
 def is_slash_command(turn: TranscriptTurn) -> bool:
     """Whether *turn* is a slash command the person ran in the harness, or what one printed."""
     return turn.speaker is Speaker.notice and turn.tool in SLASH_KINDS
+
+
+def is_compact_summary(turn: TranscriptTurn) -> bool:
+    """Whether *turn* is the harness's summary of what a compaction dropped, not a word said."""
+    return turn.speaker is Speaker.notice and turn.tool == SUMMARY
 
 
 def is_api_error(turn: TranscriptTurn) -> bool:
@@ -384,6 +392,8 @@ class ClaudeRecord(BaseModel):
     uuid: Text = None
     timestamp: Text = None
     subtype: Text = None
+    # A system record's text, which is where a `local_command` one keeps its tags.
+    content: Text = None
     cwd: Text = None
     is_meta: Flag = Field(default=None, validation_alias="isMeta")
     message: Annotated[_Message | None, OR_NONE] = None
@@ -965,6 +975,7 @@ def _slash_turn(found: SlashCommand | CommandOutput, stamp: TurnStamp) -> Transc
         tool=OUTPUT,
         result=result,
         result_truncated=cut,
+        failed=found.failed,
     )
 
 
@@ -1008,8 +1019,24 @@ def _injected_turn(
     )
 
 
+def _summary_turn(content: str, stamp: TurnStamp) -> TranscriptTurn:
+    """A compact summary as a quiet line that opens on it, until it folds onto its /compact."""
+    result, cut = clip(content, MAX_RESULT_CHARS)
+    return TranscriptTurn(
+        uuid=stamp.uuid,
+        speaker=Speaker.notice,
+        text=SUMMARY_LINE,
+        ts=stamp.written,
+        tool=SUMMARY,
+        result=result,
+        result_truncated=cut,
+    )
+
+
 def _user_text(record: ClaudeRecord, content: str, stamp: TurnStamp) -> TranscriptTurn | None:
     """A user record whose content is one string: a prompt, or something the harness wrote."""
+    if record.is_compact_summary is True:
+        return _summary_turn(content, stamp)
     human = _is_human(record)
     found = injected(record.origin, content, human=human)
     if isinstance(found, Hidden):
@@ -1139,27 +1166,44 @@ def _assistant_record(record: ClaudeRecord, stamp: TurnStamp) -> TranscriptTurn 
     return None
 
 
+def _local_command(record: ClaudeRecord, stamp: TurnStamp) -> TranscriptTurn | None:
+    """A slash command, or its output, that Claude Code wrote as a system record."""
+    found = injected(None, record.content or "", human=False)
+    if isinstance(found, SlashCommand | CommandOutput):
+        return _slash_turn(found, stamp)
+    return None
+
+
 def _claude_turn(record: ClaudeRecord) -> TranscriptTurn | None:
     """One Claude Code JSONL record as a chat turn, or ``None`` to drop it."""
     kind = record.type
-    if kind in _SKIP_TYPES:
-        return None
     uuid = record.uuid
-    if not uuid or record.message is None:
+    if not uuid:
         return None
     stamp = TurnStamp(uuid, record.timestamp or "")
-    if kind == "user":
+    # Measured: /artifacts, /branch, /feedback and others are written this way, same tags.
+    if kind == "system" and record.subtype == "local_command":
+        return _local_command(record, stamp)
+    if kind in _SKIP_TYPES or record.message is None:
+        return None
+    return _message_turn(record, stamp)
+
+
+def _message_turn(record: ClaudeRecord, stamp: TurnStamp) -> TranscriptTurn | None:
+    """A record that carries a ``message``: the person's side, or the agent's."""
+    if record.type == "user":
         return _user_record(record, stamp)
-    if kind == "assistant" and record.is_api_error is True:
+    if record.type == "assistant" and record.is_api_error is True:
         return _api_error_turn(record, stamp)
-    if kind == "assistant":
+    if record.type == "assistant":
         return _assistant_record(record, stamp)
     return None
 
 
 def fold_turns(turns: Iterable[TranscriptTurn]) -> list[TranscriptTurn]:
-    """Fold tool results onto calls, command output onto its command, and repeated API errors."""
-    return _fold_repeats(_fold_outputs(_fold_results(turns)))
+    """Fold tool results onto calls, command output and a compaction onto its command, and
+    repeated API errors."""
+    return _fold_repeats(_fold_compaction(_fold_outputs(_fold_results(turns))))
 
 
 def _prints_for(output: TranscriptTurn, command: TranscriptTurn) -> bool:
@@ -1178,11 +1222,70 @@ def _fold_outputs(turns: list[TranscriptTurn]) -> list[TranscriptTurn]:
     folded: list[TranscriptTurn] = []
     for turn in turns:
         if folded and _prints_for(turn, folded[-1]):
-            update = {"result": turn.result, "result_truncated": turn.result_truncated}
+            update = {
+                "result": turn.result,
+                "result_truncated": turn.result_truncated,
+                "failed": turn.failed,
+            }
             folded[-1] = folded[-1].model_copy(update=update)
             continue
         folded.append(turn)
     return folded
+
+
+def _runs_compact(turn: TranscriptTurn) -> bool:
+    return (
+        is_slash_command(turn) and turn.tool == SLASH and turn.text.split(" ")[0] == COMPACT_COMMAND
+    )
+
+
+@dataclass(slots=True)
+class _Compaction:
+    """What waits for the /compact line: the summary, and the line as the person sent it."""
+
+    summary: TranscriptTurn | None = None
+    sent: TranscriptTurn | None = None
+
+
+def _compaction_step(turn: TranscriptTurn, waiting: _Compaction) -> list[TranscriptTurn]:
+    """What *turn* takes in out of what waits for it, emptying what it ends."""
+    if is_compact_summary(turn):
+        waiting.summary = turn
+    elif turn.speaker is Speaker.system:
+        waiting.sent = turn
+    elif turn.speaker is Speaker.human or _runs_compact(turn):
+        taken = [t for t in (waiting.summary, waiting.sent) if t is not None]
+        waiting.summary = waiting.sent = None
+        return taken if _runs_compact(turn) else []
+    return []
+
+
+def _fold_compaction(turns: list[TranscriptTurn]) -> list[TranscriptTurn]:
+    """Each /compact line opening on the summary before it, the line as the person sent it dropped.
+
+    Measured: the line as sent is written at once, then, once the compaction is done, the
+    summary, the command and what it printed; a background copy keeps the agent's last words
+    between the summary and the command, so only a prompt the person typed ends the wait.
+    """
+    waiting = _Compaction()
+    taken: dict[str, TranscriptTurn] = {}
+    dropped: set[str] = set()
+    for turn in turns:
+        for earlier in _compaction_step(turn, waiting):
+            if is_compact_summary(earlier):
+                taken[turn.uuid] = earlier
+                dropped.add(earlier.uuid)
+            elif earlier.text == turn.text:
+                dropped.add(earlier.uuid)
+    return [_opening_on(turn, taken.get(turn.uuid)) for turn in turns if turn.uuid not in dropped]
+
+
+def _opening_on(turn: TranscriptTurn, summary: TranscriptTurn | None) -> TranscriptTurn:
+    """*turn*, opening on *summary* in place of "Compacted (ctrl+o to see full summary)"."""
+    if summary is None:
+        return turn
+    update = {"result": summary.result, "result_truncated": summary.result_truncated}
+    return turn.model_copy(update=update)
 
 
 def _fold_results(turns: Iterable[TranscriptTurn]) -> list[TranscriptTurn]:
@@ -1245,7 +1348,10 @@ _RETRY_TRIGGERS: Final = (Speaker.notice, Speaker.peer)
 
 
 def _wakes(turn: TranscriptTurn) -> bool:
-    """Whether *turn* only woke the agent to retry; a slash command is the person acting."""
+    """Whether *turn* only woke the agent to retry; a slash command is the person acting.
+
+    A compact summary is looked past too: it is the harness, neither the person nor the agent.
+    """
     return turn.speaker in _RETRY_TRIGGERS and not is_slash_command(turn)
 
 
