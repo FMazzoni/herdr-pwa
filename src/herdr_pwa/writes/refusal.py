@@ -119,10 +119,10 @@ FAILURES: Final[dict[Refusal, Failure]] = {
         "Nothing was {verb}: its agents, or what they are doing, changed since you "
         "confirmed. Look again.",
     ),
-    # Another tab or phone is mid-write to the same agent; its outcome decides what this one means.
+    # Another tab or phone is mid-write to the same agent, pane or workspace; its outcome decides.
     Refusal.IN_FLIGHT: Failure(
         409,
-        "Nothing was {verb}: another write to this agent is still in flight. "
+        "Nothing was {verb}: another write to the same agent or workspace is still in flight. "
         "Look at what it did before trying again.",
     ),
     Refusal.NOT_READY: Failure(

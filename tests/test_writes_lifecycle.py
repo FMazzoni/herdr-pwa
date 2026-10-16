@@ -1,6 +1,7 @@
 """Starting and ending agents, workspaces, and the one failure table."""
 
 import dataclasses
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 import pytest
@@ -14,6 +15,7 @@ from herdr_pwa.engine import (
     ProtocolMismatch,
     RequestTooLarge,
     TargetNotFound,
+    as_pane_id,
 )
 from herdr_pwa.jsontypes import JsonObject
 from herdr_pwa.writes.guard import MAX_PROMPT_CHARS
@@ -27,7 +29,13 @@ from herdr_pwa.writes.lifecycle import (
     end_agent,
     start_agent,
 )
-from herdr_pwa.writes.prompt import SETTLED_LOOKS, PromptSent
+from herdr_pwa.writes.prompt import (
+    SETTLED_LOOKS,
+    PromptAsk,
+    PromptSent,
+    send_first_prompt,
+    send_prompt,
+)
 from herdr_pwa.writes.refusal import FAILURES, Refusal, Refused, failed_result, refusal_for
 from herdr_pwa.writes.workspaces import (
     WorkspaceCloseAsk,
@@ -381,3 +389,92 @@ def test_a_first_prompt_at_a_question_is_not_typed_but_the_agent_stays(tmp_path:
     assert result.first.refusal is Refusal.QUESTION_SHOWING
     assert r.herd.writes("agent.prompt") == []
     assert r.herd.writes("pane.close") == []
+
+
+SNAPSHOT = "session.snapshot"
+
+
+# Every write takes the one-at-a-time lock: a second tab mid-write is refused, never sent twice.
+
+
+def during[T](r: Rig, method: str, second: Callable[[], T]) -> list[T]:
+    """Run ``second`` once, inside the first write, right after it calls ``method``."""
+    seen: list[T] = []
+
+    def other_tab(herd: FakeHerd, params: JsonObject) -> None:
+        del herd.after[method], params
+        seen.append(second())
+
+    r.herd.after[method] = other_tab
+    return seen
+
+
+def in_flight(results: Sequence[object]) -> None:
+    [late] = results
+    assert (refused(late).refusal, refused(late).status) == (Refusal.IN_FLIGHT, 409)
+
+
+def test_a_second_end_mid_end_is_refused_and_so_is_a_prompt(tmp_path: Path) -> None:
+    r = end_rig(tmp_path)
+    late = during(r, SNAPSHOT, lambda: end_agent(r.writer, EndAsk(S1, confirmed=True)))
+    assert isinstance(end_agent(r.writer, EndAsk(S1, confirmed=True)), AgentEnded)
+    in_flight(late)
+    assert r.herd.writes("pane.close") == [{"pane_id": "w1:p3"}]
+    r = end_rig(tmp_path)
+    typed = during(r, SNAPSHOT, lambda: send_prompt(r.writer, PromptAsk(S1, "hello")))
+    _ = end_agent(r.writer, EndAsk(S1, confirmed=True))
+    in_flight(typed)
+
+
+def test_a_second_start_into_the_same_workspace_is_refused(tmp_path: Path) -> None:
+    r = start_rig(tmp_path)
+    late = during(r, SNAPSHOT, lambda: start_agent(r.writer, ask(tmp_path), which=everywhere))
+    assert isinstance(start_agent(r.writer, ask(tmp_path), which=everywhere), AgentStarted)
+    in_flight(late)
+    assert len(r.herd.writes("tab.create")) == 1
+
+
+def test_a_workspace_cannot_be_closed_while_an_agent_starts_in_it(tmp_path: Path) -> None:
+    r = start_rig(tmp_path)
+    close = WorkspaceCloseAsk("w1", confirmed=True)
+    late = during(r, "tab.create", lambda: close_workspace(r.writer, close))
+    assert isinstance(start_agent(r.writer, ask(tmp_path), which=everywhere), AgentStarted)
+    in_flight(late)
+    assert r.herd.writes("workspace.close") == []
+
+
+def test_the_opening_prompt_holds_the_new_pane(tmp_path: Path) -> None:
+    r = listening_rig(tmp_path, session="")
+    late = during(r, "agent.read", lambda: send_first_prompt(r.writer, as_pane_id(NEW_PANE), "x"))
+    _ = start_agent(r.writer, ask(tmp_path, kind="hermes", prompt="go"), which=everywhere)
+    in_flight(late)
+    assert len(r.herd.writes("agent.prompt")) == 1
+
+
+def test_a_second_workspace_create_mid_create_is_refused(tmp_path: Path) -> None:
+    r = rig(tmp_path)
+    late = during(r, "workspace.create", lambda: create_workspace(r.writer.client, "b"))
+    assert isinstance(create_workspace(r.writer.client, "a"), WorkspaceDone)
+    in_flight(late)
+    assert len(r.herd.writes("workspace.create")) == 1
+
+
+def test_a_second_rename_mid_rename_is_refused(tmp_path: Path) -> None:
+    r = rig(tmp_path)
+    r.herd.add_workspace("w2")
+    late = during(r, SNAPSHOT, lambda: rename_workspace(r.writer.client, "w2", "b"))
+    assert isinstance(rename_workspace(r.writer.client, "w2", "a"), WorkspaceDone)
+    in_flight(late)
+    assert len(r.herd.writes("workspace.rename")) == 1
+
+
+def test_a_second_workspace_close_mid_close_is_refused(tmp_path: Path) -> None:
+    r = rig(tmp_path)
+    r.herd.add_workspace("w2")
+    close = WorkspaceCloseAsk("w2", confirmed=True)
+    late = during(r, SNAPSHOT, lambda: close_workspace(r.writer, close))
+    renamed = during(r, "workspace.close", lambda: rename_workspace(r.writer.client, "w2", "b"))
+    assert isinstance(close_workspace(r.writer, close), WorkspaceDone)
+    in_flight(late)
+    in_flight(renamed)
+    assert len(r.herd.writes("workspace.close")) == 1
