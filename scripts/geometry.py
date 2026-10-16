@@ -363,10 +363,8 @@ class Switch:
         self.app = app
 
     def let_go(self) -> list[str]:
-        """Release every held write and wait for each to be answered; what never was."""
+        """Release every held write and wait for every write to be answered; what never was."""
         held, self.held = self.held, []
-        if not held:
-            return []
         # The tap is drawn as out before it reaches the runner: let go early, it would land late.
         # One never made is already its state's failure, and then nothing is out.
         _ = eventually(lambda: all(h.taken.is_set() for h in held), seconds=READY_SECONDS)
@@ -375,7 +373,7 @@ class Switch:
         # The in-flight claim is one per process, so a write still out refuses the next tap.
         if eventually(lambda: self.writing == 0, seconds=READY_SECONDS):
             return []
-        return ["a held write was still out when the next state mounted, so its tap may be refused"]
+        return ["a write was still out when the next state mounted, so its tap may be refused"]
 
 
 @contextmanager
