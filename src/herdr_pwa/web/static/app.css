@@ -787,9 +787,10 @@ textarea { resize: vertical; min-height: 4.5em; }
 /* Spaced by a gap, not a separator glyph. Wrapping is how a fact that does not fit leaves the
    line: it moves whole onto a second line, which the height cap does not draw. */
 .stats__facts { display: flex; flex-wrap: wrap; align-items: center; min-width: 0; max-height: var(--stats-facts-max); overflow: hidden; gap: 0 var(--space-6); }
-/* A model id longer than the line (a provider's raw id) ends in an ellipsis, so the strip
-   still says which model even when it is the only fact that fits. */
-.stats__model { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
+/* A fact that can be longer than the line alone (a provider's raw model id, the no-usage note
+   at a large Text Size) ends in an ellipsis rather than wrapping under the line's cap. */
+.stats__model, .stats__note { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stats__model { color: var(--ink); }
 .stats__note { color: var(--ink-3); }
 .stats__context { display: inline-flex; align-items: center; white-space: nowrap; }
 .meter { flex: none; width: var(--meter-w); height: var(--meter-h); margin-right: var(--space-2); overflow: hidden; background: var(--surface-2); border: var(--line-1) solid var(--rule); border-radius: var(--radius-pill); }
