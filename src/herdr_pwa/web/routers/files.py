@@ -33,7 +33,7 @@ from herdr_pwa.files.view import (
 )
 from herdr_pwa.web.deps import WebState, hidden_tick, viewer_guard
 from herdr_pwa.web.failures import AgentGone
-from herdr_pwa.web.herd import find_agent
+from herdr_pwa.web.herd import agent_status, find_agent
 from herdr_pwa.web.routers.agent import read_stats
 
 # An open file is re-checked on disk at the feed's quiet cadence.
@@ -102,6 +102,7 @@ class Explorer:
         shared = {
             "agent": agent,
             "stats": read_stats(self.web, agent) if agent is not None else None,
+            "agent_status": agent_status(self.web, agent) if agent is not None else None,
             "root": root,
             "nav": nav,
             "view": view,
@@ -310,7 +311,11 @@ def _register_agent(router: APIRouter, explorer: Explorer) -> None:
             return _redirect(_agent_url(explorer, agent, _Ask(path, line, to, q)))
         except UnknownRoot:
             # The tab stays, so the bar keeps its shape; the page says why it is empty.
-            context = {"agent": agent, "stats": read_stats(explorer.web, agent)}
+            context = {
+                "agent": agent,
+                "agent_status": agent_status(explorer.web, agent),
+                "stats": read_stats(explorer.web, agent),
+            }
             return explorer.web.pages.page("files_none.html", context)
 
 

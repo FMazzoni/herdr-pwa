@@ -69,6 +69,9 @@ def _lifespan(
             await hub.close()
             if notifier is not None:
                 await notifier.stop()
+            if web.seen is not None:
+                # What was read survives a restart even when no notifier runs to flush it.
+                web.seen.flush()
 
     return lifespan
 
@@ -91,17 +94,18 @@ def create_app(
     )
     # A box that cannot record a write does not serve one.
     audit.preflight()
+    client = client_factory(settings.engine())
+    cache = SnapshotCache(ttl=settings.snapshot_cache_ttl, clock=clock)
+    pushing = open_push(settings, reader=client, cache=cache, deliver=deliver, clock=time.time)
     web = WebState(
         settings=settings,
-        client=client_factory(settings.engine()),
-        cache=SnapshotCache(ttl=settings.snapshot_cache_ttl, clock=clock),
+        client=client,
+        cache=cache,
         pages=pages,
         audit=audit,
         clock=clock,
         pacing=pacing or Pacing(),
-    )
-    pushing = open_push(
-        settings, reader=web.client, cache=web.cache, deliver=deliver, clock=time.time
+        seen=pushing.stores.seen if pushing is not None else None,
     )
     hub = Hub(
         web,

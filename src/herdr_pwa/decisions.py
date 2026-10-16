@@ -18,6 +18,8 @@ from herdr_pwa.engine import (
 )
 from herdr_pwa.panetext import printed_whole
 
+# Said, not drawn as a herdr state: the question went, and herdr has not yet said what replaced it.
+UPDATING: Final = "updating"
 IDLE_CADENCE: Final = 12
 WORKING_CADENCE: Final = 5
 # Past this many seconds the herd is offline rather than merely late.
@@ -249,12 +251,27 @@ def identity_doubt(origin: str, cwds: Iterable[str]) -> str:
     )
 
 
+def read_status(
+    status: AgentStatus, session: str, unread: Mapping[str, bool] | None
+) -> AgentStatus:
+    """The status every surface shows: a finish the phone has already shown is idle again."""
+    # herdr keeps done until the desk focuses the pane; reading it on the phone is our own overlay.
+    if status is not AgentStatus.DONE or unread is None:
+        return status
+    # A session missing from the seen ledger has never been read.
+    return status if unread.get(session, True) else AgentStatus.IDLE
+
+
 def effective_status(agent: Agent, unread: Mapping[str, bool] | None = None) -> AgentStatus:
     """The status the feed acts on: a finished agent already read is idle again."""
-    if agent.status is not AgentStatus.DONE or unread is None:
-        return agent.status
-    # A session missing from the seen ledger has never been read.
-    return agent.status if unread.get(agent.session, True) else AgentStatus.IDLE
+    return read_status(agent.status, agent.session, unread)
+
+
+def page_status(agent: Agent, unread: Mapping[str, bool] | None, *, answered: bool) -> str:
+    """The agent page's status word: "updating" over a question just answered, else the feed's."""
+    if answered and agent.status is AgentStatus.BLOCKED:
+        return UPDATING
+    return effective_status(agent, unread).value
 
 
 def cadence_for(agents: Iterable[Agent]) -> int:

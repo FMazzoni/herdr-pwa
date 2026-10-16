@@ -94,6 +94,11 @@
       return heard.kind === "stale" && heard.data ? heard.data : null;
     }
 
+    // An open page watched the agent finish when a redraw first shows it done: say so once.
+    function finishedNow(before, after) {
+      return after === "done" && before !== "done";
+    }
+
     // Each whole block in what has arrived from `from` on, and where the unfinished rest begins.
     function blocks(text, from) {
       var whole = [];
@@ -153,6 +158,7 @@
       landing: landing,
       eventOf: eventOf,
       staleTopic: staleTopic,
+      finishedNow: finishedNow,
       blocks: blocks,
       backoff: backoff,
       markAt: markAt,
@@ -1530,4 +1536,28 @@
     }
   }
   markSeen();
+
+  /* The answer region is what the stream redraws for this agent, and it carries the status the
+   * page shows; the status word and dot follow it, and a finish seen on screen is marked read. */
+  var statusWord = document.getElementById("agent-status");
+  var shownStatus = statusWord ? statusWord.textContent : "";
+  document.addEventListener("htmx:afterSettle", function () {
+    var region = document.getElementById("answer");
+    var status = region ? region.getAttribute("data-hp-status") : null;
+    if (!status || status === shownStatus) {
+      return;
+    }
+    var word = document.getElementById("agent-status");
+    var dot = document.getElementById("agent-dot");
+    if (word) {
+      word.textContent = status;
+    }
+    if (dot) {
+      dot.className = "dot dot--" + status;
+    }
+    if (logic.finishedNow(shownStatus, status)) {
+      markSeen();
+    }
+    shownStatus = status;
+  });
 })();

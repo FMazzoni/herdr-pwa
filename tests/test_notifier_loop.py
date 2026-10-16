@@ -59,12 +59,16 @@ class Loop:
     clock: Clock
     sender: Sender
     stores: PushStores
+    # herdr stamps each status change with a fresh counter; the seen ledger reads it.
+    seq: int = 1000
 
     def set_status(self, status: str, pane: str = WORKING_PANE) -> None:
         frame = snapshot_frame()
         for agent in agents_of(frame):
             if agent.get("pane_id") == pane:
+                self.seq += 1
                 agent["agent_status"] = status
+                agent["state_change_seq"] = self.seq
         self.wire.replies[SNAPSHOT] = frame
         self.clock.now += PAST_THE_CACHE
 

@@ -3,7 +3,7 @@
 {% block title %}Files &mdash; herdr{% endblock %}
 {% block brand %}{% endblock %}
 {# The tab stays, so the bar never changes shape; it says why there is nothing under it. #}
-{% block topbar %}{{ agent_ui.bar(agent, "files") }}{% endblock %}
+{% block topbar %}{{ agent_ui.bar(agent, "files", agent_status) }}{% endblock %}
 {% block strip %}{% include "stats.html" %}{% endblock %}
 {% block body %}
 <main class="feed-host files">
