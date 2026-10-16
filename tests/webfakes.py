@@ -168,11 +168,17 @@ def build_rig(
 
 
 def write_transcript(root: Path, session: str, records: list[dict[str, JsonValue]]) -> None:
-    """Lay a Claude Code transcript out the way Claude Code does."""
+    """Lay a Claude Code transcript out the way Claude Code does, or replace one whole.
+
+    Claude Code only appends; a walk that rewrites the log swaps a new file in, since writing
+    it in place leaves it empty for a moment, and a page told of that moment draws no chat."""
     project = root / "-tmp"
     project.mkdir(parents=True, exist_ok=True)
     lines = (json.dumps(r) for r in records)
-    (project / f"{session}.jsonl").write_text("\n".join(lines) + "\n")
+    log = project / f"{session}.jsonl"
+    fresh = log.with_name(log.name + ".new")
+    fresh.write_text("\n".join(lines) + "\n")
+    fresh.replace(log)
 
 
 def assistant_says(text: str, uuid: str = "a1") -> dict[str, JsonValue]:
