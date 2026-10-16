@@ -34,6 +34,7 @@ from herdr_pwa.web.routers import (
     workspace,
 )
 from herdr_pwa.web.security import SecurityHeaders
+from herdr_pwa.web.warm import warm_later
 from herdr_pwa.writes.outcome import Pacing
 
 IMMUTABLE: Final = "public, max-age=31536000, immutable"
@@ -54,10 +55,12 @@ def _static_route(app: FastAPI, web: WebState, assets: Assets) -> None:
 
 
 def _lifespan(
-    state: PushState | None, hub: Hub
+    state: PushState | None, hub: Hub, web: WebState
 ) -> Callable[[FastAPI], AbstractAsyncContextManager[None]]:
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
+        if web.settings.prewarm:
+            warm_later(web)
         notifier = state.notifier if state is not None else None
         if notifier is not None:
             notifier.start()
@@ -110,9 +113,13 @@ def create_app(
             lifetime=settings.events_lifetime,
         ),
     )
-    app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=_lifespan(pushing, hub))
+    app = FastAPI(
+        docs_url=None, redoc_url=None, openapi_url=None, lifespan=_lifespan(pushing, hub, web)
+    )
     # The gate rigs reach in to drop every stream, to prove a page falls back and recovers.
     app.state.events = hub
+    # And to its caches, to count what a page read from disk.
+    app.state.web = web
     failures.install(app, pages)
 
     @app.get("/healthz", include_in_schema=False)

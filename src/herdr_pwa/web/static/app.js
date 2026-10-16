@@ -963,6 +963,13 @@
     swapY = event.detail.shouldSwap ? window.scrollY : null;
   });
 
+  /* The page arrives with its view, the question and the composer already drawn, so it lands as
+   * its first swap used to: the dock's room reserved first, which lands a pinned page at the end. */
+  document.addEventListener("DOMContentLoaded", function () {
+    dock();
+    armTimers(document);
+  });
+
   document.addEventListener("htmx:afterSwap", function (event) {
     if (isRead(event.detail)) {
       if (swapEnd) {
@@ -1180,6 +1187,14 @@
       say("New message: " + words(newest).replace(/^Agent:\s*/, "").slice(0, 140));
     }
     newestSaid = key;
+  });
+
+  // The conversation the page opened on is not news either.
+  document.addEventListener("DOMContentLoaded", function () {
+    if (document.querySelector("#agent-view.chat")) {
+      var newest = newestMessage();
+      newestSaid = newest ? unitKey(newest) : "";
+    }
   });
 
   document.addEventListener("htmx:afterSettle", function () {

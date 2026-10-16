@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     transcript_roots: tuple[str, ...] = ()
     # A page of chat counts messages (prompts and agent prose); tool calls ride along inside it.
     chat_messages: int = Field(default=20, gt=0)
+    # On start, read and draw the most urgent Claude agents' chats in the background, so the first
+    # open after a restart does not read a whole transcript while the phone waits.
+    prewarm: bool = True
 
     # The event stream: how often the herd is diffed, how long a quiet stream waits before a
     # heartbeat keeps the proxy from buffering or closing it, and how many pages may hold one.

@@ -1,17 +1,24 @@
-"""The agent drill-in: Chat and Pane tabs and the stats strip, each a fragment the stream refreshes."""
+"""The agent drill-in: Chat and Pane tabs and the stats strip, each a fragment the stream refreshes.
+
+The page itself carries the first drawing of the view, the answer region and the composer, so the
+newest line arrives with the HTML instead of one fetch after the scripts have run.
+"""
 
 from typing import Annotated, Final
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from markupsafe import Markup
 
 from herdr_pwa import panetext
 from herdr_pwa.engine.model import Agent
 from herdr_pwa.engine.tail import Ask, chat_window
-from herdr_pwa.web.chat import chat_view
+from herdr_pwa.engine.transport import EngineError
+from herdr_pwa.web.chat import ChatView, chat_view
 from herdr_pwa.web.deps import WebState, hidden_tick, viewer_guard
 from herdr_pwa.web.herd import find_agent
 from herdr_pwa.web.naming import page_title
+from herdr_pwa.web.routers.compose import answer_region, composer_region
 from herdr_pwa.web.stats import Stats, stats_for
 from herdr_pwa.web.writing import first_note
 
@@ -27,6 +34,44 @@ def read_stats(web: WebState, agent: Agent) -> Stats:
         root=web.settings.transcript_roots or None,
     )
     return stats_for(agent.agent or "", agent.status.value, usage, now=web.wall())
+
+
+def read_chat(
+    web: WebState,
+    agent: Agent,
+    *,
+    start: int | None = None,
+    before: int | None = None,
+    log: str = "",
+) -> ChatView:
+    """The Chat tab's window: the newest page of messages, or the one the reader asked for."""
+    ask = Ask(messages=web.settings.chat_messages, start=start, before=before)
+    page = chat_window(
+        agent.session,
+        agent_kind=agent.agent,
+        ask=ask,
+        tails=web.tails,
+        log=log,
+        root=web.settings.transcript_roots or None,
+    )
+    return chat_view(page)
+
+
+def read_pane(web: WebState, agent: Agent) -> panetext.PaneView:
+    """The Pane tab's mirror of the terminal."""
+    return panetext.pane_view(web.client.mirror_read(agent.target, status=agent.status))
+
+
+def first_view(web: WebState, agent: Agent, tab: str) -> Markup | None:
+    """The view the page opens on, drawn into it; ``None`` if the pane cannot be read now."""
+    if tab == "chat":
+        return web.pages.piece("chat.html", {"agent": agent, "chat": read_chat(web, agent)})
+    try:
+        view = read_pane(web, agent)
+    except EngineError:
+        # The region then fetches itself, and its own failure is drawn where the view would be.
+        return None
+    return web.pages.piece("pane.html", {"agent": agent, "view": view})
 
 
 def build(web: WebState) -> APIRouter:
@@ -49,6 +94,9 @@ def build(web: WebState) -> APIRouter:
             "heading": heading,
             "first": first_note(first),
             "stats": read_stats(web, agent),
+            "view": first_view(web, agent, chosen),
+            "answer": web.pages.piece("answer.html", answer_region(web, agent)),
+            "composer": web.pages.piece("compose.html", composer_region(web, agent)),
         }
         return web.pages.page("agent_page.html", context)
 
@@ -62,23 +110,13 @@ def build(web: WebState) -> APIRouter:
         # `start` keeps what the reader already has, earlier pages included; `before` asks for
         # one more page above it; neither is the newest page of messages.
         agent = find_agent(web, session)
-        ask = Ask(messages=web.settings.chat_messages, start=start, before=before)
-        page = chat_window(
-            agent.session,
-            agent_kind=agent.agent,
-            ask=ask,
-            tails=web.tails,
-            log=log,
-            root=web.settings.transcript_roots or None,
-        )
-        return web.pages.fragment("chat.html", {"agent": agent, "chat": chat_view(page)})
+        chat = read_chat(web, agent, start=start, before=before, log=log)
+        return web.pages.fragment("chat.html", {"agent": agent, "chat": chat})
 
     @router.get("/pane", dependencies=[Depends(hidden_tick)])
     def pane(session: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
         agent = find_agent(web, session)
-        text = web.client.mirror_read(agent.target, status=agent.status)
-        context = {"agent": agent, "view": panetext.pane_view(text)}
-        return web.pages.fragment("pane.html", context)
+        return web.pages.fragment("pane.html", {"agent": agent, "view": read_pane(web, agent)})
 
     @router.get("/stats", dependencies=[Depends(hidden_tick)])
     def stats(session: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]

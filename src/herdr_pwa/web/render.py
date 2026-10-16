@@ -6,6 +6,7 @@ from typing import Final
 
 from fastapi.responses import HTMLResponse
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
+from markupsafe import Markup
 
 from herdr_pwa.web.assets import Assets
 
@@ -42,6 +43,11 @@ class Pages:
     def render(self, name: str, context: Mapping[str, object]) -> str:
         """Render one template to a string."""
         return self.env.get_template(name).render({**self.shared, **context})
+
+    def piece(self, name: str, context: Mapping[str, object]) -> Markup:
+        """A fragment drawn into a page, exactly as its own route would send it."""
+        # Safe as markup: it is this environment's own output, escaped as it was rendered.
+        return Markup(self.render(name, context))  # noqa: S704
 
     def page(self, name: str, context: Mapping[str, object], *, status: int = 200) -> HTMLResponse:
         """A whole document."""

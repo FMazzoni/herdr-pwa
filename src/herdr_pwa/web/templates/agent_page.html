@@ -28,13 +28,17 @@
   {# app.js shows it and remembers the choice; without script the pane just wraps. #}
   <p class="agent__columns" hidden><button type="button" class="button button--toggle" data-hp-columns aria-pressed="false">Keep the columns</button></p>
   {% endif %}
+  {# Drawn here, not fetched after the scripts run: the newest line comes with the page. Each region
+     is the same markup its own route sends, so the stream's redraws replace it like for like. #}
+  {% if view %}{{ view }}{% else %}
   <div id="agent-view" data-hp-poll="{{ base }}/{{ tab }}" data-hp-topic="{{ tab }}:{{ agent.session }}" hx-get="{{ base }}/{{ tab }}" hx-trigger="load" hx-target="this" hx-swap="outerHTML">
     <p class="boot" role="status">Reading&hellip;</p>
   </div>
+  {% endif %}
   {# The question is where the conversation ends, by the thumb, directly above the composer. #}
-  <div class="agent__answer" data-hp-topic="agent:{{ agent.session }}" hx-get="{{ base }}/answer" hx-trigger="load" hx-swap="outerHTML"></div>
+  {{ answer }}
   {# app.js shows it while a question waits below a reader who scrolled up. #}
   <button type="button" class="button jump" id="hp-jump" hidden>Question waiting <span aria-hidden="true">&darr;</span></button>
-  <div hx-get="{{ base }}/compose" hx-trigger="load" hx-swap="outerHTML"></div>
+  {{ composer }}
 </main>
 {% endblock %}

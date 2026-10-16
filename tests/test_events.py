@@ -14,12 +14,14 @@ from herdr_pwa.web.events import Hub, Listener, changed, herd_marks, topics_of
 from tests.catalogue import long_chat
 from tests.webfakes import (
     IDENTITY,
+    READ,
     SNAPSHOT,
     WORKING_SESSION,
     Rig,
     agents_of,
     assistant_says,
     build_rig,
+    read_frame,
     snapshot_frame,
     write_transcript,
 )
@@ -275,7 +277,8 @@ def test_the_route_is_behind_the_gate_and_streams_unbuffered(tmp_path: Path) -> 
 
 @pytest.mark.parametrize("tab", ["chat", "pane"])
 def test_the_agent_page_names_its_topics(tmp_path: Path, tab: str) -> None:
-    rig = build_rig(tmp_path)
+    # The page draws its view, so the Pane tab reads the screen as it is served.
+    rig = build_rig(tmp_path, {SNAPSHOT: snapshot_frame(), READ: read_frame("$ ")})
     page = rig.http.get(f"/agent/{WORKING_SESSION}?tab={tab}").text
     assert f'data-hp-topic="agent:{WORKING_SESSION}"' in page
     assert f'data-hp-topic="{tab}:{WORKING_SESSION}"' in page

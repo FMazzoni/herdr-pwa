@@ -228,7 +228,7 @@ def test_a_pane_address_is_not_an_identity(tmp_path: Path) -> None:
 
 
 def test_the_agent_page_has_both_tabs(tmp_path: Path) -> None:
-    rig = build_rig(tmp_path)
+    rig = build_rig(tmp_path, {SNAPSHOT: snapshot_frame(), READ: read_frame("$ ")})
     body = rig.http.get(f"/agent/{WORKING_SESSION}?tab=pane").text
     assert f'hx-get="/agent/{WORKING_SESSION}/pane"' in body
     assert "?tab=chat" in body
@@ -337,12 +337,13 @@ def test_back_belongs_to_the_herd_in_the_markup(tmp_path: Path) -> None:
     cards = rig.http.get("/feed", headers=FRAGMENT).text
     assert f'href="/agent/{WORKING_SESSION}">' in cards
     page = rig.http.get(f"/agent/{WORKING_SESSION}").text
-    assert page.count("data-hp-replace") == 5  # leave, Files, End, two tabs
+    # Leave, Files, End, two tabs, and the answer region's way to the Pane should a tap be lost.
+    assert page.count("data-hp-replace") == 6
     assert f'href="/agent/{WORKING_SESSION}?tab=pane" data-hp-replace' in page
 
 
 def test_the_view_switch_lives_in_the_top_bar_and_the_title_scrolls(tmp_path: Path) -> None:
-    rig = build_rig(tmp_path)
+    rig = build_rig(tmp_path, {SNAPSHOT: snapshot_frame(), READ: read_frame("$ ")})
     page = rig.http.get(f"/agent/{WORKING_SESSION}?tab=pane").text
     bar = page[page.index('<header class="topbar">') : page.index("</header>")]
     assert '<nav class="tabs tabs--3" aria-label="View">' in bar
