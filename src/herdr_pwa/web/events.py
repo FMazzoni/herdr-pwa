@@ -16,7 +16,15 @@ from pathlib import Path
 from typing import Final
 
 from herdr_pwa.decisions import effective_status
-from herdr_pwa.engine import AgentStatus, CachedSnapshot, EngineError, EventStream, Snapshot, locate
+from herdr_pwa.engine import (
+    AgentStatus,
+    CachedSnapshot,
+    EngineError,
+    EventStream,
+    Snapshot,
+    has_byte_frontier,
+    locate,
+)
 from herdr_pwa.web.deps import WebState
 from herdr_pwa.web.herd import unread_of
 
@@ -61,7 +69,7 @@ def herd_marks(
             continue
         marks[f"agent:{agent.session}"] = row
         marks[f"pane:{agent.session}"] = (agent.target, agent.status.value, agent.revision)
-        if agent.agent != "claude":
+        if not has_byte_frontier(agent.agent):
             # No byte frontier to watch: the screen moving is the best sign the store did.
             marks[f"chat:{agent.session}"] = (agent.status.value, agent.revision)
             marks[f"stats:{agent.session}"] = (agent.status.value, agent.revision)
@@ -278,11 +286,11 @@ class Hub:
             return None
 
     def _chats(self, viewed: frozenset[str], kinds: Mapping[str, tuple[str, str]]) -> Marks:
-        """A claude chat's mark is its transcript's identity and size: one stat, no read."""
+        """An appended-to log's mark is its identity and size: one stat, no read."""
         marks: Marks = {}
         for session in viewed:
             kind, status = kinds.get(session, ("", ""))
-            if kind == "claude":
+            if has_byte_frontier(kind):
                 stat = self._stat(session)
                 marks[f"chat:{session}"] = stat
                 # The strip also says whether a turn is running, which the log alone cannot.

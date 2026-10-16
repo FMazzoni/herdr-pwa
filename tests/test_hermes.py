@@ -8,9 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from herdr_pwa.engine import HistoryState, Source, Speaker, TranscriptTurn
+from herdr_pwa.engine import HistoryState, Source, Speaker, TranscriptTurn, harness_kinds
 from tests.engine_seam import (
-    AGENT_KINDS,
     HERMES_DB,
     HermesAdapter,
     Window,
@@ -108,7 +107,7 @@ def turns(roots: list[Path]) -> list[TranscriptTurn]:
 
 def test_hermes_is_a_kind_the_chat_tab_can_answer_for() -> None:
     """Being absent from either of these is what left the Chat tab silent."""
-    assert "hermes" in AGENT_KINDS
+    assert "hermes" in harness_kinds()
     assert adapter_for("hermes") is not None
 
 

@@ -1,5 +1,6 @@
 """opencode's store, in either of its two layouts, read as one conversation."""
 
+import json
 import re
 from collections.abc import Sequence
 from datetime import UTC, datetime
@@ -17,11 +18,13 @@ from herdr_pwa.engine.transcript import (
     MAX_SUMMARY_CHARS,
     MAX_USAGE_BYTES,
     Gather,
+    Harness,
     HistoryState,
     ModelRef,
     SessionUsage,
     Source,
     Speaker,
+    StartRecipe,
     TranscriptAdapter,
     TranscriptPage,
     TranscriptTurn,
@@ -33,6 +36,9 @@ from herdr_pwa.engine.transcript import (
     remember,
 )
 from herdr_pwa.validation import OR_NONE, Count, Flag, Number, Text
+
+# opencode auto-approves bash by default, so its agent would never block and never notify.
+OPENCODE_ASK: Final = json.dumps({"permission": {"bash": "ask"}}, separators=(",", ":"))
 
 OPENCODE_ROOT: Final = "~/.local/share/opencode"
 
@@ -705,6 +711,10 @@ class OpencodeAdapter(TranscriptAdapter):
     """opencode's history: either normalised store, paged by POSITION not byte."""
 
     default_roots: ClassVar[tuple[str, ...]] = (OPENCODE_ROOT,)
+    # OPENCODE_CONFIG_CONTENT is merged over the project's config: https://opencode.ai/docs/config/
+    harness: ClassVar[Harness] = Harness(
+        "opencode", StartRecipe("opencode", env={"OPENCODE_CONFIG_CONTENT": OPENCODE_ASK})
+    )
 
     @override
     def page(self, source: Source, window: Window) -> TranscriptPage:

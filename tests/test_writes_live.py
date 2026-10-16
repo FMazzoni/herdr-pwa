@@ -18,7 +18,6 @@ from herdr_pwa.engine import (
 from herdr_pwa.writes.answer import KeyAsk, KeySent, send_key, send_starting_key
 from herdr_pwa.writes.keys import control_token
 from herdr_pwa.writes.lifecycle import (
-    OPENCODE_ASK,
     AgentEnded,
     AgentStarted,
     EndAsk,
@@ -37,6 +36,7 @@ from herdr_pwa.writes.workspaces import (
     create_workspace,
     rename_workspace,
 )
+from tests.engine_seam import OPENCODE_ASK
 from tests.waiting import until
 
 # Read at import, before the autouse fixture points HOME at a temp dir.

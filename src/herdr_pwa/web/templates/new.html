@@ -14,6 +14,7 @@
     {% call ui.field("Kind") %}
       <select name="kind">{% for kind in kinds %}<option value="{{ kind }}"{% if kind == values.get('kind') %} selected{% endif %}>{{ kind }}</option>{% endfor %}</select>
     {% endcall %}
+    {% for missing in stranded %}<p class="field__note">{{ missing.kind }} is installed at {{ missing.stranded }} but isn't on this service's PATH, so it can't be started from here.</p>{% endfor %}
     <p class="field__note">opencode starts with bash set to ask, so it stops and asks before running a command.</p>
     {% call ui.field("Model (optional)") %}<input name="model" value="{{ values.get('model', '') }}" list="models">{% endcall %}
     <datalist id="models">{% for kind, names in models.items() %}{% for name in names %}<option value="{{ name }}">{{ kind }}</option>{% endfor %}{% endfor %}</datalist>

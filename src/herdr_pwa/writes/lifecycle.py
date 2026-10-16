@@ -1,14 +1,14 @@
 """Starting an agent in a new tab, and ending one: the write with no undo."""
 
-import json
 import logging
 import os
 import re
-from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from collections.abc import Callable, Iterable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
+from herdr_pwa import statedir
 from herdr_pwa.audit import CLOSE, START, Write
 from herdr_pwa.engine import (
     AgentStatus,
@@ -20,7 +20,10 @@ from herdr_pwa.engine import (
     Seat,
     SessionId,
     StartedAgent,
+    StartRecipe,
     as_pane_id,
+    harness_kinds,
+    harness_of,
 )
 from herdr_pwa.writes.guard import destructive_reason, unsendable
 from herdr_pwa.writes.outcome import Pacing
@@ -45,31 +48,17 @@ _MODEL_ID: Final = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,95}$")
 SESSION_WAIT: Final = 2.0
 SESSION_POLL: Final = 0.5
 
-# opencode auto-approves bash by default, so its agent would never block and never notify.
-OPENCODE_ASK: Final = json.dumps({"permission": {"bash": "ask"}}, separators=(",", ":"))
+# Where a person's own installs land when no package manager puts them on the system PATH. A
+# service started with a narrower PATH than a login shell misses these, and offered nothing.
+USER_BIN_DIRS: Final = ("~/.local/bin", "~/bin", "~/.bun/bin", "~/.npm-global/bin")
+# What `serve` records of its own PATH, so `doctor` run from a shell can judge the service's.
+SERVICE_PATH_FILENAME: Final = "service-path"
 
 
-@dataclass(frozen=True, slots=True)
-class Harness:
-    """How one agent kind is launched: its model flag, the models offered, its environment."""
-
-    kind: str
-    model_flag: str = "--model"
-    # Empty means this box cannot enumerate them, so no model is ever put on the argv.
-    models: tuple[str, ...] = ()
-    env: Mapping[str, str] = field(default_factory=dict[str, str])
-
-    def args(self, model: str) -> tuple[str, ...]:
-        """What follows the bare ``--`` on the agent's command line."""
-        return (self.model_flag, model) if model else ()
-
-
-HARNESSES: Final[Mapping[str, Harness]] = {
-    "claude": Harness("claude", models=("fable", "opus", "sonnet", "haiku")),
-    # OPENCODE_CONFIG_CONTENT is merged over the project's config: https://opencode.ai/docs/config/
-    "opencode": Harness("opencode", env={"OPENCODE_CONFIG_CONTENT": OPENCODE_ASK}),
-    "hermes": Harness("hermes"),
-}
+def launch_of(kind: str) -> StartRecipe | None:
+    """How *kind* is started from the phone, or ``None`` for a kind with no harness here."""
+    harness = harness_of(kind)
+    return harness.launch if harness is not None else None
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,21 +102,90 @@ def agent_name(typed: str) -> str:
     return folded if _AGENT_NAME.match(folded) else ""
 
 
-def on_path(name: str) -> str | None:
-    """The executable called ``name`` on this process's PATH, found without spawning anything."""
-    for entry in os.environ.get("PATH", os.defpath).split(os.pathsep):
-        candidate = Path(entry) / name
+def found_in(name: str, dirs: Iterable[str]) -> str | None:
+    """The executable called ``name`` in the first of *dirs* holding one, without spawning."""
+    for entry in dirs:
+        if not entry:
+            continue
+        candidate = Path(entry).expanduser() / name
         try:
-            if entry and candidate.is_file() and os.access(candidate, os.X_OK):
+            if candidate.is_file() and os.access(candidate, os.X_OK):
                 return str(candidate)
         except OSError:
             continue
     return None
 
 
+def on_path(name: str) -> str | None:
+    """The executable called ``name`` on this process's PATH, found without spawning anything."""
+    return found_in(name, os.environ.get("PATH", os.defpath).split(os.pathsep))
+
+
 def offered_kinds(which: Callable[[str], str | None] = on_path) -> tuple[str, ...]:
     """The harnesses this app knows how to launch that are on this machine's PATH."""
-    return tuple(kind for kind in HARNESSES if which(kind))
+    return tuple(kind for kind in harness_kinds() if which(_binary(kind)))
+
+
+def _binary(kind: str) -> str:
+    launch = launch_of(kind)
+    # herdr's --kind names the canonical executable, so a kind with no harness here is its own.
+    return launch.binary if launch is not None else kind
+
+
+@dataclass(frozen=True, slots=True)
+class Availability:
+    """Whether one kind herdr can run would start from here, and why not when it would not."""
+
+    kind: str
+    # This app has a harness for it: its chat, usage and launch are known.
+    known: bool
+    # Where the PATH asked about finds its executable, or ``""``.
+    found: str = ""
+    # Where it is installed for the user while that PATH cannot see it, or ``""``.
+    stranded: str = ""
+
+    @property
+    def offered(self) -> bool:
+        """The new-agent form offers it."""
+        return self.known and bool(self.found)
+
+
+def availability(kind: str, path: str) -> Availability:
+    """*kind* judged against the PATH string *path*, and against the user's own install dirs."""
+    binary = _binary(kind)
+    found = found_in(binary, path.split(os.pathsep)) or ""
+    stranded = "" if found else found_in(binary, USER_BIN_DIRS) or ""
+    return Availability(kind, known=launch_of(kind) is not None, found=found, stranded=stranded)
+
+
+def stranded_kinds() -> tuple[Availability, ...]:
+    """The harnesses here that are installed for the user but not on this process's PATH."""
+    search = os.environ.get("PATH", os.defpath)
+    return tuple(
+        found
+        for found in (availability(kind, search) for kind in harness_kinds())
+        if found.stranded
+    )
+
+
+def record_service_path(state_dir: Path) -> None:
+    """Write this process's PATH where ``doctor`` reads it; a failure is logged, never raised."""
+    try:
+        _ = statedir.ensure_dir(state_dir)
+        statedir.write_secret(
+            state_dir / SERVICE_PATH_FILENAME, os.environ.get("PATH", os.defpath) + "\n"
+        )
+    except OSError as exc:
+        log.warning("could not record the service's PATH for doctor: %s", exc)
+
+
+def service_path(state_dir: Path) -> str | None:
+    """The PATH the service last started with, or ``None`` when it never said."""
+    try:
+        text = statedir.read_text(state_dir / SERVICE_PATH_FILENAME)
+    except OSError:
+        return None
+    return None if text is None else text.strip()
 
 
 def _unusable_cwd(cwd: str) -> bool:
@@ -140,7 +198,7 @@ def _unusable_cwd(cwd: str) -> bool:
 
 
 def _form_refusal(request: StartRequest, kinds: tuple[str, ...]) -> Refusal | None:
-    harness = HARNESSES.get(request.kind) if request.kind in kinds else None
+    harness = launch_of(request.kind) if request.kind in kinds else None
     checks = (
         (not agent_name(request.name), Refusal.BAD_NAME),
         (harness is None, Refusal.BAD_KIND),
@@ -189,7 +247,9 @@ def _await_session(client: HerdrClient, started: StartedAgent, pacing: Pacing) -
 
 
 def _launch(client: HerdrClient, request: StartRequest, name: str) -> StartedAgent | Refused:
-    harness = HARNESSES[request.kind]
+    harness = launch_of(request.kind)
+    if harness is None:
+        return Refused(Refusal.BAD_KIND, "created")
     try:
         pane = client.create_tab(
             NewTab(request.workspace_id, request.cwd.strip(), name, env=harness.env)
@@ -197,7 +257,7 @@ def _launch(client: HerdrClient, request: StartRequest, name: str) -> StartedAge
     except EngineError as exc:
         return Refused(refusal_for(exc), "created", detail=str(exc))
     try:
-        return client.start_agent(Launch(name, harness.kind, pane, harness.args(request.model)))
+        return client.start_agent(Launch(name, request.kind, pane, harness.args(request.model)))
     except EngineError as exc:
         _abandon(client, pane)
         return Refused(refusal_for(exc), "created", detail=str(exc))

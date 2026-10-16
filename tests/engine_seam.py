@@ -18,6 +18,7 @@ from herdr_pwa.engine.generated.event import EventKind
 from herdr_pwa.engine.hermes import HERMES_DB, HermesAdapter
 from herdr_pwa.engine.notices import HIDDEN, PeerMessage, RecordOrigin, TaskNotice, injected
 from herdr_pwa.engine.opencode import (
+    OPENCODE_ASK,
     OPENCODE_DB,
     OPENCODE_ROOT,
     OPENCODE_STORAGE_ROOT,
@@ -26,7 +27,6 @@ from herdr_pwa.engine.opencode import (
 )
 from herdr_pwa.engine.store import readonly_uri
 from herdr_pwa.engine.transcript import (
-    AGENT_KINDS,
     MAX_NOTE_CHARS,
     MAX_PROSE_CHARS,
     MAX_RESULT_CHARS,
@@ -57,7 +57,6 @@ head_records = transcript._head_records  # pyright: ignore[reportPrivateUsage]
 head_window = transcript._head_window  # pyright: ignore[reportPrivateUsage]
 
 __all__ = [
-    "AGENT_KINDS",
     "BACKOFF_CAP",
     "EVENT_SUBSCRIBE",
     "HERMES_DB",
@@ -68,6 +67,7 @@ __all__ = [
     "MAX_REQUEST_BYTES",
     "MAX_RESULT_CHARS",
     "MAX_STRAY_FRAMES",
+    "OPENCODE_ASK",
     "OPENCODE_DB",
     "OPENCODE_ROOT",
     "OPENCODE_STORAGE_ROOT",

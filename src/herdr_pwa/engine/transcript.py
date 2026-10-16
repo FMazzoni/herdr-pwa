@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import json
 import os
-from collections.abc import Callable, Iterable, Iterator, Sequence
-from dataclasses import dataclass, replace
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, ClassVar, Final, NamedTuple, Protocol, override
@@ -13,6 +13,7 @@ from typing import Annotated, ClassVar, Final, NamedTuple, Protocol, override
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter, ValidationError
 
 from herdr_pwa.diff import EditArgs, FileDiff, tool_diff
+from herdr_pwa.engine.generated.request import IntegrationTarget
 from herdr_pwa.engine.model import Agent, SessionId
 from herdr_pwa.engine.notices import (
     Hidden,
@@ -26,7 +27,8 @@ from herdr_pwa.validation import OR_NONE, Count, Flag, Text
 
 CLAUDE_TRANSCRIPT_ROOT: Final = "~/.claude/projects"
 
-AGENT_KINDS: Final = ("claude", "opencode", "hermes")
+# Every kind herdr itself can run, whether or not a harness here reads it.
+HERDR_KINDS: Final = tuple(target.value for target in IntegrationTarget)
 
 # A path, or the string an env var carries.
 type OneRoot = str | os.PathLike[str]
@@ -396,7 +398,7 @@ def claude_record(raw: bytes) -> ClaudeRecord | None:
 def _for_kind(entry: str, kind: str) -> str:
     """*entry* as it applies to *kind*: unqualified, qualified for it, or empty."""
     head, sep, rest = entry.partition(":")
-    if not sep or head.strip().lower() not in AGENT_KINDS:
+    if not sep or head.strip().lower() not in _registry():
         return entry
     return rest.strip() if head.strip().lower() == kind else ""
 
@@ -1102,10 +1104,43 @@ def fold_tool_results(turns: Iterable[TranscriptTurn]) -> list[TranscriptTurn]:
     return folded
 
 
+@dataclass(frozen=True, slots=True)
+class StartRecipe:
+    """How herdr starts one harness from the phone: its executable, model flag, models, environment."""
+
+    # herdr's ``--kind`` names the canonical executable, so this is what must be on PATH.
+    binary: str
+    model_flag: str = "--model"
+    # Empty means this box cannot enumerate them, so no model is ever put on the argv.
+    models: tuple[str, ...] = ()
+    env: Mapping[str, str] = field(default_factory=dict[str, str])
+
+    def args(self, model: str) -> tuple[str, ...]:
+        """What follows the bare ``--`` on the agent's command line."""
+        return (self.model_flag, model) if model else ()
+
+
+@dataclass(frozen=True, slots=True)
+class Harness:
+    """What one harness is and can do. Callers ask these, never the kind's name."""
+
+    # herdr's name for it, the key the registry is looked up by.
+    kind: str
+    launch: StartRecipe
+    # One append-only JSONL per session paged by byte: the tail and usage caches read it in place
+    # and grow it by what was appended, and a stat of the file says whether it moved.
+    byte_frontier: bool = False
+    # Whether the tally's context figure is the prompt's size, rather than nothing stored.
+    stores_context: bool = True
+    # Whether the tally's cost is the harness's own price; one recording no money reads zero.
+    prices_itself: bool = True
+
+
 class TranscriptAdapter(Protocol):
-    """What a harness must answer for its conversation to reach the Chat tab."""
+    """What a harness must answer for its conversation to reach the Chat tab, and what it is."""
 
     default_roots: ClassVar[tuple[str, ...]]
+    harness: ClassVar[Harness]
 
     def page(self, source: Source, window: Window) -> TranscriptPage:
         """The *window*'s turns or messages, ending at frontier ``before``, oldest first."""
@@ -1128,6 +1163,13 @@ class ClaudeAdapter(TranscriptAdapter):
     """Claude Code: one JSONL per session, and the frontier is a BYTE OFFSET."""
 
     default_roots: ClassVar[tuple[str, ...]] = (CLAUDE_TRANSCRIPT_ROOT,)
+    harness: ClassVar[Harness] = Harness(
+        "claude",
+        StartRecipe("claude", models=("fable", "opus", "sonnet", "haiku")),
+        byte_frontier=True,
+        # Claude Code writes tokens and no money, so a cost here would be invented.
+        prices_itself=False,
+    )
 
     @override
     def page(self, source: Source, window: Window) -> TranscriptPage:
@@ -1203,15 +1245,35 @@ def _registry() -> dict[str, TranscriptAdapter]:
         from herdr_pwa.engine.hermes import HermesAdapter  # noqa: PLC0415
         from herdr_pwa.engine.opencode import OpencodeAdapter  # noqa: PLC0415
 
-        _ADAPTERS["claude"] = ClaudeAdapter()
-        _ADAPTERS["opencode"] = OpencodeAdapter()
-        _ADAPTERS["hermes"] = HermesAdapter()
+        adapters: tuple[TranscriptAdapter, ...] = (
+            ClaudeAdapter(),
+            OpencodeAdapter(),
+            HermesAdapter(),
+        )
+        _ADAPTERS.update({adapter.harness.kind: adapter for adapter in adapters})
     return _ADAPTERS
 
 
 def adapter_for(agent_kind: str | None) -> TranscriptAdapter | None:
     """The adapter for *agent_kind*, or ``None`` if there is not one."""
     return _registry().get((agent_kind or "").strip().lower())
+
+
+def harness_of(agent_kind: str | None) -> Harness | None:
+    """What *agent_kind* is and can do, or ``None`` for a kind with no harness here."""
+    adapter = adapter_for(agent_kind)
+    return adapter.harness if adapter is not None else None
+
+
+def harness_kinds() -> tuple[str, ...]:
+    """Every kind with an adapter here, in the order the new-agent form offers them."""
+    return tuple(_registry())
+
+
+def has_byte_frontier(agent_kind: str | None) -> bool:
+    """Whether *agent_kind*'s store is a log grown by appended bytes; ``False`` with no adapter."""
+    harness = harness_of(agent_kind)
+    return harness is not None and harness.byte_frontier
 
 
 def history(source: Source, window: Window = NEWEST) -> TranscriptPage:

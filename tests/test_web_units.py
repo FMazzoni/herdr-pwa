@@ -30,6 +30,7 @@ from herdr_pwa.web.naming import card_question, card_title, display_title, page_
 from herdr_pwa.web.routers.compose import key_name, said
 from herdr_pwa.web.seams import Seams
 from herdr_pwa.writes.answer import KeySent
+from herdr_pwa.writes.lifecycle import record_service_path
 from herdr_pwa.writes.outcome import Evidence, Outcome
 from tests.webfakes import FIXTURES, SNAPSHOT, FakeWire, agents_of, snapshot_frame
 
@@ -261,6 +262,34 @@ def test_doctor_says_when_push_last_sent_failed_and_held_back(tmp_path: Path) ->
     code, out = _doctor(tmp_path, frame, now)
     assert code == 0
     assert "push: last sent 3m ago · last error 3h ago (BadJwtToken) · last quieted never" in out
+
+
+def test_doctor_judges_each_harness_on_the_services_path_not_its_own(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    home_bin = tmp_path / "home" / ".local" / "bin"
+    service_bin = tmp_path / "service-bin"
+    for where, name in ((home_bin, "hermes"), (service_bin, "claude")):
+        where.mkdir(parents=True, exist_ok=True)
+        _ = (where / name).write_text("#!/bin/sh\n")
+        (where / name).chmod(0o700)
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("PATH", str(service_bin))
+    record_service_path(tmp_path)
+    # doctor runs from a shell that CAN see hermes; the verdict is still the service's.
+    monkeypatch.setenv("PATH", f"{service_bin}:{home_bin}")
+    code, out = _doctor(tmp_path, FakeWire({SNAPSHOT: _frame(EXPECTED_PROTOCOL)}))
+    assert code == 0
+    assert "harnesses, on the service's PATH:" in out
+    assert f"  claude: offered, at {service_bin / 'claude'}" in out
+    assert f"  hermes: installed at {home_bin / 'hermes'}, not on the service's PATH  WARN" in out
+    assert "  codex: no harness here" in out
+    assert out.rstrip().endswith("doctor: OK")
+
+
+def test_doctor_says_when_the_service_never_recorded_its_path(tmp_path: Path) -> None:
+    _, out = _doctor(tmp_path, FakeWire({SNAPSHOT: _frame(EXPECTED_PROTOCOL)}))
+    assert "the service never recorded its PATH, so judged on this shell's" in out
 
 
 def test_doctor_fails_on_runner_drift(tmp_path: Path) -> None:

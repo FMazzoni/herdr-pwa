@@ -20,14 +20,16 @@ from herdr_pwa.engine import (
 )
 from herdr_pwa.writes.guard import MAX_PROMPT_CHARS
 from herdr_pwa.writes.lifecycle import (
-    OPENCODE_ASK,
     AgentEnded,
     AgentStarted,
     EndAsk,
     StartRequest,
     agent_name,
+    availability,
     end_agent,
+    offered_kinds,
     start_agent,
+    stranded_kinds,
 )
 from herdr_pwa.writes.prompt import (
     SETTLED_LOOKS,
@@ -45,6 +47,7 @@ from herdr_pwa.writes.workspaces import (
     rename_workspace,
 )
 from tests._fake_herd import P3, S1, S2, SETTLED, FakeHerd, Rig, capture, echoed, rig
+from tests.engine_seam import OPENCODE_ASK
 
 NEW = "a1b2c3d4-0000-4000-8000-000000000001"
 
@@ -93,6 +96,38 @@ def test_opencode_is_started_with_bash_set_to_ask(tmp_path: Path) -> None:
     [tab] = r.herd.writes("tab.create")
     assert tab["env"] == {"OPENCODE_CONFIG_CONTENT": OPENCODE_ASK}
     assert '"bash":"ask"' in OPENCODE_ASK
+
+
+def _stand_in(where: Path, name: str) -> Path:
+    where.mkdir(parents=True, exist_ok=True)
+    binary = where / name
+    _ = binary.write_text("#!/bin/sh\n")
+    binary.chmod(0o700)
+    return binary
+
+
+def test_a_harness_installed_for_the_user_but_off_the_path_is_stranded_not_dropped(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    mine = _stand_in(tmp_path / "home" / ".local" / "bin", "claude")
+    service = tmp_path / "service-bin"
+    _ = _stand_in(service, "opencode")
+    monkeypatch.setenv("PATH", str(service))
+    assert offered_kinds() == ("opencode",)
+    [stranded] = stranded_kinds()
+    assert (stranded.kind, stranded.stranded, stranded.offered) == ("claude", str(mine), False)
+    # Once the service can see it, it is offered and no longer stranded.
+    on_both = f"{service}:{mine.parent}"
+    assert availability("claude", on_both).offered
+    monkeypatch.setenv("PATH", on_both)
+    assert stranded_kinds() == ()
+
+
+def test_a_kind_herdr_runs_with_no_harness_here_is_never_offered(tmp_path: Path) -> None:
+    found = availability("codex", str(_stand_in(tmp_path, "codex").parent))
+    assert (found.known, found.offered) == (False, False)
+    assert found.found.endswith("/codex")
 
 
 def test_hermes_starts_with_no_session_yet(tmp_path: Path) -> None:
