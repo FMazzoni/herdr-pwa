@@ -1,12 +1,15 @@
 """The web layer's pure parts: the prose tree, card naming, the failure table, doctor."""
 
 import dataclasses
+import os
 from pathlib import Path
 from typing import Final
 
 import pytest
+from jinja2 import TemplateNotFound
 from pydantic import JsonValue
 
+from herdr_pwa import statedir
 from herdr_pwa.cli import doctor
 from herdr_pwa.decisions import AgentRow, decide_screen
 from herdr_pwa.engine import (
@@ -27,8 +30,10 @@ from herdr_pwa.web.chat import is_long
 from herdr_pwa.web.failures import FAILURES, failure_for
 from herdr_pwa.web.markdown import TAGS, MdNode, render_tree
 from herdr_pwa.web.naming import card_question, card_title, display_title, page_title
+from herdr_pwa.web.render import Pages, read_templates
 from herdr_pwa.web.routers.compose import key_name, said
 from herdr_pwa.web.seams import Seams
+from herdr_pwa.web.started import STARTED_FILENAME, StartedTree, fingerprint, record_started
 from herdr_pwa.writes.answer import KeySent
 from herdr_pwa.writes.lifecycle import record_service_path
 from herdr_pwa.writes.outcome import Evidence, Outcome
@@ -215,6 +220,18 @@ def test_assets_hash_every_static_file() -> None:
     assert assets.url("app.js").endswith(assets.files["app.js"].digest)
 
 
+def test_a_template_changed_on_disk_after_start_is_not_what_is_served(tmp_path: Path) -> None:
+    # New markup under old view models is a 500 under StrictUndefined; a restart shows it instead.
+    _ = (tmp_path / "t.html").write_text("old {{ x }}")
+    pages = Pages(Assets.load(), read_templates(tmp_path))
+    assert pages.render("t.html", {"x": 1}) == "old 1"
+    _ = (tmp_path / "t.html").write_text("new {{ y }}")
+    _ = (tmp_path / "u.html").write_text("added")
+    assert pages.render("t.html", {"x": 1}) == "old 1"
+    with pytest.raises(TemplateNotFound):
+        _ = pages.render("u.html", {})
+
+
 def test_no_template_or_script_writes_inline_style_or_markup() -> None:
     templates = Path(STATIC_DIR).parent / "templates"
     for path in templates.iterdir():
@@ -290,6 +307,63 @@ def test_doctor_judges_each_harness_on_the_services_path_not_its_own(
 def test_doctor_says_when_the_service_never_recorded_its_path(tmp_path: Path) -> None:
     _, out = _doctor(tmp_path, FakeWire({SNAPSHOT: _frame(EXPECTED_PROTOCOL)}))
     assert "the service never recorded its PATH, so judged on this shell's" in out
+
+
+def test_doctor_passes_a_service_whose_tree_has_not_moved(tmp_path: Path) -> None:
+    record_started(tmp_path, at=1_800_000_000.0)
+    code, out = _doctor(tmp_path, FakeWire({SNAPSHOT: _frame(EXPECTED_PROTOCOL)}))
+    assert code == 0
+    assert ": unchanged  ok" in out
+    assert out.rstrip().endswith("doctor: OK")
+
+
+def _started_from(state_dir: Path, tree: Path) -> None:
+    started = StartedTree(directory=str(tree), fingerprint=fingerprint(tree), at=1_800_000_000.0)
+    statedir.write_secret(state_dir / STARTED_FILENAME, started.model_dump_json())
+
+
+def test_doctor_fails_when_the_tree_moved_since_the_service_started(tmp_path: Path) -> None:
+    tree = tmp_path / "src"
+    tree.mkdir()
+    _ = (tree / "page.html").write_text("{{ x }}")
+    _started_from(tmp_path, tree)
+    _ = (tree / "page.html").write_text("{{ y }}")
+    code, out = _doctor(tmp_path, FakeWire({SNAPSHOT: _frame(EXPECTED_PROTOCOL)}))
+    assert code == 1
+    assert f"service tree at {tree}" in out
+    assert f"now {fingerprint(tree)}, so it serves old code; restart it  FAIL" in out
+    assert out.rstrip().endswith("doctor: FAIL")
+
+
+def test_doctor_fails_when_the_tree_the_service_started_from_is_gone(tmp_path: Path) -> None:
+    tree = tmp_path / "src"
+    tree.mkdir()
+    _started_from(tmp_path, tree)
+    tree.rmdir()
+    code, out = _doctor(tmp_path, FakeWire({SNAPSHOT: _frame(EXPECTED_PROTOCOL)}))
+    assert code == 1
+    assert "unreadable now (no such directory)  FAIL" in out
+
+
+def test_doctor_says_when_the_service_never_recorded_its_tree(tmp_path: Path) -> None:
+    code, out = _doctor(tmp_path, FakeWire({SNAPSHOT: _frame(EXPECTED_PROTOCOL)}))
+    assert code == 0
+    assert "service tree: never recorded, so a stale service is not ruled out" in out
+
+
+def test_the_tree_fingerprint_follows_content_not_mtimes_or_bytecode(tmp_path: Path) -> None:
+    # just check rewrites mtimes, and importing writes __pycache__: neither is a code change.
+    _ = (tmp_path / "a.py").write_text("x = 1\n")
+    before = fingerprint(tmp_path)
+    os.utime(tmp_path / "a.py", (0, 0))
+    (tmp_path / "__pycache__").mkdir()
+    _ = (tmp_path / "__pycache__" / "a.cpython-313.pyc").write_bytes(b"\0")
+    assert fingerprint(tmp_path) == before
+    _ = (tmp_path / "a.py").write_text("x = 2\n")
+    assert fingerprint(tmp_path) != before
+    _ = (tmp_path / "a.py").write_text("x = 1\n")
+    _ = (tmp_path / "b.py").write_text("")
+    assert fingerprint(tmp_path) != before
 
 
 def test_doctor_fails_on_runner_drift(tmp_path: Path) -> None:

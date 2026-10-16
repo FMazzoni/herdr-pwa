@@ -18,7 +18,7 @@ from herdr_pwa.web.deps import WebState, viewer_guard
 from herdr_pwa.web.events import Hub, HubConfig
 from herdr_pwa.web.gate import IdentityGate
 from herdr_pwa.web.notifier import HerdSource, PushState, open_push
-from herdr_pwa.web.render import Pages
+from herdr_pwa.web.render import TEMPLATES_DIR, Pages, read_templates
 from herdr_pwa.web.routers import (
     agent,
     compose,
@@ -88,7 +88,12 @@ def _lifespan(
 def create_app(settings: Settings, seams: Seams) -> FastAPI:
     """Build the web application around one runner client, one snapshot cache and push."""
     assets = Assets.load()
-    pages = Pages(assets, device_report=settings.device_report, fallback=settings.events_fallback)
+    pages = Pages(
+        assets,
+        read_templates(TEMPLATES_DIR),
+        device_report=settings.device_report,
+        fallback=settings.events_fallback,
+    )
     web, pushing = _web_state(settings, seams, pages)
     background = _Background(Hub(web, _hub_config(settings)), pushing)
     app = FastAPI(
