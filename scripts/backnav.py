@@ -236,9 +236,23 @@ def files_tab(walk: Walk, fake: FakeHerd, home: Path) -> None:
     walk.back_to_feed("the Files tab")
 
 
+def explorer(walk: Walk, fake: FakeHerd, home: Path) -> None:
+    """The feed's files link pushes once; a repository's card inside the explorer replaces."""
+    repo = make_repo(home / "repo")
+    fake.put(P3, S1, cwd=str(repo), foreground_cwd=str(repo))
+    walk.home()
+    base = f"/files/{root_id(repo)}"
+    walk.click('a.topbar__link[href="/files"]')
+    walk.depth(walk.wait("/files", ".cards"), 1, "opening the explorer")
+    walk.click(f'a.card__link[href="{base}"]')
+    walk.depth(walk.wait(base, "main.files"), 1, "opening a repository")
+    walk.back_to_feed("a repository opened from the explorer")
+
+
 WALKS: tuple[tuple[str, Callable[[Walk, FakeHerd, Path], None]], ...] = (
     ("tabs", lambda walk, _fake, _home: tabs_and_end(walk)),
     ("files", files_tab),
+    ("explorer", explorer),
     ("write", lambda walk, _fake, _home: write_sheet(walk)),
     ("door", lambda walk, fake, _home: door(walk, fake)),
 )

@@ -9,7 +9,7 @@
 </p>
 {% if gated %}
 {% call ui.banner("held", what="This file may hold secrets", why="Its name is one secrets are kept under, so its change was not read.") %}{% endcall %}
-<p class="files__toggle"><a class="button" href="{{ nav.href('diff', rel, reveal=1) }}" {{ replace() }}>Show it anyway</a></p>
+<p class="files__toggle">{{ ui.button("Show it anyway", href=nav.href('diff', rel, reveal=1), attrs=replace()) }}</p>
 {% elif diff.note %}
 <p class="empty">{{ diff.note }}</p>
 {% elif not diff.lines %}

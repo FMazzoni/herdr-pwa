@@ -1,12 +1,13 @@
 {% extends "files_base.html" %}
 {% from "md.html" import md %}
+{% import "_ui.html" as ui %}
 {% block title %}{{ file.name }} &mdash; herdr{% endblock %}
 {% macro pager() %}
 {% set last = file.lines[-1].n if file.lines else file.first %}
 <nav class="pager" aria-label="Pages">
-  {% if file.page > 0 %}<a class="button pager__go" href="{{ nav.href('file', rel, line=(file.page - 1) * page_lines + 1) }}" {{ replace() }}>&lsaquo; Earlier</a>{% endif %}
+  {% if file.page > 0 %}{% call ui.button(none, extra="pager__go", href=nav.href('file', rel, line=(file.page - 1) * page_lines + 1), attrs=replace()) %}&lsaquo; Earlier{% endcall %}{% endif %}
   <span class="pager__where">Lines {{ "{:,}".format(file.first) }}&ndash;{{ "{:,}".format(last) }}, page {{ file.page + 1 }} of {{ file.pages }}</span>
-  {% if file.page + 1 < file.pages %}<a class="button pager__go" href="{{ nav.href('file', rel, line=(file.page + 1) * page_lines + 1) }}" {{ replace() }}>Later &rsaquo;</a>{% endif %}
+  {% if file.page + 1 < file.pages %}{% call ui.button(none, extra="pager__go", href=nav.href('file', rel, line=(file.page + 1) * page_lines + 1), attrs=replace()) %}Later &rsaquo;{% endcall %}{% endif %}
 </nav>
 {% endmacro %}
 {% block content %}
@@ -22,7 +23,7 @@
 {% if file.note %}{{ ui.banner("unsure", what=file.note) }}{% endif %}
 {% if file.kind == "secret" %}
 {% call ui.banner("held", what="This file may hold secrets", why="Its name is one secrets are kept under, so nothing in it was read.") %}{% endcall %}
-<p class="files__toggle"><a class="button" href="{{ nav.href('file', rel, reveal=1, line=at) }}" {{ replace() }}>Show it anyway</a></p>
+<p class="files__toggle">{{ ui.button("Show it anyway", href=nav.href('file', rel, reveal=1, line=at), attrs=replace()) }}</p>
 {% elif file.kind == "empty" %}
 <p class="empty">This file is empty.</p>
 {% elif file.kind == "binary" %}
@@ -37,7 +38,8 @@
 {% else %}
 {% if file.kind == "paged" %}{{ pager() }}{% endif %}
 {# The pane's own switch and its remembered choice: unwrapped, a line keeps its indentation. #}
-<p class="agent__columns files__columns" hidden><button type="button" class="button button--toggle" data-hp-columns aria-pressed="false">Keep the columns</button></p>
+{% set columns %}data-hp-columns aria-pressed="false"{% endset %}
+<p class="agent__columns files__columns" hidden>{{ ui.button("Keep the columns", "toggle", type="button", attrs=columns) }}</p>
 {% if source %}<p class="files__toggle"><a href="{{ nav.href('file', rel) }}" {{ replace() }}>Show it rendered</a></p>{% endif %}
 <div class="src" role="region" aria-label="{{ file.name }}">
   {%- for chunk in file.chunks %}<div class="src__chunk">{% for l in chunk %}{{ f.line(l.n, l.runs, l.cut, at) }}{% endfor %}</div>{% endfor -%}
