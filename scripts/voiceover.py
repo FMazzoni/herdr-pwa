@@ -112,16 +112,14 @@ def _heard(driver: Marionette) -> dict[str, object]:
 
 def _until(driver: Marionette, done: Callable[[dict[str, object]], bool]) -> dict[str, object]:
     """Wait until ``done`` holds of what was heard and nothing is in flight, then let it settle."""
-    if not eventually(
-        lambda: done(seen := _heard(driver)) and not seen.get("busy"), seconds=WAIT_SECONDS
-    ):
+    if not eventually(lambda: done(seen := _heard(driver)) and not seen.get("busy"), WAIT_SECONDS):
         return {}
     settle(driver)
     return _heard(driver)
 
 
 def _ready(driver: Marionette, selector: str) -> bool:
-    if not eventually(lambda: bool(driver.script(READY, selector)), seconds=WAIT_SECONDS):
+    if not eventually(lambda: bool(driver.script(READY, selector)), WAIT_SECONDS):
         return False
     settle(driver)
     return True
