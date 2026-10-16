@@ -1508,6 +1508,7 @@ STATES: Final = (*FEED, *AGENT_PAGE, *TAPPED, *ANSWERED, *LIFECYCLE, *STATS, *FI
 
 # Screens this app draws that the old app had no name for.
 V2_ONLY: Final = (
+    "usage-opencode-models",
     "chat-doubted-identity",
     "feed-herd",
     "agent-answer-sending",
