@@ -390,12 +390,21 @@ html { -webkit-tap-highlight-color: transparent; }
 .tool[open] > .tool__line .tool__text { white-space: pre-wrap; overflow-wrap: anywhere; }
 .tool__failed { flex: none; color: var(--blocked); font-weight: 600; }
 .tool__result { margin: 0 0 var(--space-4); color: var(--ink-2); }
-/* A task that stopped is a tool-like line; one that failed or was killed says so in --blocked. */
-.notice__mark { flex: none; color: var(--ink-3); }
-.notice__text { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); }
-.notice[open] > .tool__line .notice__text { white-space: normal; overflow-wrap: anywhere; }
-.notice__time { flex: none; color: var(--ink-3); }
-.notice--failed .notice__text, .notice--failed .notice__mark { color: var(--blocked); }
+/* A task that stopped is a tool's line led by its kind; failed or killed, label and ending are
+   --blocked. Every one opens: an agent's report as prose, a command wrapped in full. */
+/* The text grows to its own width and no further, so the ending follows it; under large type the
+   ending wraps to a second row rather than leaving the screen. */
+.notice > .tool__line { flex-wrap: wrap; }
+.notice__text { flex: 1 1 0; min-width: 4em; max-width: max-content; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); }
+.notice--agent[open] > .tool__line .notice__text, .notice--task[open] > .tool__line .notice__text { white-space: normal; overflow-wrap: anywhere; }
+.notice__status, .notice__time { flex: none; color: var(--ink-3); }
+.notice--failed .notice__label, .notice--failed .notice__status { color: var(--blocked); font-weight: 600; }
+.notice__body { padding: 0 0 var(--space-4) var(--space-6); border-left: var(--line-1) solid var(--rule); }
+.notice__result { white-space: pre-wrap; overflow-wrap: anywhere; }
+.notice__report { color: var(--ink); font-size: var(--text-body); }
+.notice__report:has(> .turn__more[open]) > .turn__fold { max-height: none; }
+.notice__none, .notice__meta { margin: 0 0 var(--space-3); }
+.notice__path { font: var(--text-small) var(--mono); overflow-wrap: anywhere; }
 /* Another agent's message: an outlined card, so it never reads as this agent's prose or as You. */
 .turn--peer { background: transparent; border: var(--line-1) solid var(--rule); }
 .peer__head { margin: 0 0 var(--space-3); color: var(--ink-3); font-size: var(--text-meta); }
