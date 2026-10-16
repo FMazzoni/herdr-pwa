@@ -31,6 +31,7 @@ from firefox import BrowserError, Marionette, browser, free_port, phone_window  
 
 from tests.catalogue import STATES, State, build, pick  # noqa: E402
 from tests.waiting import eventually  # noqa: E402
+from tests.webfakes import Hold  # noqa: E402
 
 # The --only name for the back-navigation walks.
 HISTORY = "history"
@@ -322,6 +323,8 @@ class Switch:
 
     def __init__(self) -> None:
         self.app: ASGIApp | None = None
+        # Writes the current state's runner is sitting on, let go when the next state mounts.
+        self.held: list[Hold] = []
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         """Forward one request."""
@@ -366,7 +369,12 @@ def install(switch: Switch, state: State, scratch: Path) -> None:
     """Build a fresh app for ``state`` over its own fake runner and make it current."""
     home = scratch / state.name
     home.mkdir(parents=True)
-    switch.app = build(state, home).http.app
+    # A held write keeps its session's write lock, which would refuse the next state's tap.
+    for hold in switch.held:
+        hold.release.set()
+    rig = build(state, home)
+    switch.held = [hook for hook in rig.wire.after.values() if isinstance(hook, Hold)]
+    switch.app = rig.http.app
 
 
 def _wait(
