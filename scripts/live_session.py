@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import fcntl
-import json
 import os
 import pty
 import socket
@@ -17,7 +16,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from pydantic import JsonValue, TypeAdapter, ValidationError
+from herdr_pwa.engine.transport import EngineError, Frame, SocketTransport
 
 SESSION = "hp-test"  # anything but this name is a foot-gun
 
@@ -31,9 +30,10 @@ INHERITED = (
     "HERDR_WORKSPACE_ID",
 )  # the variables that tell a process it is already inside a session
 
-
-# The herdr CLI prints one JSON object per call.
-_REPLY = TypeAdapter(dict[str, JsonValue])
+# How long `agent.start` waits for the agent to be ready: the herdr CLI's own default.
+START_WAIT_MS = 30_000
+# Long enough for that wait and the reply after it.
+CALL_SECONDS = START_WAIT_MS / 1000 + 10
 
 
 def session_dir(session: str) -> Path:
@@ -66,22 +66,21 @@ def clean_env() -> dict[str, str]:
     return env
 
 
-def api(session: str, *args: str, check: bool = True) -> dict[str, Any]:
-    """One `herdr` CLI call against *this* session's socket, decoded."""
-    env = clean_env()
-    env["HERDR_SOCKET_PATH"] = str(socket_path(session))
-    done = subprocess.run(["herdr", *args], capture_output=True, text=True, env=env, check=False)
-    if check and done.returncode != 0:
-        raise SystemExit(f"herdr {' '.join(args)} failed:\n{done.stdout}{done.stderr}")
+def api(session: str, method: str, params: Frame | None = None, *, check: bool = True) -> Frame:
+    """One request on *this* session's socket, through the app's own transport."""
+    link = SocketTransport(socket_path(session), timeout=CALL_SECONDS)
     try:
-        return _REPLY.validate_json(done.stdout)
-    except ValidationError:
-        return {"raw": done.stdout, "stderr": done.stderr, "code": done.returncode}
+        return link.call(method, params or {})
+    except EngineError:
+        if check:
+            raise
+        return {}
+    finally:
+        link.close()
 
 
-def result(payload: dict[str, Any]) -> dict[str, Any]:
-    if "error" in payload:
-        raise SystemExit(f"herdr refused: {payload['error']}")
+def result(payload: Frame) -> dict[str, Any]:
+    # An error frame never gets here: the transport raises it as an EngineError.
     return payload.get("result", payload)
 
 
@@ -159,7 +158,8 @@ def down(session: str) -> int:
     if not listening(path):
         print(f"session {session!r} is not running")
         return 0
-    api(session, "server", "stop", check=False)
+    # The server may hang up instead of answering a stop, which is the stop working.
+    api(session, "server.stop", check=False)
     for _ in range(40):
         if not listening(path):
             print(f"session {session!r} stopped")
@@ -170,7 +170,7 @@ def down(session: str) -> int:
 
 
 def agents(session: str) -> list[dict[str, Any]]:
-    return result(api(session, "agent", "list")).get("agents", [])
+    return result(api(session, "agent.list")).get("agents", [])
 
 
 def status(session: str) -> int:
@@ -197,30 +197,21 @@ def status(session: str) -> int:
 
 def free_pane(session: str, cwd: str) -> str:
     """A pane at a shell prompt, splitting one off if every pane is taken."""
-    panes = result(api(session, "pane", "list")).get("panes", [])
+    panes = result(api(session, "pane.list")).get("panes", [])
     for pane in panes:
         if not pane.get("agent"):
             return str(pane["pane_id"])
     if not panes:
         raise SystemExit("the session has no panes at all; is it really up?")
-    fresh = result(
-        api(
-            session,
-            "pane",
-            "split",
-            str(panes[0]["pane_id"]),
-            "--direction",
-            "down",
-            "--cwd",
-            cwd,
-        )
-    )
+    split = {"target_pane_id": str(panes[0]["pane_id"]), "direction": "down", "cwd": cwd}
+    fresh = result(api(session, "pane.split", split))
     return str(fresh["pane"]["pane_id"])
 
 
 def pane_text(session: str, target: str) -> str:
-    payload = api(session, "agent", "read", target, "--format", "text", "--lines", "40")
-    return payload.get("raw", "") if "raw" in payload else json.dumps(payload)
+    params: Frame = {"target": target, "source": "recent", "format": "text", "lines": 40}
+    read = result(api(session, "agent.read", params)).get("read", {})
+    return str(read.get("text", ""))
 
 
 def settle(session: str, target: str, timeout: float = 60.0) -> str | None:
@@ -234,7 +225,7 @@ def settle(session: str, target: str, timeout: float = 60.0) -> str | None:
                 if uuid:
                     return str(uuid)
         if not trusted and "trust this folder" in pane_text(session, target):
-            api(session, "agent", "send-keys", target, "Enter", check=False)
+            api(session, "agent.send_keys", {"target": target, "keys": ["Enter"]}, check=False)
             trusted = True
         time.sleep(1.0)
     return None
@@ -248,23 +239,16 @@ def agent(session: str, name: str, kind: str, model: str, cwd: str) -> int:
             return 0
     target = free_pane(session, cwd)
     print(f"starting {kind} {name!r} on {target} with --model {model} (cwd {cwd})")
-    started = result(
-        api(
-            session,
-            "agent",
-            "start",
-            name,
-            "--kind",
-            kind,
-            "--pane",
-            target,
-            "--",
-            "--model",
-            model,
-        )
-    )
+    launch: Frame = {
+        "name": name,
+        "kind": kind,
+        "pane_id": target,
+        "args": ["--model", model],
+        "timeout_ms": START_WAIT_MS,
+    }
+    started = result(api(session, "agent.start", launch))
     # herdr echoes the argv it actually ran, which is the only honest proof
-    # that the passthrough after `--` reached the agent binary.
+    # that the model argument reached the agent binary.
     print(f"argv: {started.get('argv')}")
     uuid = settle(session, target)
     if uuid is None:

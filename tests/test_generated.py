@@ -1,15 +1,16 @@
 """The generated wire models, checked against herdr's own recorded output."""
 
 import hashlib
-import subprocess
-import sys
 from pathlib import Path
+from typing import Unpack
 
 import pytest
+from datamodel_code_generator._types.generate_config_dict import GenerateConfigDict
 from pydantic import JsonValue, TypeAdapter
 
 from herdr_pwa.engine import AgentStatus, Snapshot
 from herdr_pwa.protocol import EXPECTED_PROTOCOL
+from scripts import generate_models
 from tests.engine_seam import EventKind, generated
 from tests.engine_seam import wire_request as request
 from tests.engine_seam import wire_response as wire
@@ -17,7 +18,6 @@ from tests.engine_seam import wire_response as wire
 ROOT = Path(__file__).resolve().parent.parent
 FIXTURES = ROOT / "tests" / "fixtures"
 SCHEMA_PATH = FIXTURES / "herdr-api-schema.json"
-GENERATOR = ROOT / "scripts" / "generate_models.py"
 
 
 def _obj(value: JsonValue) -> dict[str, JsonValue]:
@@ -189,17 +189,23 @@ def test_generated_files_record_the_vendored_schema_digest() -> None:
         assert digest in module.read_text(encoding="utf-8"), module.name
 
 
-def test_committed_generated_code_is_not_stale() -> None:
-    """Regenerate into a temp dir and diff."""
-    result = subprocess.run(  # noqa: S603
-        [sys.executable, str(GENERATOR), "--check"],
-        capture_output=True,
-        text=True,
-        cwd=ROOT,
-        check=False,
-    )
-    assert result.returncode == 0, (
+@pytest.mark.filterwarnings("error")
+def test_committed_generated_code_is_not_stale(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Regenerate into a temp dir and diff, with the generator called here, not run as a child."""
+    inputs: list[str] = []
+    codegen = generate_models.codegen
+
+    def watched(source: Path, **options: Unpack[GenerateConfigDict]) -> object:
+        inputs.append(source.name)
+        return codegen(source, **options)
+
+    monkeypatch.setattr(generate_models, "codegen", watched)
+    code = generate_models.check()
+    out = capsys.readouterr().out
+    assert code == 0, (
         "committed models differ from what the vendored schema generates.\n"
-        "Run: uv run python scripts/generate_models.py\n\n"
-        f"{result.stdout}\n{result.stderr}"
+        f"Run: uv run python scripts/generate_models.py\n\n{out}"
     )
+    assert inputs == [f"{name}.json" for name in generate_models.SUB_SCHEMAS]
