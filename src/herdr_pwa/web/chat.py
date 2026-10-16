@@ -85,6 +85,8 @@ class ChatView:
     catching_up: bool = False
     # Why the session the pane reports may not be the agent there; shown above everything.
     doubt: str = ""
+    # The log could not be read under a drawing the reader already has, which then stands.
+    held: bool = False
 
 
 def fold_tools(turns: tuple[ChatTurn, ...]) -> tuple[ChatTurn | ToolRun, ...]:
@@ -209,15 +211,22 @@ def _carrying(notice: TranscriptTurn, reports: list[TranscriptTurn]) -> Transcri
     return notice.model_copy(update={"result": text, "result_truncated": cut})
 
 
-def chat_view(page: TranscriptPage, *, working: bool = False, doubt: str = "") -> ChatView:
+def chat_view(
+    page: TranscriptPage, *, working: bool = False, doubt: str = "", drawn: bool = False
+) -> ChatView:
     """The Chat tab's content for one transcript page.
 
     *working* is the agent's own status, not a guess from the page: turns land
     at message boundaries, so while the agent works whatever it is saying now
     is not in the log yet, and the tab says so instead of looking complete.
+
+    *drawn* says the reader already has turns on screen. A store its harness has
+    locked reads as unreadable with no turns, and redrawn that would blank the log
+    for a poll and lose the reader's place, so the view is ``held`` instead.
     """
     turns = tuple(_turn(t) for t in joined(tuple(page.turns)))
     note = "" if turns else _STATE_NOTES.get(page.state, "Nothing has been said yet.")
+    held = drawn and not turns and page.state is HistoryState.unreadable
     return ChatView(
         fold_tools(turns),
         note,
@@ -226,4 +235,5 @@ def chat_view(page: TranscriptPage, *, working: bool = False, doubt: str = "") -
         more=page.has_more,
         catching_up=working,
         doubt=doubt,
+        held=held,
     )

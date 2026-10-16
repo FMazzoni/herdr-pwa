@@ -11,7 +11,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from markupsafe import Markup
 
 from herdr_pwa import panetext
-from herdr_pwa.engine import Agent, AgentStatus, Ask, EngineError, chat_window
+from herdr_pwa.decisions import still_talking
+from herdr_pwa.engine import Agent, Ask, EngineError, chat_window
 from herdr_pwa.web.chat import ChatView, chat_view
 from herdr_pwa.web.deps import WebState, hidden_tick, viewer_guard
 from herdr_pwa.web.herd import agent_status, find_agent
@@ -23,6 +24,8 @@ from herdr_pwa.writes.resolve import doubt
 
 # Files is a tab too, but its pages are the explorer's, reached through /agent/<session>/files.
 TABS: Final = ("chat", "pane")
+# A held chat redraws only its note slot; the turns the reader has, and their place, stand.
+KEEP_DRAWN: Final = {"HX-Retarget": "#chat-note", "HX-Reswap": "outerHTML"}
 
 
 def read_stats(web: WebState, agent: Agent) -> Stats:
@@ -54,7 +57,10 @@ def read_chat(
         root=web.settings.transcript_roots or None,
     )
     said = doubt(agent, web.settings.transcript_roots)
-    return chat_view(page, working=agent.status is AgentStatus.WORKING, doubt=said)
+    # Every page reaches the newest turn, an earlier one included, so each says what is on its way.
+    talking = still_talking(agent_status(web, agent))
+    drawn = start is not None or before is not None
+    return chat_view(page, working=talking, doubt=said, drawn=drawn)
 
 
 def read_pane(web: WebState, agent: Agent) -> panetext.PaneView:
@@ -112,7 +118,10 @@ def build(web: WebState) -> APIRouter:
         # one more page above it; neither is the newest page of messages.
         agent = find_agent(web, session)
         chat = read_chat(web, agent, start=start, before=before, log=log)
-        return web.pages.fragment("chat.html", {"agent": agent, "chat": chat})
+        context = {"agent": agent, "chat": chat}
+        if chat.held:
+            return web.pages.fragment("chat_note.html", context, headers=KEEP_DRAWN)
+        return web.pages.fragment("chat.html", context)
 
     @router.get("/pane", dependencies=[Depends(hidden_tick)])
     def pane(session: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]

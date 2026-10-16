@@ -274,6 +274,12 @@ def page_status(agent: Agent, unread: Mapping[str, bool] | None, *, answered: bo
     return effective_status(agent, unread).value
 
 
+def still_talking(status: AgentStatus) -> bool:
+    """Whether the agent is producing a turn its log has not received yet."""
+    # Turns land at message boundaries: while it works, what it is saying now is still on its way.
+    return status is AgentStatus.WORKING
+
+
 def cadence_for(agents: Iterable[Agent]) -> int:
     """Seconds between feed polls: faster while anything is working."""
     working = any(agent.status is AgentStatus.WORKING for agent in agents)

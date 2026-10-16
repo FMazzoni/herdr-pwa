@@ -70,7 +70,5 @@
   </article>
   {% endif %}
   {% endfor %}
-  {# The agent is producing a turn the store has not received yet; say so instead of
-     looking complete. Purely the agent's status, so it cannot flicker between polls. #}
-  {% if chat.catching_up %}<p class="chat__note">It is talking; what it says lands here when the turn is done.</p>{% endif %}
+  {% include "chat_note.html" %}
 </section>
