@@ -6,6 +6,7 @@
   "use strict";
 
   var logic = hp.logic;
+  var bus = hp.bus;
 
   /* Every request from a hidden page says so; its poll answers 286 and stops. */
   document.addEventListener("htmx:configRequest", function (event) {
@@ -16,13 +17,13 @@
 
   /* htmx 2 refuses to swap a non-2xx; a fragment the server marked is the honest
    * failure screen, and it carries the poll that heals the page. */
-  document.addEventListener("htmx:beforeSwap", function (event) {
-    var xhr = event.detail.xhr;
+  bus.on("swap:admit", function (detail) {
+    var xhr = detail.xhr;
     if (xhr && xhr.status >= 400 && xhr.getResponseHeader("HP-Fragment") === "1") {
-      event.detail.shouldSwap = true;
-      event.detail.isError = false;
+      detail.shouldSwap = true;
+      detail.isError = false;
     }
-    sheetAnswer(event.detail);
+    sheetAnswer(detail);
   });
 
   /* ---- Back belongs to the herd ----
@@ -185,10 +186,10 @@
       keep(box);
     }
   });
-  document.addEventListener("htmx:afterSwap", function (event) {
-    settle(event.detail.elt.parentNode || document);
+  bus.on("swapped:restore", function (detail) {
+    settle(detail.elt.parentNode || document);
   });
-  document.addEventListener("DOMContentLoaded", function () {
+  bus.on("ready:restore", function () {
     settle(document);
   });
 
@@ -231,8 +232,8 @@
     }
   }
 
-  document.addEventListener("htmx:afterSwap", function (event) {
-    var config = event.detail.requestConfig;
+  bus.on("swapped:scroll", function (detail) {
+    var config = detail.requestConfig;
     var region = document.getElementById("answer");
     if (!region || !config || config.verb === "get") {
       return;
@@ -265,9 +266,9 @@
 
   /* A read that would redraw the notice away before it could be read is dropped, and the region
    * fetched afresh once it has been up long enough. A tap's own answer is never held. */
-  document.addEventListener("htmx:beforeSwap", function (event) {
-    var target = event.detail.target;
-    if (!target || target.id !== "answer" || !isRead(event.detail)) {
+  bus.on("swap:veto", function (detail) {
+    var target = detail.target;
+    if (!target || target.id !== "answer" || !isRead(detail)) {
       return;
     }
     var notice = lostShown.notice;
@@ -276,7 +277,7 @@
     if (wait <= 0) {
       return;
     }
-    event.detail.shouldSwap = false;
+    detail.shouldSwap = false;
     window.clearTimeout(lostTimer);
     lostTimer = window.setTimeout(function () {
       if (target.isConnected && typeof window.htmx !== "undefined") {
@@ -615,13 +616,13 @@
     return (unit ? unitKey(unit) : "") + "#" + (own || Array.prototype.indexOf.call(inside, details));
   }
 
-  document.addEventListener("htmx:beforeSwap", function (event) {
-    if (!isView(event.detail)) {
+  bus.on("swap:capture", function (detail) {
+    if (!isView(detail)) {
       return;
     }
     unfolded = [];
     drawn = [];
-    var all = event.detail.target.querySelectorAll("details");
+    var all = detail.target.querySelectorAll("details");
     for (var i = 0; i < all.length; i++) {
       drawn.push(detailsKey(all[i]));
       if (all[i].open) {
@@ -630,8 +631,8 @@
     }
   });
 
-  document.addEventListener("htmx:afterSwap", function (event) {
-    if (!isView(event.detail) || !unfolded.length) {
+  bus.on("swapped:restore", function (detail) {
+    if (!isView(detail) || !unfolded.length) {
       return;
     }
     var keys = unfolded;
@@ -862,21 +863,33 @@
     return !!(elt && elt.hasAttribute && elt.hasAttribute("data-hp-earlier"));
   }
 
-  document.addEventListener("htmx:beforeSwap", function (event) {
-    if (!isRead(event.detail)) {
-      superseded(event.detail);
+  /* A scroll is told of on the next frame, and a read can land before it: the reader who has
+   * just left the end would still read as pinned and be taken back, or read as still. Heard
+   * first, so whether the reader is busy is known when the read is put off or let through. An
+   * earlier page is never put off. */
+  bus.on("swap:veto", function (detail) {
+    if (!isRead(detail)) {
       return;
     }
-    /* A scroll is told of on the next frame, and a read can land before it: the reader who has
-     * just left the end would still read as pinned and be taken back. Hear it now. */
     hearScroll();
-    if (isEarlier(event.detail)) {
+    if (!isEarlier(detail)) {
+      deferring(detail);
+    }
+  });
+
+  bus.on("swap:capture", function (detail) {
+    if (!isRead(detail)) {
+      superseded(detail);
+      return;
+    }
+    if (isEarlier(detail)) {
       pinOn("earlier");
       swapEnd = false;
       swapMark = mark(EARLIER_ANCHORS) || mark();
       return;
     }
-    if (deferring(event.detail)) {
+    // A read held back draws nothing, so there is nothing to follow or hold.
+    if (!detail.shouldSwap) {
       return;
     }
     // Only the agent view follows its end; the feed is read from the top.
@@ -886,19 +899,19 @@
 
   // Where the page stood as a swap began, so the swap is blamed only for a move it made.
   var swapY = null;
-  document.addEventListener("htmx:beforeSwap", function (event) {
-    swapY = event.detail.shouldSwap ? window.scrollY : null;
+  bus.on("swap:capture", function (detail) {
+    swapY = detail.shouldSwap ? window.scrollY : null;
   });
 
   /* The page arrives with its view, the question and the composer already drawn, so it lands as
    * its first swap used to: the dock's room reserved first, which lands a pinned page at the end. */
+  bus.on("ready:scroll", dock);
   document.addEventListener("DOMContentLoaded", function () {
-    dock();
     armTimers(document);
   });
 
-  document.addEventListener("htmx:afterSwap", function (event) {
-    if (isRead(event.detail)) {
+  bus.on("swapped:scroll", function (detail) {
+    if (isRead(detail)) {
       if (swapEnd) {
         toEnd();
       } else if (swapMark) {
@@ -1075,11 +1088,11 @@
     }
   }
 
-  document.addEventListener("htmx:beforeSwap", function (event) {
-    var target = event.detail.target;
-    var xhr = event.detail.xhr;
+  bus.on("swap:capture", function (detail) {
+    var target = detail.target;
+    var xhr = detail.xhr;
     // A hidden page's stopped poll swaps nothing, and nothing would settle to clear the mark.
-    if (!target || !event.detail.shouldSwap || (xhr && xhr.getResponseHeader("HX-Reswap") === "none")) {
+    if (!target || !detail.shouldSwap || (xhr && xhr.getResponseHeader("HX-Reswap") === "none")) {
       return;
     }
     var host = target.parentElement;
@@ -1088,7 +1101,7 @@
       busyHosts.push(host);
     }
     refocus = focusMark(target);
-    writeTarget = isRead(event.detail) ? "" : target.id;
+    writeTarget = isRead(detail) ? "" : target.id;
   });
 
   // The newest message in the chat, if the newest thing in it is the agent speaking.
@@ -1098,7 +1111,7 @@
     return last && last.classList.contains("turn--agent") ? last : null;
   }
 
-  document.addEventListener("htmx:afterSwap", function (event) {
+  bus.on("swapped:announce", function (detail) {
     if (refocus) {
       refocusIn(refocus);
       refocus = null;
@@ -1112,7 +1125,7 @@
       writeTarget = "";
       return;
     }
-    if (!isRead(event.detail) || !document.querySelector("#agent-view.chat")) {
+    if (!isRead(detail) || !document.querySelector("#agent-view.chat")) {
       return;
     }
     var newest = newestMessage();
@@ -1125,7 +1138,7 @@
   });
 
   // The conversation the page opened on is not news either.
-  document.addEventListener("DOMContentLoaded", function () {
+  bus.on("ready:announce", function () {
     if (document.querySelector("#agent-view.chat")) {
       var newest = newestMessage();
       newestSaid = newest ? unitKey(newest) : "";
@@ -1431,15 +1444,16 @@
   /* ---- The stats strip keeps its details open across the redraws that refresh it ---- */
   var statsOpen = false;
 
-  document.addEventListener("htmx:beforeSwap", function (event) {
-    var target = event.detail.target;
+  bus.on("swap:capture", function (detail) {
+    var target = detail.target;
     if (target && target.id === "agent-stats") {
       var sheet = target.querySelector("details");
       statsOpen = !!(sheet && sheet.open);
     }
   });
 
-  document.addEventListener("htmx:afterSwap", function () {
+  // After the page has its place, as it always has: reopening it first would move the hold.
+  bus.on("swapped:settle", function () {
     var sheet = statsOpen ? document.querySelector("#agent-stats details") : null;
     statsOpen = false;
     if (sheet) {
@@ -1693,14 +1707,12 @@
     }
   }
 
-  document.addEventListener("DOMContentLoaded", function () {
+  function showBubble() {
     tellBubble();
     startBubble();
-  });
-  document.addEventListener("htmx:afterSwap", function () {
-    tellBubble();
-    startBubble();
-  });
+  }
+  bus.on("ready:announce", showBubble);
+  bus.on("swapped:announce", showBubble);
   document.addEventListener("visibilitychange", wakeBubble);
   window.addEventListener("pageshow", wakeBubble);
   stillness.addEventListener("change", function () {

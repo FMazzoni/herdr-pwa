@@ -1,6 +1,6 @@
 /* herdr-pwa's client core, the first of its scripts (assets.SCRIPTS names them in order): what
- * the others share, under window.hp. Every one is a classic script, stamped and deferred; none
- * builds markup from strings or evals. */
+ * the others share, under window.hp: the page's decisions and the bus that orders a swap. Every
+ * one is a classic script, stamped and deferred; none builds markup from strings or evals. */
 (function () {
   "use strict";
 
@@ -257,5 +257,73 @@
   })();
   // hp:logic:end
 
-  window.hp = { logic: logic };
+  /* ---- A swap runs in named phases, not in the order its listeners were added ----
+   * htmx tells each htmx:beforeSwap and htmx:afterSwap listener in turn, so with one listener per
+   * concern it was the order of the code that decided, say, that a held-back read captures
+   * nothing. Here each concern names its phase and the bus runs the phases in order:
+   *   swap:admit     a failure htmx would drop is let through (before anything may veto it)
+   *   swap:veto      a swap is held back (shouldSwap = false)
+   *   swap:capture   what the swap will destroy is noted: the reader's place, folds, focus
+   *   swapped:restore   what the new drawing lost is put back: drafts, folds
+   *   swapped:scroll    the page is moved where it belongs, and the pin told
+   *   swapped:settle    what is put back after the page has its place: the stats sheet
+   *   swapped:announce  what is said aloud, and what runs on what was drawn
+   * The page's first drawing runs ready:restore, ready:scroll and ready:announce on
+   * DOMContentLoaded. Handlers that share a phase must not depend on each other's order. */
+  var PHASES = {
+    swap: ["admit", "veto", "capture"],
+    swapped: ["restore", "scroll", "settle", "announce"],
+    ready: ["restore", "scroll", "announce"],
+  };
+  var handlers = {};
+  Object.keys(PHASES).forEach(function (moment) {
+    PHASES[moment].forEach(function (phase) {
+      handlers[moment + ":" + phase] = [];
+    });
+  });
+
+  // One handler's throw is reported as a listener's would be, and the others still run.
+  function report(err) {
+    if (typeof window.reportError === "function") {
+      window.reportError(err);
+    } else {
+      window.setTimeout(function () {
+        throw err;
+      }, 0);
+    }
+  }
+
+  function run(moment, detail) {
+    PHASES[moment].forEach(function (phase) {
+      handlers[moment + ":" + phase].forEach(function (handler) {
+        try {
+          handler(detail);
+        } catch (err) {
+          report(err);
+        }
+      });
+    });
+  }
+
+  var bus = {
+    // Run `handler` in the named phase, e.g. "swap:veto"; it is handed htmx's event.detail.
+    on: function (name, handler) {
+      if (!handlers[name]) {
+        throw new Error("no such phase: " + name);
+      }
+      handlers[name].push(handler);
+    },
+  };
+
+  document.addEventListener("htmx:beforeSwap", function (event) {
+    run("swap", event.detail);
+  });
+  document.addEventListener("htmx:afterSwap", function (event) {
+    run("swapped", event.detail);
+  });
+  document.addEventListener("DOMContentLoaded", function () {
+    run("ready", null);
+  });
+
+  window.hp = { logic: logic, bus: bus };
 })();
