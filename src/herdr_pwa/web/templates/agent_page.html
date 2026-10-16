@@ -26,7 +26,8 @@
   {% if first %}{{ ui.banner(first.kind, first.what, first.why or none) }}{% endif %}
   {% if tab == "pane" %}
   {# app.js shows it and remembers the choice; without script the pane just wraps. #}
-  <p class="agent__columns" hidden><button type="button" class="button button--toggle" data-hp-columns aria-pressed="false">Keep the columns</button></p>
+  {% set columns %}data-hp-columns aria-pressed="false"{% endset %}
+  <p class="agent__columns" hidden>{{ ui.button("Keep the columns", "toggle", type="button", attrs=columns) }}</p>
   {% endif %}
   {# Drawn here, not fetched after the scripts run: the newest line comes with the page. Each region
      is the same markup its own route sends, so the stream's redraws replace it like for like. #}
@@ -38,7 +39,8 @@
   {# The question is where the conversation ends, by the thumb, directly above the composer. #}
   {{ answer }}
   {# app.js shows it while a question waits below a reader who scrolled up. #}
-  <button type="button" class="button jump" id="hp-jump" hidden>Question waiting <span aria-hidden="true">&darr;</span></button>
+  {% set jump %}id="hp-jump" hidden{% endset %}
+  {% call ui.button(none, extra="jump", type="button", attrs=jump) %}Question waiting <span aria-hidden="true">&darr;</span>{% endcall %}
   {{ composer }}
 </main>
 {% endblock %}

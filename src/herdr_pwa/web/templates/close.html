@@ -12,7 +12,7 @@
     <input type="hidden" name="target" value="{{ agent.target }}">
     <input type="hidden" name="confirm" value="1">
     {% if agent.status.value == "working" %}
-    <label class="field field--check"><input type="checkbox" name="acknowledge" value="1"> It is working right now; end it anyway.</label>
+    {{ ui.field("It is working right now; end it anyway.", check="acknowledge") }}
     {% endif %}
     {{ ui.button("End agent", "danger", extra="leave") }}
     <a class="leave" href="{{ base }}" {{ replace() }}>Keep it</a>

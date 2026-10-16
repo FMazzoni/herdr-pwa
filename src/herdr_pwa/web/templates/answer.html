@@ -23,13 +23,15 @@
   {% call ui.banner(said.kind, said.what, said.why, sent=true, outcome=sent.outcome.value ~ ":" ~ sent.evidence.value) %}{% if said.unsure %}<a class="banner__go" href="{{ pane_link }}" {{ replace() }}>Look at the Pane</a>{% endif %}{% endcall %}
   {% endif %}
   {# app.js shows this when a tap got no reply at all: a dropped link, not a refusal. #}
-  <p class="banner banner--failure" role="alert" data-hp-lost hidden><span class="banner__what">No reply came back.</span><span class="banner__why">That tap may or may not have reached the agent. Look before tapping again.</span><a class="banner__go" href="{{ pane_link }}" {{ replace() }}>Look at the Pane</a></p>
+  {% set lost %}data-hp-lost hidden{% endset %}
+  {% call ui.banner("failure", "No reply came back.", "That tap may or may not have reached the agent. Look before tapping again.", role="alert", attrs=lost) %}<a class="banner__go" href="{{ pane_link }}" {{ replace() }}>Look at the Pane</a>{% endcall %}
   {% if arming %}
   {# The confirm sits under the banner that asks for it, where the thumb already is. #}
   {# The way out beside the way through. Keep going sends nothing: it redraws this region.
      app.js also redraws it after data-hp-disarm seconds, unless a thumb is on it. #}
   <div class="keys__stop keys__stop--armed" data-hp-disarm="5">
-    <button class="button keys__cancel" type="button" hx-get="{{ base }}/answer" hx-target="#answer" hx-swap="outerHTML" hx-sync="closest .answer:replace">Keep going</button>
+    {% set redraw %}hx-get="{{ base }}/answer" hx-target="#answer" hx-swap="outerHTML" hx-sync="closest .answer:replace"{% endset %}
+    {{ ui.button("Keep going", extra="keys__cancel", type="button", attrs=redraw) }}
     {{ ui.key_form(base, agent.target, interrupt, "Really interrupt", kind="danger", confirm=true) }}
   </div>
   {% endif %}

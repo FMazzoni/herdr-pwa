@@ -1,4 +1,7 @@
-{# The repeated pieces of every screen. A look changes here, or in app.css's tokens, once. #}
+{# The repeated pieces of every screen. A look changes here, or in app.css's tokens, once.
+   `attrs` on any of them is markup the caller adds to the element: replace() from _nav.html, or a
+   {% set %} block, never a string marked safe. A history rule travels this way rather than as a flag,
+   so the check that reads every link sees whether this one replaces. #}
 
 {# A status dot; the colour comes from its status class. #}
 {% macro dot(status, id=none, oob=false) %}<span class="dot dot--{{ status }}"{% if id %} id="{{ id }}"{% endif %}{% if oob %} hx-swap-oob="true"{% endif %} aria-hidden="true"></span>{% endmacro %}
@@ -10,16 +13,20 @@
    `outcome` carries a write's audit token, for a test or a reader to check against the words.
    No live role by default: most banners sit in a region a poll redraws, and app.js says a
    write's outcome once through the page's own live region. A refusal passes role="alert". #}
-{% macro banner(kind, what=none, why=none, role=none, sent=false, outcome=none) -%}
-<p class="banner banner--{{ kind }}"{% if role %} role="{{ role }}"{% endif %}{% if sent %} data-hp-sent{% endif %}{% if outcome %} data-hp-outcome="{{ outcome }}"{% endif %}>
+{% macro banner(kind, what=none, why=none, role=none, sent=false, outcome=none, attrs="") -%}
+<p class="banner banner--{{ kind }}"{% if role %} role="{{ role }}"{% endif %}{% if sent %} data-hp-sent{% endif %}{% if outcome %} data-hp-outcome="{{ outcome }}"{% endif %}{% if attrs %} {{ attrs }}{% endif %}>
   {%- if what is not none %}<span class="banner__what">{{ what }}</span>{% endif %}
   {%- if why is not none %}<span class="banner__why">{{ why }}</span>{% endif %}
   {%- if caller is defined %}{{ caller() }}{% endif -%}
 </p>
 {%- endmacro %}
 
-{# A 44px button. `kind` is option or danger; `extra` adds classes such as leave. #}
-{% macro button(label, kind=none, extra=none, type="submit") %}<button class="button{% if kind %} button--{{ kind }}{% endif %}{% if extra %} {{ extra }}{% endif %}" type="{{ type }}">{{ label }}</button>{% endmacro %}
+{# A 44px button. `kind` is option, danger or toggle; `extra` adds classes such as leave. With `href` it
+   is a link drawn as a button. A call block draws the inside instead of `label`. #}
+{% macro button(label, kind=none, extra=none, type="submit", href=none, attrs="") -%}
+{% set cls %}button{% if kind %} button--{{ kind }}{% endif %}{% if extra %} {{ extra }}{% endif %}{% endset %}
+{%- if href %}<a class="{{ cls }}" href="{{ href }}"{% else %}<button class="{{ cls }}" type="{{ type }}"{% endif %}{% if attrs %} {{ attrs }}{% endif %}>{% if caller is defined %}{{ caller() }}{% else %}{{ label }}{% endif %}{% if href %}</a>{% else %}</button>{% endif %}
+{%- endmacro %}
 
 {# One key sent to a pane from the answer panel; `screen` pins the screen it was drawn against.
    A tap disables every control in the region until the answer lands, and replaces a poll in
@@ -52,9 +59,9 @@
 
 {# A card in a list. `href` makes the whole card the link, with a chevron on its first line; `inner` is the tag otherwise.
    `key` names what the card shows, so a poll that re-sorts the list can hold it under the thumb. #}
-{% macro card(status, href=none, id=none, inner="div", key=none) -%}
+{% macro card(status, href=none, id=none, inner="div", key=none, attrs="") -%}
 <li class="card card--{{ status }}"{% if id %} id="{{ id }}"{% endif %}{% if key %} data-hp-key="{{ key }}"{% endif %}>
-  {%- if href %}<a class="card__link card__link--go" href="{{ href }}">{% else %}<{{ inner }} class="card__link">{% endif %}{{ caller() }}{% if href %}<span class="card__chevron" aria-hidden="true"></span></a>{% else %}</{{ inner }}>{% endif -%}
+  {%- if href %}<a class="card__link card__link--go" href="{{ href }}"{% if attrs %} {{ attrs }}{% endif %}>{% else %}<{{ inner }} class="card__link">{% endif %}{{ caller() }}{% if href %}<span class="card__chevron" aria-hidden="true"></span></a>{% else %}</{{ inner }}>{% endif -%}
 </li>
 {%- endmacro %}
 
@@ -63,14 +70,19 @@
 <a class="chip{% if on %} chip--on{% endif %}" href="{{ href }}"{% if on %} aria-current="true"{% endif %} {{ attrs }}><span class="chip__pill"><span class="chip__label">{{ label }}</span>{% if count is not none %}<span class="chip__n">{{ count }}</span>{% endif %}</span></a>
 {%- endmacro %}
 
-{# The first line of a card: status dot, a title that ellipsizes, and the status word. #}
-{% macro card_top(status, title) -%}
+{# The first line of a card: status dot, a title that ellipsizes, and the status word. `word` says
+   something else in the status's place; `dotted=false` leaves the dot out. #}
+{% macro card_top(status, title, word=none, dotted=true) -%}
 <span class="card__top">
-      {{ dot(status) }}
+      {{ dot(status) if dotted else "" }}
       <span class="card__title">{{ title }}</span>
-      <span class="card__status">{{ status }}</span>
+      <span class="card__status">{{ status if word is none else word }}</span>
     </span>
 {%- endmacro %}
 
-{# A labelled form field; the call block is the control. `quiet` keeps the label for a screen reader only. #}
-{% macro field(label, quiet=false) %}<label class="field"><span class="field__label{% if quiet %} field__label--quiet{% endif %}">{{ label }}</span>{{ caller() }}</label>{% endmacro %}
+{# A labelled form field; the call block is the control. `quiet` keeps the label for a screen reader only.
+   `check` names a checkbox instead, sent as 1 when ticked: the box first, its label after, one 44px row. #}
+{% macro field(label, quiet=false, check=none) -%}
+{% if check %}<label class="field field--check"><input type="checkbox" name="{{ check }}" value="1"> {{ label }}</label>
+{%- else %}<label class="field"><span class="field__label{% if quiet %} field__label--quiet{% endif %}">{{ label }}</span>{{ caller() }}</label>{% endif %}
+{%- endmacro %}

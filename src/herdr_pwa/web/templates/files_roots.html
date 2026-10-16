@@ -11,8 +11,8 @@
   <ul class="cards">
     {% for r in roots %}
     {% set st = statuses[r.id] %}
-    {% call ui.card("working" if st.changes else "idle", href="/files/" ~ r.id) %}
-        <span class="card__top"><span class="card__title">{{ r.label }}</span><span class="card__status">{{ st.changes|length }} changed</span></span>
+    {% call ui.card("working" if st.changes else "idle", href="/files/" ~ r.id, attrs=replace()) %}
+        {{ ui.card_top("working" if st.changes else "idle", r.label, word=(st.changes|length) ~ " changed", dotted=false) }}
         <span class="card__meta">
           <span>{{ st.branch or "no branch" }}</span>
           <span>{{ r.sessions|length }} agent{{ "" if r.sessions|length == 1 else "s" }}</span>
