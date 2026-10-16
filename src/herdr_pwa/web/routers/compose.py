@@ -9,6 +9,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from herdr_pwa.decisions import decide_screen, page_status
 from herdr_pwa.engine import (
     INTERRUPT_KEY,
+    VISIBLE_READ,
     Agent,
     AgentStatus,
     BlockedPrompt,
@@ -52,7 +53,7 @@ def _screen_now(web: WebState, agent: Agent) -> str:
     if agent.status is AgentStatus.WORKING:
         return ""
     try:
-        screen = web.client.read(agent.target, source="visible")
+        screen = web.client.read(agent.target, VISIBLE_READ)
     except EngineError:
         return ""
     return "" if asks_a_question(screen) else screen_digest(screen)

@@ -14,6 +14,7 @@ from herdr_pwa.engine import (
     BlockedPrompt,
     EngineError,
     PaneId,
+    ReadOptions,
     SessionId,
     Snapshot,
     SnapshotCache,
@@ -61,8 +62,7 @@ class HerdReader(Protocol):
         target: PaneId,
         *,
         session: SessionId = ...,
-        lines: int | None = None,
-        timeout: float | None = None,
+        options: ReadOptions = ...,
     ) -> BlockedPrompt: ...
 
     def pane_pids(self, pane_id: str, *, timeout: float | None = None) -> tuple[int, ...]: ...

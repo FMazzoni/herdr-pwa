@@ -4,6 +4,7 @@ import hashlib
 import re
 from collections import Counter
 from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
 from enum import StrEnum
 from typing import NewType, Self, cast
 
@@ -85,6 +86,17 @@ def as_pane_id(value: object) -> PaneId:
             "resolve it against a fresh snapshot with Snapshot.resolve_session first"
         )
     return PaneId(text)
+
+
+@dataclass(frozen=True, slots=True)
+class Seat:
+    """A pane to type at, and the session that must still hold it, since panes are recycled.
+
+    ``session=None`` types at whoever holds the pane: only for a pane this same request created.
+    """
+
+    target: PaneId
+    session: SessionId | None = None
 
 
 class AgentStatus(StrEnum):
@@ -224,6 +236,11 @@ class Agent(BaseModel):
     def sort_key(self) -> tuple[int, int, int, str]:
         """Deterministic feed order: urgency, recency, then workspace, then pane."""
         return self.feed_key()
+
+    @property
+    def seat(self) -> Seat:
+        """This agent's pane, held to its own session."""
+        return Seat(self.target, self.session)
 
     @property
     def project(self) -> str:

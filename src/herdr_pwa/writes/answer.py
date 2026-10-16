@@ -107,7 +107,7 @@ def _press(
     ended = key_ends_question(prompt, key)
     with entry:
         try:
-            _ = writer.client.send_keys(agent.target, key, session=agent.session)
+            _ = writer.client.send_keys(agent.seat, key)
         except EngineError as exc:
             entry.outcome(failed_result(exc))
             return Refused(refusal_for(exc), _VERB, detail=str(exc), prompt=prompt)
