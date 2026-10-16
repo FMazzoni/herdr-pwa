@@ -1093,6 +1093,83 @@ def _scroll_pane(rig: Rig, _home: Path, n: int) -> str:
     return f"step {n + LINES - 1:03d}"
 
 
+# The turn the reader is on (the first whose top is below the bar), and how many are drawn; and,
+# from the moment it is armed, whether the log was ever left with no turns at all.
+PLACE = r"""
+const under = document.querySelector(".topbar").getBoundingClientRect().bottom;
+const turns = [...document.querySelectorAll("#agent-view .turn")];
+const on = turns.find((t) => t.getBoundingClientRect().top >= under);
+const note = document.getElementById("chat-note");
+const busy = document.querySelector(".htmx-request, .htmx-swapping, .htmx-settling");
+return { key: on ? on.getAttribute("data-hp-key") : "", top: on ? on.getBoundingClientRect().top : null,
+  turns: turns.length, note: note ? note.textContent : "", blank: !!window.__hpBlank, busy: !!busy };
+"""
+ARM_BLANK = r"""
+window.__hpBlank = false;
+new MutationObserver(() => {
+  if (!document.querySelector("#agent-view .turn")) window.__hpBlank = true;
+}).observe(document.body, { childList: true, subtree: true });
+"""
+HELD_NOTE = "could not be read just now"
+
+
+def _place(driver: Marionette) -> dict[str, object]:
+    found = driver.script(PLACE)
+    return found if isinstance(found, dict) else {}
+
+
+def _place_when(driver: Marionette, done: Callable[[dict[str, object]], bool]) -> dict[str, object]:
+    if not _until(lambda: done(_place(driver))):
+        return {}
+    settle(driver)
+    return _place(driver)
+
+
+def _kept(name: str, was: dict[str, object], now: dict[str, object]) -> list[str]:
+    problems = [f"{name}: the log was left with no turns"] if now.get("blank") else []
+    if now.get("turns") != was.get("turns"):
+        problems.append(f"{name}: {was.get('turns')} turns drawn, then {now.get('turns')}")
+    if now.get("key") != was.get("key") or abs(_num(now, "top") - _num(was, "top")) > DRIFT:
+        problems.append(
+            f"{name}: the reader was on {was.get('key')} at {_num(was, 'top'):.0f}px, "
+            f"then {now.get('key')} at {_num(now, 'top'):.0f}px"
+        )
+    return problems
+
+
+def locked(driver: Marionette, base: str, tab: Tab, _rig: Rig, home: Path) -> list[str]:
+    """A refresh that cannot read the log (its harness holds the store locked) keeps the turns
+    drawn and the reader on the one they were reading, says so under them, and heals."""
+    driver.send("WebDriver:Navigate", {"url": base + tab.state.path})
+    if not _wait_for(driver, tab.newest):
+        return [f"{tab.name}: never drew its newest turn"]
+    driver.script("window.scrollTo(0, 400);")
+    settle(driver, READER_STILL_MS)
+    was = _place(driver)
+    if not was.get("key"):
+        return [f"{tab.name}: no turn under the bar to read"]
+    log = next((home / "transcripts").rglob(f"{WORKING_SESSION}.jsonl"))
+    driver.script(ARM_BLANK)
+    log.chmod(0)
+    try:
+        driver.script(POKE)
+        held = _place_when(
+            driver, lambda p: HELD_NOTE in str(p.get("note", "")) or bool(p.get("blank"))
+        )
+    finally:
+        log.chmod(0o600)
+    if not held:
+        return [f"{tab.name}: a locked refresh never said the log could not be read"]
+    problems = _kept(f"{tab.name}, locked", was, held)
+    driver.script(POKE)
+    healed = _place_when(
+        driver, lambda p: HELD_NOTE not in str(p.get("note", "")) and not p.get("busy")
+    )
+    if not healed:
+        return [*problems, f"{tab.name}: the note stayed once the log could be read again"]
+    return problems + _kept(f"{tab.name}, healed", was, healed)
+
+
 def _tabs() -> tuple[tuple[Tab, Callable[[Marionette, str, Tab, Rig, Path], list[str]]], ...]:
     blocked = runner(lambda: herd(**BLOCKED), long_pane(LINES) + capture(MENU))
     chat = State("chat", f"{AGENT}?tab=chat", "", runner(snapshot_frame), long_chat(TURNS))
@@ -1126,6 +1203,7 @@ def _tabs() -> tuple[tuple[Tab, Callable[[Marionette, str, Tab, Rig, Path], list
         (Tab("chat end", chat, last_reply, _say), follow),
         (Tab("unheard scroll", chat, last_reply, _say), unheard_scroll),
         (Tab("unheard read", chat, last_reply, _say), unheard_read),
+        (Tab("locked log", chat, last_reply, _say), locked),
         (Tab("pane unheard read", pane, last_line, _scroll_pane), unheard_read),
         (Tab("strip under a finger", strip, "", _say), strip_under_finger),
         (Tab("pane end", pane, last_line, _print), follow),

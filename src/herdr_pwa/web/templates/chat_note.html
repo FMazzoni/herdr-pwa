@@ -1,0 +1,8 @@
+{# The notes under the log, a slot of their own: a refresh that cannot read the log redraws only
+   this, so the turns the reader has stay drawn and in place. The agent producing a turn the store
+   has not received yet is said, instead of looking complete; that is purely the agent's status,
+   so it cannot flicker between polls. #}
+<div id="chat-note" class="chat__notes">
+  {%- if chat.held %}<p class="chat__note">The transcript could not be read just now; what is shown is from the last read.</p>{% endif %}
+  {%- if chat.catching_up %}<p class="chat__note">It is talking; what it says lands here when the turn is done.</p>{% endif -%}
+</div>

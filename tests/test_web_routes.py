@@ -384,6 +384,67 @@ def test_the_catching_up_note_is_gone_when_the_agent_stops(tmp_path: Path) -> No
     assert NOTE not in body
 
 
+HELD = "The transcript could not be read just now"
+
+
+def _talking(tmp_path: Path) -> Path:
+    """A working agent's log of a few exchanges; the file itself, to lock."""
+    records = [
+        record
+        for n in range(4)
+        for record in (
+            human_says(f"ask {n}", uuid=f"h{n}"),
+            assistant_says(f"Reply {n}.", uuid=f"a{n}"),
+        )
+    ]
+    write_transcript(tmp_path / "transcripts", WORKING_SESSION, records)
+    return next((tmp_path / "transcripts").rglob(f"{WORKING_SESSION}.jsonl"))
+
+
+def test_a_refresh_that_cannot_read_the_log_swaps_only_the_note(tmp_path: Path) -> None:
+    """A locked store must not blank the turns already drawn: only the note slot is redrawn."""
+    log = _talking(tmp_path)
+    rig = build_rig(tmp_path, chat_messages=2)
+    drawn = rig.http.get(f"/agent/{WORKING_SESSION}/chat", headers=FRAGMENT).text
+    assert "Reply 3." in drawn
+    assert HELD not in drawn
+    log.chmod(0)
+    try:
+        for ask in ("start=0", "before=999999"):
+            held = rig.http.get(f"/agent/{WORKING_SESSION}/chat?{ask}", headers=FRAGMENT)
+            assert held.status_code == 200, ask
+            assert held.headers.get("hx-retarget") == "#chat-note", ask
+            assert held.headers.get("hx-reswap") == "outerHTML", ask
+            assert 'id="agent-view"' not in held.text, ask
+            assert HELD in held.text, ask
+    finally:
+        log.chmod(0o600)
+    healed = rig.http.get(f"/agent/{WORKING_SESSION}/chat?start=0", headers=FRAGMENT)
+    assert "hx-retarget" not in healed.headers
+    assert 'id="agent-view"' in healed.text
+    assert HELD not in healed.text
+
+
+def test_an_unreadable_log_on_opening_says_so_in_the_whole_view(tmp_path: Path) -> None:
+    """Nothing is drawn yet, so there is nothing to keep: the view is drawn with its note."""
+    _talking(tmp_path).chmod(0)
+    rig = build_rig(tmp_path)
+    response = rig.http.get(f"/agent/{WORKING_SESSION}/chat", headers=FRAGMENT)
+    assert "hx-retarget" not in response.headers
+    assert 'id="agent-view"' in response.text
+    assert "could not be read" in response.text
+
+
+def test_the_catching_up_note_is_only_on_the_newest_page(tmp_path: Path) -> None:
+    _talking(tmp_path)
+    rig = build_rig(tmp_path, chat_messages=2)
+    newest = rig.http.get(f"/agent/{WORKING_SESSION}/chat", headers=FRAGMENT).text
+    assert NOTE in newest
+    earlier = rig.http.get(f"/agent/{WORKING_SESSION}/chat?before=999999", headers=FRAGMENT)
+    assert "Reply" in earlier.text
+    assert NOTE not in earlier.text
+
+
 def test_the_catching_up_note_is_a_function_of_the_status_alone() -> None:
     """No clock, no age, no pane read: the same page renders the same note for a status."""
     page = TranscriptPage(
