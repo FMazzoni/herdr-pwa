@@ -484,7 +484,11 @@ class HerdrClient:
             )
         except EngineError:
             return prompt
-        return BlockedPrompt.parse(text, target=target, session=session, ansi=ansi)
+        # Text and colour from this one read: a cursor seen beside an older text read
+        # may sit on a row that has since moved.
+        return BlockedPrompt.parse(
+            panetext.as_text_read(ansi), target=target, session=session, ansi=ansi
+        )
 
     # ----------------------------------------------------------------------
     # Writes -- every one of these fails closed on an unexpected protocol

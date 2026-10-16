@@ -31,7 +31,8 @@ WORKING_SESSION = "6ae1e031-ddb4-4684-ab07-68073f7fec47"
 WORKING_PANE = "w1:p3"
 IDLE_SESSION = "5b609dba-d756-493a-a3fc-b4e09bf0a183"
 
-type Reply = JsonObject | Exception
+# A callable answers from the request, as a runner answers a text and a colour read differently.
+type Reply = JsonObject | Exception | Callable[[JsonObject], JsonObject]
 
 
 def _object(value: JsonValue) -> JsonObject:
@@ -109,7 +110,7 @@ class FakeWire:
         hook = self.after.get(method)
         if hook is not None:
             hook(self)
-        return copy.deepcopy(reply)
+        return reply(params) if callable(reply) else copy.deepcopy(reply)
 
     def close(self) -> None:
         return None

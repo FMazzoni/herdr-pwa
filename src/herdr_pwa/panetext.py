@@ -525,6 +525,11 @@ def plain(text: str) -> str:
     return "\n".join(plain_text(line) for line in _tokenise(text))
 
 
+def as_text_read(ansi: str) -> str:
+    """A colour read as the text read of the same screen: escapes dropped, padding trimmed."""
+    return "\n".join(line.rstrip() for line in plain(ansi).splitlines())
+
+
 # Was this label printed whole, or is it the top half of a wrapped row?
 
 
