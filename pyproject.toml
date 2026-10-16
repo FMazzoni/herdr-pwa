@@ -15,6 +15,7 @@ dependencies = [
     "latex2mathml>=3.81.1",
     "linkify-it-py>=2.2.0",
     "pygments>=2.21.0",
+    "pygit2>=1.20.1",
 ]
 
 [project.scripts]

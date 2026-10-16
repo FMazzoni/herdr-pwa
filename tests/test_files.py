@@ -16,7 +16,7 @@ from fastapi.routing import APIRoute
 from starlette.routing import BaseRoute
 
 from herdr_pwa.files import fuzzy
-from herdr_pwa.files.git import Git, _filter_names, parse_status  # pyright: ignore[reportPrivateUsage]
+from herdr_pwa.files.git import Git
 from herdr_pwa.files.reader import Listing, LocalReader, OutsideRoot, Stat
 from herdr_pwa.files.roots import Fence, is_secret, root_id
 from herdr_pwa.files.view import (
@@ -819,20 +819,6 @@ def test_nothing_the_explorer_answers_may_be_stored(tmp_path: Path, repo: Path) 
 # ---- small parts ----------------------------------------------------------------------------
 
 
-def test_status_reads_renames_untracked_and_the_branch() -> None:
-    raw = b"## feature...origin/feature\0 M a.py\0R  new.py\0old.py\0?? notes.txt\0D  gone.py\0"
-    status = parse_status(raw)
-    assert status.branch == "feature"
-    assert [(c.path, c.kind) for c in status.changes] == [
-        ("a.py", "modified"),
-        ("gone.py", "deleted"),
-        ("new.py", "renamed"),
-        ("notes.txt", "new"),
-    ]
-    assert status.under("") == 4
-    assert status.of("old.py") is None
-
-
 def test_sizes_read_as_a_phone_reads_them() -> None:
     assert [human_size(n) for n in (0, 812, 14_000, 3_300_000)] == [
         "0 B",
@@ -916,10 +902,3 @@ def test_a_submodule_never_runs_a_command_its_own_config_names(tmp_path: Path) -
     ):
         assert rig.http.get(url).status_code == 200, url
         assert sorted(p.name for p in marks.iterdir()) == [], url
-
-
-def test_a_filter_name_that_cannot_be_blanked_stops_git() -> None:
-    raw = b"filter.lfs.clean\ngit-lfs clean\0filter.a.b.process\nx\0"
-    assert _filter_names(raw) == ["lfs", "a.b"]
-    assert _filter_names(b"filter.x=y.clean\nrm\0") is None
-    assert _filter_names(b"") == []

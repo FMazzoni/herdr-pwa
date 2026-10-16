@@ -14,7 +14,6 @@ import threading
 import time
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from pathlib import Path
-from typing import Final
 
 import pytest
 from pydantic import JsonValue, TypeAdapter
@@ -1044,16 +1043,12 @@ def test_live_the_request_line_ceiling_is_still_where_it_was_measured() -> None:
 # --------------------------------------------------------------------------
 
 
-# The file explorer's git reader runs read-only git commands; it never reaches herdr.
-SPAWNS_GIT: Final = "files/git.py"
-
-
 def test_nothing_in_the_package_spawns_a_process() -> None:
     """The transport swap is only finished when the subprocess path is gone."""
     offenders = [
         path.relative_to(SRC).as_posix()
         for path in SRC.rglob("*.py")
-        if "__pycache__" not in path.parts and path.relative_to(SRC).as_posix() != SPAWNS_GIT
+        if "__pycache__" not in path.parts
         for line in path.read_text(encoding="utf-8").splitlines()
         if line.startswith(("import subprocess", "from subprocess", "import shutil"))
     ]
