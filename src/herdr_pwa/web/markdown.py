@@ -196,24 +196,29 @@ def _whole(node: SyntaxTreeNode, children: list[MdNode]) -> bool:
     return columns >= WIDE_TABLE and len(text) <= SHORT_CELL
 
 
+def _token_spans(text: str) -> list[MdNode]:
+    parts: list[MdNode] = []
+    at = 0
+    for found in _BREAKABLE_RUN.finditer(text):
+        if found.start() > at:
+            parts.append(MdNode(text=text[at : found.start()]))
+        parts.append(MdNode("span", cls="cell-token", children=(MdNode(text=found.group(0)),)))
+        at = found.end()
+    if at < len(text):
+        parts.append(MdNode(text=text[at:]))
+    return parts
+
+
 def _kept_whole(nodes: Iterable[MdNode]) -> list[MdNode]:
     """Each breakable run in a prose cell's text, held to one line so the column is as wide as it."""
     out: list[MdNode] = []
     for node in nodes:
-        if node.tag == "code" or node.tag in MATH_TAGS:
+        if not node.tag:
+            out += _token_spans(node.text)
+        elif node.tag == "code" or node.tag in MATH_TAGS:
             out.append(node)
-            continue
-        if node.tag:
+        else:
             out.append(replace(node, children=tuple(_kept_whole(node.children))))
-            continue
-        at = 0
-        for found in _BREAKABLE_RUN.finditer(node.text):
-            if found.start() > at:
-                out.append(MdNode(text=node.text[at : found.start()]))
-            out.append(MdNode("span", cls="cell-token", children=(MdNode(text=found.group(0)),)))
-            at = found.end()
-        if at < len(node.text):
-            out.append(MdNode(text=node.text[at:]))
     return out
 
 
