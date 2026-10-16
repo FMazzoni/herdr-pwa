@@ -17,6 +17,7 @@ from herdr_pwa.engine.generated.request import IntegrationTarget
 from herdr_pwa.engine.model import Agent, SessionId
 from herdr_pwa.engine.notices import (
     API_ERROR_KINDS,
+    ApiError,
     Hidden,
     PeerMessage,
     RecordOrigin,
@@ -137,7 +138,7 @@ def is_message(turn: TranscriptTurn) -> bool:
 
 
 def is_api_error(turn: TranscriptTurn) -> bool:
-    """Whether *turn* is the harness saying the API refused a turn, not anything the agent said."""
+    """Whether *turn* is the harness saying a turn ended with no answer, not the agent speaking."""
     return turn.speaker is Speaker.notice and turn.tool in API_ERROR_KINDS
 
 
@@ -1049,10 +1050,8 @@ def _result_parts(body: JsonValue) -> list[_ResultPart]:
         return []
 
 
-def _api_error_turn(record: ClaudeRecord, stamp: TurnStamp) -> TranscriptTurn:
-    """A refused turn as a quiet line saying what unblocks it, opening on the harness's words."""
-    said = "\n".join(block.said for block in _blocks(record) if block.type == "text")
-    found = api_error(record.error, said)
+def api_error_turn(found: ApiError, stamp: TurnStamp) -> TranscriptTurn:
+    """A turn that ended with no answer as a quiet line saying what unblocks it."""
     line, _ = one_line(found.line)
     result, cut = clip(found.said, MAX_RESULT_CHARS)
     return TranscriptTurn(
@@ -1063,8 +1062,14 @@ def _api_error_turn(record: ClaudeRecord, stamp: TurnStamp) -> TranscriptTurn:
         tool=found.kind,
         result="" if result == line else result,
         result_truncated=cut,
-        failed=True,
+        failed=found.failed,
     )
+
+
+def _api_error_turn(record: ClaudeRecord, stamp: TurnStamp) -> TranscriptTurn:
+    """A refused turn, opening on the harness's words."""
+    said = "\n".join(block.said for block in _blocks(record) if block.type == "text")
+    return api_error_turn(api_error(record.error, said), stamp)
 
 
 def _assistant_record(record: ClaudeRecord, stamp: TurnStamp) -> TranscriptTurn | None:

@@ -10,6 +10,7 @@ from typing import Annotated, ClassVar, Final, NamedTuple, Protocol, Self, overr
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from herdr_pwa.diff import EditArgs, tool_diff
+from herdr_pwa.engine.notices import INTERRUPTED_CODE, ApiError, api_error, status_code
 from herdr_pwa.engine.store import SessionStore, consult
 from herdr_pwa.engine.transcript import (
     MAX_NOTE_CHARS,
@@ -31,6 +32,7 @@ from herdr_pwa.engine.transcript import (
     TranscriptTurn,
     TurnStamp,
     Window,
+    api_error_turn,
     clip,
     first_line,
     one_line,
@@ -52,6 +54,16 @@ _ID: Final = re.compile(r"^(?:ses|msg|prt)_[A-Za-z0-9]+$")
 
 _QUIET_TYPES: Final = frozenset(
     {"step-start", "step-finish", "snapshot", "patch", "reasoning", "compaction"}
+)
+
+# Measured: the error opencode records when the turn was stopped, worded "Aborted" or, in the
+# frozen layout, "The operation was aborted."
+_ABORTED: Final = "MessageAbortedError"
+
+# A message whose answer failed: its error is read where its parts end, as one more entry.
+_FAILED_MESSAGES: Final = (
+    "select id from message where session_id = ?"
+    " and case when json_valid(data) then json_type(data, '$.error') end = 'object'"
 )
 
 
@@ -95,6 +107,7 @@ class _Times(BaseModel):
 
     start: Number = None
     created: Number = None
+    completed: Number = None
 
 
 type _When = Annotated[_Times | None, OR_NONE]
@@ -163,8 +176,24 @@ class _Tokens(BaseModel):
     cache: Annotated[_Cache | None, OR_NONE] = None
 
 
+class _ErrorData(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    message: Text = None
+    status: Count = Field(default=None, validation_alias="statusCode")
+
+
+class _Error(BaseModel):
+    """A message's ``error``: opencode's name for what went wrong, and the provider's words."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    name: Text = None
+    data: Annotated[_ErrorData | None, OR_NONE] = None
+
+
 class _MessageRecord(BaseModel):
-    """One ``message`` record: who spoke, when, and on an answer, what it cost."""
+    """One ``message`` record: who spoke, when, on an answer what it cost, and why it failed."""
 
     model_config = ConfigDict(extra="ignore")
 
@@ -174,6 +203,7 @@ class _MessageRecord(BaseModel):
     tokens: Annotated[_Tokens | None, OR_NONE] = None
     model: Text = Field(default=None, validation_alias="modelID")
     provider: Text = Field(default=None, validation_alias="providerID")
+    error: Annotated[_Error | None, OR_NONE] = None
 
 
 class _Session(BaseModel):
@@ -277,14 +307,17 @@ class _Files:
         return cls(resolved, session)
 
     def stream(self) -> list[tuple[str, str]]:
-        """Every part as ``(message id, path)``, oldest first."""
+        """Every part as ``(message id, path)``, then a failed message's own id, oldest first."""
         found: list[tuple[str, str]] = []
         for message in self.messages():
             try:
                 parts = sorted((self._base / "part" / message).iterdir())
             except OSError:
-                continue
+                parts = []
             found.extend((message, str(part)) for part in parts if _named(part))
+            record, _ = self.message(message)
+            if record is not None and record.error is not None:
+                found.append((message, message))
         return found
 
     def part(self, key: str) -> tuple[_Part | None, int]:
@@ -365,16 +398,18 @@ class _Live:
         return None if db is None else cls(db)
 
     def stream(self) -> list[tuple[str, str]]:
-        """Every part as ``(message id, part id)``, oldest first."""
+        """Every part as ``(message id, part id)``, then a failed message's own id, oldest first."""
         rows = self._db.rows(
             "select message_id, id from part where session_id = ? order by message_id, id",
             self._db.session,
         )
-        return [
+        failed = self._db.rows(_FAILED_MESSAGES, self._db.session)
+        found = [
             (m, k)
-            for m, k in rows
+            for m, k in [*rows, *((m, m) for (m,) in failed)]
             if isinstance(m, str) and isinstance(k, str) and _ID.match(m) and _ID.match(k)
         ]
+        return sorted(found, key=_after_parts)
 
     def part(self, key: str) -> tuple[_Part | None, int]:
         """One part row, with its own id folded back in as the store spells it."""
@@ -434,6 +469,12 @@ class _Live:
             return None, 0
         blob = found[0]
         return blob, len(blob) if isinstance(blob, str | bytes) else 0
+
+
+def _after_parts(entry: tuple[str, str]) -> tuple[str, bool, str]:
+    """A stream entry's place: by message, a failure (keyed by its own id) after the parts."""
+    message, key = entry
+    return message, key == message, key
 
 
 def _candidates(root: Path) -> tuple[Path, tuple[Path, Path]]:
@@ -564,13 +605,44 @@ class _Messages:
         return self._held[identifier]
 
 
-def _charge(
-    store: _Store, messages: _Messages, key: str, max_bytes: int
-) -> tuple[_Part | None, bool]:
-    """One part, its read charged to the page; and whether that broke the budget."""
+class _Read(NamedTuple):
+    """One stream entry as a turn: whether its record was intact, and whether it broke the budget."""
+
+    turn: TranscriptTurn | None
+    intact: bool
+    over: bool
+
+
+def _failure(message: _MessageRecord) -> ApiError | None:
+    """Why *message*'s answer never came, in the words the chat says it with, or ``None``."""
+    error = message.error
+    if error is None:
+        return None
+    data = error.data or _ErrorData()
+    code = INTERRUPTED_CODE if error.name == _ABORTED else status_code(data.status)
+    return api_error(code, data.message or error.name or "")
+
+
+def _ended(message: _MessageRecord) -> str:
+    """When *message* ended, which is when its failure happened."""
+    times = message.time or _Times()
+    return _stamp(times.completed) or _stamp(times.created)
+
+
+def _read(store: _Store, messages: _Messages, entry: tuple[str, str], max_bytes: int) -> _Read:
+    """One stream entry, its read charged to the page: a part, or a failed message's error."""
+    identifier, key = entry
+    if key == identifier:
+        message = messages.get(identifier)
+        found = _failure(message)
+        turn = None if found is None else api_error_turn(found, TurnStamp(key, _ended(message)))
+        return _Read(turn, intact=True, over=messages.spent > max_bytes)
     part, spent = store.part(key)
     messages.spent += spent
-    return part, messages.spent > max_bytes
+    if messages.spent > max_bytes:
+        return _Read(None, intact=part is not None, over=True)
+    turn = None if part is None else _turn(part, messages.get(identifier))
+    return _Read(turn, intact=part is not None, over=False)
 
 
 def _page(store: _Store, window: Window) -> TranscriptPage:
@@ -583,13 +655,11 @@ def _page(store: _Store, window: Window) -> TranscriptPage:
     messages = _Messages(store)
     cursor = end
     for position in range(end, 0, -1):
-        identifier, key = stream[position - 1]
-        part, over = _charge(store, messages, key, gather.budget)
-        if over:
+        read = _read(store, messages, stream[position - 1], gather.budget)
+        if read.over:
             break
         cursor = position - 1
-        turn = None if part is None else _turn(part, messages.get(identifier))
-        if gather.take(turn, cursor):
+        if gather.take(read.turn, cursor):
             break
     turns = gather.turns
     turns.reverse()
@@ -615,12 +685,11 @@ def _since(store: _Store, window: Window) -> TranscriptPage:
     turns = gather.turns
     end = start
     for position in range(start + 1, size + 1):
-        identifier, key = stream[position - 1]
-        part, over = _charge(store, messages, key, gather.budget)
-        if over or part is None:
+        read = _read(store, messages, stream[position - 1], gather.budget)
+        if read.over or not read.intact:
             break
         end = position
-        if gather.take(_turn(part, messages.get(identifier)), position - 1):
+        if gather.take(read.turn, position - 1):
             break
     return TranscriptPage(
         turns=turns,
@@ -682,7 +751,9 @@ def _take(tally: SessionUsage, record: _MessageRecord) -> None:
         return
     cost = _spent(record)
     tokens = record.tokens
-    if tokens is None:
+    # A failed answer's zeros are not a reply: counted, they name a model that never answered
+    # and empty the context window the last real answer measured.
+    if tokens is None or record.error is not None:
         tally.cost += cost
         return
     # Every assistant row names both: the provider is not derivable from the model id.

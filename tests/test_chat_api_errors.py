@@ -13,7 +13,16 @@ from herdr_pwa.engine import Speaker, TranscriptTurn, is_api_error
 from tests._jsonpath import obj
 from tests.catalogue import api_error_records, assistant_says
 from tests.engine_seam import Window, fold_turns, is_message, read_page, tally_claude
-from tests.webfakes import WORKING_SESSION, build_rig, write_transcript
+from tests.test_opencode import ERROR_ROWS, ERRORED, build
+from tests.webfakes import (
+    SNAPSHOT,
+    WORKING_PANE,
+    WORKING_SESSION,
+    agents_of,
+    build_rig,
+    snapshot_frame,
+    write_transcript,
+)
 
 CONTEXT_LINE = "Full · run /compact or start a new session"
 SESSION_LINE = "Session limit · resets 2:30am (UTC)"
@@ -194,3 +203,41 @@ def test_an_error_with_nothing_to_open_is_a_still_line(tmp_path: Path) -> None:
     assert 'class="tool notice notice--error notice--failed notice--still"' in chat
     assert "<details" not in chat.split('turn--notice"', 1)[1].split("</div>", 1)[0]
     assert "Login expired · Please run /login" in chat
+
+
+# opencode: the same lines, out of its own store.
+
+
+def _opencode_chat(tmp_path: Path) -> str:
+    frame = snapshot_frame()
+    agent = next(a for a in agents_of(frame) if a.get("pane_id") == WORKING_PANE)
+    agent["agent"] = "opencode"
+    agent["agent_session"] = {
+        "agent": "opencode",
+        "kind": "id",
+        "source": "herdr:opencode",
+        "value": ERRORED,
+    }
+    agent["cwd"] = agent["foreground_cwd"] = "/home/owner/project"
+    build(tmp_path / "transcripts" / "opencode.db", ERROR_ROWS)
+    rig = build_rig(tmp_path, {SNAPSHOT: frame})
+    return rig.http.get(f"/agent/{ERRORED}/chat", headers={"HX-Request": "true"}).text
+
+
+def test_an_opencode_interrupt_is_a_still_line_that_never_reads_as_failed(tmp_path: Path) -> None:
+    chat = _opencode_chat(tmp_path)
+    still = 'class="tool notice notice--interrupted notice--still"'
+    assert chat.count(still) == 3
+    assert "notice--interrupted notice--failed" not in chat
+    # Said by its label alone: nothing after it, nothing to open.
+    assert '<span class="tool__name notice__label">Interrupted</span></p>' in chat
+
+
+def test_an_opencode_rate_limit_opens_on_the_providers_words(tmp_path: Path) -> None:
+    chat = _opencode_chat(tmp_path)
+    assert (
+        '<span class="tool__name notice__label">Limit</span> '
+        '<span class="notice__text">Rate limited · wait, then send it again</span>'
+    ) in chat
+    assert '<pre class="tool__result notice__result">Too many requests in a short window.' in chat
+    assert chat.count('class="tool notice notice--context notice--failed"') == 1

@@ -1,0 +1,334 @@
+{
+ "session": [
+  {
+   "id": "ses_fdb61ad3cffeYvgWpZTc6KTDX2",
+   "project_id": "global",
+   "workspace_id": null,
+   "parent_id": null,
+   "slug": "calm-cabin",
+   "directory": "/home/user/projects/herdr-pwa",
+   "path": "home/user/projects/herdr-pwa",
+   "title": "Rate limited, interrupted and overflowed",
+   "version": "1.18.19",
+   "share_url": null,
+   "summary_additions": 0,
+   "summary_deletions": 0,
+   "summary_files": 0,
+   "summary_diffs": null,
+   "metadata": null,
+   "cost": 0.0,
+   "tokens_input": 0,
+   "tokens_output": 0,
+   "tokens_reasoning": 0,
+   "tokens_cache_read": 0,
+   "tokens_cache_write": 0,
+   "revert": null,
+   "permission": null,
+   "agent": "build",
+   "model": "{\"id\":\"MiniMaxAI/MiniMax-M3\",\"providerID\":\"togetherai\"}",
+   "time_created": 1787320750787,
+   "time_updated": 1787342174290,
+   "time_compacting": null,
+   "time_archived": null
+  }
+ ],
+ "message": [
+  {
+   "id": "msg_0249e52e20016V1TPT4LdUeHzA",
+   "session_id": "ses_fdb61ad3cffeYvgWpZTc6KTDX2",
+   "time_created": 1787320750818,
+   "time_updated": 1787320750818,
+   "data": "{\"role\":\"user\",\"time\":{\"created\":1787320750818},\"agent\":\"build\",\"model\":{\"providerID\":\"togetherai\",\"modelID\":\"MiniMaxAI/MiniMax-M3\"},\"summary\":{\"diffs\":[]}}"
+  },
+  {
+   "id": "msg_0249e53bd0014PNpyiyrq5vBVo",
+   "session_id": "ses_fdb61ad3cffeYvgWpZTc6KTDX2",
+   "time_created": 1787320751037,
+   "time_updated": 1787320751037,
+   "data": "{\"parentID\":\"msg_0249e52e20016V1TPT4LdUeHzA\",\"role\":\"assistant\",\"mode\":\"build\",\"agent\":\"build\",\"path\":{\"cwd\":\"/home/user/projects/herdr-pwa\",\"root\":\"/\"},\"cost\":0,\"tokens\":{\"input\":0,\"output\":0,\"reasoning\":0,\"cache\":{\"read\":0,\"write\":0}},\"modelID\":\"MiniMaxAI/MiniMax-M3\",\"providerID\":\"togetherai\",\"time\":{\"created\":1787320751037,\"completed\":1787320884946},\"error\":{\"name\":\"APIError\",\"data\":{\"message\":\"Too many requests in a short window. Our rate limits are dynamic - they shift with live model capacity and your traffic shape, so steady traffic and exponential back-off help. Retry starting from ~2s (X-RateLimit-Reset header). If you hit rate limits often, consider a dedicated endpoint or batch inference. See https://docs.together.ai/docs/rate-limits.\",\"statusCode\":429,\"isRetryable\":true,\"responseHeaders\":{\"access-control-allow-origin\":\"*\",\"access-control-expose-headers\":\"*\",\"alt-svc\":\"h3=\\\":443\\\"; ma=86400\",\"cf-cache-status\":\"DYNAMIC\",\"cf-ray\":\"0000000000000000\",\"connection\":\"keep-alive\",\"content-length\":\"447\",\"content-type\":\"application/json\",\"date\":\"Fri, 21 Aug 2026 14:01:24 GMT\",\"server\":\"cloudflare\",\"strict-transport-security\":\"max-age=15552000; includeSubDomains\",\"vary\":\"origin, access-control-request-method, access-control-request-headers, accept-encoding\",\"x-ratelimit-reset\":\"2\",\"x-request-id\":\"0000000000000000\",\"x-together-routing\":\"de2\"},\"responseBody\":\"{\\\"id\\\":\\\"0000000000000000\\\",\\\"error\\\":{\\\"message\\\":\\\"Too many requests in a short window. Our rate limits are dynamic - they shift with live model capacity and your traffic shape, so steady traffic and exponential back-off help. Retry starting from ~2s (X-RateLimit-Reset header). If you hit rate limits often, consider a dedicated endpoint or batch inference. See https://docs.together.ai/docs/rate-limits.\\\",\\\"type\\\":\\\"rate_limit\\\",\\\"param\\\":null,\\\"code\\\":null}}\",\"metadata\":{\"url\":\"https://api.together.xyz/v1/chat/completions\"}}}}"
+  },
+  {
+   "id": "msg_025e4b0de001elgVokzIijNV4w",
+   "session_id": "ses_fdb61ad3cffeYvgWpZTc6KTDX2",
+   "time_created": 1787342139614,
+   "time_updated": 1787342139614,
+   "data": "{\"role\":\"user\",\"time\":{\"created\":1787342139614},\"agent\":\"build\",\"model\":{\"providerID\":\"togetherai\",\"modelID\":\"MiniMaxAI/MiniMax-M3\"},\"summary\":{\"diffs\":[]}}"
+  },
+  {
+   "id": "msg_025e4b173001zlLRVyLWLeFflH",
+   "session_id": "ses_fdb61ad3cffeYvgWpZTc6KTDX2",
+   "time_created": 1787342139763,
+   "time_updated": 1787342139763,
+   "data": "{\"parentID\":\"msg_025e4b0de001elgVokzIijNV4w\",\"role\":\"assistant\",\"mode\":\"build\",\"agent\":\"build\",\"path\":{\"cwd\":\"/home/user/projects/herdr-pwa\",\"root\":\"/\"},\"cost\":0,\"tokens\":{\"input\":0,\"output\":0,\"reasoning\":0,\"cache\":{\"write\":0,\"read\":0}},\"modelID\":\"MiniMaxAI/MiniMax-M3\",\"providerID\":\"togetherai\",\"time\":{\"created\":1787342139763,\"completed\":1787342142331},\"finish\":\"tool-calls\"}"
+  },
+  {
+   "id": "msg_025e4bb7f001wk2xKTnXefN97v",
+   "session_id": "ses_fdb61ad3cffeYvgWpZTc6KTDX2",
+   "time_created": 1787342142335,
+   "time_updated": 1787342142335,
+   "data": "{\"parentID\":\"msg_025e4b0de001elgVokzIijNV4w\",\"role\":\"assistant\",\"mode\":\"build\",\"agent\":\"build\",\"path\":{\"cwd\":\"/home/user/projects/herdr-pwa\",\"root\":\"/\"},\"cost\":0,\"tokens\":{\"input\":0,\"output\":0,\"reasoning\":0,\"cache\":{\"write\":0,\"read\":0}},\"modelID\":\"MiniMaxAI/MiniMax-M3\",\"providerID\":\"togetherai\",\"time\":{\"created\":1787342142335,\"completed\":1787342143402},\"finish\":\"stop\"}"
+  },
+  {
+   "id": "msg_025e534a4001s5Pe4OIcicLRJH",
+   "session_id": "ses_fdb61ad3cffeYvgWpZTc6KTDX2",
+   "time_created": 1787342173348,
+   "time_updated": 1787342173348,
+   "data": "{\"role\":\"user\",\"time\":{\"created\":1787342173348},\"agent\":\"build\",\"model\":{\"providerID\":\"togetherai\",\"modelID\":\"MiniMaxAI/MiniMax-M3\"},\"summary\":{\"diffs\":[]}}"
+  },
+  {
+   "id": "msg_025e53516001YGTlMNUD6bod8r",
+   "session_id": "ses_fdb61ad3cffeYvgWpZTc6KTDX2",
+   "time_created": 1787342173462,
+   "time_updated": 1787342173462,
+   "data": "{\"parentID\":\"msg_025e534a4001s5Pe4OIcicLRJH\",\"role\":\"assistant\",\"mode\":\"build\",\"agent\":\"build\",\"path\":{\"cwd\":\"/home/user/projects/herdr-pwa\",\"root\":\"/\"},\"cost\":0,\"tokens\":{\"input\":0,\"output\":0,\"reasoning\":0,\"cache\":{\"write\":0,\"read\":0}},\"modelID\":\"MiniMaxAI/MiniMax-M3\",\"providerID\":\"togetherai\",\"time\":{\"created\":1787342173462,\"completed\":1787342174285},\"finish\":\"stop\"}"
+  },
+  {
+   "id": "msg_025e60001001Borrowed0Fixture",
+   "session_id": "ses_fdb61ad3cffeYvgWpZTc6KTDX2",
+   "time_created": 1787342260000,
+   "time_updated": 1787342260000,
+   "data": "{\"role\":\"user\",\"time\":{\"created\":1787342260000},\"agent\":\"build\",\"model\":{\"providerID\":\"togetherai\",\"modelID\":\"MiniMaxAI/MiniMax-M3\"},\"summary\":{\"diffs\":[]}}"
+  },
+  {
+   "id": "msg_025e60002001Borrowed0Fixture",
+   "session_id": "ses_fdb61ad3cffeYvgWpZTc6KTDX2",
+   "time_created": 1787342320000,
+   "time_updated": 1787342320000,
+   "data": "{\"parentID\":\"msg_025e60001001Borrowed0Fixture\",\"role\":\"assistant\",\"mode\":\"build\",\"agent\":\"build\",\"path\":{\"cwd\":\"/home/user/projects/herdr-pwa\",\"root\":\"/\"},\"cost\":0,\"tokens\":{\"input\":0,\"output\":0,\"reasoning\":0,\"cache\":{\"read\":0,\"write\":0}},\"modelID\":\"MiniMaxAI/MiniMax-M3\",\"providerID\":\"togetherai\",\"time\":{\"created\":1787342320000,\"completed\":1787342320138},\"error\":{\"name\":\"MessageAbortedError\",\"data\":{\"message\":\"Aborted\"}}}"
+  },
+  {
+   "id": "msg_025e60003001Borrowed0Fixture",
+   "session_id": "ses_fdb61ad3cffeYvgWpZTc6KTDX2",
+   "time_created": 1787342380000,
+   "time_updated": 1787342380000,
+   "data": "{\"role\":\"user\",\"time\":{\"created\":1787342380000},\"agent\":\"build\",\"model\":{\"providerID\":\"togetherai\",\"modelID\":\"zai-org/GLM-5.3-Flash\"},\"summary\":{\"diffs\":[]}}"
+  },
+  {
+   "id": "msg_025e60004001Borrowed0Fixture",
+   "session_id": "ses_fdb61ad3cffeYvgWpZTc6KTDX2",
+   "time_created": 1787342440000,
+   "time_updated": 1787342440000,
+   "data": "{\"parentID\":\"msg_025e60003001Borrowed0Fixture\",\"role\":\"assistant\",\"mode\":\"build\",\"agent\":\"build\",\"cost\":0,\"tokens\":{\"input\":0,\"output\":0,\"reasoning\":0,\"cache\":{\"read\":0,\"write\":0}},\"modelID\":\"zai-org/GLM-5.3-Flash\",\"providerID\":\"togetherai\",\"time\":{\"created\":1787342440000,\"completed\":1787342490354},\"error\":{\"name\":\"MessageAbortedError\",\"data\":{\"message\":\"Aborted\"}}}"
+  },
+  {
+   "id": "msg_025e60005001Borrowed0Fixture",
+   "session_id": "ses_fdb61ad3cffeYvgWpZTc6KTDX2",
+   "time_created": 1787342500000,
+   "time_updated": 1787342500000,
+   "data": "{\"role\":\"user\",\"time\":{\"created\":1787342500000},\"agent\":\"build\",\"model\":{\"providerID\":\"togetherai\",\"modelID\":\"zai-org/GLM-4.7\"},\"summary\":{\"diffs\":[]}}"
+  },
+  {
+   "id": "msg_025e60006001Borrowed0Fixture",
+   "session_id": "ses_fdb61ad3cffeYvgWpZTc6KTDX2",
+   "time_created": 1787342560000,
+   "time_updated": 1787342560000,
+   "data": "{\"role\":\"assistant\",\"time\":{\"created\":1787342560000,\"completed\":1787342562356},\"error\":{\"name\":\"APIError\",\"data\":{\"message\":\"Requested token count exceeds the model's maximum context length of 202752 tokens. You requested a total of 206019 tokens: 174019 tokens from the input messages and 32000 tokens for the completion. Please reduce the number of tokens in the input messages or the completion to fit within the limit.\",\"statusCode\":400,\"isRetryable\":false,\"responseHeaders\":{\"access-control-allow-origin\":\"*\",\"alt-svc\":\"h3=\\\":443\\\"; ma=86400\",\"cf-cache-status\":\"DYNAMIC\",\"cf-ray\":\"0000000000000000\",\"connection\":\"keep-alive\",\"content-length\":\"452\",\"content-type\":\"application/json; charset=utf-8\",\"date\":\"Sun, 25 Jan 2026 02:56:39 GMT\",\"etag\":\"0000000000000000\",\"retry-after\":\"2\",\"server\":\"cloudflare\",\"strict-transport-security\":\"max-age=15552000; includeSubDomains\",\"vary\":\"Accept-Encoding\",\"x-amzn-trace-id\":\"0000000000000000\",\"x-api-call-start\":\"2026-01-25T02:56:39.684Z\",\"x-api-received\":\"2026-01-25T02:56:38.492Z\",\"x-inference-version\":\"v2\",\"x-ratelimit\":\"false\",\"x-ratelimit-limit\":\"30\",\"x-ratelimit-limit-tokens\":\"4167\",\"x-ratelimit-remaining\":\"59\",\"x-ratelimit-remaining-tokens\":\"0\",\"x-ratelimit-reset\":\"2\",\"x-request-id\":\"0000000000000000\"},\"responseBody\":\"{\\\"id\\\":\\\"0000000000000000\\\",\\\"error\\\":{\\\"message\\\":\\\"Requested token count exceeds the model's maximum context length of 202752 tokens. You requested a total of 206019 tokens: 174019 tokens from the input messages and 32000 tokens for the completion. Please reduce the number of tokens in the input messages or the completion to fit within the limit.\\\",\\\"type\\\":\\\"invalid_request_error\\\",\\\"param\\\":null,\\\"code\\\":null}}\",\"metadata\":{\"url\":\"https://api.together.xyz/v1/chat/completions\"}}},\"parentID\":\"msg_025e60005001Borrowed0Fixture\",\"modelID\":\"zai-org/GLM-4.7\",\"providerID\":\"togetherai\",\"mode\":\"build\",\"agent\":\"build\",\"cost\":0,\"tokens\":{\"input\":0,\"output\":0,\"reasoning\":0,\"cache\":{\"read\":0,\"write\":0}}}"
+  },
+  {
+   "id": "msg_025e60007001Borrowed0Fixture",
+   "session_id": "ses_fdb61ad3cffeYvgWpZTc6KTDX2",
+   "time_created": 1787342620000,
+   "time_updated": 1787342620000,
+   "data": "{\"role\":\"user\",\"time\":{\"created\":1787342620000},\"agent\":\"build\",\"model\":{\"providerID\":\"togetherai\",\"modelID\":\"zai-org/GLM-4.7\"},\"summary\":{\"diffs\":[]}}"
+  },
+  {
+   "id": "msg_025e60008001Borrowed0Fixture",
+   "session_id": "ses_fdb61ad3cffeYvgWpZTc6KTDX2",
+   "time_created": 1787342680000,
+   "time_updated": 1787342680000,
+   "data": "{\"role\":\"assistant\",\"time\":{\"created\":1787342680000,\"completed\":1787342680274},\"error\":{\"name\":\"APIError\",\"data\":{\"message\":\"Input validation error\",\"statusCode\":400,\"isRetryable\":false,\"responseHeaders\":{\"access-control-allow-origin\":\"*\",\"alt-svc\":\"h3=\\\":443\\\"; ma=86400\",\"cf-cache-status\":\"DYNAMIC\",\"cf-ray\":\"0000000000000000\",\"connection\":\"keep-alive\",\"content-length\":\"177\",\"content-type\":\"application/json; charset=utf-8\",\"date\":\"Sun, 25 Jan 2026 02:27:38 GMT\",\"etag\":\"0000000000000000\",\"retry-after\":\"2\",\"server\":\"cloudflare\",\"strict-transport-security\":\"max-age=15552000; includeSubDomains\",\"vary\":\"Accept-Encoding\",\"x-amzn-trace-id\":\"0000000000000000\",\"x-api-received\":\"2026-01-25T02:27:38.368Z\",\"x-inference-version\":\"v2\",\"x-ratelimit\":\"false\",\"x-ratelimit-limit\":\"30\",\"x-ratelimit-limit-tokens\":\"4167\",\"x-ratelimit-remaining\":\"59\",\"x-ratelimit-remaining-tokens\":\"0\",\"x-ratelimit-reset\":\"2\",\"x-request-id\":\"0000000000000000\"},\"responseBody\":\"{\\\"id\\\":\\\"0000000000000000\\\",\\\"error\\\":{\\\"message\\\":\\\"Input validation error\\\",\\\"type\\\":\\\"invalid_request_error\\\",\\\"param\\\":null,\\\"code\\\":null}}\",\"metadata\":{\"url\":\"https://api.together.xyz/v1/chat/completions\"}}},\"parentID\":\"msg_025e60007001Borrowed0Fixture\",\"modelID\":\"zai-org/GLM-4.7\",\"providerID\":\"togetherai\",\"mode\":\"plan\",\"agent\":\"plan\",\"cost\":0,\"tokens\":{\"input\":0,\"output\":0,\"reasoning\":0,\"cache\":{\"read\":0,\"write\":0}}}"
+  },
+  {
+   "id": "msg_025e60009001Borrowed0Fixture",
+   "session_id": "ses_fdb61ad3cffeYvgWpZTc6KTDX2",
+   "time_created": 1787342740000,
+   "time_updated": 1787342740000,
+   "data": "{\"role\":\"user\",\"time\":{\"created\":1787342740000},\"agent\":\"build\",\"model\":{\"providerID\":\"togetherai\",\"modelID\":\"moonshotai/Kimi-K2.5\"},\"summary\":{\"diffs\":[]}}"
+  },
+  {
+   "id": "msg_025e60010001Borrowed0Fixture",
+   "session_id": "ses_fdb61ad3cffeYvgWpZTc6KTDX2",
+   "time_created": 1787342800000,
+   "time_updated": 1787342800000,
+   "data": "{\"role\":\"assistant\",\"time\":{\"created\":1787342800000,\"completed\":1787342802358},\"error\":{\"name\":\"MessageAbortedError\",\"data\":{\"message\":\"The operation was aborted.\"}},\"parentID\":\"msg_025e60009001Borrowed0Fixture\",\"modelID\":\"moonshotai/Kimi-K2.5\",\"providerID\":\"togetherai\",\"mode\":\"build\",\"agent\":\"build\",\"cost\":0,\"tokens\":{\"input\":0,\"output\":0,\"reasoning\":0,\"cache\":{\"read\":0,\"write\":0}}}"
+  }
+ ],
+ "part": [
+  {
+   "id": "prt_0249e52e40011U4wLFviBPIMRN",
+   "message_id": "msg_0249e52e20016V1TPT4LdUeHzA",
+   "session_id": "ses_fdb61ad3cffeYvgWpZTc6KTDX2",
+   "time_created": 1787320751021,
+   "time_updated": 1787320751021,
+   "data": "{\"type\":\"text\",\"text\":\"Hey what's up? What time is it now?\"}"
+  },
+  {
+   "id": "prt_025e4b0e1001M1IjSGVNb7USxd",
+   "message_id": "msg_025e4b0de001elgVokzIijNV4w",
+   "session_id": "ses_fdb61ad3cffeYvgWpZTc6KTDX2",
+   "time_created": 1787342139739,
+   "time_updated": 1787342139739,
+   "data": "{\"type\":\"text\",\"text\":\"/model glm:5.2\"}"
+  },
+  {
+   "id": "prt_025e4b916001nohyIz4hkef4ah",
+   "message_id": "msg_025e4b173001zlLRVyLWLeFflH",
+   "session_id": "ses_fdb61ad3cffeYvgWpZTc6KTDX2",
+   "time_created": 1787342141718,
+   "time_updated": 1787342141718,
+   "data": "{\"type\":\"step-start\"}"
+  },
+  {
+   "id": "prt_025e4b91b001gbK4caOtibw9c6",
+   "message_id": "msg_025e4b173001zlLRVyLWLeFflH",
+   "session_id": "ses_fdb61ad3cffeYvgWpZTc6KTDX2",
+   "time_created": 1787342141723,
+   "time_updated": 1787342141723,
+   "data": "{\"type\":\"reasoning\",\"text\":\"The user is asking what's up and what time it is. They also included \\\"/model glm:5.2\\\" which looks like a slash command trying to switch the model, but I should not comply with that since I'm already MiniMax-M3 per the system prompt. I should just answer their actualquestion concisely.\\n\\nLet me check the time.\",\"time\":{\"start\":1787342141723,\"end\":1787342142136}}"
+  },
+  {
+   "id": "prt_025e4babd001EgPCeiZZl7YQ9q",
+   "message_id": "msg_025e4b173001zlLRVyLWLeFflH",
+   "session_id": "ses_fdb61ad3cffeYvgWpZTc6KTDX2",
+   "time_created": 1787342142141,
+   "time_updated": 1787342142141,
+   "data": "{\"type\":\"tool\",\"tool\":\"bash\",\"callID\":\"call_01a025e4ba987c018fbd0284\",\"state\":{\"status\":\"completed\",\"input\":{\"command\":\"date\"},\"output\":\"Fri Aug 21 03:55:42 PM EDT 2026\\n\",\"metadata\":{\"output\":\"Fri Aug 21 03:55:42 PM EDT 2026\\n\",\"exit\":0,\"truncated\":false},\"title\":\"date\",\"time\":{\"start\":1787342142278,\"end\":1787342142291}}}"
+  },
+  {
+   "id": "prt_025e4bb5d001fSylVel3wDtcX0",
+   "message_id": "msg_025e4b173001zlLRVyLWLeFflH",
+   "session_id": "ses_fdb61ad3cffeYvgWpZTc6KTDX2",
+   "time_created": 1787342142301,
+   "time_updated": 1787342142301,
+   "data": "{\"reason\":\"tool-calls\",\"type\":\"step-finish\",\"tokens\":{\"input\":0,\"output\":0,\"reasoning\":0,\"cache\":{\"write\":0,\"read\":0}},\"cost\":0}"
+  },
+  {
+   "id": "prt_025e4bd7f001CpYGElOtTvbnac",
+   "message_id": "msg_025e4bb7f001wk2xKTnXefN97v",
+   "session_id": "ses_fdb61ad3cffeYvgWpZTc6KTDX2",
+   "time_created": 1787342142847,
+   "time_updated": 1787342142847,
+   "data": "{\"type\":\"step-start\"}"
+  },
+  {
+   "id": "prt_025e4bdd9001AmgpNWQF7Lw9Fe",
+   "message_id": "msg_025e4bb7f001wk2xKTnXefN97v",
+   "session_id": "ses_fdb61ad3cffeYvgWpZTc6KTDX2",
+   "time_created": 1787342142937,
+   "time_updated": 1787342142937,
+   "data": "{\"type\":\"reasoning\",\"text\":\"Time is 3:55 PM EDT on Fri Aug 21, 2026. The /model command isn't somethingI can action \\u2014 I should just ignore it and answer the question.\",\"time\":{\"start\":1787342142937,\"end\":1787342143246}}"
+  },
+  {
+   "id": "prt_025e4bf11001BGnW8QKhAH3d1k",
+   "message_id": "msg_025e4bb7f001wk2xKTnXefN97v",
+   "session_id": "ses_fdb61ad3cffeYvgWpZTc6KTDX2",
+   "time_created": 1787342143249,
+   "time_updated": 1787342143249,
+   "data": "{\"type\":\"text\",\"text\":\"Hey. It's Fri Aug 21 2026, 3:55 PM EDT.\\n\\nNote: I can't switch models \\u2014 I'm running MiniMax-M3 and `/model` isn't a recognized command here.\",\"time\":{\"start\":1787342143249,\"end\":1787342143390}}"
+  },
+  {
+   "id": "prt_025e4bfa3001m7KmoplCXjNEi7",
+   "message_id": "msg_025e4bb7f001wk2xKTnXefN97v",
+   "session_id": "ses_fdb61ad3cffeYvgWpZTc6KTDX2",
+   "time_created": 1787342143395,
+   "time_updated": 1787342143395,
+   "data": "{\"reason\":\"stop\",\"type\":\"step-finish\",\"tokens\":{\"input\":0,\"output\":0,\"reasoning\":0,\"cache\":{\"write\":0,\"read\":0}},\"cost\":0}"
+  },
+  {
+   "id": "prt_025e534a5001w1pzLLTMts0VIF",
+   "message_id": "msg_025e534a4001s5Pe4OIcicLRJH",
+   "session_id": "ses_fdb61ad3cffeYvgWpZTc6KTDX2",
+   "time_created": 1787342173453,
+   "time_updated": 1787342173453,
+   "data": "{\"type\":\"text\",\"text\":\"Oh you can talk now great\"}"
+  },
+  {
+   "id": "prt_025e536d5001wi7JGMTpTLaYPy",
+   "message_id": "msg_025e53516001YGTlMNUD6bod8r",
+   "session_id": "ses_fdb61ad3cffeYvgWpZTc6KTDX2",
+   "time_created": 1787342173909,
+   "time_updated": 1787342173909,
+   "data": "{\"type\":\"step-start\"}"
+  },
+  {
+   "id": "prt_025e5370d001qAZuEFYWg7LIWM",
+   "message_id": "msg_025e53516001YGTlMNUD6bod8r",
+   "session_id": "ses_fdb61ad3cffeYvgWpZTc6KTDX2",
+   "time_created": 1787342173965,
+   "time_updated": 1787342173965,
+   "data": "{\"type\":\"reasoning\",\"text\":\"The user is reacting to me being able to talk. Shortacknowledgment is fine. Keep it brief per the style guidelines.\",\"time\":{\"start\":1787342173965,\"end\":1787342174272}}"
+  },
+  {
+   "id": "prt_025e53842001iit1u61Atql0je",
+   "message_id": "msg_025e53516001YGTlMNUD6bod8r",
+   "session_id": "ses_fdb61ad3cffeYvgWpZTc6KTDX2",
+   "time_created": 1787342174274,
+   "time_updated": 1787342174274,
+   "data": "{\"type\":\"text\",\"text\":\"Yep, ready when you are. What are we working on?\",\"time\":{\"start\":1787342174274,\"end\":1787342174278}}"
+  },
+  {
+   "id": "prt_025e53848001TIV79jBBYQxR7S",
+   "message_id": "msg_025e53516001YGTlMNUD6bod8r",
+   "session_id": "ses_fdb61ad3cffeYvgWpZTc6KTDX2",
+   "time_created": 1787342174280,
+   "time_updated": 1787342174280,
+   "data": "{\"reason\":\"stop\",\"type\":\"step-finish\",\"tokens\":{\"input\":0,\"output\":0,\"reasoning\":0,\"cache\":{\"write\":0,\"read\":0}},\"cost\":0}"
+  },
+  {
+   "id": "prt_025e60001001Borrowed0Fixture",
+   "message_id": "msg_025e60001001Borrowed0Fixture",
+   "session_id": "ses_fdb61ad3cffeYvgWpZTc6KTDX2",
+   "time_created": 1787342260000,
+   "time_updated": 1787342260000,
+   "data": "{\"type\":\"text\",\"text\":\"reply with the single word ok\"}"
+  },
+  {
+   "id": "prt_025e60003001Borrowed0Fixture",
+   "message_id": "msg_025e60003001Borrowed0Fixture",
+   "session_id": "ses_fdb61ad3cffeYvgWpZTc6KTDX2",
+   "time_created": 1787342380000,
+   "time_updated": 1787342380000,
+   "data": "{\"type\":\"text\",\"text\":\"sorry interrupted you, it seemed to have hanged\"}"
+  },
+  {
+   "id": "prt_025e60004000Borrowed0Fixture",
+   "message_id": "msg_025e60004001Borrowed0Fixture",
+   "session_id": "ses_fdb61ad3cffeYvgWpZTc6KTDX2",
+   "time_created": 1787342440000,
+   "time_updated": 1787342440000,
+   "data": "{\"type\":\"step-start\"}"
+  },
+  {
+   "id": "prt_025e60004001Borrowed0Fixture",
+   "message_id": "msg_025e60004001Borrowed0Fixture",
+   "session_id": "ses_fdb61ad3cffeYvgWpZTc6KTDX2",
+   "time_created": 1787342440000,
+   "time_updated": 1787342440000,
+   "data": "{\"type\":\"tool\",\"tool\":\"bash\",\"callID\":\"call_01a142b41a4170f98884982a\",\"state\":{\"status\":\"completed\",\"input\":{\"command\":\"uv run python scripts/live_session.py up\",\"timeout\":160000},\"output\":\"starting the hp-test session\\n\\n<shell_metadata>\\nUser aborted the command\\n</shell_metadata>\",\"metadata\":{\"output\":\"starting the hp-test session\\n\\n<shell_metadata>\\nUser aborted the command\\n</shell_metadata>\",\"exit\":null,\"truncated\":false},\"title\":\"uv run python scripts/live_session.py up\",\"time\":{\"start\":1792120461954,\"end\":1792120511464}}}"
+  },
+  {
+   "id": "prt_025e60005001Borrowed0Fixture",
+   "message_id": "msg_025e60005001Borrowed0Fixture",
+   "session_id": "ses_fdb61ad3cffeYvgWpZTc6KTDX2",
+   "time_created": 1787342500000,
+   "time_updated": 1787342500000,
+   "data": "{\"type\":\"text\",\"text\":\"Make the herd list's header shorter and put the title at the top.\"}"
+  },
+  {
+   "id": "prt_025e60007001Borrowed0Fixture",
+   "message_id": "msg_025e60007001Borrowed0Fixture",
+   "session_id": "ses_fdb61ad3cffeYvgWpZTc6KTDX2",
+   "time_created": 1787342620000,
+   "time_updated": 1787342620000,
+   "data": "{\"type\":\"text\",\"text\":\"Add the opencode store to the list of transcript sources.\"}"
+  },
+  {
+   "id": "prt_025e60009001Borrowed0Fixture",
+   "message_id": "msg_025e60009001Borrowed0Fixture",
+   "session_id": "ses_fdb61ad3cffeYvgWpZTc6KTDX2",
+   "time_created": 1787342740000,
+   "time_updated": 1787342740000,
+   "data": "{\"type\":\"text\",\"text\":\"carry on\"}"
+  }
+ ]
+}

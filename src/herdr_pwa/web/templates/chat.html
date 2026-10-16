@@ -17,12 +17,12 @@
 {%- endmacro %}
 {# A task that stopped: a tool's line, its kind for the label, and how it ended in words. #}
 {% macro notice_words(t) -%}
-<span class="tool__name notice__label">{{ t.tool }}</span> <span class="notice__text">{{ t.text }}</span>{% if t.status %} <span class="notice__status"><span aria-hidden="true">&middot; </span>{{ t.status }}</span>{% endif %}{% if t.elapsed %} <span class="notice__time"><span aria-hidden="true">&middot; </span>{{ t.elapsed }}</span>{% endif %}{% if t.times > 1 %} <span class="notice__times"><span aria-hidden="true">&middot; </span>{{ t.times }} times</span>{% endif %}
+<span class="tool__name notice__label">{{ t.tool }}</span>{% if t.text %} <span class="notice__text">{{ t.text }}</span>{% endif %}{% if t.status %} <span class="notice__status"><span aria-hidden="true">&middot; </span>{{ t.status }}</span>{% endif %}{% if t.elapsed %} <span class="notice__time"><span aria-hidden="true">&middot; </span>{{ t.elapsed }}</span>{% endif %}{% if t.times > 1 %} <span class="notice__times"><span aria-hidden="true">&middot; </span>{{ t.times }} times</span>{% endif %}
 {%- endmacro %}
 {# Every notice opens: an agent's on its report, a command on the whole of what was run. #}
 {% macro notice_line(t, files) -%}
-{#- An API error whose line already is the harness's words has nothing more to open on. #}
-{%- if t.api_error and not t.result %}<div class="tool notice notice--{{ t.tool|lower }} notice--failed notice--still"><p class="tool__line tool__line--still">{{ notice_words(t) }}</p></div>
+{#- An API error whose line already is the harness's words, or an interrupt, has nothing to open on. #}
+{%- if t.api_error and not t.result %}<div class="tool notice notice--{{ t.tool|lower }}{% if t.failed %} notice--failed{% endif %} notice--still"><p class="tool__line tool__line--still">{{ notice_words(t) }}</p></div>
 {%- else %}<details class="tool notice notice--{{ t.tool|lower }}{% if t.failed %} notice--failed{% endif %}" data-hp-key="notice"><summary class="tool__line">{{ notice_words(t) }}</summary><div class="notice__body">
 {%- if t.tool == "Agent" %}{% if t.prose %}<div class="notice__report"><div class="prose{% if t.long %} turn__fold{% endif %}">{{ md(t.prose, files=files) }}</div>{% if t.long %}<details class="turn__more"><summary><span class="turn__all">Show all</span><span class="turn__less">Show less</span></summary></details>{% endif %}</div>{% else %}<p class="notice__none">No report yet.</p>{% endif %}
 {%- elif t.result %}<pre class="tool__result notice__result">{{ t.result }}</pre>{% endif %}
