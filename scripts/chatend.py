@@ -1077,21 +1077,32 @@ def _tabs() -> tuple[tuple[Tab, Callable[[Marionette, str, Tab, Rig, Path], list
     )
 
 
-def run(
-    driver: Marionette, base: str, mount: Callable[[ASGIApp], None], scratch: Path
-) -> list[str]:
-    """Every walk on a fresh app in its own phone window; empty when each tab keeps its end."""
-    problems: list[str] = []
+def _walks(
+    mount: Callable[[ASGIApp], None],
+) -> list[tuple[Tab, Callable[[Marionette, str, Tab, Rig, Path], list[str]]]]:
     chat = State("stream loss", f"{AGENT}?tab=chat", "", runner(snapshot_frame), long_chat(TURNS))
     lost = State(chat.name, chat.path, "", chat.replies, chat.transcript, settings=LIVE_SETTINGS)
-    walks = [
-        *_tabs(),
-        (
-            Tab("stream loss", lost, f"Reply {TURNS - 1}:", _say),
-            falls_back(mount),
-        ),
-    ]
-    for tab, walk in walks:
+    return [*_tabs(), (Tab("stream loss", lost, f"Reply {TURNS - 1}:", _say), falls_back(mount))]
+
+
+def names() -> list[str]:
+    """Every walk's name, in the order ``run`` walks them."""
+    return [tab.name for tab, _walk in _walks(lambda _app: None)]
+
+
+def run(
+    driver: Marionette,
+    base: str,
+    mount: Callable[[ASGIApp], None],
+    scratch: Path,
+    only: frozenset[str] | None = None,
+) -> list[str]:
+    """Every walk, or those ``only`` names, on a fresh app in its own phone window; empty when
+    each tab keeps its end."""
+    problems: list[str] = []
+    for tab, walk in _walks(mount):
+        if only is not None and tab.name not in only:
+            continue
         home = scratch / f"end-{tab.name.replace(' ', '-')}"
         home.mkdir(parents=True)
         rig = build(tab.state, home)

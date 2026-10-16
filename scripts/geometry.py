@@ -1,7 +1,10 @@
 """Drive headless Firefox over the real app at phone widths and hold its geometry to account."""
 
 import argparse
+import json
 import logging
+import os
+import subprocess
 import sys
 import tempfile
 import threading
@@ -10,6 +13,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
+from queue import Empty, Queue
 
 import uvicorn
 from starlette.types import ASGIApp, Receive, Scope, Send
@@ -633,47 +637,171 @@ def report(tally: Tally, *, whole: bool, runs: int) -> int:
     return 1 if problems else 0
 
 
+# A task is one size over a slice of the states, or a walk; workers take them from one queue.
+Task = dict[str, object]
+WALKS = {
+    HISTORY: backnav,
+    CHAT_END: chatend,
+    FEED_HOLD: feedhold,
+    SEND_HOLD: sendhold,
+    VOICEOVER: voiceover,
+}
+# States per task: small enough that the browsers finish together, large enough to amortise
+# opening a window.
+CHUNK = 14
+# Each worker drives its own Firefox; past four they mostly wait on each other for the CPU.
+JOBS = max(1, min(4, (os.cpu_count() or 2) // 2))
+
+
+def _label(task: Task) -> str:
+    if task["kind"] == "states":
+        return Size(int(str(task["width"])), float(str(task["scale"]))).label("states")
+    return f"walk {task['module']} {task.get('names') or ''}".rstrip()
+
+
+def _strings(value: object) -> list[str]:
+    return [str(v) for v in value] if isinstance(value, list) else []
+
+
+def _do(task: Task, driver: Marionette, base: str, switch: Switch, scratch: Path) -> Tally:
+    """Run one task in this worker's browser."""
+    tally = Tally()
+    if task["kind"] == "states":
+        size = Size(int(str(task["width"])), float(str(task["scale"])))
+        phone_window(driver, size.width, HEIGHT)
+        for state in pick(_strings(task["names"])):
+            install(switch, state, scratch)
+            run_state(driver, state, base, size, tally)
+        driver.send("WebDriver:CloseWindow", {})
+        driver.send("WebDriver:SwitchToWindow", {"handle": driver.handles()[0]})
+        return tally
+    module = str(task["module"])
+    if module == CHAT_END and task.get("names"):
+        only = frozenset(_strings(task["names"]))
+        tally.problems += chatend.run(driver, base, switch.mount, scratch, only)
+    else:
+        tally.problems += WALKS[module].run(driver, base, switch.mount, scratch)
+    return tally
+
+
+def worker() -> int:
+    """Take tasks as JSON lines on stdin and answer each with its tally on stdout."""
+    answers = sys.stdout
+    # Progress lines go where the parent's own output goes; stdout carries only the answers.
+    sys.stdout = sys.stderr
+    switch = Switch()
+    with (
+        tempfile.TemporaryDirectory(prefix="hp-geometry-") as scratch,
+        serve(switch) as base,
+        browser() as driver,
+    ):
+        for n, line in enumerate(sys.stdin):
+            task: Task = json.loads(line)
+            try:
+                tally = _do(task, driver, base, switch, Path(scratch) / str(n))
+            except BrowserError as exc:
+                tally = Tally(problems=[f"{_label(task)}: the browser failed: {exc}"])
+            answer = {"problems": tally.problems, "used": tally.used, "taps": tally.taps}
+            answers.write(json.dumps(answer) + "\n")
+            answers.flush()
+    return 0
+
+
+def tasks(only: list[str]) -> tuple[list[Task], int, bool]:
+    """Every task ``only`` asks for, the longest first; with the state runs, and whether whole."""
+    names = [n for n in only if n not in WALKS]
+    chosen = [s.name for s in (pick(names) if names or not only else [])]
+    sizes = [Size(w) for w in WIDTHS] + [Size(w, s) for w in TEXT_WIDTHS for s in TEXT_SIZES]
+    walks: list[Task] = []
+    for module in WALKS:
+        if only and module not in only:
+            continue
+        if module == CHAT_END:
+            walks += [{"kind": "walk", "module": module, "names": [n]} for n in chatend.names()]
+        else:
+            walks.append({"kind": "walk", "module": module})
+    states: list[Task] = [
+        {"kind": "states", "width": size.width, "scale": size.scale, "names": chosen[i : i + CHUNK]}
+        for size in reversed(sizes)
+        for i in range(0, len(chosen), CHUNK)
+    ]
+    # The stream-loss walk is the longest single task, so it starts first.
+    ordered = sorted(walks, key=lambda t: t.get("names") != ["stream loss"]) + states
+    whole = len(chosen) == len(STATES) and not only
+    return ordered, len(chosen) * len(sizes), whole
+
+
+def _merge(tally: Tally, answer: dict[str, object]) -> None:
+    tally.problems += _strings(answer.get("problems"))
+    used = answer.get("used")
+    for selector, count in used.items() if isinstance(used, dict) else ():
+        tally.used[str(selector)] = tally.used.get(str(selector), 0) + int(str(count))
+    taps = answer.get("taps")
+    tally.taps += taps if isinstance(taps, int) else 0
+
+
+def drive(work: list[Task], jobs: int) -> Tally:
+    """Hand ``work`` to ``jobs`` workers, each with its own server and browser, and add up."""
+    queue: Queue[Task] = Queue()
+    for task in work:
+        queue.put(task)
+    tally = Tally()
+    lock = threading.Lock()
+
+    def feed(process: subprocess.Popen[str]) -> None:
+        stdin, stdout = process.stdin, process.stdout
+        if stdin is None or stdout is None:
+            raise RuntimeError("a geometry worker has no pipes")
+        while True:
+            try:
+                task = queue.get_nowait()
+            except Empty:
+                break
+            stdin.write(json.dumps(task) + "\n")
+            stdin.flush()
+            line = stdout.readline()
+            with lock:
+                if not line:
+                    tally.problems.append(f"{_label(task)}: the worker died before it answered")
+                    return
+                _merge(tally, json.loads(line))
+        stdin.close()
+        if process.wait() != 0:
+            with lock:
+                tally.problems.append(f"a geometry worker exited {process.returncode}")
+
+    command = [sys.executable, str(Path(__file__).resolve()), "--worker"]
+    processes = [
+        subprocess.Popen(
+            command, cwd=ROOT, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True
+        )
+        for _ in range(max(1, min(jobs, len(work))))
+    ]
+    threads = [threading.Thread(target=feed, args=(p,)) for p in processes]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    for process in processes:
+        if process.poll() is None:
+            process.kill()
+            process.wait()
+    return tally
+
+
 def main(argv: list[str] | None = None) -> int:
-    """Run every state at every width in one browser."""
+    """Run every state at every size, and every walk, across several browsers."""
     parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     parser.add_argument("--only", action="append", default=[], help="run just these states")
+    parser.add_argument("--jobs", type=int, default=JOBS, help="browsers to run at once")
+    parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     # The unreachable states log a warning per request by design; the report is the output.
     logging.getLogger("herdr_pwa").setLevel(logging.ERROR)
-    names = [n for n in args.only if n not in (HISTORY, CHAT_END, FEED_HOLD, SEND_HOLD, VOICEOVER)]
-    chosen = pick(names) if names or not args.only else []
-    widths = WIDTHS if chosen else ()
-    sizes = [Size(w) for w in widths] + [
-        Size(w, s) for w in TEXT_WIDTHS for s in TEXT_SIZES if chosen
-    ]
-    tally = Tally()
-    switch = Switch()
-    with tempfile.TemporaryDirectory(prefix="hp-geometry-") as scratch, serve(switch) as base:
-        try:
-            with browser() as driver:
-                for size in sizes:
-                    phone_window(driver, size.width, HEIGHT)
-                    for state in chosen:
-                        install(switch, state, Path(scratch) / f"{size.width}-{size.scale}")
-                        run_state(driver, state, base, size, tally)
-                    driver.send("WebDriver:CloseWindow", {})
-                    driver.send("WebDriver:SwitchToWindow", {"handle": driver.handles()[0]})
-                # History belongs to a top-level window, and this one is left on the app.
-                if not args.only or HISTORY in args.only:
-                    tally.problems += backnav.run(driver, base, switch.mount, Path(scratch))
-                if not args.only or CHAT_END in args.only:
-                    tally.problems += chatend.run(driver, base, switch.mount, Path(scratch))
-                if not args.only or FEED_HOLD in args.only:
-                    tally.problems += feedhold.run(driver, base, switch.mount, Path(scratch))
-                if not args.only or SEND_HOLD in args.only:
-                    tally.problems += sendhold.run(driver, base, switch.mount, Path(scratch))
-                if not args.only or VOICEOVER in args.only:
-                    tally.problems += voiceover.run(driver, base, switch.mount, Path(scratch))
-        except BrowserError as exc:
-            print(f"geometry: the browser failed: {exc}", file=sys.stderr)
-            return 1
-    whole = len(chosen) == len(STATES) and not args.only
-    return report(tally, whole=whole, runs=len(chosen) * len(sizes))
+    if args.worker:
+        return worker()
+    work, runs, whole = tasks(args.only)
+    return report(drive(work, args.jobs), whole=whole, runs=runs)
 
 
 if __name__ == "__main__":
