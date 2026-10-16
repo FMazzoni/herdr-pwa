@@ -858,12 +858,13 @@
   /* Only the reader moves the pin: a scroll this script did not make pins the page if it ends at
    * the very end and unpins it anywhere else, down as well as up, since a reader who opened a
    * tool's output scrolls down into it. A page that shrank under a pinned reader stays pinned. */
-  window.addEventListener("scroll", function () {
+  function hearScroll() {
     pinOn("scroll");
     if (pin.reader) {
       readerScrolledAt = Date.now();
     }
-  }, { passive: true });
+  }
+  window.addEventListener("scroll", hearScroll, { passive: true });
 
   // Opening a fold at the end pushes the end away: the reader is reading the fold now.
   document.addEventListener("toggle", function (event) {
@@ -943,6 +944,9 @@
     if (!isRead(event.detail)) {
       return;
     }
+    /* A scroll is told of on the next frame, and a read can land before it: the reader who has
+     * just left the end would still read as pinned and be taken back. Hear it now. */
+    hearScroll();
     if (isEarlier(event.detail)) {
       pinOn("earlier");
       swapEnd = false;
