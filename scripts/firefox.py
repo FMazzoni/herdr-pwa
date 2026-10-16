@@ -1,5 +1,6 @@
 """Headless Firefox spoken to over Marionette, its own protocol, so no driver is installed."""
 
+import configparser
 import contextlib
 import json
 import shutil
@@ -111,8 +112,16 @@ def available() -> bool:
 
 def version() -> str:
     """The browser's own version line, which changes layout as surely as a CSS edit does."""
-    done = subprocess.run([BINARY, "--version"], capture_output=True, text=True, check=True)
-    return done.stdout.strip()
+    found = shutil.which(BINARY)
+    if found is None:
+        raise BrowserError(f"{BINARY} is not on PATH")
+    # Where `firefox --version` reads it from: the install's application.ini, beside the real binary.
+    ini = Path(found).resolve().parent / "application.ini"
+    parser = configparser.ConfigParser(interpolation=None)
+    if not parser.read(ini, encoding="utf-8") or not parser.has_section("App"):
+        raise BrowserError(f"no [App] section in {ini}, so the browser version is unknown")
+    app = parser["App"]
+    return f"{app.get('Vendor', '')} {app.get('Name', '')} {app.get('Version', '')}".strip()
 
 
 def _connect(port: int, process: subprocess.Popen[bytes]) -> Marionette:

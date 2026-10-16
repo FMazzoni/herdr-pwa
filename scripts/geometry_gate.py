@@ -4,17 +4,15 @@ import argparse
 import fcntl
 import hashlib
 import json
-import subprocess
 import sys
 import time
 from pathlib import Path
 from typing import IO
 
-from firefox import available, version
-
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from scripts.firefox import available, version  # noqa: E402
 from tests.catalogue import CAPTURES  # noqa: E402
 
 # Per user rather than per worktree: a fresh worktree whose guarded files match a tree already
@@ -87,14 +85,15 @@ def held() -> IO[str]:
 
 
 def run(current: str) -> int:
-    """Run the checks in a child process and write the receipt only if every one passed."""
+    """Run the checks in this interpreter and write the receipt only if every one passed."""
+    # Imported late so a receipt hit skips loading it; its browsers live in its own workers.
+    import geometry  # noqa: PLC0415
+
     started = time.monotonic()
-    done = subprocess.run(
-        [sys.executable, str(ROOT / "scripts" / "geometry.py")], cwd=ROOT, check=False
-    )
-    if done.returncode != 0:
+    code = geometry.main([])
+    if code != 0:
         print(f"geometry: RED for {current}; no receipt written", file=sys.stderr)
-        return done.returncode
+        return code
     seconds = round(time.monotonic() - started, 1)
     RECEIPTS.mkdir(parents=True, exist_ok=True)
     body = {"fingerprint": current, "seconds": seconds, "files": len(guarded_files())}
