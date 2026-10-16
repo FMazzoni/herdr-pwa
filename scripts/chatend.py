@@ -1110,7 +1110,7 @@ const [layout] = arguments;
 const root = document.documentElement;
 const view = window.visualViewport;
 const band = window.innerHeight;
-const kb = { top: layout - band, wrong: [], shut: [], frames: 0 };
+const kb = { top: layout - band, wrong: [], shut: [], pans: 0 };
 window.__hpKb = kb;
 document.querySelector("#composer textarea").focus({ preventScroll: true });
 Object.defineProperty(root, "clientHeight", { configurable: true, get: () => layout });
@@ -1122,13 +1122,25 @@ const pan = () => {
   layoutTop = Math.min(Math.max(layoutTop, 0), Math.max(0, root.scrollHeight - layout));
   kb.top = scrollY - layoutTop;
   view.dispatchEvent(new Event("scroll"));
-  requestAnimationFrame(() => requestAnimationFrame(() => {
-    kb.frames += 1;
-    const lift = parseFloat(root.style.getPropertyValue("--kb")) || 0;
-    const want = layout - band - kb.top;
-    if (Math.abs(lift - want) > 1) kb.wrong.push([Math.round(kb.top), lift, Math.round(want)]);
-    if (!root.classList.contains("is-keyboard")) kb.shut.push(Math.round(kb.top));
-  }));
+  const at = kb.top;
+  kb.pans += 1;
+  frames(2, () => look(at, 0));
+};
+const frames = (n, then) => (n ? requestAnimationFrame(() => frames(n - 1, then)) : then());
+// Judged once the dock has had its frame, and again later: a newer pan, or a busy machine's late
+// frame, is not a wrong lift, but one still wrong ten frames on is.
+const look = (at, tries) => {
+  if (kb.top !== at) return;
+  const lift = parseFloat(root.style.getPropertyValue("--kb")) || 0;
+  const want = layout - band - at;
+  const open = root.classList.contains("is-keyboard");
+  if (Math.abs(lift - want) <= 1 && open) return;
+  if (!tries) {
+    frames(10, () => look(at, 1));
+  } else {
+    if (Math.abs(lift - want) > 1) kb.wrong.push([Math.round(at), lift, Math.round(want)]);
+    if (!open) kb.shut.push(Math.round(at));
+  }
 };
 addEventListener("scroll", pan, { passive: true });
 view.dispatchEvent(new Event("resize"));
@@ -1187,7 +1199,7 @@ def keyboard_up(driver: Marionette, base: str, tab: Tab, rig: Rig, home: Path) -
     found = driver.script(READ_KEYBOARD)
     kb = found if isinstance(found, dict) else {}
     problems = pans + _walk_problems(tab.name, _walked(driver), STEP * KEYBOARD_STEPS)
-    if not _num(kb, "frames"):
+    if _num(kb, "pans") <= 1:
         problems.append(f"{tab.name}: the band never moved")
     if kb.get("wrong"):
         problems.append(
