@@ -220,6 +220,16 @@ class _Block(BaseModel):
     # Kept whole: a result that is not text and images is shown as the JSON it was.
     content: JsonValue = None
 
+    @property
+    def said(self) -> str:
+        """The block's text, empty when it has none."""
+        return self.text or ""
+
+    @property
+    def called(self) -> str:
+        """The tool a ``tool_use`` block calls, empty when it names none."""
+        return self.name or ""
+
 
 class _ResultPart(BaseModel):
     """One part of a tool result's content list."""
@@ -945,7 +955,7 @@ def _user_block(block: _Block, uuid: str, ts: str, *, meta: bool) -> TranscriptT
             failed=block.is_error is True,
         )
     if kind == "text" and not meta:
-        text, cut = clip(block.text or "", MAX_NOTE_CHARS)
+        text, cut = clip(block.said, MAX_NOTE_CHARS)
         if text:
             return TranscriptTurn(
                 uuid=uuid, speaker=Speaker.system, text=text, ts=ts, truncated=cut
@@ -978,7 +988,7 @@ def _assistant_record(record: ClaudeRecord, uuid: str, ts: str) -> TranscriptTur
     for block in _blocks(record):
         btype = block.type
         if btype == "text":
-            text, cut = clip(block.text or "", MAX_PROSE_CHARS)
+            text, cut = clip(block.said, MAX_PROSE_CHARS)
             if not text:
                 return None
             return TranscriptTurn(uuid=uuid, speaker=Speaker.agent, text=text, ts=ts, truncated=cut)
@@ -989,7 +999,7 @@ def _assistant_record(record: ClaudeRecord, uuid: str, ts: str) -> TranscriptTur
                 speaker=Speaker.tool,
                 text=text,
                 ts=ts,
-                tool=block.name or "",
+                tool=block.called,
                 truncated=cut,
                 call=block.id or "",
                 diff=tool_diff(block.input),
