@@ -232,3 +232,84 @@ test("lost: a read waits out the rest of the no-reply notice's reading time, and
   assert.equal(logic.lostHold(least), 0);
   assert.equal(logic.lostHold(least + 60000), 0);
 });
+
+// The working line: its times, which verb shows when, how two verbs' glyphs pair, and the wave.
+const TIMES = { sweep: 2400, hold: 6000, morph: 900 };
+
+test("millis: app.css's times read as milliseconds, and anything else is not a time", () => {
+  assert.equal(logic.millis(" 2.4s"), 2400);
+  assert.equal(logic.millis("900ms"), 900);
+  assert.equal(logic.millis(".5s"), 500);
+  assert.ok(Number.isNaN(logic.millis("")));
+  assert.ok(Number.isNaN(logic.millis("0.12em")));
+});
+
+test("verbAt: the first verb stands from the start; each later one turns out of the one before", () => {
+  assert.deepEqual(plain(logic.verbAt(0, 12, TIMES)), { index: 0, from: -1, t: 1 });
+  assert.deepEqual(plain(logic.verbAt(5999, 12, TIMES)), { index: 0, from: -1, t: 1 });
+  assert.deepEqual(plain(logic.verbAt(6450, 12, TIMES)), { index: 1, from: 0, t: 0.5 });
+  assert.deepEqual(plain(logic.verbAt(6900, 12, TIMES)), { index: 1, from: 0, t: 1 });
+  // Past the last verb the line wraps to the first, turning out of the last.
+  assert.deepEqual(plain(logic.verbAt(12 * 6000, 12, TIMES)), { index: 0, from: 11, t: 0 });
+});
+
+test("pairs: shared letters pair in order, so no glyph crosses another on its way", () => {
+  const word = (text) => Array.from(text + "…");
+  const paired = plain(logic.pairs(word("Sifting"), word("Knitting")));
+  assert.equal(paired.length, 9);
+  // The ellipsis always glides from the old end to the new one.
+  assert.equal(paired[8], 7);
+  const kept = paired.filter((i) => i >= 0);
+  assert.deepEqual(kept, [...kept].sort((a, b) => a - b));
+  assert.deepEqual(plain(logic.pairs(["a", "b"], ["b", "a"])).filter((i) => i >= 0).length, 1);
+  assert.deepEqual(plain(logic.pairs([], ["x"])), [-1]);
+});
+
+test("morphFrame: a paired glyph glides between its places; the rest fade where they stand", () => {
+  const from = [0, 10, 20];
+  const to = [0, 8, 30];
+  const paired = [0, -1, 2];
+  const start = plain(logic.morphFrame(from, to, paired, 0));
+  assert.deepEqual(start.arriving, [{ x: 0, alpha: 1 }, { x: 8, alpha: 0 }, { x: 20, alpha: 1 }]);
+  assert.deepEqual(start.leaving, [null, { x: 10, alpha: 1 }, null]);
+  const end = plain(logic.morphFrame(from, to, paired, 1));
+  assert.deepEqual(end.arriving, [{ x: 0, alpha: 1 }, { x: 8, alpha: 1 }, { x: 30, alpha: 1 }]);
+  assert.equal(end.leaving[1].alpha, 0);
+  const mid = plain(logic.morphFrame(from, to, paired, 0.5));
+  assert.equal(mid.arriving[2].x, 25);
+});
+
+test("wave: one soft crest crosses the verb left to right and is gone at either end", () => {
+  assert.equal(logic.wave(0, 100, 0), 0);
+  assert.equal(logic.wave(100, 100, 1), 0);
+  // Halfway through the sweep the crest stands at the verb's middle.
+  assert.equal(logic.wave(50, 100, 0.5), 1);
+  assert.ok(logic.wave(20, 100, 0.3) > logic.wave(80, 100, 0.3));
+  assert.ok(logic.wave(80, 100, 0.7) > logic.wave(20, 100, 0.7));
+  for (let x = 0; x <= 100; x += 5) {
+    const lift = logic.wave(x, 100, 0.42);
+    assert.ok(lift >= 0 && lift <= 1, `${x}: ${lift}`);
+  }
+});
+
+test("ease: still at both ends, halfway at the middle", () => {
+  assert.equal(logic.ease(0), 0);
+  assert.equal(logic.ease(1), 1);
+  assert.equal(logic.ease(0.5), 0.5);
+});
+
+test("glow: across the crest the colour runs trailing edge to leading edge, and holds beyond", () => {
+  // Halfway through the sweep the crest stands at the middle of a 100px verb, 35px either side.
+  assert.equal(logic.glow(50, 100, 0.5), 0.5);
+  assert.equal(logic.glow(15, 100, 0.5), 0);
+  assert.equal(logic.glow(85, 100, 0.5), 1);
+  assert.equal(logic.glow(0, 100, 0.5), 0);
+  assert.equal(logic.glow(100, 100, 0.5), 1);
+  // One continuous ramp: nearer the leading edge is always further along it.
+  let last = -1;
+  for (let x = 15; x <= 85; x += 5) {
+    const side = logic.glow(x, 100, 0.5);
+    assert.ok(side > last, `${x}: ${side}`);
+    last = side;
+  }
+});
