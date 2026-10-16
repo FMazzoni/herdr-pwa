@@ -18,6 +18,7 @@ from herdr_pwa.engine import (
 )
 from herdr_pwa.settings import Settings
 from herdr_pwa.web.app import create_app
+from herdr_pwa.web.seams import Seams
 from herdr_pwa.writes.keys import control_token
 from herdr_pwa.writes.outcome import Pacing
 from tests._fake_herd import P3, P5, S1, S2, SETTLED, FakeClock, FakeHerd, capture, echoed
@@ -56,7 +57,8 @@ def web(tmp_path: Path, herd: FakeHerd) -> Web:
     def factory(engine: EngineSettings) -> HerdrClient:
         return HerdrClient(engine, transport=herd, clock=clock, sleep=clock.sleep)
 
-    app = create_app(settings, factory, clock=clock, pacing=Pacing(sleep=clock.sleep, clock=clock))
+    pacing = Pacing(sleep=clock.sleep, clock=clock)
+    app = create_app(settings, Seams(clock=clock, pacing=pacing, client_factory=factory))
     return Web(herd, TestClient(app, headers=IDENTITY), tmp_path / "state")
 
 

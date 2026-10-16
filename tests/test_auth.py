@@ -292,7 +292,6 @@ def test_an_assumed_login_refuses_to_start_while_serve_is_active(tmp_path: Path)
 
 
 def test_without_an_assumed_login_tailscaled_is_never_asked(tmp_path: Path) -> None:
-    def probe(_api: LocalApi) -> bool:
-        raise AssertionError("asked")
-
-    assert_assumed_login_safe(PINNED, LocalApi(tmp_path / "none.sock"), probe=probe)
+    with tailscaled(tmp_path, serve_config={"TCP": {"443": {"HTTPS": True}}}) as fake:
+        assert_assumed_login_safe(PINNED, fake.api)
+        assert fake.requests == []

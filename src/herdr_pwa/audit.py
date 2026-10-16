@@ -9,7 +9,8 @@ import os
 import secrets
 import stat
 import threading
-from collections.abc import Callable, Iterator
+import time
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -20,6 +21,7 @@ from pydantic import Field, TypeAdapter, ValidationError
 
 from herdr_pwa import statedir
 from herdr_pwa.auth import Identity
+from herdr_pwa.clock import Clock
 from herdr_pwa.statedir import FILE_MODE
 
 log = logging.getLogger(__name__)
@@ -119,8 +121,9 @@ class Origin:
         return cls(identity.login, identity.via, client_ip, forwarded_for)
 
 
-def _utc_now() -> datetime:
-    return datetime.now(UTC)
+def _iso(at: float) -> str:
+    """A wall-clock stamp as the log writes it: ISO 8601 in UTC."""
+    return datetime.fromtimestamp(at, UTC).isoformat()
 
 
 def _payload(text: str, *, limit: int, omitted: str) -> tuple[str | None, bool]:
@@ -179,12 +182,12 @@ class AuditLog:
         *,
         max_bytes: int,
         payload_chars: int,
-        clock: Callable[[], datetime] = _utc_now,
+        clock: Clock = time.time,
     ) -> None:
         self._state_dir: Path = state_dir
         self._max_bytes: int = max_bytes
         self._payload_chars: int = payload_chars
-        self._clock: Callable[[], datetime] = clock
+        self._clock: Clock = clock
         self._lock: threading.Lock = threading.Lock()
 
     @property
@@ -220,7 +223,7 @@ class AuditLog:
             "v": 1,
             "phase": ATTEMPT,
             "id": secrets.token_hex(8),
-            "ts": self._clock().isoformat(),
+            "ts": _iso(self._clock()),
             "endpoint": write.endpoint,
             "target": write.target,
             "session": write.session,
@@ -246,7 +249,7 @@ class AuditLog:
             "v": 1,
             "phase": OUTCOME,
             "id": attempt["id"],
-            "ts": self._clock().isoformat(),
+            "ts": _iso(self._clock()),
             "endpoint": attempt["endpoint"],
             "target": attempt["target"],
             "result": result,

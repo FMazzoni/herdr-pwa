@@ -9,13 +9,14 @@ import socket
 import threading
 import time
 import weakref
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from pathlib import Path
 from secrets import token_hex
 from typing import Final, NamedTuple, Protocol, runtime_checkable
 
 from pydantic import JsonValue, TypeAdapter, ValidationError
 
+from herdr_pwa.clock import Clock
 from herdr_pwa.engine.generated import ErrorBody, SuccessResponse
 from herdr_pwa.engine.generated.success_response import SubscriptionStartedResponseResult
 
@@ -260,14 +261,11 @@ class SocketTransport:
         path: Path | str,
         *,
         timeout: float,
-        max_frame_bytes: int = MAX_FRAME_BYTES,
-        backoff_cap: float = BACKOFF_CAP,
-        clock: Callable[[], float] = time.monotonic,
+        clock: Clock = time.monotonic,
     ) -> None:
         self.path = Path(path)
         self.timeout = timeout
-        self.max_frame_bytes = max_frame_bytes
-        self.backoff_cap = backoff_cap
+        self.max_frame_bytes = MAX_FRAME_BYTES
         self._clock = clock
         self._lock = threading.Lock()
         self._sock: socket.socket | None = None
@@ -461,7 +459,7 @@ class SocketTransport:
         return _why_unreachable(self.path, exc)
 
     def _penalise(self) -> None:
-        self._backoff = min(max(self._backoff * 2, BACKOFF_BASE), self.backoff_cap)
+        self._backoff = min(max(self._backoff * 2, BACKOFF_BASE), BACKOFF_CAP)
         self._retry_at = self._clock() + self._backoff
 
     def _drop(self) -> None:

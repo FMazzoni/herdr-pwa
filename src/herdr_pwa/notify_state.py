@@ -5,7 +5,7 @@ seen, and which kinds of alert the user lets through. Every file is 0600 in the 
 import logging
 import threading
 import time
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Annotated, Literal, Protocol
 
@@ -21,6 +21,7 @@ from pydantic import (
 )
 
 from herdr_pwa import statedir
+from herdr_pwa.clock import Clock
 from herdr_pwa.push import EVENT_BLOCKED, EVENT_DONE
 from herdr_pwa.validation import or_default
 
@@ -33,8 +34,6 @@ INTERRUPTS_FILENAME = "interrupts.json"
 MAX_DND_SECONDS = 12 * 3600
 SEEN_FLUSH_INTERVAL = 10.0
 SEEN_MAX_ENTRIES = 512
-
-Clock = Callable[[], float]
 
 
 class _StateFile(BaseModel):

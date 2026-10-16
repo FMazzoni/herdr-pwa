@@ -8,6 +8,7 @@ from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Protocol, Self
 
+from herdr_pwa.clock import Clock
 from herdr_pwa.decisions import read_status
 from herdr_pwa.engine import AgentStatus
 from herdr_pwa.notify_state import Interrupts, SeenLedger, StatusLedger
@@ -34,8 +35,6 @@ MAX_NAME_CHARS = 40
 _ABSENT = "\x00absent"
 # The verb goes first so a long agent title cannot truncate it away.
 _VERB = {EVENT_BLOCKED: "needs you", EVENT_DONE: "finished"}
-
-Clock = Callable[[], float]
 
 
 class AgentView(Protocol):

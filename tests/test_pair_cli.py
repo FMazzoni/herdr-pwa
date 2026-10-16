@@ -8,12 +8,13 @@ from herdr_pwa.cli import main, pair
 from herdr_pwa.pairing import TEARDOWN_COMMAND
 from herdr_pwa.settings import Settings
 from herdr_pwa.tailscale import LocalApi
+from herdr_pwa.web.seams import Seams
 from tests.fakes import NODE, status_route, tailscaled
 
 
 def run(settings: Settings, api: LocalApi, *, publish: bool = True) -> tuple[int, str]:
     out: list[str] = []
-    code = pair(settings, api=api, write=out.append, publish=publish)
+    code = pair(settings, Seams(write=out.append, local_api=lambda _path: api), publish=publish)
     return code, "".join(out)
 
 

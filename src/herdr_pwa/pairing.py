@@ -55,12 +55,12 @@ class Pairing:
     note: str
 
 
-def pair_url(host: str, path: str = "/") -> str:
+def pair_url(host: str) -> str:
     """The https URL for this node; a secure context is what service workers and push need."""
     hostname = host.strip().rstrip(".")
     if not hostname:
         raise PairingError("Cannot build a pairing URL: the host name is empty.")
-    return f"https://{hostname}{path if path.startswith('/') else '/' + path}"
+    return f"https://{hostname}/"
 
 
 def qr_text(url: str) -> str:

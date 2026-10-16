@@ -8,9 +8,9 @@ from fastapi import Request
 
 from herdr_pwa import auth
 from herdr_pwa.audit import AuditLog
+from herdr_pwa.clock import Clock
 from herdr_pwa.engine import (
     CachedValue,
-    EngineSettings,
     HerdrClient,
     Snapshot,
     SnapshotCache,
@@ -22,8 +22,6 @@ from herdr_pwa.settings import Settings
 from herdr_pwa.web.failures import PageHidden
 from herdr_pwa.web.render import Pages
 from herdr_pwa.writes.outcome import Pacing
-
-type ClientFactory = Callable[[EngineSettings], HerdrClient]
 
 HIDDEN_HEADER = "HP-Hidden"
 
@@ -37,7 +35,7 @@ class WebState:
     cache: SnapshotCache
     pages: Pages
     audit: AuditLog
-    clock: Callable[[], float] = field(default=time.monotonic)
+    clock: Clock = field(default=time.monotonic)
     # What a write's read-back waits run on; injected so route tests never sleep.
     pacing: Pacing = field(default_factory=Pacing)
     # The viewed transcripts, held parsed so a refresh reads only what was appended.
@@ -45,7 +43,7 @@ class WebState:
     # The viewed agents' usage tallies, grown by what their logs appended.
     usage: UsageCache = field(default_factory=UsageCache)
     # Wall time, for how long ago a stamp in a transcript was; injected so tests hold it still.
-    wall: Callable[[], float] = field(default=time.time)
+    wall: Clock = field(default=time.time)
     # What the phone has shown; absent with push off, and then nothing is ever read.
     seen: SeenLedger | None = None
 

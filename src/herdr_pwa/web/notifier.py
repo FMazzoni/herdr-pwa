@@ -5,11 +5,11 @@ import contextlib
 import logging
 import threading
 import time
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Final, Protocol, Self
 
+from herdr_pwa.clock import Clock
 from herdr_pwa.engine import (
     BlockedPrompt,
     EngineError,
@@ -27,6 +27,7 @@ from herdr_pwa.push import (
     Deliver,
     DeliveryLog,
     FanOut,
+    Outlet,
     PushError,
     SubjectError,
     Subscription,
@@ -41,10 +42,10 @@ from herdr_pwa.push import (
     load_or_create_vapid_keys,
 )
 from herdr_pwa.settings import Settings
+from herdr_pwa.web.seams import Seams
 
 log = logging.getLogger(__name__)
 
-Clock = Callable[[], float]
 
 # A hold that is due must still be looked at; this keeps a stale due time from spinning.
 MIN_SLEEP: Final = 0.25
@@ -126,6 +127,9 @@ class LoopConfig:
     interval: float = 2.0
     ledger_max_age: float = 900.0
     notify: NotifyConfig = field(default_factory=NotifyConfig)
+    # Who the push service may contact, and how long it holds a push; read only when arming.
+    subject: str = ""
+    ttl: int = 900
 
     @classmethod
     def from_settings(cls, settings: Settings) -> Self:
@@ -134,6 +138,8 @@ class LoopConfig:
             interval=settings.push_interval,
             ledger_max_age=settings.push_ledger_max_age,
             notify=NotifyConfig.from_settings(settings),
+            subject=settings.push_subject,
+            ttl=settings.push_ttl,
         )
 
 
@@ -141,19 +147,17 @@ class Notifier:
     """One planner, fed a fresh snapshot each tick and wired to every subscribed device."""
 
     def __init__(
-        self,
-        *,
-        herd: HerdSource,
-        stores: PushStores,
-        deliver: Deliver,
-        config: LoopConfig,
-        clock: Clock = time.time,
+        self, *, herd: HerdSource, stores: PushStores, config: LoopConfig, seams: Seams
     ) -> None:
+        """Arm the sender (raising SubjectError when its contact would be refused) and plan."""
         self._reader: HerdReader = herd.reader
         self._cache: SnapshotCache = herd.cache
         self._stores: PushStores = stores
-        self._deliver: Deliver = deliver
+        self._deliver: Deliver = seams.deliver or arm_sender(
+            stores.keys, subject=config.subject, ttl=config.ttl
+        )
         self._config: LoopConfig = config
+        clock = seams.wall
         self._clock: Clock = clock
         self._managed: ManagedHerd = ManagedHerd(herd.reader)
         ledger = StatusLedger(stores.state_dir, max_age=config.ledger_max_age, clock=clock)
@@ -280,13 +284,8 @@ class Notifier:
         except PushError as exc:
             self._stores.health.failed(f"payload: {exc}")
             return FanOut()
-        return fan_out(
-            data,
-            devices,
-            deliver=self._deliver,
-            store=self._stores.devices,
-            health=self._stores.health,
-        )
+        outlet = Outlet(self._deliver, self._stores.devices, self._stores.health)
+        return fan_out(data, devices, outlet, now=self._clock())
 
 
 @dataclass(frozen=True, slots=True)
@@ -298,33 +297,20 @@ class PushState:
     reason: str = ""
 
 
-def open_push(
-    settings: Settings,
-    *,
-    reader: HerdReader,
-    cache: SnapshotCache,
-    deliver: Deliver | None = None,
-    clock: Clock = time.time,
-) -> PushState | None:
+def open_push(settings: Settings, herd: HerdSource, seams: Seams) -> PushState | None:
     """Open the push stores and arm the notifier; None when push is switched off."""
     if not settings.push_enabled:
         log.info("push is off (HP_PUSH_ENABLED=0): no key, no routes answer, no loop")
         return None
-    stores = PushStores.open(settings.state_dir, clock=clock)
+    stores = PushStores.open(settings.state_dir, clock=seams.wall)
     if not settings.push_notifier:
         return PushState(stores, None, "the notifier is switched off (HP_PUSH_NOTIFIER=0)")
-    if deliver is None:
-        try:
-            deliver = arm_sender(stores.keys, subject=settings.push_subject, ttl=settings.push_ttl)
-        except SubjectError as exc:
-            # Loud but not fatal: the phone can still subscribe, and the alerts page says why.
-            log.error("push is not armed: %s", exc)  # noqa: TRY400 - the reason is the message
-            return PushState(stores, None, str(exc))
-    notifier = Notifier(
-        herd=HerdSource(reader, cache),
-        stores=stores,
-        deliver=deliver,
-        config=LoopConfig.from_settings(settings),
-        clock=clock,
-    )
+    try:
+        notifier = Notifier(
+            herd=herd, stores=stores, config=LoopConfig.from_settings(settings), seams=seams
+        )
+    except SubjectError as exc:
+        # Loud but not fatal: the phone can still subscribe, and the alerts page says why.
+        log.error("push is not armed: %s", exc)  # noqa: TRY400 - the reason is the message
+        return PushState(stores, None, str(exc))
     return PushState(stores, notifier)

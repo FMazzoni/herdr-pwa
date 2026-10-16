@@ -28,8 +28,8 @@ ME = Origin(
 )
 
 
-def fixed_clock() -> datetime:
-    return datetime(2026, 10, 10, 12, 0, tzinfo=UTC)
+def fixed_clock() -> float:
+    return datetime(2026, 10, 10, 12, 0, tzinfo=UTC).timestamp()
 
 
 def make_log(

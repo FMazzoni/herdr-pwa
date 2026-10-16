@@ -602,7 +602,6 @@ def locate(
     session: SessionId | str,
     *,
     root: TranscriptRoots = None,
-    follow: bool = True,
 ) -> Path | None:
     """The file *session*'s conversation is actually in now, or ``None``."""
     text = _session_id(session)
@@ -610,7 +609,7 @@ def locate(
         return None
     for base in _roots(root, kind="claude"):
         # A root that cannot be read must not blank the roots after it.
-        found = _in_root(base, text, follow=follow)
+        found = _in_root(base, text, follow=True)
         if found is not None:
             return found
     return None

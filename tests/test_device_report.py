@@ -8,6 +8,7 @@ import pytest
 
 from herdr_pwa import cli, devreport
 from herdr_pwa.settings import Settings
+from herdr_pwa.web.seams import Seams
 from tests.webfakes import IDENTITY, build_rig
 
 SAME_ORIGIN = {**IDENTITY, "Origin": "http://testserver"}
@@ -81,16 +82,16 @@ def test_cli_prints_the_latest_session_in_order(tmp_path: Path) -> None:
     for batch in (_batch("old"), _batch("new", "load"), _batch("new", "popstate")):
         store.append(devreport.Batch.model_validate(batch))
     out: list[str] = []
-    assert cli.device_report(Settings(state_dir=tmp_path), write=out.append) == 0
+    assert cli.device_report(Settings(state_dir=tmp_path), Seams(write=out.append)) == 0
     text = "".join(out)
     assert text.startswith("session new: 2 event(s)")
     assert text.index("load") < text.index("popstate")
     named: list[str] = []
-    _ = cli.device_report(Settings(state_dir=tmp_path), "old", write=named.append)
+    _ = cli.device_report(Settings(state_dir=tmp_path), Seams(write=named.append), "old")
     assert "session old: 1 event(s)" in "".join(named)
 
 
 def test_cli_says_when_there_is_nothing(tmp_path: Path) -> None:
     out: list[str] = []
-    _ = cli.device_report(Settings(state_dir=tmp_path), write=out.append)
+    _ = cli.device_report(Settings(state_dir=tmp_path), Seams(write=out.append))
     assert "no device report" in "".join(out)

@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
+from herdr_pwa.clock import Clock
+
 log = logging.getLogger(__name__)
 
 TIMEOUT: Final = 5.0
@@ -91,14 +93,16 @@ def _blanked(names: list[str]) -> list[str]:
     return args
 
 
-def _collect(proc: subprocess.Popen[bytes], limit: int, deadline: float) -> tuple[bytes, bool]:
+def _collect(
+    proc: subprocess.Popen[bytes], limit: int, deadline: float, clock: Clock
+) -> tuple[bytes, bool]:
     """Up to ``limit`` bytes of the process's output, and whether that was all of it."""
     assert proc.stdout is not None  # noqa: S101 - spawned with stdout=PIPE
     out = bytearray()
     with selectors.DefaultSelector() as ready:
         ready.register(proc.stdout, selectors.EVENT_READ)
         while len(out) <= limit:
-            left = deadline - time.monotonic()
+            left = deadline - clock()
             if left <= 0 or not ready.select(left):
                 raise subprocess.TimeoutExpired(proc.args, TIMEOUT)
             chunk = os.read(proc.stdout.fileno(), _CHUNK)
@@ -166,8 +170,8 @@ def parse_status(raw: bytes) -> Status:
 class Git:
     """Runs read-only git commands under a timeout, caching each answer for a few seconds."""
 
-    def __init__(self, clock: Callable[[], float] = time.monotonic) -> None:
-        self.clock = clock
+    def __init__(self, clock: Clock = time.monotonic) -> None:
+        self._clock = clock
         self.binary = shutil.which("git") or ""
         self._memo: dict[tuple[str, ...], tuple[float, object]] = {}
 
@@ -187,7 +191,7 @@ class Git:
             log.info("git %s in %s failed: %s", args[0], cwd, exc)
             return None
         try:
-            out, whole = _collect(proc, limit, time.monotonic() + TIMEOUT)
+            out, whole = _collect(proc, limit, self._clock() + TIMEOUT, self._clock)
         except (OSError, subprocess.TimeoutExpired) as exc:
             log.info("git %s in %s failed: %s", args[0], cwd, exc)
             return None
@@ -212,7 +216,7 @@ class Git:
         return self._spawn(cwd, [*_blanked(names), *args], limit)
 
     def _cached[T](self, key: tuple[str, ...], ttl: float, read: Callable[[], T]) -> T:
-        now = self.clock()
+        now = self._clock()
         hit = self._memo.get(key)
         if hit is not None and now - hit[0] < ttl:
             return hit[1]  # pyright: ignore[reportReturnType]

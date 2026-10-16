@@ -3,13 +3,14 @@
 import logging
 import threading
 import time
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from functools import cache
 from typing import Final, NamedTuple, TypeVar, cast, get_args
 
 from pydantic import BaseModel, ValidationError
 
 from herdr_pwa import panetext
+from herdr_pwa.clock import Clock, Sleep
 from herdr_pwa.engine.config import EngineSettings
 from herdr_pwa.engine.dialog import BlockedPrompt
 from herdr_pwa.engine.generated import request as wire_request
@@ -138,8 +139,8 @@ class HerdrClient:
         settings: EngineSettings,
         *,
         transport: Transport | None = None,
-        clock: Callable[[], float] = time.monotonic,
-        sleep: Callable[[float], None] = time.sleep,
+        clock: Clock = time.monotonic,
+        sleep: Sleep = time.sleep,
     ) -> None:
         self.settings = settings
         self._clock = clock
@@ -147,7 +148,9 @@ class HerdrClient:
         self.transport: Transport = (
             transport
             if transport is not None
-            else SocketTransport(self.settings.socket_path, timeout=self.settings.command_timeout)
+            else SocketTransport(
+                self.settings.socket_path, timeout=self.settings.command_timeout, clock=clock
+            )
         )
         self.last_protocol: int | None = None
         self.last_protocol_at: float = 0.0

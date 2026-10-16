@@ -34,7 +34,6 @@ from tests._jsonpath import at
 from tests.engine_seam import (
     BACKOFF_CAP,
     EVENT_SUBSCRIBE,
-    MAX_FRAME_BYTES,
     MAX_REQUEST_BYTES,
     MAX_STRAY_FRAMES,
     SocketTransport,
@@ -161,17 +160,9 @@ def transport(
     path: Path,
     *,
     timeout: float = FAST,
-    max_frame_bytes: int = MAX_FRAME_BYTES,
-    backoff_cap: float = BACKOFF_CAP,
     clock: Callable[[], float] = time.monotonic,
 ) -> SocketTransport:
-    return SocketTransport(
-        path,
-        timeout=timeout,
-        max_frame_bytes=max_frame_bytes,
-        backoff_cap=backoff_cap,
-        clock=clock,
-    )
+    return SocketTransport(path, timeout=timeout, clock=clock)
 
 
 # --------------------------------------------------------------------------
@@ -648,7 +639,9 @@ def test_a_frame_with_no_terminator_is_cut_off_rather_than_buffered_forever(
                 return
 
     serve(sock_path, handler, request)
-    wire = transport(sock_path, timeout=2.0, max_frame_bytes=8192)
+    wire = transport(sock_path, timeout=2.0)
+    # A small bound, so the endless line overruns it in two frames rather than thousands.
+    wire.max_frame_bytes = 8192
     with pytest.raises(InvalidResponse) as exc:
         wire.call("session.snapshot", {})
     assert "terminator" in exc.value.message
@@ -857,12 +850,12 @@ def test_the_backoff_is_bounded_and_a_success_clears_it(
     sock_path: Path, request: pytest.FixtureRequest
 ) -> None:
     clock = Clock()
-    wire = transport(sock_path, clock=clock, backoff_cap=0.5)
-    for _ in range(10):  # ten failed dials, doubling each time
+    wire = transport(sock_path, clock=clock)
+    for _ in range(10):  # ten failed dials, doubling each time, well past the cap
         clock.now += 100
         with pytest.raises(EngineUnavailable):
             wire.call("session.snapshot", {})
-    assert wire._backoff == 0.5  # pyright: ignore[reportPrivateUsage]
+    assert wire._backoff == BACKOFF_CAP  # pyright: ignore[reportPrivateUsage]
 
     serve(sock_path, ok, request)
     clock.now += 100
