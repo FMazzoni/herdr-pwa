@@ -1,0 +1,16 @@
+{
+  "about": "clock.elapsed and app.js's logic.elapsed word a span alike: both tests read this table.",
+  "spans": [
+    [0, "0s"],
+    [-5, "0s"],
+    [42, "42s"],
+    [59.9, "59s"],
+    [60, "1m"],
+    [120, "2m"],
+    [252, "4m 12s"],
+    [3599, "59m 59s"],
+    [3600, "1h 0m"],
+    [4320, "1h 12m"],
+    [200000, "2d 7h"]
+  ]
+}

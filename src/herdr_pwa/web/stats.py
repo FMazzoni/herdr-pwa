@@ -125,6 +125,28 @@ def _seconds_since(stamp: str, now: float) -> float | None:
 
 
 @dataclass(frozen=True, slots=True)
+class TurnTimes:
+    """The newest turn's clock, in seconds: how long it has run, how long its log has been still,
+    and how long it took from the prompt to the last record; ``None`` where the tally cannot say."""
+
+    ran: float | None = None
+    quiet: float | None = None
+    took: float | None = None
+
+
+# A turn the tally can say nothing about.
+NO_TIMES: Final = TurnTimes()
+
+
+def turn_times(usage: SessionUsage, now: float) -> TurnTimes:
+    """The newest turn's clock from the tally the strip reads, at wall-clock *now*."""
+    ran = _seconds_since(usage.turn_started, now) if usage.turn_started else None
+    quiet = _seconds_since(usage.last_at, now) if usage.last_at else None
+    took = ran - quiet if ran is not None and quiet is not None and ran >= quiet else None
+    return TurnTimes(ran=ran, quiet=quiet, took=took)
+
+
+@dataclass(frozen=True, slots=True)
 class _Context:
     used: int
     window: int

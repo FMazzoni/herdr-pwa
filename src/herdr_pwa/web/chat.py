@@ -4,8 +4,10 @@ import zlib
 from dataclasses import dataclass
 from typing import Final
 
-from herdr_pwa.clock import duration
+from herdr_pwa.clock import duration, duration_said, elapsed
+from herdr_pwa.decisions import QUIET_AFTER, gone_quiet, needs_you, still_talking
 from herdr_pwa.engine import (
+    AgentStatus,
     HistoryState,
     Speaker,
     TranscriptPage,
@@ -15,6 +17,7 @@ from herdr_pwa.engine import (
     is_slash_command,
 )
 from herdr_pwa.web.markdown import MdNode, render_tree
+from herdr_pwa.web.stats import NO_TIMES, TurnTimes
 
 _STATE_NOTES = {
     HistoryState.empty: "Nothing has been said yet.",
@@ -24,7 +27,7 @@ _STATE_NOTES = {
 }
 
 
-# The working line's decoration, not a claim about the turn: assistive tech hears "Working".
+# The turn's one word while the agent thinks between tools: decoration, which VoiceOver skips.
 WORKING_VERBS: Final = (
     "Sketching",
     "Untangling",
@@ -40,15 +43,16 @@ WORKING_VERBS: Final = (
     "Polishing",
 )
 
+# The status bubble's looks, by name: a palette is one of app.css's [data-working-palette] blocks,
+# a motion one entry of app.js's MOTIONS table. Changing either default is this one line.
+WORKING_PALETTE: Final = "softer-ember"
+WORKING_MOTION: Final = "crest"
 
-def working_verbs(turn: str) -> tuple[str, ...]:
-    """Every verb, starting at the turn named *turn*'s own: the same on every poll, and every run.
 
-    The working line opens on the first and moves through the rest in order while the turn lasts.
-    """
+def turn_verb(stretch: str) -> str:
+    """The verb the working stretch named *stretch* wears: the same on every poll, and every run."""
     # crc32, not hash(): str hashes are salted per process, so a restart would change the verb.
-    first = zlib.crc32(turn.encode()) % len(WORKING_VERBS)
-    return WORKING_VERBS[first:] + WORKING_VERBS[:first]
+    return WORKING_VERBS[zlib.crc32(stretch.encode()) % len(WORKING_VERBS)]
 
 
 @dataclass(frozen=True, slots=True)
@@ -124,12 +128,10 @@ class ChatView:
     start: int = 0
     log: str = ""
     more: bool = False
-    # The agent is working, so the turn it is producing now lands here when it is done.
-    catching_up: bool = False
-    # The stretch the agent is working in, and the verbs its working line wears, the turn's own
-    # first, so a poll's redraw picks the line up where it was rather than starting it over.
-    turn: str = ""
-    verbs: tuple[str, ...] = ()
+    # Under the newest turn: what the agent is doing while the turn is its own, or once the turn
+    # is over, how long it worked.
+    bubble: "Bubble | None" = None
+    receipt: "Receipt | None" = None
     # Why the session the pane reports may not be the agent there; shown above everything.
     doubt: str = ""
     # The log could not be read under a drawing the reader already has, which then stands.
@@ -262,16 +264,186 @@ def _carrying(notice: TranscriptTurn, reports: list[TranscriptTurn]) -> Transcri
     return notice.model_copy(update={"result": text, "result_truncated": cut})
 
 
+@dataclass(frozen=True, slots=True)
+class Turning:
+    """What the router knows of the turn beside its log: the agent's status, the turn it is on
+    (which names its verb), what its card says it is asking, and the turn's clock."""
+
+    status: AgentStatus = AgentStatus.UNKNOWN
+    stretch: str = ""
+    asked: str = ""
+    times: TurnTimes = NO_TIMES
+
+
+# An agent whose status is not known: no bubble, and no receipt without a clock.
+NOT_TURNING: Final = Turning()
+
+
+@dataclass(frozen=True, slots=True)
+class Bubble:
+    """The status bubble: its state, its words, what VoiceOver hears, and its clocks."""
+
+    state: str
+    text: str
+    # Said when the state changes; the bubble's own words are for reading, not for announcing.
+    said: str
+    describe: str
+    stretch: str
+    # Whole seconds the turn has run, worded for the timer; None and "" draw no timer.
+    ran: int | None = None
+    time: str = ""
+    # Whole seconds the log has been still, and how long it may be before the bubble says so.
+    quiet: int | None = None
+    quiet_after: int = QUIET_AFTER
+    palette: str = WORKING_PALETTE
+    motion: str = WORKING_MOTION
+
+
+@dataclass(frozen=True, slots=True)
+class Receipt:
+    """The quiet line a finished turn folds into, and the same in words VoiceOver says well."""
+
+    text: str
+    said: str
+
+
+# What a tool does, by its name in any harness, case aside; a tool not listed is "Using" itself.
+_DOING: Final = {
+    "bash": "Running",
+    "shell": "Running",
+    "terminal": "Running",
+    "read": "Reading",
+    "read_file": "Reading",
+    "view": "Reading",
+    "edit": "Editing",
+    "multiedit": "Editing",
+    "notebookedit": "Editing",
+    "patch": "Editing",
+    "apply_patch": "Editing",
+    "write": "Writing",
+    "write_file": "Writing",
+    "grep": "Searching",
+    "search_files": "Searching",
+    "glob": "Finding",
+    "webfetch": "Fetching",
+    "websearch": "Searching",
+    "task": "Delegating",
+    "agent": "Delegating",
+}
+_FILE_TOOLS: Final = frozenset({"Reading", "Editing", "Writing"})
+# What a command line opens with before the program it runs: a change of directory, a setting,
+# or a wrapper that runs the next word; each is skipped so "Running" names the program.
+_WRAPPERS: Final = frozenset(
+    {"sudo", "env", "nice", "time", "timeout", "nohup", "setsid", "exec", "uv", "run", "npx"}
+)
+
+
+def _skipped(word: str) -> bool:
+    return word in _WRAPPERS or word.startswith("-") or word.isdigit() or "=" in word
+
+
+def _program(command: str) -> str:
+    """The command line's first line from the program it runs, past cd, settings and wrappers."""
+    first = command.strip().splitlines()[0] if command.strip() else ""
+    parts = [part.strip() for part in first.split("&&")]
+    line = next((part for part in parts if not part.startswith("cd ")), first)
+    words = line.split()
+    at = next((i for i, word in enumerate(words) if not _skipped(word)), 0)
+    return " ".join(words[at:])
+
+
+def doing(turn: ChatTurn) -> str:
+    """A tool call as what it is doing to what: "Running pytest", "Editing chat.py"."""
+    verb = _DOING.get(turn.tool.casefold())
+    if verb is None:
+        return f"Using {turn.tool}"
+    if verb == "Running":
+        return f"{verb} {_program(turn.text)}".strip()
+    what = turn.text.rstrip("/").rsplit("/", 1)[-1] if verb in _FILE_TOOLS else turn.text
+    return f"{verb} {' '.join(what.split())}".strip()
+
+
+def _running(items: tuple[ChatTurn | ToolRun, ...]) -> ChatTurn | None:
+    """The newest call when it is the newest thing in the log and has no result yet."""
+    last = items[-1] if items else None
+    call = last.tools[-1] if isinstance(last, ToolRun) else None
+    return call if call is not None and not call.result and not call.failed else None
+
+
+def _whole(seconds: float | None) -> int | None:
+    return None if seconds is None else int(seconds)
+
+
+def _working(items: tuple[ChatTurn | ToolRun, ...], turning: Turning) -> Bubble:
+    times = turning.times
+    ran = _whole(times.ran)
+    time = elapsed(ran) if ran is not None else ""
+    call = _running(items)
+    # A call still open is the agent at work however long it runs (a test run writes nothing
+    # until it ends), so it carries no quiet clock and never reads as gone quiet.
+    if call is not None:
+        text = doing(call)
+        return Bubble("working", text, "Working", f"Working: {text}", turning.stretch, ran, time)
+    if gone_quiet(times.quiet):
+        quiet = int(times.quiet or 0)
+        text = f"No activity for {elapsed(quiet // 60 * 60)}"
+        said = f"No activity for {duration_said(quiet)}"
+        return Bubble("quiet", text, said, said, turning.stretch, ran, time, quiet)
+    text = f"{turn_verb(turning.stretch)}\u2026"
+    quiet = _whole(times.quiet)
+    return Bubble("working", text, "Working", "Working", turning.stretch, ran, time, quiet)
+
+
+def _blocked(turning: Turning) -> Bubble:
+    asked = " ".join(turning.asked.split())
+    text = f"Needs you \u00b7 {asked}" if asked else "Needs you"
+    said = f"Needs you: {asked}" if asked else "Needs you"
+    return Bubble("blocked", text, said, said, turning.stretch)
+
+
+def _calls_since_prompt(items: tuple[ChatTurn | ToolRun, ...]) -> int | None:
+    """Tool calls after the newest prompt on the page; None when no prompt is on it."""
+    asked = [i for i, item in enumerate(items) if isinstance(item, ChatTurn) and _asks(item)]
+    if not asked:
+        return None
+    return sum(len(item.tools) for item in items[asked[-1] :] if isinstance(item, ToolRun))
+
+
+def _asks(item: ChatTurn) -> bool:
+    return item.speaker == Speaker.human.value
+
+
+def _receipt(items: tuple[ChatTurn | ToolRun, ...], took: float | None) -> Receipt | None:
+    """How long the newest turn worked, once the agent has answered it."""
+    last = items[-1] if items else None
+    if took is None or last is None or (isinstance(last, ChatTurn) and _asks(last)):
+        return None
+    calls = _calls_since_prompt(items)
+    counted = f"{calls} tool call{'' if calls == 1 else 's'}" if calls else ""
+    text = " \u00b7 ".join(part for part in (f"Worked {elapsed(took)}", counted) if part)
+    said = ", ".join(part for part in (f"Worked {duration_said(took)}", counted) if part)
+    return Receipt(text, said)
+
+
+def _status(
+    items: tuple[ChatTurn | ToolRun, ...], turning: Turning
+) -> tuple[Bubble | None, Receipt | None]:
+    if still_talking(turning.status):
+        return _working(items, turning), None
+    if needs_you(turning.status):
+        return _blocked(turning), None
+    return None, _receipt(items, turning.times.took)
+
+
 def chat_view(
-    page: TranscriptPage, *, working: str = "", doubt: str = "", drawn: bool = False
+    page: TranscriptPage, *, turning: Turning = NOT_TURNING, doubt: str = "", drawn: bool = False
 ) -> ChatView:
     """The Chat tab's content for one transcript page.
 
-    *working* names the stretch the agent is working in, empty when it is not; it
-    comes from the agent's own status, not a guess from the page: turns land at
-    message boundaries, so while the agent works whatever it is saying now is not
-    in the log yet, and the tab says so instead of looking complete. The name picks
-    the verb the working line opens on, so it holds for the whole stretch.
+    *turning* is what the agent's status and its harness's tally say about the turn: turns
+    land at message boundaries, so while the agent works whatever it is saying now is not in
+    the log yet, and a status bubble under the newest turn says what it is doing instead of
+    the log looking complete. Once the turn is over the bubble folds into how long it worked.
 
     *drawn* says the reader already has turns on screen. A store its harness has
     locked reads as unreadable with no turns, and redrawn that would blank the log
@@ -280,15 +452,16 @@ def chat_view(
     turns = tuple(_turn(t) for t in joined(tuple(page.turns)))
     note = "" if turns else _STATE_NOTES.get(page.state, "Nothing has been said yet.")
     held = drawn and not turns and page.state is HistoryState.unreadable
+    items = fold_tools(turns)
+    bubble, receipt = _status(items, turning)
     return ChatView(
-        fold_tools(turns),
+        items,
         note,
         start=page.cursor,
         log=page.log,
         more=page.has_more,
-        catching_up=bool(working),
-        turn=working,
-        verbs=working_verbs(working) if working else (),
+        bubble=bubble,
+        receipt=receipt,
         doubt=doubt,
         held=held,
     )

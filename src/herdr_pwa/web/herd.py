@@ -4,7 +4,15 @@ import logging
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
-from herdr_pwa.decisions import Fetched, HerdDecision, Overlay, decide_herd, effective_status
+from herdr_pwa.decisions import (
+    Fetched,
+    HerdDecision,
+    Overlay,
+    agent_row,
+    decide_herd,
+    effective_status,
+    needs_you,
+)
 from herdr_pwa.engine import (
     Agent,
     AgentStatus,
@@ -16,6 +24,7 @@ from herdr_pwa.engine import (
 )
 from herdr_pwa.web.deps import WebState
 from herdr_pwa.web.failures import AgentGone
+from herdr_pwa.web.naming import card_question
 
 log = logging.getLogger(__name__)
 
@@ -59,6 +68,13 @@ def overlay_of(web: WebState, agents: Iterable[Agent]) -> Overlay:
 def agent_status(web: WebState, agent: Agent) -> AgentStatus:
     """The status one agent's page shows, by the same rule as its feed card."""
     return effective_status(agent, overlay_of(web, (agent,)))
+
+
+def asked_by(web: WebState, agent: Agent) -> str:
+    """What *agent*'s feed card says it is asking, from the same cached read; ``""`` for none."""
+    blocked = needs_you(agent.status) and bool(agent.session)
+    prompt = _prompt(web, agent) if blocked else None
+    return card_question(agent_row(agent, overlay_of(web, (agent,)), prompt))
 
 
 def mark_read(web: WebState, session: str) -> None:

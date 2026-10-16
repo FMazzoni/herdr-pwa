@@ -290,8 +290,8 @@ class Hub:
             kind, status = kinds.get(session, ("", ""))
             if has_byte_frontier(kind):
                 stat = self._stat(session)
-                marks[f"chat:{session}"] = stat
-                # The strip also says whether a turn is running, which the log alone cannot.
+                # Both also say whether a turn is running or waiting, which the log alone cannot.
+                marks[f"chat:{session}"] = (status, stat)
                 marks[f"stats:{session}"] = (status, stat)
         for gone in set(self._watches) - viewed:
             del self._watches[gone]

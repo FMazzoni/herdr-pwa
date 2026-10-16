@@ -162,71 +162,65 @@
       return shownFor < 0 ? 0 : Math.max(0, LOST_READ_MS - shownFor);
     }
 
-    /* The working line. Its times come from app.css's tokens, so a CSS time reads as milliseconds
-     * here: "2.4s" or "800ms", and NaN for anything else. */
-    function millis(text) {
-      var found = /^\s*(\d*\.?\d+)(ms|s)\s*$/.exec(String(text));
-      if (found === null) {
-        return NaN;
+    /* The status bubble's motion styles, every one in this one place, picked by the bubble's
+     * data-working-motion (web/chat.py's WORKING_MOTION names the default). A style is how long
+     * one crest takes to cross the words (period, ms), how wide it is as a share of them (reach),
+     * and how high it lifts a letter (rise, em); null is a style that never moves. To add one,
+     * add an entry here and name it in WORKING_MOTION to wear it. */
+    var MOTIONS = {
+      // One gentle crest of colour crossing the words, nothing lifted.
+      crest: { period: 1600, reach: 0.35, rise: 0 },
+      // The same crest lifting each letter a little as it passes, as the first working line did.
+      "crest-lift": { period: 1600, reach: 0.35, rise: 0.08 },
+      // A slower, wider crest, for a calmer bubble.
+      drift: { period: 2800, reach: 0.5, rise: 0 },
+      still: null,
+    };
+
+    var MINUTE = 60;
+    var HOUR = 3600;
+    var DAY = 86400;
+
+    /* A span in the words herdr_pwa.clock.elapsed gives it: 42s, 4m 12s, 2m, 1h 12m, 2d 7h. The
+     * server words the first drawing; this only carries it on between redraws, and
+     * tests/fixtures/elapsed.json holds both to the same table. */
+    function elapsed(seconds) {
+      var whole = Math.max(0, Math.floor(seconds));
+      if (whole >= DAY) {
+        return Math.floor(whole / DAY) + "d " + Math.floor((whole % DAY) / HOUR) + "h";
       }
-      return parseFloat(found[1]) * (found[2] === "s" ? 1000 : 1);
+      if (whole >= HOUR) {
+        return Math.floor(whole / HOUR) + "h " + Math.floor((whole % HOUR) / MINUTE) + "m";
+      }
+      if (whole < MINUTE) {
+        return whole + "s";
+      }
+      var rest = whole % MINUTE;
+      return Math.floor(whole / MINUTE) + "m" + (rest ? " " + rest + "s" : "");
     }
 
-    /* Where the line is `elapsed` ms into its stretch: each verb holds for `hold` ms, the first
-     * `morph` of them spent turning out of the one before. index is the verb shown, from the one
-     * it is turning out of (-1 before the first turn), t how far that turn has gone (1: done). */
-    function verbAt(elapsed, count, times) {
-      var n = Math.floor(Math.max(0, elapsed) / times.hold);
-      var into = Math.max(0, elapsed) - n * times.hold;
-      return {
-        index: n % count,
-        from: n === 0 ? -1 : (n - 1) % count,
-        t: n === 0 ? 1 : Math.min(1, into / times.morph),
-      };
+    // A quiet stretch in whole minutes, as the server words it.
+    function quietFor(seconds) {
+      return "No activity for " + elapsed(Math.floor(seconds / MINUTE) * MINUTE);
     }
 
-    /* Which glyph of `from` each glyph of `to` grows out of, or -1: the longest run of letters the
-     * two words share, kept in order, so no two glyphs cross on their way to their new places. */
-    function pairs(from, to) {
-      var rows = [];
-      for (var i = 0; i <= from.length; i++) {
-        rows.push(new Array(to.length + 1).fill(0));
+    /* Whether a bubble drawn `quiet` seconds after the log last moved has, `sinceMs` later, been
+     * still past `after` seconds: nothing redraws a log that does not move, so this page says so. */
+    function goneQuiet(quiet, sinceMs, after) {
+      if (quiet === null || !(after > 0)) {
+        return false;
       }
-      for (i = from.length - 1; i >= 0; i--) {
-        for (var j = to.length - 1; j >= 0; j--) {
-          rows[i][j] = from[i] === to[j] ? rows[i + 1][j + 1] + 1 : Math.max(rows[i + 1][j], rows[i][j + 1]);
-        }
-      }
-      var paired = new Array(to.length).fill(-1);
-      i = 0;
-      j = 0;
-      while (i < from.length && j < to.length) {
-        if (from[i] === to[j]) {
-          paired[j] = i;
-          i++;
-          j++;
-        } else if (rows[i + 1][j] >= rows[i][j + 1]) {
-          i++;
-        } else {
-          j++;
-        }
-      }
-      return paired;
+      return quiet + sinceMs / 1000 >= after;
     }
 
-    // Slow at both ends, so a glyph leaves its place and arrives at the next without a jolt.
-    function ease(t) {
-      return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-    }
-
-    // How wide the wave's crest is, as a share of the verb it crosses.
+    // How wide the wave's crest is, as a share of the words it crosses, unless a motion says.
     var WAVE_REACH = 0.35;
 
     /* How far the wave lifts a glyph at `x` on a verb `width` wide, `phase` (0 to 1) of the way
      * through one sweep: 0 to 1, a soft crest that enters on the left and leaves on the right, so
      * the crest moves at one speed across a wide m and a narrow i alike. */
-    function wave(x, width, phase) {
-      var reach = Math.max(width * WAVE_REACH, 1);
+    function wave(x, width, phase, share) {
+      var reach = Math.max(width * (share || WAVE_REACH), 1);
       var crest = -reach + phase * (width + 2 * reach);
       var off = Math.abs(x - crest) / reach;
       return off >= 1 ? 0 : (1 + Math.cos(Math.PI * off)) / 2;
@@ -234,31 +228,10 @@
 
     /* Where a glyph centred at `x` stands across the crest, for the colour it wears: 0 at the
      * trailing edge, 1 at the leading edge, so the colours run through the crest as one gradient. */
-    function glow(x, width, phase) {
-      var reach = Math.max(width * WAVE_REACH, 1);
+    function glow(x, width, phase, share) {
+      var reach = Math.max(width * (share || WAVE_REACH), 1);
       var crest = -reach + phase * (width + 2 * reach);
       return Math.min(1, Math.max(0, (x - crest) / (2 * reach) + 0.5));
-    }
-
-    /* One frame of a verb turning into the next, from where each glyph starts in the old verb and
-     * in the new (fromX, toX) and how they pair. A glyph of the new verb that grows out of one in the old glides from its
-     * place; the rest fade in where they belong, and the old glyphs nothing grew from fade out
-     * where they stood. Each is { x, alpha }; `leaving` is indexed like `from`, null if it stays. */
-    function morphFrame(fromX, toX, paired, t) {
-      var e = ease(t);
-      var kept = new Array(fromX.length).fill(false);
-      var arriving = toX.map(function (x, i) {
-        var source = paired[i];
-        if (source < 0) {
-          return { x: x, alpha: e };
-        }
-        kept[source] = true;
-        return { x: fromX[source] + (x - fromX[source]) * e, alpha: 1 };
-      });
-      var leaving = fromX.map(function (x, i) {
-        return kept[i] ? null : { x: x, alpha: 1 - e };
-      });
-      return { arriving: arriving, leaving: leaving };
     }
 
     return {
@@ -275,13 +248,12 @@
       defers: defers,
       LOST_READ_MS: LOST_READ_MS,
       lostHold: lostHold,
-      millis: millis,
-      verbAt: verbAt,
-      pairs: pairs,
-      ease: ease,
+      MOTIONS: MOTIONS,
+      elapsed: elapsed,
+      quietFor: quietFor,
+      goneQuiet: goneQuiet,
       wave: wave,
       glow: glow,
-      morphFrame: morphFrame,
     };
   })();
   // hp:logic:end
@@ -1291,15 +1263,23 @@
   var writeTarget = "";
   var newestSaid = null;
 
+  // What is to be said in the next moment, so two things said in one swap are both heard.
+  var toSay = [];
+
   function say(text) {
     var spoken = document.getElementById("hp-live");
     if (!spoken || !text) {
       return;
     }
+    toSay.push(text);
+    if (toSay.length > 1) {
+      return;
+    }
     // Emptied first, so the same words twice are still news.
     spoken.textContent = "";
     window.setTimeout(function () {
-      spoken.textContent = text;
+      spoken.textContent = toSay.join(". ");
+      toSay = [];
     }, 50);
   }
 
@@ -1757,195 +1737,225 @@
     shownStatus = status;
   });
 
-  /* ---- The working line: the verb's glyphs ride a slow wave and flow into the next verb ----
-   * A canvas measures where each glyph of a verb sits without the verb being on the page, so a
-   * glyph can glide from its place in one verb to its place in the next. One frame loop at most,
-   * and only while the line is on screen in a visible page; a swap that takes the line away ends
-   * it. Under Reduce Motion, or with no canvas to measure on, the verb stays still. */
-  var ELLIPSIS = "…";
-  // Three dots of their own rather than one ellipsis glyph, so the wave runs on into each.
-  var DOTS = "...";
+  /* ---- The status bubble: a crest crosses its words while the agent works; its timer ticks ----
+   * The server draws the bubble's state, words and clocks on every redraw; between redraws this
+   * carries the timer on, says "No activity" once the log has been still too long (a log that
+   * does not move redraws nothing), and runs at most one frame loop, only while the bubble is
+   * working, on screen, in a visible page and allowed to move. Under Reduce Motion, or a motion
+   * style that is still, the words stand still and the timer still ticks. VoiceOver is told only
+   * when the state changes: working, quiet, needs you, done. */
   var stillness = window.matchMedia("(prefers-reduced-motion: reduce)");
-  var working = {
-    line: null, layer: null, key: "", start: 0, seen: false, frame: 0, observer: null,
-    verbs: [], paired: [], times: null, scale: 1, nodes: null, shown: -1,
+  var bubble = {
+    node: null, stretch: "", start: 0, drawnAt: 0, ran: null, quiet: null, after: NaN,
+    motion: null, glyphs: [], frame: 0, tick: 0, seen: false, observer: null,
   };
-  var measured = new Map();
-  var pen = null;
+  // The state last told to VoiceOver, so a redraw of the same state says nothing.
+  var bubbleState = null;
 
-  // Where each glyph of `text` starts, and the whole width, measured on the canvas in `font`.
-  function glyphPlaces(text, font) {
-    var known = measured.get(font + "\n" + text);
-    if (known) {
-      return known;
-    }
-    // The verbs are one fixed list of plain words, so a code point is a glyph.
-    var glyphs = Array.from(text);
-    pen.font = font;
-    // A prefix's width, kerning and all, is where the next glyph starts.
-    var advance = function (upTo) {
-      return pen.measureText(glyphs.slice(0, upTo).join("")).width;
-    };
-    var places = {
-      glyphs: glyphs,
-      x: glyphs.map(function (_, i) {
-        return i === 0 ? 0 : advance(i);
-      }),
-      width: advance(glyphs.length),
-    };
-    measured.set(font + "\n" + text, places);
-    return places;
+  // A number the server wrote into an attribute, or null where it wrote none.
+  function attrNumber(raw) {
+    return raw === null || raw === "" ? null : Number(raw);
   }
 
-  function workingTimes(line) {
-    var style = window.getComputedStyle(line);
-    var times = {
-      sweep: logic.millis(style.getPropertyValue("--working-sweep")),
-      hold: logic.millis(style.getPropertyValue("--working-hold")),
-      morph: logic.millis(style.getPropertyValue("--working-morph")),
-    };
-    return times.sweep > 0 && times.morph > 0 && times.hold > times.morph ? times : null;
+  function motionOf(node) {
+    var name = node.getAttribute("data-working-motion") || "";
+    return Object.prototype.hasOwnProperty.call(logic.MOTIONS, name) ? logic.MOTIONS[name] : null;
   }
 
-  function stopWorking() {
-    if (working.frame) {
-      window.cancelAnimationFrame(working.frame);
-      working.frame = 0;
+  // The words as one span per letter, which the crest colours one by one; VoiceOver skips them.
+  function layGlyphs(node, motion) {
+    var words = node.querySelector(".bubble__text");
+    if (!words) {
+      return [];
     }
-    if (working.observer) {
-      working.observer.disconnect();
-      working.observer = null;
-    }
-    if (working.layer) {
-      working.layer.parentNode.classList.remove("is-moving");
-      working.layer.remove();
-    }
-    working.line = null;
-    working.layer = null;
-    working.seen = false;
-  }
-
-  // The glyph spans for a verb turning out of the one before it (from: null when it is not).
-  function glyphNodes(layer, to, from) {
-    var make = function (text) {
-      var node = document.createElement("span");
-      node.className = "working__glyph";
-      node.textContent = text;
-      layer.appendChild(node);
-      return node;
-    };
-    layer.replaceChildren();
-    return {
-      arriving: to.glyphs.map(make),
-      leaving: from ? from.glyphs.map(make) : [],
-    };
-  }
-
-  function placeGlyph(node, x, alpha, lift, side) {
-    node.style.setProperty("--glyph-x", (x * working.scale).toFixed(2) + "px");
-    node.style.setProperty("--glyph-alpha", alpha.toFixed(3));
-    node.style.setProperty("--glyph-wave", lift.toFixed(3));
-    // The crest's colours, three stops as two blends: the first two, then that and the third.
-    node.style.setProperty("--glyph-near", Math.min(1, side * 2).toFixed(3));
-    node.style.setProperty("--glyph-far", Math.max(0, side * 2 - 1).toFixed(3));
-  }
-
-  function drawWorking(now) {
-    var w = working;
-    var at = logic.verbAt(now - w.start, w.verbs.length, w.times);
-    var to = w.verbs[at.index];
-    var from = at.t < 1 ? w.verbs[at.from] : null;
-    if (at.index !== w.shown || (from === null) !== (w.nodes.leaving.length === 0)) {
-      w.nodes = glyphNodes(w.layer, to, from);
-      w.shown = at.index;
-    }
-    var phase = ((now - w.start) % w.times.sweep) / w.times.sweep;
-    var turning = from ? logic.morphFrame(from.x, to.x, w.paired[at.index], at.t) : null;
-    to.x.forEach(function (x, i) {
-      var spot = turning ? turning.arriving[i] : { x: x, alpha: 1 };
-      // Sampled at the glyph's middle, so a wide m and a narrow i take the colour under them.
-      var middle = spot.x + ((i + 1 < to.x.length ? to.x[i + 1] : to.width) - x) / 2;
-      var lift = logic.wave(middle, to.width, phase) * logic.ease(at.t);
-      placeGlyph(w.nodes.arriving[i], spot.x, spot.alpha, lift, logic.glow(middle, to.width, phase));
+    var glyphs = Array.from(words.textContent).map(function (letter) {
+      var glyph = document.createElement("span");
+      glyph.className = "bubble__glyph";
+      glyph.textContent = letter;
+      return glyph;
     });
-    w.nodes.leaving.forEach(function (node, i) {
-      var spot = turning.leaving[i];
-      placeGlyph(node, spot ? spot.x : 0, spot ? spot.alpha : 0, 0, 0);
+    words.replaceChildren.apply(words, glyphs);
+    node.classList.toggle("is-lifting", motion.rise > 0);
+    node.style.setProperty("--working-rise", motion.rise + "em");
+    return glyphs;
+  }
+
+  function drawCrest(now) {
+    var b = bubble;
+    var count = b.glyphs.length;
+    var phase = ((now - b.start) % b.motion.period) / b.motion.period;
+    b.glyphs.forEach(function (glyph, i) {
+      var middle = i + 0.5;
+      var side = logic.glow(middle, count, phase, b.motion.reach);
+      glyph.style.setProperty("--glyph-wave", logic.wave(middle, count, phase, b.motion.reach).toFixed(3));
+      // Three stops as two blends: the first two, then that and the third.
+      glyph.style.setProperty("--glyph-near", Math.min(1, side * 2).toFixed(3));
+      glyph.style.setProperty("--glyph-far", Math.max(0, side * 2 - 1).toFixed(3));
     });
   }
 
-  function runWorking() {
-    var go = working.line !== null && working.seen && !document.hidden;
-    if (go && !working.frame) {
-      working.frame = window.requestAnimationFrame(function (now) {
-        working.frame = 0;
-        if (!working.line || !working.line.isConnected) {
-          stopWorking();
+  function runCrest() {
+    var b = bubble;
+    var go = b.glyphs.length > 0 && b.seen && !document.hidden;
+    if (go && !b.frame) {
+      b.frame = window.requestAnimationFrame(function (now) {
+        b.frame = 0;
+        if (!b.node || !b.node.isConnected) {
+          stopBubble();
           return;
         }
-        drawWorking(now);
-        runWorking();
+        drawCrest(now);
+        runCrest();
       });
-    } else if (!go && working.frame) {
-      window.cancelAnimationFrame(working.frame);
-      working.frame = 0;
+    } else if (!go && b.frame) {
+      window.cancelAnimationFrame(b.frame);
+      b.frame = 0;
     }
   }
 
-  function startWorking() {
-    var line = document.querySelector(".chat__working[data-hp-verbs]");
-    if (line === working.line) {
-      return;
+  function stopCrest() {
+    var b = bubble;
+    if (b.frame) {
+      window.cancelAnimationFrame(b.frame);
+      b.frame = 0;
     }
-    stopWorking();
-    var box = line ? line.querySelector(".working") : null;
-    var times = line ? workingTimes(line) : null;
-    pen = pen || document.createElement("canvas").getContext("2d");
-    if (!box || !times || stillness.matches || !pen) {
-      return;
+    if (b.observer) {
+      b.observer.disconnect();
+      b.observer = null;
     }
-    var key = line.getAttribute("data-hp-working") || "";
-    if (key !== working.key) {
-      working.key = key;
-      working.start = window.performance.now();
+    var words = b.node ? b.node.querySelector(".bubble__text") : null;
+    if (words && b.glyphs.length) {
+      // The letters' own text, back as one run of words.
+      var text = words.textContent;
+      words.textContent = text;
     }
-    var style = window.getComputedStyle(box);
-    var font = [style.fontStyle, style.fontWeight, style.fontSize, style.fontFamily].join(" ");
-    var verbs = line.getAttribute("data-hp-verbs").split(" ").map(function (verb) {
-      return glyphPlaces(verb + DOTS, font);
-    });
-    var still = box.querySelector(".working__verb");
-    // One read of the verb the page drew: canvas and the page may pick a system font apart.
-    var drawn = still ? still.getBoundingClientRect().width : 0;
-    var first = glyphPlaces(verbs[0].glyphs.slice(0, -DOTS.length).join("") + ELLIPSIS, font).width;
-    working.scale = drawn > 0 && first > 0 ? drawn / first : 1;
-    working.verbs = verbs;
-    working.times = times;
-    working.paired = verbs.map(function (to, i) {
-      return logic.pairs(verbs[(i - 1 + verbs.length) % verbs.length].glyphs, to.glyphs);
-    });
-    working.line = line;
-    working.layer = document.createElement("span");
-    working.layer.className = "working__glyphs";
-    working.nodes = { arriving: [], leaving: [] };
-    working.shown = -1;
-    box.appendChild(working.layer);
-    box.classList.add("is-moving");
-    // Drawn once now, so the swap that brought the line in never paints it empty.
-    drawWorking(window.performance.now());
-    working.observer = new IntersectionObserver(function (entries) {
-      working.seen = entries[entries.length - 1].isIntersecting;
-      runWorking();
-    });
-    working.observer.observe(line);
+    b.glyphs = [];
   }
 
-  document.addEventListener("DOMContentLoaded", startWorking);
-  document.addEventListener("htmx:afterSwap", startWorking);
-  document.addEventListener("visibilitychange", runWorking);
-  window.addEventListener("pageshow", runWorking);
+  function stopBubble() {
+    stopCrest();
+    if (bubble.tick) {
+      window.clearTimeout(bubble.tick);
+      bubble.tick = 0;
+    }
+    bubble.node = null;
+  }
+
+  // The bubble's own words, and VoiceOver's, once this page has seen the log stay still too long.
+  function showQuiet(node, seconds) {
+    var words = node.querySelector(".bubble__text");
+    var described = node.querySelector(".sr-only");
+    if (words) {
+      words.textContent = logic.quietFor(seconds);
+    }
+    if (described) {
+      described.textContent = "No recent activity";
+    }
+  }
+
+  function goQuiet(node, seconds) {
+    stopCrest();
+    node.classList.remove("bubble--working");
+    node.classList.add("bubble--quiet");
+    node.setAttribute("data-hp-bubble", "quiet");
+    node.setAttribute("data-hp-said", "No recent activity");
+    showQuiet(node, seconds);
+    tellBubble();
+  }
+
+  // Once a second, on the second: the timer, and whether the turn has gone quiet.
+  function tickBubble() {
+    var b = bubble;
+    b.tick = 0;
+    if (!b.node || !b.node.isConnected) {
+      stopBubble();
+      return;
+    }
+    var since = window.performance.now() - b.drawnAt;
+    var time = b.node.querySelector(".bubble__time");
+    if (time && b.ran !== null) {
+      time.textContent = logic.elapsed(b.ran + since / 1000);
+    }
+    var state = b.node.getAttribute("data-hp-bubble");
+    if (b.quiet !== null && state === "working" && logic.goneQuiet(b.quiet, since, b.after)) {
+      goQuiet(b.node, b.quiet + since / 1000);
+    } else if (b.quiet !== null && state === "quiet") {
+      showQuiet(b.node, b.quiet + since / 1000);
+    }
+    if (!document.hidden) {
+      b.tick = window.setTimeout(tickBubble, 1000 - (since % 1000));
+    }
+  }
+
+  /* Says the bubble's state when it is not the one last said: the first drawing is the page
+   * opening, not news. A finished turn's receipt settles in where the bubble was. */
+  function tellBubble() {
+    var shown = document.querySelector("#chat-note [data-hp-bubble]");
+    var state = shown ? shown.getAttribute("data-hp-bubble") : "";
+    if (bubbleState !== null && state !== bubbleState) {
+      if (shown) {
+        say(shown.getAttribute("data-hp-said") || "");
+      }
+      if (state === "done" && bubbleState !== "") {
+        shown.classList.add("is-folding");
+      }
+    }
+    bubbleState = state;
+  }
+
+  function startBubble() {
+    var node = document.querySelector("#chat-note .bubble[data-hp-bubble]");
+    if (node === bubble.node) {
+      return;
+    }
+    stopBubble();
+    if (!node) {
+      return;
+    }
+    var b = bubble;
+    var stretch = node.getAttribute("data-hp-stretch") || "";
+    b.drawnAt = window.performance.now();
+    // A redraw of the same stretch carries the crest on from where it was.
+    if (stretch !== b.stretch) {
+      b.stretch = stretch;
+      b.start = b.drawnAt;
+    }
+    b.node = node;
+    b.ran = attrNumber(node.getAttribute("data-hp-ran"));
+    b.quiet = attrNumber(node.getAttribute("data-hp-quiet"));
+    b.after = attrNumber(node.getAttribute("data-hp-quiet-after"));
+    b.motion = motionOf(node);
+    if (node.getAttribute("data-hp-bubble") === "working" && b.motion && !stillness.matches) {
+      b.glyphs = layGlyphs(node, b.motion);
+      drawCrest(b.drawnAt);
+      b.observer = new IntersectionObserver(function (entries) {
+        b.seen = entries[entries.length - 1].isIntersecting;
+        runCrest();
+      });
+      b.observer.observe(node);
+    }
+    tickBubble();
+  }
+
+  function wakeBubble() {
+    runCrest();
+    if (bubble.node && !bubble.tick && !document.hidden) {
+      tickBubble();
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", function () {
+    tellBubble();
+    startBubble();
+  });
+  document.addEventListener("htmx:afterSwap", function () {
+    tellBubble();
+    startBubble();
+  });
+  document.addEventListener("visibilitychange", wakeBubble);
+  window.addEventListener("pageshow", wakeBubble);
   stillness.addEventListener("change", function () {
-    stopWorking();
-    startWorking();
+    stopBubble();
+    startBubble();
   });
 })();
