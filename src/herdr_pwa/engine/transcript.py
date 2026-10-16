@@ -1068,9 +1068,7 @@ def _api_error_turn(record: ClaudeRecord, stamp: TurnStamp) -> TranscriptTurn:
 
 
 def _assistant_record(record: ClaudeRecord, stamp: TurnStamp) -> TranscriptTurn | None:
-    """An assistant record: prose, one collapsed tool call, or an API error the harness wrote."""
-    if record.is_api_error is True:
-        return _api_error_turn(record, stamp)
+    """An assistant record: prose, or one collapsed tool call."""
     uuid, ts = stamp.uuid, stamp.written
     for block in _blocks(record):
         btype = block.type
@@ -1108,6 +1106,8 @@ def _claude_turn(record: ClaudeRecord) -> TranscriptTurn | None:
     stamp = TurnStamp(uuid, record.timestamp or "")
     if kind == "user":
         return _user_record(record, stamp)
+    if kind == "assistant" and record.is_api_error is True:
+        return _api_error_turn(record, stamp)
     if kind == "assistant":
         return _assistant_record(record, stamp)
     return None
