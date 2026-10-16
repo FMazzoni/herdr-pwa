@@ -19,7 +19,7 @@ from herdr_pwa.engine import (
     TranscriptPage,
     TranscriptTurn,
 )
-from herdr_pwa.web.chat import chat_view
+from herdr_pwa.web.chat import WORKING_VERBS, chat_view, working_verb
 from herdr_pwa.web.security import CSP
 from tests.webfakes import (
     IDLE_SESSION,
@@ -397,13 +397,51 @@ def test_the_view_switch_lives_in_the_top_bar_and_the_title_scrolls(tmp_path: Pa
 # The Chat tab's catching-up note: the agent's status alone decides it, so it
 # cannot flicker between polls, and a locked store never reads as "nothing said".
 
-NOTE = "It is talking; what it says lands here when the turn is done."
+NOTE = '<span class="sr-only">Working</span>'
 
 
 def test_the_chat_says_it_is_catching_up_while_the_agent_works(tmp_path: Path) -> None:
     rig = build_rig(tmp_path)
     body = rig.http.get(f"/agent/{WORKING_SESSION}/chat").text
     assert NOTE in body
+
+
+def _verb_in(body: str) -> str:
+    found = re.search(r'<span aria-hidden="true">(\w+)<span class="working">', body)
+    assert found is not None, body
+    return found.group(1)
+
+
+def _working_at(tmp_path: Path, seq: int, revision: int = 1) -> str:
+    frame = snapshot_frame()
+    for agent in agents_of(frame):
+        agent["state_change_seq"] = seq
+        agent["revision"] = revision
+    rig = build_rig(tmp_path, {SNAPSHOT: frame})
+    return rig.http.get(f"/agent/{WORKING_SESSION}/chat", headers=FRAGMENT).text
+
+
+def test_the_working_line_says_working_and_hides_its_verb(tmp_path: Path) -> None:
+    """VoiceOver hears one stable word; the verb and the dots are decoration it skips."""
+    body = _working_at(tmp_path, 7)
+    assert _verb_in(body) in WORKING_VERBS
+    assert body.count('class="working__dot"') == 3
+    assert "It is talking" not in body
+
+
+def test_the_working_verb_holds_for_a_turn_and_changes_with_the_next(tmp_path: Path) -> None:
+    """Every poll of one working stretch redraws the same verb; a new stretch may pick another."""
+    first = _verb_in(_working_at(tmp_path / "a", 7))
+    # A poll redraws on every new screen (revision); the stretch, and so the verb, is the same.
+    assert _verb_in(_working_at(tmp_path / "b", 7, revision=40)) == first
+    verbs = {_verb_in(_working_at(tmp_path / f"s{seq}", seq)) for seq in range(8, 20)}
+    assert len(verbs) > 1
+
+
+def test_the_working_verb_is_a_function_of_the_turn_alone() -> None:
+    """crc32 of the turn's name, so it survives a restart, unlike Python's salted str hash."""
+    assert working_verb("s:1") == "Gathering"
+    assert {working_verb(f"s:{n}") for n in range(200)} == set(WORKING_VERBS)
 
 
 def test_the_catching_up_note_is_gone_when_the_agent_stops(tmp_path: Path) -> None:
@@ -484,5 +522,6 @@ def test_the_catching_up_note_is_a_function_of_the_status_alone() -> None:
         state=HistoryState.ok,
     )
     for status in AgentStatus:
-        view = chat_view(page, working=status is AgentStatus.WORKING)
+        view = chat_view(page, working="s:1" if status is AgentStatus.WORKING else "")
         assert view.catching_up is (status is AgentStatus.WORKING), status
+        assert bool(view.verb) is view.catching_up, status

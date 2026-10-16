@@ -1,5 +1,6 @@
 """Transcript turns turned into what the Chat tab renders: speaker, text, prose tree."""
 
+import zlib
 from dataclasses import dataclass
 from typing import Final
 
@@ -13,6 +14,29 @@ _STATE_NOTES = {
     HistoryState.unreadable: "The transcript exists and could not be read.",
     HistoryState.unsupported: "This harness keeps no transcript this app can read; see Pane.",
 }
+
+
+# The working line's decoration, not a claim about the turn: assistive tech hears "Working".
+WORKING_VERBS: Final = (
+    "Sketching",
+    "Untangling",
+    "Whittling",
+    "Sifting",
+    "Knitting",
+    "Rummaging",
+    "Weighing",
+    "Tidying",
+    "Gathering",
+    "Folding",
+    "Charting",
+    "Polishing",
+)
+
+
+def working_verb(turn: str) -> str:
+    """The verb for the turn named *turn*: the same on every poll of that turn, and every run."""
+    # crc32, not hash(): str hashes are salted per process, so a restart would change the verb.
+    return WORKING_VERBS[zlib.crc32(turn.encode()) % len(WORKING_VERBS)]
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,6 +110,8 @@ class ChatView:
     more: bool = False
     # The agent is working, so the turn it is producing now lands here when it is done.
     catching_up: bool = False
+    # The working line's verb, fixed for the turn so a poll's redraw never swaps it.
+    verb: str = ""
     # Why the session the pane reports may not be the agent there; shown above everything.
     doubt: str = ""
     # The log could not be read under a drawing the reader already has, which then stands.
@@ -217,13 +243,15 @@ def _carrying(notice: TranscriptTurn, reports: list[TranscriptTurn]) -> Transcri
 
 
 def chat_view(
-    page: TranscriptPage, *, working: bool = False, doubt: str = "", drawn: bool = False
+    page: TranscriptPage, *, working: str = "", doubt: str = "", drawn: bool = False
 ) -> ChatView:
     """The Chat tab's content for one transcript page.
 
-    *working* is the agent's own status, not a guess from the page: turns land
-    at message boundaries, so while the agent works whatever it is saying now
-    is not in the log yet, and the tab says so instead of looking complete.
+    *working* names the stretch the agent is working in, empty when it is not; it
+    comes from the agent's own status, not a guess from the page: turns land at
+    message boundaries, so while the agent works whatever it is saying now is not
+    in the log yet, and the tab says so instead of looking complete. The name picks
+    the verb the working line wears, so it holds for the whole stretch.
 
     *drawn* says the reader already has turns on screen. A store its harness has
     locked reads as unreadable with no turns, and redrawn that would blank the log
@@ -238,7 +266,8 @@ def chat_view(
         start=page.cursor,
         log=page.log,
         more=page.has_more,
-        catching_up=working,
+        catching_up=bool(working),
+        verb=working_verb(working) if working else "",
         doubt=doubt,
         held=held,
     )
