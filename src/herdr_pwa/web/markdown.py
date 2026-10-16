@@ -2,6 +2,7 @@
 
 import re
 from collections.abc import Callable, Iterable
+from dataclasses import replace
 from functools import lru_cache
 from typing import Final
 from urllib.parse import urlencode
@@ -48,7 +49,7 @@ TAGS: Final = frozenset(
 VOID_TAGS: Final = frozenset({"hr", "br"})
 CLASSES: Final = frozenset(
     {
-        *("table-scroll", "align-center", "align-right", "cell-whole", "math-block"),
+        *("table-scroll", "align-center", "align-right", "cell-whole", "cell-token", "math-block"),
         *("task", "task-open", "task-done", "file-ref"),
         *TOKEN_CLASSES,
     }
@@ -60,6 +61,9 @@ _LINK_SCHEMES: Final = ("http://", "https://")
 _LEAF_TEXT: Final = frozenset({"text", "html_block"})
 WIDE_TABLE: Final = 4
 SHORT_CELL: Final = 24
+# A run with no space in it that a browser would still break: after a slash or a dash, which a sha
+# range, a path or a ticket ref is full of.
+_BREAKABLE_RUN: Final = re.compile(r"[^\s/\\\-‐–—]*[/\\\-‐–—]\S*")
 _ALIGN: Final = {"text-align:center": "align-center", "text-align:right": "align-right"}
 # The tasklists plugin's checkbox: with raw HTML off, no other inline HTML reaches the tree.
 _TASK_BOX: Final = "task-list-item-checkbox"
@@ -191,6 +195,27 @@ def _whole(node: SyntaxTreeNode, children: list[MdNode]) -> bool:
     return columns >= WIDE_TABLE and len(text) <= SHORT_CELL
 
 
+def _kept_whole(nodes: Iterable[MdNode]) -> list[MdNode]:
+    """Each breakable run in a prose cell's text, held to one line so the column is as wide as it."""
+    out: list[MdNode] = []
+    for node in nodes:
+        if node.tag == "code" or node.tag in MATH_TAGS:
+            out.append(node)
+            continue
+        if node.tag:
+            out.append(replace(node, children=tuple(_kept_whole(node.children))))
+            continue
+        at = 0
+        for found in _BREAKABLE_RUN.finditer(node.text):
+            if found.start() > at:
+                out.append(MdNode(text=node.text[at : found.start()]))
+            out.append(MdNode("span", cls="cell-token", children=(MdNode(text=found.group(0)),)))
+            at = found.end()
+        if at < len(node.text):
+            out.append(MdNode(text=node.text[at:]))
+    return out
+
+
 def _cell_cls(node: SyntaxTreeNode, children: list[MdNode]) -> str:
     names = [_ALIGN.get(str(node.attrs.get("style", "")), "")]
     if _whole(node, children):
@@ -210,7 +235,11 @@ def _element(node: SyntaxTreeNode, children: list[MdNode]) -> list[MdNode]:
     # Images are never fetched: their alt text is all that is shown.
     if node.type == "image" or node.tag not in TAGS:
         return children
-    element = MdNode(node.tag, cls=_cls(node, children), children=tuple(children))
+    cls = _cls(node, children)
+    if node.tag in ("th", "td") and "cell-whole" not in cls:
+        # The geometry gate holds no cell narrower than its widest word; the table scrolls instead.
+        children = _kept_whole(children)
+    element = MdNode(node.tag, cls=cls, children=tuple(children))
     if node.tag == "table":
         # A table wider than the turn scrolls in this box; the page never moves sideways.
         return [MdNode("div", cls="table-scroll", children=(element,))]

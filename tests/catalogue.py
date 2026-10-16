@@ -953,10 +953,12 @@ AGENT_PAGE: Final = (
     State(
         "chat-report-table",
         f"{AGENT}?tab=chat",
-        ".chat .turn--peer .prose table",
+        ".chat .turn--peer:has(.turn__more[open]) .prose table",
         runner(_stressed),
         report_table_chat(),
-        title="Chat: a report with a table whose cells hold shas, paths and ticket refs",
+        title="Chat: a report opened on a table whose cells hold shas, paths and ticket refs",
+        armed=".chat .turn--peer .turn__more summary",
+        act=_click(".chat .turn--peer .turn__more summary"),
     ),
     State(
         "chat-peer-message",
