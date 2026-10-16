@@ -260,7 +260,7 @@ def _close(session: SessionId, post: Posted) -> Response:
     if isinstance(result, Refused):
         raise_if_gone(result)
         context = {"agent": find_agent(web, session)}
-        return refused(web.pages, Redraw("close.html", context, whole=True), result)
+        return refused(web.pages, Redraw("close.html", context, as_page=True), result)
     return opened(post.request, "/")
 
 
@@ -372,5 +372,5 @@ def _door(web: WebState, pane: PaneId, knock: _Knock) -> HTMLResponse:
     if isinstance(result, Refused):
         # Which form the refusal answers, so a held interrupt never arms the prompt's confirm.
         context = {**_door_context(pane, agent, knock.text), "key": knock.key}
-        return refused(web.pages, Redraw("starting.html", context, whole=True), result)
+        return refused(web.pages, Redraw("starting.html", context, as_page=True), result)
     return web.pages.page("starting.html", {**_door_context(pane, agent), "sent": result})

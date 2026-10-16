@@ -96,7 +96,7 @@ def _new(post: Posted) -> Response:
     result = start_agent(post.writer, ask)
     if isinstance(result, Refused):
         context = _new_context(web.client.snapshot(), values)
-        return refused(web.pages, Redraw("new.html", context, whole=True), result)
+        return refused(web.pages, Redraw("new.html", context, as_page=True), result)
     return _started(post.request, result)
 
 
@@ -106,7 +106,7 @@ def _find(snapshot: Snapshot, workspace_id: str) -> Workspace | None:
 
 def _no_workspace(web: WebState, name: str, verb: str) -> HTMLResponse:
     context: dict[str, object] = {"workspace": None, "label": "", "cost": None, "armed": False}
-    drawn = Redraw(name, context, whole=True)
+    drawn = Redraw(name, context, as_page=True)
     return refused(web.pages, drawn, Refused(Refusal.NO_WORKSPACE, verb))
 
 
@@ -121,7 +121,7 @@ def _workspace_routes(router: APIRouter, web: WebState) -> None:
         label = form(body).get("label", "")
         result = create_workspace(web.client, label)
         if isinstance(result, Refused):
-            drawn = Redraw("workspace_new.html", {"label": label}, whole=True)
+            drawn = Redraw("workspace_new.html", {"label": label}, as_page=True)
             return refused(web.pages, drawn, result)
         return opened(request, _workspace_back(result.workspace_id))
 
@@ -139,7 +139,9 @@ def _workspace_routes(router: APIRouter, web: WebState) -> None:
         if isinstance(result, Refused):
             found = _find(web.client.snapshot(), workspace_id)
             context = {"workspace": found, "label": label}
-            return refused(web.pages, Redraw("workspace_rename.html", context, whole=True), result)
+            return refused(
+                web.pages, Redraw("workspace_rename.html", context, as_page=True), result
+            )
         return opened(request, _workspace_back(workspace_id))
 
 
@@ -177,5 +179,5 @@ def _close(workspace_id: str, post: Posted) -> Response:
         # The second step is armed once the first confirm has been given against a cost.
         armed = ask.confirmed and result.refusal in (Refusal.CONFIRM, Refusal.COUNT_CHANGED)
         context = _close_context(web, workspace_id, armed=armed)
-        return refused(web.pages, Redraw("workspace_close.html", context, whole=True), result)
+        return refused(web.pages, Redraw("workspace_close.html", context, as_page=True), result)
     return opened(post.request, "/workspaces")

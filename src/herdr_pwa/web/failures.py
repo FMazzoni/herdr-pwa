@@ -181,12 +181,12 @@ class Redraw:
 
     name: str
     context: Mapping[str, object]
-    whole: bool = False
+    as_page: bool = False
 
 
 def refused(pages: Pages, redraw: Redraw, result: Refused) -> HTMLResponse:
     """A write the library declined, at the status the write library's one table assigns."""
     log.info("write refused: %s %s", result.refusal.value, result.detail)
     shown = {**redraw.context, "refused": result, "says": result.says}
-    render = pages.page if redraw.whole else pages.fragment
+    render = pages.page if redraw.as_page else pages.fragment
     return render(redraw.name, shown, status=result.status)
