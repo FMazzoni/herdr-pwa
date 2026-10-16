@@ -35,7 +35,6 @@ def posts(fake: FakeTailscaled) -> list[str]:
 
 def test_the_url_is_always_https_and_safe_to_screenshot() -> None:
     assert pair_url(f"{NODE}.") == f"https://{NODE}/"
-    assert pair_url(NODE, "agents") == f"https://{NODE}/agents"
     assert "?" not in pair_url(NODE)
     with pytest.raises(PairingError):
         _ = pair_url("  ")

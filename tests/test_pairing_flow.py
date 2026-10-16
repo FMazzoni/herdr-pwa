@@ -14,6 +14,7 @@ from herdr_pwa.pairing import pair, qr_text
 from herdr_pwa.push import Subscription, SubscriptionStore
 from herdr_pwa.settings import Settings
 from herdr_pwa.web.app import create_app
+from herdr_pwa.web.seams import Seams
 from tests.fakes import LOGIN, NODE, status_route, tailscaled
 from tests.test_push import raw_subscription
 from tests.webfakes import SNAPSHOT, WORKING_PANE, FakeWire, agents_of, snapshot_frame
@@ -63,7 +64,7 @@ def test_a_scripted_phone_pairs_installs_subscribes_and_is_pushed_to(tmp_path: P
         del subscription
         sent.append(payload.validate_json(data))
 
-    app = create_app(settings_for(tmp_path), factory, deliver=deliver)
+    app = create_app(settings_for(tmp_path), Seams(client_factory=factory, deliver=deliver))
     # The phone, as tailscale serve presents it: same Host, identity header injected.
     ingress = {"Tailscale-User-Login": LOGIN}
     with TestClient(app, base_url=paired.url.rstrip("/"), headers=ingress) as phone:
@@ -90,7 +91,7 @@ def test_a_scripted_phone_pairs_installs_subscribes_and_is_pushed_to(tmp_path: P
 
 def test_the_paired_url_refuses_anyone_the_ingress_did_not_vouch_for(tmp_path: Path) -> None:
     settings = settings_for(tmp_path).model_copy(update={"push_notifier": False})
-    client = TestClient(create_app(settings), base_url=f"https://{NODE}")
+    client = TestClient(create_app(settings, Seams()), base_url=f"https://{NODE}")
     assert client.get("/push/key").status_code == 401
     assert client.get("/sw.js", headers={"Tailscale-User-Login": "other@x.org"}).status_code == 403
     cross = client.post(

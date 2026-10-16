@@ -31,6 +31,7 @@ from pydantic import (
 from pywebpush import WebPushException
 
 from herdr_pwa import statedir
+from herdr_pwa.clock import Clock
 from herdr_pwa.validation import is_not_json, or_default, summary
 
 log = logging.getLogger(__name__)
@@ -58,8 +59,6 @@ _AUTH_BYTES = 16
 _UNCOMPRESSED = 0x04
 # The order n of P-256 (SEC 2, 2.4.2); a private scalar must lie in [1, n-1].
 _P256_ORDER: Final = 0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551
-
-Clock = Callable[[], float]
 
 
 class PushError(Exception):
@@ -551,7 +550,7 @@ class DeliveryLog:
 
     def __init__(self, state_dir: Path, *, clock: Clock = time.time) -> None:
         self.path: Path = state_dir / HEALTH_FILENAME
-        self.clock: Clock = clock
+        self._clock: Clock = clock
         self._current: DeliveryRecord | None = None
 
     def load(self) -> DeliveryRecord | None:
@@ -581,7 +580,7 @@ class DeliveryLog:
         self._bump(lambda r, now: {"quieted": r.quieted + count, "last_quiet_at": now})
 
     def _bump(self, change: Callable[[DeliveryRecord, float], dict[str, object]]) -> None:
-        now = self.clock()
+        now = self._clock()
         base = self._current or self.load() or DeliveryRecord(version=1)
         self._current = base.model_copy(update={**change(base, now), "updated_at": now})
         try:
@@ -608,17 +607,24 @@ class FanOut:
     pruned: int = 0
 
 
+@dataclass(frozen=True, slots=True)
+class Outlet:
+    """Where a fan-out sends, and what it keeps: the sender, the devices, the health log."""
+
+    deliver: Deliver
+    store: SubscriptionStore
+    health: DeliveryLog
+
+
 def fan_out(
-    data: str,
-    subscriptions: Sequence[Subscription],
-    *,
-    deliver: Deliver,
-    store: SubscriptionStore,
-    health: DeliveryLog,
+    data: str, subscriptions: Sequence[Subscription], outlet: Outlet, *, now: float
 ) -> FanOut:
-    """Send to every device: prune the gone, record each outcome, never let one stop the rest."""
+    """Send to every device: prune the gone, record each outcome, never let one stop the rest.
+
+    *now* is wall time from the caller's clock, for subscriptions that expire by their own date.
+    """
+    deliver, store, health = outlet.deliver, outlet.store, outlet.health
     sent = failed = pruned = 0
-    now = health.clock()
     for subscription in subscriptions:
         if subscription.expired(now):
             # Dead by its own expirationTime, as a 404 or 410 would say after a wasted send.

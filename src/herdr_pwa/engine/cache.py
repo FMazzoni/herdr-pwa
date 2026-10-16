@@ -9,6 +9,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Final, Protocol, cast
 
+from herdr_pwa.clock import Clock
 from herdr_pwa.engine.model import Snapshot
 from herdr_pwa.engine.transport import EngineUnavailable
 
@@ -75,7 +76,7 @@ class _Fetch:
 class SnapshotCache:
     """One shared value per fact per app, refreshed lazily, with misses coalesced."""
 
-    def __init__(self, *, ttl: float, clock: Callable[[], float] = _CLOCK) -> None:
+    def __init__(self, *, ttl: float, clock: Clock = _CLOCK) -> None:
         """Build a cache with its TTL and its clock, both injected."""
         self._ttl = ttl
         self._clock = clock

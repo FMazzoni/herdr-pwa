@@ -24,6 +24,7 @@ from herdr_pwa.push import (
     DeliveryError,
     DeliveryLog,
     Notice,
+    Outlet,
     PushError,
     SubjectError,
     Subscription,
@@ -361,7 +362,7 @@ def test_a_subscription_past_its_expiration_is_pruned_without_a_send(tmp_path: P
         _ = store.add(Subscription.model_validate(raw))
     devices = Devices({})
     health = DeliveryLog(tmp_path, clock=clock)
-    outcome = fan_out("{}", store.list_all(), deliver=devices, store=store, health=health)
+    outcome = fan_out("{}", store.list_all(), Outlet(devices, store, health), now=clock())
     assert devices.reached == [
         "https://push.example.invalid/live",
         "https://push.example.invalid/forever",
@@ -389,7 +390,7 @@ def test_one_failing_device_does_not_stop_the_others_and_the_gone_are_pruned(
         }
     )
     health = DeliveryLog(tmp_path, clock=clock)
-    outcome = fan_out("{}", store.list_all(), deliver=devices, store=store, health=health)
+    outcome = fan_out("{}", store.list_all(), Outlet(devices, store, health), now=clock())
     assert devices.reached == endpoints
     assert (outcome.sent, outcome.failed, outcome.pruned) == (1, 1, 2)
     assert [one.endpoint for one in store.list_all()] == [endpoints[1], endpoints[2]]

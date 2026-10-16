@@ -4,20 +4,18 @@ import argparse
 import ipaddress
 import logging
 import sys
-import time
-from collections.abc import Callable
 from typing import Final
 
 import uvicorn
 
 from herdr_pwa import auth, devreport, pairing, tailscale
 from herdr_pwa.audit import AuditUnavailableError
-from herdr_pwa.engine import EngineError, HerdrClient
+from herdr_pwa.engine import EngineError
 from herdr_pwa.protocol import EXPECTED_PROTOCOL
 from herdr_pwa.push import DeliveryLog, VapidKeyError, health_line
 from herdr_pwa.settings import Settings
 from herdr_pwa.web.app import create_app
-from herdr_pwa.web.deps import ClientFactory
+from herdr_pwa.web.seams import Seams
 
 log = logging.getLogger(__name__)
 
@@ -28,17 +26,12 @@ def _verdict(found: int | None) -> str:
     return "ok" if found == EXPECTED_PROTOCOL else f"FAIL (pinned {EXPECTED_PROTOCOL})"
 
 
-def doctor(
-    settings: Settings,
-    *,
-    client_factory: ClientFactory = HerdrClient,
-    write: Callable[[str], object] = sys.stdout.write,
-) -> int:
+def doctor(settings: Settings, seams: Seams) -> int:
     """Compare the live runner's snapshot protocol with the pin; non-zero on drift or silence."""
     engine = settings.engine()
     lines = [f"pinned protocol: {EXPECTED_PROTOCOL}"]
     try:
-        snapshot = client_factory(engine).snapshot()
+        snapshot = seams.client(engine).snapshot()
     except EngineError as exc:
         live: int | None = None
         lines.append(f"runner at {engine.socket_path}: unreachable ({exc.message})  FAIL")
@@ -50,22 +43,17 @@ def doctor(
         )
     # Informational: a box that never delivered is worth seeing, but the runner decides the verdict.
     health = DeliveryLog(settings.state_dir.expanduser()).load()
-    lines.append(health_line(health, now=time.time()))
+    lines.append(health_line(health, now=seams.wall()))
     healthy = live == EXPECTED_PROTOCOL
     lines.append("doctor: OK" if healthy else "doctor: FAIL")
-    write("\n".join(lines) + "\n")
+    seams.write("\n".join(lines) + "\n")
     return 0 if healthy else 1
 
 
-def pair(
-    settings: Settings,
-    *,
-    api: tailscale.LocalApi | None = None,
-    write: Callable[[str], object] = sys.stdout.write,
-    publish: bool = True,
-) -> int:
+def pair(settings: Settings, seams: Seams, *, publish: bool = True) -> int:
     """Publish this app behind ``tailscale serve`` and print the URL as a QR; never Funnel."""
-    local = api or tailscale.LocalApi(settings.tailscaled_socket)
+    local = seams.local_api(settings.tailscaled_socket)
+    write = seams.write
     try:
         result = pairing.pair(local, port=settings.port, bind_host=settings.host, write=publish)
     except (pairing.PairingError, tailscale.LocalApiError) as exc:
@@ -117,16 +105,16 @@ def assert_loopback_bind(host: str) -> None:
 SHUTDOWN_GRACE: Final = 3
 
 
-def serve(settings: Settings, port: int | None) -> None:
+def serve(settings: Settings, port: int | None, seams: Seams) -> None:
     """Refuse a reachable bind or an unsafe assumed login, then serve the app."""
     assert_loopback_bind(settings.host)
     access = auth.Access(tailnet_login=settings.tailnet_login, assume_login=settings.assume_login)
-    auth.assert_assumed_login_safe(access, tailscale.LocalApi(settings.tailscaled_socket))
+    auth.assert_assumed_login_safe(access, seams.local_api(settings.tailscaled_socket))
     warning = auth.unpinned_warning(access)
     if warning:
         log.warning(warning)
     uvicorn.run(
-        create_app(settings),
+        create_app(settings, seams),
         host=settings.host,
         port=port or settings.port,
         # An event stream never ends on its own; without this a restart waits on every phone.
@@ -134,11 +122,9 @@ def serve(settings: Settings, port: int | None) -> None:
     )
 
 
-def device_report(
-    settings: Settings, session: str = "", *, write: Callable[[str], object] = sys.stdout.write
-) -> int:
+def device_report(settings: Settings, seams: Seams, session: str = "") -> int:
     """Print the latest (or the named) device-report session from the state dir."""
-    write(devreport.render(settings.state_dir.expanduser(), session))
+    seams.write(devreport.render(settings.state_dir.expanduser(), session))
     return 0
 
 
@@ -157,18 +143,19 @@ def main(argv: list[str] | None = None) -> int:
     report_cmd.add_argument("--session", default="", help="a session id instead of the latest")
     args = parser.parse_args(argv)
     settings = Settings()
+    seams = Seams()
     command: str = args.command  # pyright: ignore[reportAny]
     if command == "doctor":
-        return doctor(settings)
+        return doctor(settings, seams)
     if command == "device-report":
         session: str = args.session  # pyright: ignore[reportAny]
-        return device_report(settings, session)
+        return device_report(settings, seams, session)
     if command == "pair":
         check: bool = args.check  # pyright: ignore[reportAny]
-        return pair(settings, publish=not check)
+        return pair(settings, seams, publish=not check)
     port: int | None = args.port  # pyright: ignore[reportAny]
     try:
-        serve(settings, port)
+        serve(settings, port, seams)
     # A key or audit log that cannot be used stops the box serving; say why, not a traceback.
     except (auth.AuthError, NonLoopbackBindError, VapidKeyError, AuditUnavailableError) as exc:
         sys.stderr.write(f"serve: {exc}\n")

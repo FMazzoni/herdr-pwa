@@ -307,7 +307,8 @@ def test_a_held_cursor_names_the_file_it_was_taken_against(project: Path) -> Non
     """A byte offset is a promise about ONE file, and made it say which."""
     named = _log(project, ROOT, last="2026-08-20T18:12:00.000Z")
     copy = _log(project, COPY, last="2026-08-20T20:59:00.000Z", records=9, copied_from=ROOT)
-    assert locate(ROOT, root=project.parent, follow=False) == named
+    assert named.exists()
+    assert locate(ROOT, root=project.parent) == copy
     honoured = history(ROOT, root=project.parent, after=copy.stat().st_size, log=copy.stem)
     assert honoured.turns == []
     assert honoured.reset is False

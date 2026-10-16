@@ -15,6 +15,7 @@ from herdr_pwa.push import DeliveryError, Subscription
 from herdr_pwa.settings import Settings
 from herdr_pwa.web.app import create_app
 from herdr_pwa.web.notifier import HerdSource, LoopConfig, Notifier, PushStores, open_push
+from herdr_pwa.web.seams import Seams
 from tests.test_push import ENDPOINT, subscribed
 from tests.waiting import until_async
 from tests.webfakes import (
@@ -89,9 +90,8 @@ def build_loop(tmp_path: Path, notify: NotifyConfig | None = None) -> Loop:
     notifier = Notifier(
         herd=HerdSource(client, SnapshotCache(ttl=2.0, clock=clock)),
         stores=stores,
-        deliver=sender,
         config=config,
-        clock=clock,
+        seams=Seams(wall=clock, deliver=sender),
     )
     return Loop(notifier, wire, clock, sender, stores)
 
@@ -250,7 +250,7 @@ def test_the_loop_ticks_until_stopped_and_survives_a_bad_tick(
 def test_push_is_not_armed_without_a_contact_and_says_so(tmp_path: Path) -> None:
     settings = Settings(state_dir=tmp_path / "state", socket_path=tmp_path / "no.sock")
     reader = HerdrClient(settings.engine(), transport=FakeWire())
-    state = open_push(settings, reader=reader, cache=SnapshotCache(ttl=1.0))
+    state = open_push(settings, HerdSource(reader, SnapshotCache(ttl=1.0)), Seams())
     assert state is not None
     assert state.notifier is None
     assert "HP_PUSH_SUBJECT" in state.reason
@@ -269,7 +269,7 @@ def test_the_app_starts_and_stops_the_loop_with_its_lifespan(tmp_path: Path) -> 
         return HerdrClient(engine, transport=wire)
 
     sender = Sender()
-    app = create_app(settings, factory, deliver=sender)
+    app = create_app(settings, Seams(client_factory=factory, deliver=sender))
     with TestClient(app, headers={"Tailscale-User-Login": "op@example.net"}) as http:
         status = OBJECT.validate_json(http.get("/push/status").text)
         assert (status["armed"], status["running"]) == (True, True)

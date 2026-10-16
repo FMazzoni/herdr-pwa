@@ -1,6 +1,5 @@
 """The app factory: middleware, static files, the failure table and every router."""
 
-import time
 from collections.abc import AsyncGenerator, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from typing import Final
@@ -10,15 +9,14 @@ from fastapi.responses import Response
 from starlette.middleware.gzip import GZipMiddleware
 
 from herdr_pwa.audit import AuditLog
-from herdr_pwa.engine import HerdrClient, SnapshotCache
-from herdr_pwa.push import Deliver
+from herdr_pwa.engine import SnapshotCache
 from herdr_pwa.settings import Settings
 from herdr_pwa.web import failures
 from herdr_pwa.web.assets import Assets
-from herdr_pwa.web.deps import ClientFactory, WebState, viewer_guard
+from herdr_pwa.web.deps import WebState, viewer_guard
 from herdr_pwa.web.events import Hub, HubConfig
 from herdr_pwa.web.gate import IdentityGate
-from herdr_pwa.web.notifier import PushState, open_push
+from herdr_pwa.web.notifier import HerdSource, PushState, open_push
 from herdr_pwa.web.render import Pages
 from herdr_pwa.web.routers import (
     agent,
@@ -32,9 +30,9 @@ from herdr_pwa.web.routers import (
     shell,
     workspace,
 )
+from herdr_pwa.web.seams import Seams
 from herdr_pwa.web.security import SecurityHeaders
 from herdr_pwa.web.warm import warm_later
-from herdr_pwa.writes.outcome import Pacing
 
 IMMUTABLE: Final = "public, max-age=31536000, immutable"
 # Below this a gzip frame costs more than it saves.
@@ -76,14 +74,7 @@ def _lifespan(
     return lifespan
 
 
-def create_app(
-    settings: Settings,
-    client_factory: ClientFactory = HerdrClient,
-    *,
-    clock: Callable[[], float] = time.monotonic,
-    deliver: Deliver | None = None,
-    pacing: Pacing | None = None,
-) -> FastAPI:
+def create_app(settings: Settings, seams: Seams) -> FastAPI:
     """Build the web application around one runner client, one snapshot cache and push."""
     assets = Assets.load()
     pages = Pages(assets, device_report=settings.device_report, fallback=settings.events_fallback)
@@ -91,20 +82,22 @@ def create_app(
         settings.state_dir,
         max_bytes=settings.audit_max_bytes,
         payload_chars=settings.audit_payload_chars,
+        clock=seams.wall,
     )
     # A box that cannot record a write does not serve one.
     audit.preflight()
-    client = client_factory(settings.engine())
-    cache = SnapshotCache(ttl=settings.snapshot_cache_ttl, clock=clock)
-    pushing = open_push(settings, reader=client, cache=cache, deliver=deliver, clock=time.time)
+    client = seams.client(settings.engine())
+    cache = SnapshotCache(ttl=settings.snapshot_cache_ttl, clock=seams.clock)
+    pushing = open_push(settings, HerdSource(client, cache), seams)
     web = WebState(
         settings=settings,
         client=client,
         cache=cache,
         pages=pages,
         audit=audit,
-        clock=clock,
-        pacing=pacing or Pacing(),
+        clock=seams.clock,
+        pacing=seams.pacing,
+        wall=seams.wall,
         seen=pushing.stores.seen if pushing is not None else None,
     )
     hub = Hub(

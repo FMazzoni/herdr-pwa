@@ -5,7 +5,7 @@ proxies from loopback; this module trusts every local process and says so.
 """
 
 import hmac
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 from http import HTTPStatus
 from http.client import HTTPException
@@ -242,16 +242,11 @@ def serve_is_active(api: tailscale.LocalApi) -> bool:
     return tailscale.is_serving(config)
 
 
-def assert_assumed_login_safe(
-    access: Access,
-    api: tailscale.LocalApi,
-    *,
-    probe: Callable[[tailscale.LocalApi], bool] = serve_is_active,
-) -> None:
+def assert_assumed_login_safe(access: Access, api: tailscale.LocalApi) -> None:
     """At startup: refuse an assumed login while serve is active or undecidable."""
     if not access.assume_login:
         return
-    if probe(api):
+    if serve_is_active(api):
         raise AssumedLoginUnsafeError(
             "Refusing to start: HP_ASSUME_LOGIN is set while 'tailscale serve' is active, which "
             "would publish an unauthenticated shell to the tailnet. Unset HP_ASSUME_LOGIN."

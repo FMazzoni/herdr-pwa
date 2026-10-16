@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from enum import Enum, StrEnum
 from typing import Final
 
+from herdr_pwa.clock import Clock, Sleep
 from herdr_pwa.engine import BlockedPrompt
 
 
@@ -47,8 +48,8 @@ type Poll = BlockedPrompt | Unreadable | None
 class Pacing:
     """The clock and sleep every wait in this package runs on, injected so tests never sleep."""
 
-    sleep: Callable[[float], None] = time.sleep
-    clock: Callable[[], float] = time.monotonic
+    sleep: Sleep = time.sleep
+    clock: Clock = time.monotonic
 
 
 # Two not-waiting reads in a row before the question is believed gone.

@@ -168,11 +168,16 @@ def test_past_the_bound_the_oldest_page_is_let_go(tmp_path: Path) -> None:
 def test_a_stream_opens_with_a_comment_beats_while_quiet_and_ends_with_its_lifetime(
     tmp_path: Path,
 ) -> None:
-    hub, _rig = _hub(tmp_path, lifetime=0.5)
+    hub, rig = _hub(tmp_path, lifetime=0.5)
 
     async def scenario() -> list[bytes]:
         listener = hub.join(frozenset({"feed"}))
-        chunks = [chunk async for chunk in hub.stream(listener)]
+        chunks: list[bytes] = []
+        async for chunk in hub.stream(listener):
+            chunks.append(chunk)
+            if chunk == b": hb\n\n":
+                # Quiet for a beat: now age the stream past its lifetime on the app's clock.
+                rig.clock.now += 1.0
         await hub.close()
         return chunks
 
@@ -295,6 +300,8 @@ def test_a_herd_change_reaches_the_feed_and_the_agent(tmp_path: Path) -> None:
 
 def test_the_route_is_behind_the_gate_and_streams_unbuffered(tmp_path: Path) -> None:
     rig = _hub(tmp_path, lifetime=0.3)[1]
+    # Every look at the clock ages the stream a second, so it ends at its first check.
+    rig.clock.step = 1.0
     refused = rig.http.get("/events?topic=feed", headers={"Tailscale-User-Login": ""})
     assert refused.status_code == 401
     assert rig.http.get("/events?topic=nope", headers=IDENTITY).status_code == 400

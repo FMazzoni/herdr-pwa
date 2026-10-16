@@ -10,7 +10,6 @@ import contextlib
 import logging
 import re
 import threading
-import time
 from collections.abc import AsyncIterator, Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -121,12 +120,11 @@ class _Watch:
 class Hub:
     """One watcher over the herd and the viewed transcripts, and every page listening to it."""
 
-    def __init__(
-        self, web: WebState, config: HubConfig, *, clock: Callable[[], float] = time.monotonic
-    ) -> None:
+    def __init__(self, web: WebState, config: HubConfig) -> None:
         self._web = web
         self._config = config
-        self._clock = clock
+        # The app's own clock, so a test that holds time still holds the streams' ages too.
+        self._clock = web.clock
         self._listeners: list[Listener] = []
         self._task: asyncio.Task[None] | None = None
         self._wake: asyncio.Event | None = None

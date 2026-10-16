@@ -1,7 +1,6 @@
 """The web layer's pure parts: the prose tree, card naming, the failure table, doctor."""
 
 import dataclasses
-import time
 from pathlib import Path
 from typing import Final
 
@@ -29,6 +28,7 @@ from herdr_pwa.web.failures import FAILURES, failure_for
 from herdr_pwa.web.markdown import TAGS, MdNode, render_tree
 from herdr_pwa.web.naming import card_question, card_title, display_title, page_title
 from herdr_pwa.web.routers.compose import key_name, said
+from herdr_pwa.web.seams import Seams
 from herdr_pwa.writes.answer import KeySent
 from herdr_pwa.writes.outcome import Evidence, Outcome
 from tests.webfakes import FIXTURES, SNAPSHOT, FakeWire, agents_of, snapshot_frame
@@ -224,14 +224,14 @@ def test_no_template_or_script_writes_inline_style_or_markup() -> None:
     assert "innerHTML" not in (STATIC_DIR / "app.js").read_text()
 
 
-def _doctor(tmp_path: Path, wire: FakeWire) -> tuple[int, str]:
+def _doctor(tmp_path: Path, wire: FakeWire, now: float = 0.0) -> tuple[int, str]:
     settings = Settings(socket_path=tmp_path / "x.sock", state_dir=tmp_path)
     out: list[str] = []
 
     def factory(engine: EngineSettings) -> HerdrClient:
         return HerdrClient(engine, transport=wire)
 
-    code = doctor(settings, client_factory=factory, write=out.append)
+    code = doctor(settings, Seams(wall=lambda: now, client_factory=factory, write=out.append))
     return code, "".join(out)
 
 
@@ -255,12 +255,10 @@ def test_doctor_passes_when_both_sides_speak_the_pin(tmp_path: Path) -> None:
 def test_doctor_says_when_push_last_sent_failed_and_held_back(tmp_path: Path) -> None:
     frame = FakeWire({SNAPSHOT: _frame(EXPECTED_PROTOCOL)})
     assert "push: nothing delivered or attempted yet" in _doctor(tmp_path, frame)[1]
-    now = time.time()
-    health = DeliveryLog(tmp_path, clock=lambda: now - 3 * 3600)
-    health.failed("BadJwtToken")
-    health.clock = lambda: now - 200
-    health.sent()
-    code, out = _doctor(tmp_path, frame)
+    now = 1_800_000_000.0
+    DeliveryLog(tmp_path, clock=lambda: now - 3 * 3600).failed("BadJwtToken")
+    DeliveryLog(tmp_path, clock=lambda: now - 200).sent()
+    code, out = _doctor(tmp_path, frame, now)
     assert code == 0
     assert "push: last sent 3m ago · last error 3h ago (BadJwtToken) · last quieted never" in out
 

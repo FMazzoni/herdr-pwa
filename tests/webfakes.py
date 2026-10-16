@@ -12,6 +12,7 @@ from pydantic import JsonValue, TypeAdapter
 from herdr_pwa.engine import EngineSettings, HerdrClient
 from herdr_pwa.settings import Settings
 from herdr_pwa.web.app import create_app
+from herdr_pwa.web.seams import Seams
 from herdr_pwa.writes.outcome import Pacing
 from tests._jsonpath import at, obj
 from tests.engine_seam import method_of, wire_request
@@ -116,8 +117,11 @@ class Clock:
     """A clock the test moves by hand."""
 
     now: float = 1000.0
+    # How far each read moves it; nonzero is a clock that runs by itself, one tick per look.
+    step: float = 0.0
 
     def __call__(self) -> float:
+        self.now += self.step
         return self.now
 
     def sleep(self, seconds: float) -> None:
@@ -161,8 +165,8 @@ def build_rig(
         return HerdrClient(engine, transport=wire, clock=clock)
 
     # Paced, a write's watch waits on the rig's clock instead of the wall's.
-    pacing = Pacing(sleep=clock.sleep, clock=clock) if paced else None
-    app = create_app(settings, factory, clock=clock, pacing=pacing)
+    pacing = Pacing(sleep=clock.sleep, clock=clock) if paced else Pacing()
+    app = create_app(settings, Seams(clock=clock, pacing=pacing, client_factory=factory))
     http = TestClient(app, headers=IDENTITY if headers is None else headers)
     return Rig(wire, clock, http, settings)
 

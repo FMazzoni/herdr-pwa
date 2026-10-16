@@ -17,6 +17,7 @@ from herdr_pwa.engine import EngineSettings, HerdrClient
 from herdr_pwa.files.roots import root_id
 from herdr_pwa.settings import Settings
 from herdr_pwa.web.app import create_app
+from herdr_pwa.web.seams import Seams
 from tests._fake_herd import P3, P5, S1, S2, FakeHerd
 from tests.filefakes import make_repo
 
@@ -158,7 +159,7 @@ def app_for(home: Path, fake: FakeHerd) -> ASGIApp:
     def factory(engine: EngineSettings) -> HerdrClient:
         return HerdrClient(engine, transport=fake)
 
-    return create_app(settings, factory)
+    return create_app(settings, Seams(client_factory=factory))
 
 
 def tabs_and_end(walk: Walk) -> None:
