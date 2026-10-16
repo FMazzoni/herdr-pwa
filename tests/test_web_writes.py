@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from herdr_pwa.audit import records
+from herdr_pwa.audit import Record, records
 from herdr_pwa.engine import (
     BlockedPrompt,
     EngineSettings,
@@ -39,7 +39,7 @@ class Web:
         return self.http.post(path, data=data, headers=ORIGIN, follow_redirects=False)
 
     @property
-    def audit(self) -> list[dict[str, object]]:
+    def audit(self) -> list[Record]:
         return records(self.state, limit=0)
 
 
@@ -98,6 +98,7 @@ def test_a_prompt_is_sent_audited_and_read_back(tmp_path: Path) -> None:
     assert "data-hp-sent" in response.text
     assert w.herd.writes("agent.prompt") == [{"target": "w1:p3", "text": "hello there"}]
     attempt = w.audit[0]
+    assert attempt["phase"] == "attempt"
     assert (attempt["endpoint"], attempt["actor"]) == ("prompt", "operator@example.com")
 
 
@@ -249,7 +250,9 @@ def test_ending_an_agent_needs_the_confirm_the_route_enforces(tmp_path: Path) ->
     )
     assert done.status_code == 303
     assert herd.writes("pane.close") == [{"pane_id": "w1:p3"}]
-    assert w.audit[0]["endpoint"] == "close"
+    attempt = w.audit[0]
+    assert attempt["phase"] == "attempt"
+    assert attempt["endpoint"] == "close"
 
 
 def test_the_new_agent_form_offers_the_three_harnesses_on_this_machine(tmp_path: Path) -> None:

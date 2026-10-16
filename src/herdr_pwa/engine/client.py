@@ -32,7 +32,7 @@ from herdr_pwa.engine.transport import (
     TargetNotFound,
     Transport,
 )
-from herdr_pwa.jsontypes import JsonObject, as_object, objects
+from herdr_pwa.jsontypes import JsonObject
 from herdr_pwa.protocol import WRITE_METHODS
 
 log = logging.getLogger(__name__)
@@ -266,9 +266,9 @@ class HerdrClient:
     @staticmethod
     def _sub_object(payload: JsonObject, key: str, *, method: str) -> JsonObject:
         """The raw ``result.<key>`` object, for a frame that would not validate."""
-        result = as_object(payload.get("result"))
-        raw = as_object(result.get(key)) if result is not None else None
-        if raw is None:
+        result = payload.get("result")
+        raw = result.get(key) if isinstance(result, dict) else None
+        if not isinstance(raw, dict):
             raise InvalidResponse(f"{method} answered no {key!r} object")
         return raw
 
@@ -592,7 +592,7 @@ class HerdrClient:
 
     def shell_pane(self, pane_id: str, *, timeout: float | None = None) -> bool:
         """Is this pane a settled shell, ready for an agent to be started in it?"""
-        _, payload = self._result(
+        info = self._arm(
             self._call(
                 wire_request.PaneProcessInfoRequest,
                 wire_request.PaneProcessInfoParams(pane_id=pane_id),
@@ -600,15 +600,13 @@ class HerdrClient:
             ),
             wire.PaneProcessInfoResponseResult,
             method="pane.process_info",
-            degrade=False,
-        )
-        shell = payload.get("shell_pid")
-        running = objects(payload.get("foreground_processes"))
-        return bool(shell) and [p.get("pid") for p in running] == [shell]
+        ).process_info
+        running = info.foreground_processes or []
+        return bool(info.shell_pid) and [p.pid for p in running] == [info.shell_pid]
 
     def pane_pids(self, pane_id: str, *, timeout: float | None = None) -> tuple[int, ...]:
         """Every process in this pane, shell first. A runner that will not say answers `()`."""
-        _, payload = self._result(
+        arm, raw = self._result(
             self._call(
                 wire_request.PaneProcessInfoRequest,
                 wire_request.PaneProcessInfoParams(pane_id=pane_id),
@@ -618,12 +616,12 @@ class HerdrClient:
             method="pane.process_info",
             degrade=True,
         )
-        shell = payload.get("shell_pid")
-        pids = [shell] if isinstance(shell, int) else []
-        for process in objects(payload.get("foreground_processes")):
-            pid = process.get("pid")
-            if isinstance(pid, int):
-                pids.append(pid)
+        try:
+            info = arm.process_info if arm else wire.PaneProcessInfo.model_validate(raw)
+        except ValidationError:
+            return ()
+        pids = [] if info.shell_pid is None else [info.shell_pid]
+        pids.extend(process.pid for process in info.foreground_processes or [])
         return tuple(dict.fromkeys(pids))
 
     def create_tab(

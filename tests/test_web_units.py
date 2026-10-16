@@ -1,6 +1,7 @@
 """The web layer's pure parts: the prose tree, card naming, the failure table, doctor."""
 
 import dataclasses
+import time
 from pathlib import Path
 from typing import Final
 
@@ -20,6 +21,7 @@ from herdr_pwa.engine import (
 )
 from herdr_pwa.jsontypes import JsonObject
 from herdr_pwa.protocol import EXPECTED_PROTOCOL
+from herdr_pwa.push import DeliveryLog
 from herdr_pwa.settings import Settings
 from herdr_pwa.web.assets import STATIC_DIR, Assets
 from herdr_pwa.web.chat import is_long
@@ -223,7 +225,7 @@ def test_no_template_or_script_writes_inline_style_or_markup() -> None:
 
 
 def _doctor(tmp_path: Path, wire: FakeWire) -> tuple[int, str]:
-    settings = Settings(socket_path=tmp_path / "x.sock")
+    settings = Settings(socket_path=tmp_path / "x.sock", state_dir=tmp_path)
     out: list[str] = []
 
     def factory(engine: EngineSettings) -> HerdrClient:
@@ -248,6 +250,19 @@ def test_doctor_passes_when_both_sides_speak_the_pin(tmp_path: Path) -> None:
     code, out = _doctor(tmp_path, FakeWire({SNAPSHOT: _frame(EXPECTED_PROTOCOL)}))
     assert code == 0
     assert out.rstrip().endswith("doctor: OK")
+
+
+def test_doctor_says_when_push_last_sent_failed_and_held_back(tmp_path: Path) -> None:
+    frame = FakeWire({SNAPSHOT: _frame(EXPECTED_PROTOCOL)})
+    assert "push: nothing delivered or attempted yet" in _doctor(tmp_path, frame)[1]
+    now = time.time()
+    health = DeliveryLog(tmp_path, clock=lambda: now - 3 * 3600)
+    health.failed("BadJwtToken")
+    health.clock = lambda: now - 200
+    health.sent()
+    code, out = _doctor(tmp_path, frame)
+    assert code == 0
+    assert "push: last sent 3m ago · last error 3h ago (BadJwtToken) · last quieted never" in out
 
 
 def test_doctor_fails_on_runner_drift(tmp_path: Path) -> None:

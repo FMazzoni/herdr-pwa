@@ -239,7 +239,7 @@ class Notifier:
     def _devices(self) -> list[Subscription]:
         try:
             return self._stores.devices.list_all()
-        except SubscriptionError as exc:
+        except (SubscriptionError, OSError) as exc:
             log.warning("cannot read the subscription store: %s", exc)
             self._stores.health.failed(f"subscription store: {exc}")
             return []

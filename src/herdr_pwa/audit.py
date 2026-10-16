@@ -14,11 +14,13 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from types import TracebackType
-from typing import Literal, Self
+from typing import Annotated, Literal, Self, TypedDict
 
-from herdr_pwa import jsonio, statedir
+from pydantic import Field, TypeAdapter, ValidationError
+
+from herdr_pwa import statedir
 from herdr_pwa.auth import Identity
-from herdr_pwa.statedir import FILE_MODE, StateError
+from herdr_pwa.statedir import FILE_MODE
 
 log = logging.getLogger(__name__)
 
@@ -37,6 +39,53 @@ UNREADABLE = "unreadable"
 OMITTED_NO_ECHO = "no_echo_prompt"
 UNRECORDED = "unrecorded"
 _MARK = "…[truncated: {total} chars sent]"
+
+
+class Attempt(TypedDict):
+    """The record written, and fsynced, before the write it names is made."""
+
+    v: Literal[1]
+    phase: Literal["attempt"]
+    id: str
+    ts: str
+    endpoint: str
+    target: str
+    session: str
+    actor: str
+    actor_via: str
+    client_ip: str
+    forwarded_for: str
+    payload: str | None
+    payload_chars: int
+    payload_truncated: bool
+    payload_omitted: str
+
+
+class Outcome(TypedDict):
+    """The record written after the write, naming what it did."""
+
+    v: Literal[1]
+    phase: Literal["outcome"]
+    id: str
+    ts: str
+    endpoint: str
+    target: str
+    result: str
+
+
+class Unreadable(TypedDict):
+    """A line that is not one of the two records, reported where it is rather than skipped."""
+
+    phase: Literal["unreadable"]
+    ts: str
+    at: str
+
+
+# A record is read by key, as a person reading the log would; the phase says which one it is.
+type Record = Attempt | Outcome | Unreadable
+_LINE: TypeAdapter[Attempt | Outcome] = TypeAdapter(
+    Annotated[Attempt | Outcome, Field(discriminator="phase")]
+)
 
 
 class AuditUnavailableError(Exception):
@@ -74,37 +123,27 @@ def _utc_now() -> datetime:
     return datetime.now(UTC)
 
 
-def _payload_fields(text: str, *, limit: int, omitted: str) -> dict[str, object]:
-    total = len(text)
+def _payload(text: str, *, limit: int, omitted: str) -> tuple[str | None, bool]:
     if omitted:
         # Decided from the screen, never by guessing whether the text looks secret.
-        return {
-            "payload": None,
-            "payload_chars": total,
-            "payload_truncated": False,
-            "payload_omitted": omitted,
-        }
-    truncated = total > limit
-    return {
-        "payload": text[:limit] + _MARK.format(total=total) if truncated else text,
-        "payload_chars": total,
-        "payload_truncated": truncated,
-        "payload_omitted": "",
-    }
+        return None, False
+    if len(text) > limit:
+        return text[:limit] + _MARK.format(total=len(text)), True
+    return text, False
 
 
 class Entry:
     """One write in flight: its attempt is on disk and its outcome is owed."""
 
-    def __init__(self, audit: "AuditLog", record: dict[str, object]) -> None:
+    def __init__(self, audit: "AuditLog", record: Attempt) -> None:
         self._audit: AuditLog = audit
-        self._record: dict[str, object] = record
+        self._record: Attempt = record
         self._outcome: str = ""
 
     @property
     def id(self) -> str:
         """The id both of this write's records carry."""
-        return str(self._record["id"])
+        return self._record["id"]
 
     def outcome(self, result: str) -> None:
         """Name what the write did; the outcome record carries it verbatim."""
@@ -151,21 +190,33 @@ class AuditLog:
     @property
     def path(self) -> Path:
         """The live file, in a state directory created 0700 and checked."""
-        try:
-            return statedir.ensure_dir(self._state_dir) / AUDIT_FILENAME
-        except StateError as exc:
-            raise AuditUnavailableError(str(exc)) from exc
+        return statedir.ensure_dir(self._state_dir) / AUDIT_FILENAME
 
     def preflight(self) -> None:
-        """Prove at startup that a write could be recorded; a box that cannot record does not serve."""
-        with self._lock:
-            os.close(self._open())
+        """Prove at startup that a write could be recorded; a box that cannot record does not serve.
+
+        Raises:
+            AuditUnavailableError: the log cannot be opened at 0600.
+        """
+        try:
+            with self._lock:
+                os.close(self._open())
+        except OSError as exc:
+            raise AuditUnavailableError(f"cannot open the audit log: {exc}") from exc
 
     def record(self, origin: Origin, write: Write) -> Entry:
-        """Append and fsync the attempt, then hand back the handle its outcome closes."""
+        """Append and fsync the attempt, then hand back the handle its outcome closes.
+
+        Raises:
+            ValueError: the endpoint is not one of the writes this log records.
+            AuditUnavailableError: the attempt could not be recorded, so the write must not happen.
+        """
         if write.endpoint not in ENDPOINTS:
             raise ValueError(f"{write.endpoint!r} is not one of {sorted(ENDPOINTS)}")
-        entry: dict[str, object] = {
+        payload, truncated = _payload(
+            write.payload, limit=self._payload_chars, omitted=write.omitted
+        )
+        attempt: Attempt = {
             "v": 1,
             "phase": ATTEMPT,
             "id": secrets.token_hex(8),
@@ -177,15 +228,21 @@ class AuditLog:
             "actor_via": origin.via,
             "client_ip": origin.client_ip,
             "forwarded_for": origin.forwarded_for,
-            **_payload_fields(write.payload, limit=self._payload_chars, omitted=write.omitted),
+            "payload": payload,
+            "payload_chars": len(write.payload),
+            "payload_truncated": truncated,
+            "payload_omitted": write.omitted,
         }
-        with self._lock:
-            self._append(entry)
-        return Entry(self, entry)
+        try:
+            with self._lock:
+                self._append(attempt)
+        except OSError as exc:
+            raise AuditUnavailableError(f"cannot record {write.endpoint}: {exc}") from exc
+        return Entry(self, attempt)
 
-    def close(self, attempt: dict[str, object], result: str) -> None:
+    def close(self, attempt: Attempt, result: str) -> None:
         """Append the outcome; it cannot fail closed, so it fails loud and never raises."""
-        record = {
+        outcome: Outcome = {
             "v": 1,
             "phase": OUTCOME,
             "id": attempt["id"],
@@ -196,8 +253,8 @@ class AuditLog:
         }
         try:
             with self._lock:
-                self._append(record)
-        except AuditUnavailableError:
+                self._append(outcome)
+        except OSError:
             log.exception(
                 "audit %s: the write HAPPENED and its outcome %r was not recorded; "
                 "the attempt stands alone and reads as 'this may have run'",
@@ -207,10 +264,7 @@ class AuditLog:
 
     def _open(self) -> int:
         path = self.path
-        try:
-            handle = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, FILE_MODE)
-        except OSError as exc:
-            raise AuditUnavailableError(f"cannot open {path}: {exc}") from exc
+        handle = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, FILE_MODE)
         try:
             _checked_mode(handle, path)
         except BaseException:
@@ -218,15 +272,13 @@ class AuditLog:
             raise
         return handle
 
-    def _append(self, record: dict[str, object]) -> None:
-        line = (json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n").encode()
+    def _append(self, record: Attempt | Outcome) -> None:
+        line = _LINE.dump_json(record) + b"\n"
         self._rotate(len(line))
         handle = self._open()
         try:
             _ = os.write(handle, line)
             os.fsync(handle)
-        except OSError as exc:
-            raise AuditUnavailableError(f"cannot append to {self.path}: {exc}") from exc
         finally:
             os.close(handle)
 
@@ -236,26 +288,17 @@ class AuditLog:
             size = path.stat().st_size
         except FileNotFoundError:
             return
-        except OSError as exc:
-            raise AuditUnavailableError(f"cannot measure {path}: {exc}") from exc
-        if size + incoming <= self._max_bytes:
-            return
-        try:
+        if size + incoming > self._max_bytes:
             _ = path.replace(path.with_name(ROTATED_FILENAME))
-        except OSError as exc:
-            raise AuditUnavailableError(f"cannot rotate {path}: {exc}") from exc
 
 
 def _checked_mode(handle: int, path: Path) -> None:
     # Checked after every open: a file chmod-ed wider since is put back before it is written.
-    try:
-        if stat.S_IMODE(os.fstat(handle).st_mode) != FILE_MODE:
-            os.fchmod(handle, FILE_MODE)
-        mode = stat.S_IMODE(os.fstat(handle).st_mode)
-    except OSError as exc:
-        raise AuditUnavailableError(f"cannot check the mode of {path}: {exc}") from exc
+    if stat.S_IMODE(os.fstat(handle).st_mode) != FILE_MODE:
+        os.fchmod(handle, FILE_MODE)
+    mode = stat.S_IMODE(os.fstat(handle).st_mode)
     if mode != FILE_MODE:
-        raise AuditUnavailableError(f"{path} is mode {mode:04o}, expected 0600")
+        raise PermissionError(f"{path} is mode {mode:04o}, expected 0600")
 
 
 @dataclass(frozen=True, slots=True)
@@ -278,19 +321,18 @@ def _lines(path: Path) -> Iterator[str]:
         return
 
 
-def _parse_line(line: str, where: str) -> dict[str, object]:
+def _parse_line(line: str, where: str) -> Record:
     try:
-        parsed = jsonio.as_dict(jsonio.loads(line))
-    except json.JSONDecodeError:
-        parsed = None
-    # A damaged line is reported in place, never skipped.
-    return parsed if parsed is not None else {"phase": UNREADABLE, "ts": "", "at": where}
+        return _LINE.validate_json(line)
+    except ValidationError:
+        # A damaged line is reported in place, never skipped.
+        return {"phase": UNREADABLE, "ts": "", "at": where}
 
 
-def records(state_dir: Path, *, limit: int = 50) -> list[dict[str, object]]:
+def records(state_dir: Path, *, limit: int = 50) -> list[Record]:
     """The most recent records across both generations, oldest first."""
     base = statedir.ensure_dir(state_dir)
-    found: list[dict[str, object]] = []
+    found: list[Record] = []
     for name in (ROTATED_FILENAME, AUDIT_FILENAME):
         for number, line in enumerate(_lines(base / name), start=1):
             if line.strip():
@@ -298,23 +340,22 @@ def records(state_dir: Path, *, limit: int = 50) -> list[dict[str, object]]:
     return found[-limit:] if limit > 0 else found
 
 
-def describe(record: dict[str, object]) -> str:
+def describe(record: Record) -> str:
     """One record as one readable line."""
-    phase = str(record.get("phase", "?"))
-    stamp = str(record.get("ts", ""))[:19]
-    head = f"{stamp}  {record.get('endpoint', '?')!s:<7} {record.get('target') or '-'!s:<12}"
-    if phase == OUTCOME:
-        return f"{head} -> {record.get('result', '?')}"
-    if phase != ATTEMPT:
-        return f"{stamp}  UNREADABLE RECORD at {record.get('at', '?')}"
-    where = record.get("forwarded_for") or record.get("client_ip") or "?"
-    who = f"{record.get('actor', '?')} via {record.get('actor_via', '?')} from {where}"
+    stamp = record["ts"][:19]
+    if record["phase"] == UNREADABLE:
+        return f"{stamp}  UNREADABLE RECORD at {record['at']}"
+    head = f"{stamp}  {record['endpoint']:<7} {record['target'] or '-':<12}"
+    if record["phase"] == OUTCOME:
+        return f"{head} -> {record['result']}"
+    where = record["forwarded_for"] or record["client_ip"] or "?"
+    who = f"{record['actor']} via {record['actor_via']} from {where}"
     return f"{head} {who}  {_shown(record)}"
 
 
-def _shown(record: dict[str, object]) -> str:
-    omitted = record.get("payload_omitted")
+def _shown(record: Attempt) -> str:
+    omitted = record["payload_omitted"]
     if omitted:
-        return f"<payload withheld: {omitted}, {record.get('payload_chars', 0)} chars>"
-    payload = record.get("payload")
+        return f"<payload withheld: {omitted}, {record['payload_chars']} chars>"
+    payload = record["payload"]
     return "" if payload is None else json.dumps(payload, ensure_ascii=False)

@@ -1,10 +1,10 @@
-import json
 import logging
 import stat
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from pydantic import JsonValue, TypeAdapter
 
 from herdr_pwa import audit
 from herdr_pwa.audit import (
@@ -38,8 +38,11 @@ def make_log(
     return AuditLog(state, max_bytes=max_bytes, payload_chars=payload_chars, clock=fixed_clock)
 
 
-def lines(state: Path, name: str = audit.AUDIT_FILENAME) -> list[dict[str, object]]:
-    return [json.loads(line) for line in (state / name).read_text().splitlines()]
+LINE: TypeAdapter[dict[str, JsonValue]] = TypeAdapter(dict[str, JsonValue])
+
+
+def lines(state: Path, name: str = audit.AUDIT_FILENAME) -> list[dict[str, JsonValue]]:
+    return [LINE.validate_json(line) for line in (state / name).read_text().splitlines()]
 
 
 def test_the_record_is_jsonl_at_0600_in_a_0700_directory(tmp_path: Path) -> None:
@@ -178,7 +181,7 @@ def test_reading_back_crosses_the_rotation_in_order(tmp_path: Path) -> None:
     for n in range(40):
         _ = log.record(ME, Write(PROMPT, payload=f"{n:02d}" + "x" * 100))
     found = records(tmp_path, limit=0)
-    numbers = [str(one["payload"])[:2] for one in found]
+    numbers = [str(one["payload"])[:2] for one in found if one["phase"] == "attempt"]
     assert numbers == sorted(numbers)
     assert numbers[-1] == "39"
 

@@ -7,17 +7,31 @@ import re
 import time
 import unicodedata
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol, Self, cast
+from typing import Annotated, Final, Literal, Protocol, Self, cast
 
 import pywebpush
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    Field,
+    JsonValue,
+    PlainSerializer,
+    PlainValidator,
+    StrictFloat,
+    StrictInt,
+    StrictStr,
+    ValidationError,
+    model_validator,
+)
 from pywebpush import WebPushException
 
-from herdr_pwa import jsonio, statedir
-from herdr_pwa.statedir import StateError
+from herdr_pwa import statedir
+from herdr_pwa.validation import is_not_json, or_default, summary
 
 log = logging.getLogger(__name__)
 
@@ -42,6 +56,8 @@ _PRIVATE_BYTES = 32
 _POINT_BYTES = 65
 _AUTH_BYTES = 16
 _UNCOMPRESSED = 0x04
+# The order n of P-256 (SEC 2, 2.4.2); a private scalar must lie in [1, n-1].
+_P256_ORDER: Final = 0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551
 
 Clock = Callable[[], float]
 
@@ -59,7 +75,7 @@ class SubjectError(PushError):
 
 
 class SubscriptionError(PushError):
-    """A subscription, or the store file, is not the shape it must be."""
+    """The subscription store file is not the shape it must be."""
 
 
 class DeliveryError(PushError):
@@ -79,14 +95,16 @@ def _b64u_encode(raw: bytes) -> str:
     return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
 
 
-def _b64u_decode(value: object, *, label: str) -> bytes:
+def _b64u_decode(value: object) -> bytes:
+    # binascii.Error is a ValueError, so a bad alphabet or padding fails the field it is in.
     if not isinstance(value, str) or not value:
-        raise ValueError(f"{label} must be a non-empty base64url string")
+        raise ValueError("must be a non-empty base64url string")
     text = value.strip().replace("+", "-").replace("/", "_")
-    try:
-        return base64.urlsafe_b64decode(text + "=" * (-len(text) % 4))
-    except ValueError as exc:
-        raise ValueError(f"{label} is not valid base64url: {exc}") from exc
+    return base64.urlsafe_b64decode(text + "=" * (-len(text) % 4))
+
+
+# A key as the Web Push APIs spell it: base64url on disk and on the wire, bytes in memory.
+type _Key = Annotated[bytes, PlainValidator(_b64u_decode), PlainSerializer(_b64u_encode)]
 
 
 def _subject_host(subject: str) -> str:
@@ -142,149 +160,148 @@ def _derive_public(private_raw: bytes) -> bytes:
     return key.public_key().public_bytes(Encoding.X962, PublicFormat.UncompressedPoint)
 
 
-def _validate_pair(private_raw: bytes, public_raw: bytes, *, path: Path) -> None:
-    if len(private_raw) != _PRIVATE_BYTES:
-        raise VapidKeyError(f"{path}: private key is {len(private_raw)} bytes, expected 32")
-    if len(public_raw) != _POINT_BYTES or public_raw[0] != _UNCOMPRESSED:
-        raise VapidKeyError(f"{path}: public key is not an uncompressed P-256 point")
-    try:
-        derived = _derive_public(private_raw)
-    except ValueError as exc:
-        raise VapidKeyError(f"{path}: private key is not a valid P-256 scalar") from exc
-    if derived != public_raw:
-        # Every subscribed device is bound to one of the halves; guessing orphans the rest.
-        raise VapidKeyError(f"{path}: the public key is not the one the private key derives")
+class _VapidFile(BaseModel):
+    """vapid.json. What else it holds (version, created_at, curve) is for a person reading it."""
+
+    model_config = ConfigDict(extra="allow", frozen=True)
+
+    public_key: _Key
+    private_key: _Key
+
+    @model_validator(mode="after")
+    def _one_pair(self) -> Self:
+        if len(self.private_key) != _PRIVATE_BYTES:
+            raise ValueError(f"private key is {len(self.private_key)} bytes, expected 32")
+        if len(self.public_key) != _POINT_BYTES or self.public_key[0] != _UNCOMPRESSED:
+            raise ValueError("public key is not an uncompressed P-256 point")
+        if not 0 < int.from_bytes(self.private_key, "big") < _P256_ORDER:
+            raise ValueError("private key is not a valid P-256 scalar")
+        if _derive_public(self.private_key) != self.public_key:
+            # Every subscribed device is bound to one of the halves; guessing orphans the rest.
+            raise ValueError("the public key is not the one the private key derives")
+        return self
+
+    def keys(self, path: Path) -> VapidKeys:
+        """The pair as the Web Push APIs spell it."""
+        return VapidKeys(_b64u_encode(self.public_key), _b64u_encode(self.private_key), path)
 
 
-def _parse_vapid(text: str, *, path: Path) -> VapidKeys:
-    try:
-        document = jsonio.as_dict(jsonio.loads(text))
-    except json.JSONDecodeError as exc:
-        raise VapidKeyError(
-            f"{path} is not valid JSON ({exc}). Refusing to mint a replacement: a new key "
-            "orphans every subscribed device. Restore the file, or delete it deliberately."
-        ) from exc
-    if document is None:
-        raise VapidKeyError(f"{path}: expected a JSON object")
-    try:
-        private_raw = _b64u_decode(document.get("private_key"), label="private_key")
-        public_raw = _b64u_decode(document.get("public_key"), label="public_key")
-    except ValueError as exc:
-        raise VapidKeyError(f"{path}: {exc}") from exc
-    _validate_pair(private_raw, public_raw, path=path)
-    return VapidKeys(_b64u_encode(public_raw), _b64u_encode(private_raw), path)
+def _vapid_problem(path: Path, exc: OSError | ValidationError) -> str:
+    if isinstance(exc, OSError):
+        return f"cannot use {path}: {exc}"
+    if is_not_json(exc):
+        return (
+            f"{path} is not valid JSON ({summary(exc)}). Refusing to mint a replacement: a new "
+            "key orphans every subscribed device. Restore the file, or delete it deliberately."
+        )
+    return f"{path}: {summary(exc)}"
 
 
-def _read(path: Path) -> str | None:
-    try:
-        return statedir.read_text(path)
-    except StateError as exc:
-        raise VapidKeyError(str(exc)) from exc
-
-
-def load_or_create_vapid_keys(state_dir: Path, *, clock: Clock = time.time) -> VapidKeys:
-    """The keypair, created once with O_EXCL and reused forever after."""
-    try:
-        path = statedir.ensure_dir(state_dir) / VAPID_FILENAME
-    except StateError as exc:
-        raise VapidKeyError(str(exc)) from exc
-    existing = _read(path)
-    if existing is not None:
-        return _parse_vapid(existing, path=path)
+def _minted(path: Path, *, clock: Clock) -> _VapidFile:
     key = ec.generate_private_key(ec.SECP256R1())
     private_raw = key.private_numbers().private_value.to_bytes(32, "big")
     public_raw = key.public_key().public_bytes(Encoding.X962, PublicFormat.UncompressedPoint)
-    keys = VapidKeys(_b64u_encode(public_raw), _b64u_encode(private_raw), path)
     document = {
+        "public_key": _b64u_encode(public_raw),
+        "private_key": _b64u_encode(private_raw),
         "version": 1,
         "created_at": int(clock()),
         "curve": "P-256",
-        "public_key": keys.public_key,
-        "private_key": keys.private_key,
     }
+    minted = _VapidFile.model_validate(document)
     try:
-        statedir.write_secret(path, json.dumps(document, indent=2) + "\n", exclusive=True)
+        statedir.write_secret(path, minted.model_dump_json(indent=2) + "\n", exclusive=True)
     except FileExistsError:
         # Another process won the race; its key is as good as ours.
-        return _parse_vapid(_read(path) or "", path=path)
-    except (OSError, StateError) as exc:
-        raise VapidKeyError(f"cannot write {path}: {exc}") from exc
+        return _VapidFile.model_validate_json(statedir.read_text(path) or "")
     log.info("generated a new VAPID keypair at %s", path)
-    return keys
+    return minted
+
+
+def load_or_create_vapid_keys(state_dir: Path, *, clock: Clock = time.time) -> VapidKeys:
+    """The keypair, created once with O_EXCL and reused forever after.
+
+    Raises:
+        VapidKeyError: the file cannot be read or written, or is not one valid keypair.
+    """
+    path = state_dir.expanduser() / VAPID_FILENAME
+    try:
+        _ = statedir.ensure_dir(state_dir)
+        existing = statedir.read_text(path)
+        if existing is None:
+            document = _minted(path, clock=clock)
+        else:
+            document = _VapidFile.model_validate_json(existing)
+    except (OSError, ValidationError) as exc:
+        raise VapidKeyError(_vapid_problem(path, exc)) from exc
+    return document.keys(path)
 
 
 _ENDPOINT_RE = re.compile(r"^https://[^\s/@]+(?:/\S*)?$")
 
 
-def _checked_key(value: object, *, label: str, size: int) -> str:
-    try:
-        raw = _b64u_decode(value, label=f"keys.{label}")
-    except ValueError as exc:
-        raise SubscriptionError(str(exc)) from exc
-    if len(raw) != size:
-        raise SubscriptionError(f"keys.{label} decodes to {len(raw)} bytes, expected {size}")
-    if size == _POINT_BYTES and raw[0] != _UNCOMPRESSED:
-        raise SubscriptionError("keys.p256dh is not an uncompressed P-256 point")
-    return _b64u_encode(raw)
-
-
-def _checked_expiry(value: object) -> float | None:
-    if value is None:
-        return None
-    number = jsonio.as_float(value)
-    if number is None:
-        raise SubscriptionError("expirationTime must be a number or null")
-    return number
-
-
-def _checked_endpoint(value: object) -> str:
-    endpoint = jsonio.as_str(value)
-    if endpoint is None or not _ENDPOINT_RE.match(endpoint):
-        raise SubscriptionError("endpoint must be an https:// URL")
+def _checked_endpoint(endpoint: str) -> str:
+    if not _ENDPOINT_RE.match(endpoint):
+        raise ValueError("endpoint must be an https:// URL")
     if len(endpoint) > MAX_ENDPOINT_CHARS:
-        raise SubscriptionError(f"endpoint is over the {MAX_ENDPOINT_CHARS} character cap")
+        raise ValueError(f"endpoint is over the {MAX_ENDPOINT_CHARS} character cap")
     return endpoint
 
 
-@dataclass(frozen=True, slots=True)
-class Subscription:
-    """One device's PushSubscription, validated down to its key lengths."""
+def _point(raw: bytes) -> bytes:
+    if len(raw) != _POINT_BYTES:
+        raise ValueError(f"decodes to {len(raw)} bytes, expected {_POINT_BYTES}")
+    if raw[0] != _UNCOMPRESSED:
+        raise ValueError("is not an uncompressed P-256 point")
+    return raw
 
-    endpoint: str
-    p256dh: str
-    auth: str
-    expiration_time: float | None = None
-    added_at: int = 0
 
-    @classmethod
-    def parse(cls, raw: object, *, added_at: int = 0) -> Self:
-        """Validate a browser ``PushSubscription.toJSON()`` object."""
-        document = jsonio.as_dict(raw)
-        if document is None:
-            raise SubscriptionError("expected a PushSubscription object")
-        keys = jsonio.as_dict(document.get("keys"))
-        endpoint = _checked_endpoint(document.get("endpoint"))
-        if keys is None:
-            raise SubscriptionError("keys must be an object with p256dh and auth")
-        return cls(
-            endpoint=endpoint,
-            p256dh=_checked_key(keys.get("p256dh"), label="p256dh", size=_POINT_BYTES),
-            auth=_checked_key(keys.get("auth"), label="auth", size=_AUTH_BYTES),
-            expiration_time=_checked_expiry(document.get("expirationTime")),
-            added_at=added_at,
-        )
+def _auth_secret(raw: bytes) -> bytes:
+    if len(raw) != _AUTH_BYTES:
+        raise ValueError(f"decodes to {len(raw)} bytes, expected {_AUTH_BYTES}")
+    return raw
+
+
+class SubscriptionKeys(BaseModel):
+    """The device's ECDH public key and auth secret, checked down to their lengths."""
+
+    model_config = ConfigDict(frozen=True)
+
+    p256dh: Annotated[_Key, AfterValidator(_point)]
+    auth: Annotated[_Key, AfterValidator(_auth_secret)]
+
+
+class Subscription(BaseModel):
+    """One device's ``PushSubscription.toJSON()``, plus when it was first stored."""
+
+    model_config = ConfigDict(frozen=True, validate_by_name=True, serialize_by_alias=True)
+
+    endpoint: Annotated[StrictStr, AfterValidator(_checked_endpoint)]
+    keys: SubscriptionKeys
+    expiration_time: Annotated[StrictFloat | None, Field(alias="expirationTime")] = None
+    added_at: Annotated[StrictInt, or_default(0)] = 0
+
+    def expired(self, now: float) -> bool:
+        """Past its ``expirationTime`` (epoch milliseconds), after which the push service drops it."""
+        return self.expiration_time is not None and self.expiration_time <= now * 1000
 
     def push_info(self) -> dict[str, str | dict[str, str]]:
         """The ``subscription_info`` mapping pywebpush expects."""
-        return {"endpoint": self.endpoint, "keys": {"p256dh": self.p256dh, "auth": self.auth}}
+        keys = {"p256dh": _b64u_encode(self.keys.p256dh), "auth": _b64u_encode(self.keys.auth)}
+        return {"endpoint": self.endpoint, "keys": keys}
 
-    def as_json(self) -> dict[str, object]:
-        """The on-disk form: the browser's field names plus a stamp."""
-        return {
-            **self.push_info(),
-            "expirationTime": self.expiration_time,
-            "added_at": self.added_at,
-        }
+
+class _StoreFile(BaseModel):
+    """subscriptions.json as read: each entry is checked on its own, so one bad one is dropped."""
+
+    subscriptions: list[JsonValue]
+
+
+class _StoreDocument(BaseModel):
+    """subscriptions.json as written."""
+
+    version: Literal[1] = 1
+    subscriptions: Sequence[Subscription]
 
 
 class SubscriptionStore:
@@ -297,31 +314,37 @@ class SubscriptionStore:
     @property
     def path(self) -> Path:
         """The store file; its directory is created 0700 on first use."""
-        try:
-            return statedir.ensure_dir(self._state_dir) / SUBSCRIPTIONS_FILENAME
-        except StateError as exc:
-            raise SubscriptionError(str(exc)) from exc
+        return statedir.ensure_dir(self._state_dir) / SUBSCRIPTIONS_FILENAME
 
     def list_all(self) -> list[Subscription]:
-        """Every valid subscription, oldest first; a malformed entry is logged and dropped."""
+        """Every valid subscription, oldest first; a malformed entry is logged and dropped.
+
+        Raises:
+            SubscriptionError: the file is not JSON, or not an object with a subscriptions list.
+            OSError: the file cannot be read.
+        """
+        path = self.path
+        text = statedir.read_text(path) or ""
+        try:
+            entries = _StoreFile.model_validate_json(text).subscriptions if text.strip() else []
+        except ValidationError as exc:
+            raise SubscriptionError(f"{path}: {summary(exc)}") from exc
         out: list[Subscription] = []
-        for index, entry in enumerate(self._load()):
+        for index, entry in enumerate(entries):
             try:
-                stamp = jsonio.as_int(jsonio.child(entry, "added_at")) or 0
-                out.append(Subscription.parse(entry, added_at=stamp))
-            except SubscriptionError as exc:
-                log.warning("%s: dropping malformed entry %d: %s", self.path, index, exc)
+                out.append(Subscription.model_validate(entry))
+            except ValidationError as exc:
+                log.warning("%s: dropping malformed entry %d: %s", path, index, summary(exc))
         return out
 
-    def add(self, raw: object) -> Subscription:
+    def add(self, subscription: Subscription) -> Subscription:
         """Store a device; the same endpoint again updates its keys and keeps its stamp."""
-        parsed = Subscription.parse(raw, added_at=int(self._clock()))
         current = self.list_all()
-        previous = next((one for one in current if one.endpoint == parsed.endpoint), None)
-        if previous is not None:
-            parsed = replace(parsed, added_at=previous.added_at)
-        self._save([*(one for one in current if one.endpoint != parsed.endpoint), parsed])
-        return parsed
+        previous = next((one for one in current if one.endpoint == subscription.endpoint), None)
+        stamp = int(self._clock()) if previous is None else previous.added_at
+        stored = subscription.model_copy(update={"added_at": stamp})
+        self._save([*(one for one in current if one.endpoint != stored.endpoint), stored])
+        return stored
 
     def remove(self, endpoint: str) -> bool:
         """Forget one device; True when it was there."""
@@ -332,28 +355,9 @@ class SubscriptionStore:
         self._save(kept)
         return True
 
-    def _load(self) -> list[object]:
-        try:
-            text = statedir.read_text(self.path)
-        except StateError as exc:
-            raise SubscriptionError(str(exc)) from exc
-        if text is None or not text.strip():
-            return []
-        try:
-            document = jsonio.loads(text)
-        except json.JSONDecodeError as exc:
-            raise SubscriptionError(f"{self.path} is not valid JSON: {exc}") from exc
-        entries = jsonio.as_list(jsonio.child(document, "subscriptions"))
-        if entries is None:
-            raise SubscriptionError(f"{self.path}: expected an object with a 'subscriptions' list")
-        return entries
-
     def _save(self, subscriptions: Sequence[Subscription]) -> None:
-        document = {"version": 1, "subscriptions": [one.as_json() for one in subscriptions]}
-        try:
-            statedir.write_secret(self.path, json.dumps(document, indent=2) + "\n")
-        except (OSError, StateError) as exc:
-            raise SubscriptionError(f"cannot write {self.path}: {exc}") from exc
+        document = _StoreDocument(subscriptions=subscriptions)
+        statedir.write_secret(self.path, document.model_dump_json(indent=2, by_alias=True) + "\n")
 
 
 _ANSI_RE = re.compile(
@@ -474,10 +478,11 @@ class WebPushSender:
                 vapid_private_key=self.keys.private_key,
                 vapid_claims={"sub": self.subject},
             )
-        except WebPushException as exc:
-            raise DeliveryError(str(exc), status=exc.status_code) from exc
         except Exception as exc:
-            raise DeliveryError(f"{type(exc).__name__}: {exc}") from exc
+            refused = exc if isinstance(exc, WebPushException) else None
+            detail = f"{type(exc).__name__}: {exc}" if refused is None else str(exc)
+            status = None if refused is None else refused.status_code
+            raise DeliveryError(detail, status=status) from exc
 
 
 def arm_sender(keys: VapidKeys, *, subject: str, ttl: int) -> WebPushSender:
@@ -485,19 +490,32 @@ def arm_sender(keys: VapidKeys, *, subject: str, ttl: int) -> WebPushSender:
     return WebPushSender(keys=keys, subject=check_subject(subject), ttl=ttl)
 
 
-@dataclass(frozen=True, slots=True)
-class DeliveryRecord:
+# Counters and stamps read back leniently: one damaged field costs that field, not the record.
+type _Count = Annotated[StrictInt, or_default(0)]
+
+
+def _rounded(at: float) -> float:
+    return round(at, 3)
+
+
+type _Stamp = Annotated[StrictFloat, or_default(0.0), PlainSerializer(_rounded)]
+
+
+class DeliveryRecord(BaseModel):
     """Delivery counters as last written, for doctor and the settings sheet."""
 
-    sent: int = 0
-    failed: int = 0
-    pruned: int = 0
-    quieted: int = 0
-    last_send_at: float = 0.0
-    last_error: str = ""
-    last_error_at: float = 0.0
-    last_quiet_at: float = 0.0
-    updated_at: float = 0.0
+    model_config = ConfigDict(frozen=True)
+
+    version: Literal[1]
+    sent: _Count = 0
+    failed: _Count = 0
+    pruned: _Count = 0
+    quieted: _Count = 0
+    last_send_at: _Stamp = 0.0
+    last_error: Annotated[StrictStr, or_default("")] = ""
+    last_error_at: _Stamp = 0.0
+    last_quiet_at: _Stamp = 0.0
+    updated_at: _Stamp = 0.0
 
     @property
     def never_delivered(self) -> bool:
@@ -505,24 +523,26 @@ class DeliveryRecord:
         return self.sent == 0 and self.failed > 0
 
 
-_RECORD_INTS = ("sent", "failed", "pruned", "quieted")
-_RECORD_FLOATS = ("last_send_at", "last_error_at", "last_quiet_at", "updated_at")
+def _ago(at: float, now: float) -> str:
+    if not at:
+        return "never"
+    seconds = max(0, int(now - at))
+    for unit, size in (("d", 86400), ("h", 3600), ("m", 60)):
+        if seconds >= size:
+            return f"{seconds // size}{unit} ago"
+    return f"{seconds}s ago"
 
 
-def _record_from(document: dict[str, object]) -> DeliveryRecord:
-    ints = {name: jsonio.as_int(document.get(name)) or 0 for name in _RECORD_INTS}
-    floats = {name: jsonio.as_float(document.get(name)) or 0.0 for name in _RECORD_FLOATS}
-    error = jsonio.as_str(document.get("last_error")) or ""
-    return DeliveryRecord(
-        sent=ints["sent"],
-        failed=ints["failed"],
-        pruned=ints["pruned"],
-        quieted=ints["quieted"],
-        last_send_at=floats["last_send_at"],
-        last_error=error,
-        last_error_at=floats["last_error_at"],
-        last_quiet_at=floats["last_quiet_at"],
-        updated_at=floats["updated_at"],
+def health_line(record: DeliveryRecord | None, *, now: float) -> str:
+    """Delivery as doctor prints it: when push last sent, last failed, and last held one back."""
+    if record is None:
+        return "push: nothing delivered or attempted yet"
+    error = _ago(record.last_error_at, now)
+    if record.last_error_at:
+        error += f" ({record.last_error})"
+    return (
+        f"push: last sent {_ago(record.last_send_at, now)} · last error {error} · "
+        f"last quieted {_ago(record.last_quiet_at, now)}"
     )
 
 
@@ -531,69 +551,51 @@ class DeliveryLog:
 
     def __init__(self, state_dir: Path, *, clock: Clock = time.time) -> None:
         self.path: Path = state_dir / HEALTH_FILENAME
-        self._clock: Clock = clock
+        self.clock: Clock = clock
         self._current: DeliveryRecord | None = None
 
     def load(self) -> DeliveryRecord | None:
         """The last outcomes on disk, or None when there are none this build reads."""
         try:
             text = statedir.read_text(self.path)
-            document = jsonio.as_dict(jsonio.loads(text or ""))
-        except (StateError, json.JSONDecodeError):
+            return None if text is None else DeliveryRecord.model_validate_json(text)
+        except (OSError, ValidationError):
             return None
-        if document is None or document.get("version") != 1:
-            return None
-        return _record_from(document)
 
     def sent(self) -> None:
         """One device accepted a push."""
-        self._bump(lambda r, now: replace(r, sent=r.sent + 1, last_send_at=now))
+        self._bump(lambda r, now: {"sent": r.sent + 1, "last_send_at": now})
 
     def failed(self, detail: str) -> None:
         """One push failed for a reason other than the device being gone."""
         self._bump(
-            lambda r, now: replace(r, failed=r.failed + 1, last_error=detail, last_error_at=now)
+            lambda r, now: {"failed": r.failed + 1, "last_error": detail, "last_error_at": now}
         )
 
     def pruned(self) -> None:
         """A device the push service retired was forgotten."""
-        self._bump(lambda r, _now: replace(r, pruned=r.pruned + 1))
+        self._bump(lambda r, _now: {"pruned": r.pruned + 1})
 
     def quieted(self, count: int) -> None:
         """Changes a preference or the managed mark held back."""
-        self._bump(lambda r, now: replace(r, quieted=r.quieted + count, last_quiet_at=now))
+        self._bump(lambda r, now: {"quieted": r.quieted + count, "last_quiet_at": now})
 
-    def _bump(self, change: Callable[[DeliveryRecord, float], DeliveryRecord]) -> None:
-        now = self._clock()
-        base = self._current or self.load() or DeliveryRecord()
-        self._current = replace(change(base, now), updated_at=now)
-        document = {"version": 1, **_record_json(self._current)}
+    def _bump(self, change: Callable[[DeliveryRecord, float], dict[str, object]]) -> None:
+        now = self.clock()
+        base = self._current or self.load() or DeliveryRecord(version=1)
+        self._current = base.model_copy(update={**change(base, now), "updated_at": now})
         try:
             _ = statedir.ensure_dir(self.path.parent)
-            statedir.write_secret(self.path, json.dumps(document, indent=2) + "\n")
-        except (OSError, StateError) as exc:
+            statedir.write_secret(self.path, self._current.model_dump_json(indent=2) + "\n")
+        except OSError as exc:
             # Health is for the reader; failing to write it must never stop a push.
             log.warning("cannot write %s: %s; doctor will see nothing", self.path, exc)
-
-
-def _record_json(record: DeliveryRecord) -> dict[str, object]:
-    return {
-        "sent": record.sent,
-        "failed": record.failed,
-        "pruned": record.pruned,
-        "quieted": record.quieted,
-        "last_send_at": round(record.last_send_at, 3),
-        "last_error": record.last_error,
-        "last_error_at": round(record.last_error_at, 3),
-        "last_quiet_at": round(record.last_quiet_at, 3),
-        "updated_at": round(record.updated_at, 3),
-    }
 
 
 def _prune(store: SubscriptionStore, subscription: Subscription) -> None:
     try:
         _ = store.remove(subscription.endpoint)
-    except SubscriptionError as exc:
+    except (SubscriptionError, OSError) as exc:
         log.warning("could not prune a retired subscription: %s", exc)
 
 
@@ -616,7 +618,14 @@ def fan_out(
 ) -> FanOut:
     """Send to every device: prune the gone, record each outcome, never let one stop the rest."""
     sent = failed = pruned = 0
+    now = health.clock()
     for subscription in subscriptions:
+        if subscription.expired(now):
+            # Dead by its own expirationTime, as a 404 or 410 would say after a wasted send.
+            _prune(store, subscription)
+            health.pruned()
+            pruned += 1
+            continue
         try:
             deliver(subscription, data)
         except DeliveryError as exc:

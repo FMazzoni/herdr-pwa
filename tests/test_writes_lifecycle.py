@@ -73,6 +73,7 @@ def test_claude_starts_with_its_model_in_a_new_tab(tmp_path: Path) -> None:
     [start] = r.herd.writes("agent.start")
     assert (start["kind"], start["args"]) == ("claude", ["--model", "haiku"])
     outcome = r.audit_records[-1]
+    assert outcome["phase"] == "outcome"
     assert outcome["result"] == "started:w1:p9"
 
 
@@ -197,7 +198,9 @@ def test_a_workspace_with_agents_needs_the_armed_count_it_was_shown(tmp_path: Pa
     assert r.herd.writes("workspace.close") == []
     done = _second_tap(r, moved.screen)
     assert done == WorkspaceDone("w1", verified=True)
-    assert r.audit_records[0]["endpoint"] == "close"
+    attempt = r.audit_records[0]
+    assert attempt["phase"] == "attempt"
+    assert attempt["endpoint"] == "close"
 
 
 def _armed(r: Rig, workspace: str = "w1") -> str:

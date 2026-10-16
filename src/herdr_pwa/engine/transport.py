@@ -14,9 +14,11 @@ from pathlib import Path
 from secrets import token_hex
 from typing import Final, NamedTuple, Protocol, runtime_checkable
 
-from pydantic import JsonValue
+from pydantic import JsonValue, TypeAdapter, ValidationError
 
-from herdr_pwa.jsontypes import JsonObject, as_object, loads
+from herdr_pwa.engine.generated import ErrorBody, SuccessResponse
+from herdr_pwa.engine.generated.success_response import SubscriptionStartedResponseResult
+from herdr_pwa.jsontypes import JsonObject
 
 log = logging.getLogger(__name__)
 
@@ -33,8 +35,6 @@ BACKOFF_CAP: Final = 2.0
 _CHUNK: Final = 65536
 
 EVENT_SUBSCRIBE: Final = "events.subscribe"
-
-SUBSCRIPTION_STARTED: Final = "subscription_started"
 
 _EXHAUSTED: Final = frozenset({errno.EMFILE, errno.ENFILE})
 
@@ -148,13 +148,22 @@ _UNAVAILABLE_CODES: Final = frozenset(
 )
 
 
+def _error_body(error: JsonValue) -> ErrorBody:
+    try:
+        return ErrorBody.model_validate(error)
+    except ValidationError:
+        # Still a refusal: an error the schema does not describe is reported, not obeyed.
+        return ErrorBody(code="engine_error", message=f"the runner reported {error!r:.200}")
+
+
 def raise_for_error_frame(payload: JsonObject) -> None:
     """Map a peer-reported error frame onto the taxonomy, or return."""
-    error = as_object(payload.get("error"))
-    if error is None:
+    error = payload.get("error")
+    if not isinstance(error, dict):
         return
-    code = str(error.get("code") or "engine_error")
-    message = str(error.get("message") or code)
+    body = _error_body(error)
+    code = body.code or "engine_error"
+    message = body.message or code
     if code in _NOT_FOUND_CODES:
         raise TargetNotFound(message, code=code)
     if code in _UNAVAILABLE_CODES:
@@ -181,16 +190,26 @@ def _why_unreachable(path: Path, exc: OSError) -> str:
     return f"could not connect to the runner at {path}: {exc}"
 
 
+_FRAME: TypeAdapter[JsonValue] = TypeAdapter(JsonValue)
+
+
 def _decode(line: bytes) -> JsonObject:
     """Bytes to object, with both ways of not being one mapped."""
     try:
-        payload = loads(line.decode("utf-8", errors="replace"))
-    except ValueError as exc:
+        payload = _FRAME.validate_json(line.decode("utf-8", errors="replace"))
+    except ValidationError as exc:
         raise InvalidResponse(f"the runner sent a frame that is not JSON: {line[:200]!r}") from exc
-    found = as_object(payload)
-    if found is None:
+    if not isinstance(payload, dict):
         raise InvalidResponse(f"expected a JSON object, got {type(payload).__name__}")
-    return found
+    return payload
+
+
+def _confirms_subscription(payload: JsonObject) -> bool:
+    try:
+        root = SuccessResponse.model_validate(payload).result.root
+    except ValidationError:
+        return False
+    return isinstance(root, SubscriptionStartedResponseResult)
 
 
 # --------------------------------------------------------------------------
@@ -588,8 +607,7 @@ class EventStream:
         for _ in range(MAX_STRAY_FRAMES):
             payload = _decode(self._read_frame(sock))
             raise_for_error_frame(payload)
-            result = as_object(payload.get("result"))
-            if result is not None and result.get("type") == SUBSCRIPTION_STARTED:
+            if _confirms_subscription(payload):
                 return
             log.warning("discarding %r while waiting for the subscription", payload)
         raise InvalidResponse(

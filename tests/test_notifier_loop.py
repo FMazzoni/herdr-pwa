@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import JsonValue, TypeAdapter
 
-from herdr_pwa import jsonio
 from herdr_pwa.engine import EngineSettings, EngineUnavailable, HerdrClient, SnapshotCache
 from herdr_pwa.notify import NotifyConfig
 from herdr_pwa.protocol import WRITE_METHODS
@@ -15,7 +15,7 @@ from herdr_pwa.push import DeliveryError, Subscription
 from herdr_pwa.settings import Settings
 from herdr_pwa.web.app import create_app
 from herdr_pwa.web.notifier import HerdSource, LoopConfig, Notifier, PushStores, open_push
-from tests.test_push import ENDPOINT, raw_subscription
+from tests.test_push import ENDPOINT, subscribed
 from tests.waiting import until_async
 from tests.webfakes import (
     READ,
@@ -32,22 +32,22 @@ from tests.webfakes import (
 # A tick reads afresh only once the shared cache's window has passed.
 PAST_THE_CACHE = 10.0
 
+OBJECT: TypeAdapter[dict[str, JsonValue]] = TypeAdapter(dict[str, JsonValue])
+
 
 @dataclass
 class Sender:
     """Records every payload instead of posting it; ``refuse`` answers as a push service would."""
 
-    sent: list[tuple[str, dict[str, object]]] = field(
-        default_factory=list[tuple[str, dict[str, object]]]
+    sent: list[tuple[str, dict[str, JsonValue]]] = field(
+        default_factory=list[tuple[str, dict[str, JsonValue]]]
     )
     refuse: int | None = None
 
     def __call__(self, subscription: Subscription, data: str) -> None:
         if self.refuse is not None:
             raise DeliveryError("refused", status=self.refuse)
-        parsed = jsonio.as_dict(jsonio.loads(data))
-        assert parsed is not None
-        self.sent.append((subscription.endpoint, parsed))
+        self.sent.append((subscription.endpoint, OBJECT.validate_json(data)))
 
 
 @dataclass
@@ -69,7 +69,7 @@ class Loop:
         self.clock.now += PAST_THE_CACHE
 
     def subscribe(self) -> None:
-        _ = self.stores.devices.add(raw_subscription())
+        _ = self.stores.devices.add(subscribed())
 
 
 def build_loop(tmp_path: Path, notify: NotifyConfig | None = None) -> Loop:
@@ -267,8 +267,7 @@ def test_the_app_starts_and_stops_the_loop_with_its_lifespan(tmp_path: Path) -> 
     sender = Sender()
     app = create_app(settings, factory, deliver=sender)
     with TestClient(app, headers={"Tailscale-User-Login": "op@example.net"}) as http:
-        status = jsonio.as_dict(jsonio.loads(http.get("/push/status").text))
-        assert status is not None
+        status = OBJECT.validate_json(http.get("/push/status").text)
         assert (status["armed"], status["running"]) == (True, True)
     # Nobody subscribed, so the loop never read the herd.
     assert wire.calls == []

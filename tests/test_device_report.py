@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from herdr_pwa import cli, devreport, jsonio
+from herdr_pwa import cli, devreport
 from herdr_pwa.settings import Settings
 from tests.webfakes import IDENTITY, build_rig
 
@@ -37,10 +37,10 @@ def test_on_links_the_script_and_appends_a_0600_line(tmp_path: Path) -> None:
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
     lines = path.read_text().splitlines()
     assert len(lines) == 2
-    first = jsonio.as_dict(jsonio.loads(lines[0]))
-    assert first is not None
-    assert first["session"] == "abc-123"
-    assert "received" in first
+    first = devreport.StoredBatch.model_validate_json(lines[0])
+    assert first.session == "abc-123"
+    assert first.model_extra is not None
+    assert "received" in first.model_extra
 
 
 @pytest.mark.parametrize(
@@ -78,9 +78,8 @@ def test_on_refuses_no_identity_and_a_foreign_origin(tmp_path: Path) -> None:
 
 def test_cli_prints_the_latest_session_in_order(tmp_path: Path) -> None:
     store = devreport.ReportStore(tmp_path, clock=lambda: "2026-10-10T00:00:00.000Z")
-    store.append(_batch(session="old"))
-    store.append(_batch(session="new", kind="load"))
-    store.append(_batch(session="new", kind="popstate"))
+    for batch in (_batch("old"), _batch("new", "load"), _batch("new", "popstate")):
+        store.append(devreport.Batch.model_validate(batch))
     out: list[str] = []
     assert cli.device_report(Settings(state_dir=tmp_path), write=out.append) == 0
     text = "".join(out)
