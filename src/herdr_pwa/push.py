@@ -281,6 +281,10 @@ class Subscription(BaseModel):
     expiration_time: Annotated[StrictFloat | None, Field(alias="expirationTime")] = None
     added_at: Annotated[StrictInt, or_default(0)] = 0
 
+    def expired(self, now: float) -> bool:
+        """Past its ``expirationTime`` (epoch milliseconds), after which the push service drops it."""
+        return self.expiration_time is not None and self.expiration_time <= now * 1000
+
     def push_info(self) -> dict[str, str | dict[str, str]]:
         """The ``subscription_info`` mapping pywebpush expects."""
         keys = {"p256dh": _b64u_encode(self.keys.p256dh), "auth": _b64u_encode(self.keys.auth)}
@@ -519,12 +523,35 @@ class DeliveryRecord(BaseModel):
         return self.sent == 0 and self.failed > 0
 
 
+def _ago(at: float, now: float) -> str:
+    if not at:
+        return "never"
+    seconds = max(0, int(now - at))
+    for unit, size in (("d", 86400), ("h", 3600), ("m", 60)):
+        if seconds >= size:
+            return f"{seconds // size}{unit} ago"
+    return f"{seconds}s ago"
+
+
+def health_line(record: DeliveryRecord | None, *, now: float) -> str:
+    """Delivery as doctor prints it: when push last sent, last failed, and last held one back."""
+    if record is None:
+        return "push: nothing delivered or attempted yet"
+    error = _ago(record.last_error_at, now)
+    if record.last_error_at:
+        error += f" ({record.last_error})"
+    return (
+        f"push: last sent {_ago(record.last_send_at, now)} · last error {error} · "
+        f"last quieted {_ago(record.last_quiet_at, now)}"
+    )
+
+
 class DeliveryLog:
     """Every delivery outcome, written to disk as it happens so another process can read it."""
 
     def __init__(self, state_dir: Path, *, clock: Clock = time.time) -> None:
         self.path: Path = state_dir / HEALTH_FILENAME
-        self._clock: Clock = clock
+        self.clock: Clock = clock
         self._current: DeliveryRecord | None = None
 
     def load(self) -> DeliveryRecord | None:
@@ -554,7 +581,7 @@ class DeliveryLog:
         self._bump(lambda r, now: {"quieted": r.quieted + count, "last_quiet_at": now})
 
     def _bump(self, change: Callable[[DeliveryRecord, float], dict[str, object]]) -> None:
-        now = self._clock()
+        now = self.clock()
         base = self._current or self.load() or DeliveryRecord(version=1)
         self._current = base.model_copy(update={**change(base, now), "updated_at": now})
         try:
@@ -591,7 +618,14 @@ def fan_out(
 ) -> FanOut:
     """Send to every device: prune the gone, record each outcome, never let one stop the rest."""
     sent = failed = pruned = 0
+    now = health.clock()
     for subscription in subscriptions:
+        if subscription.expired(now):
+            # Dead by its own expirationTime, as a 404 or 410 would say after a wasted send.
+            _prune(store, subscription)
+            health.pruned()
+            pruned += 1
+            continue
         try:
             deliver(subscription, data)
         except DeliveryError as exc:

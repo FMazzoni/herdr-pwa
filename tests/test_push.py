@@ -351,6 +351,28 @@ class Devices:
             raise failure
 
 
+def test_a_subscription_past_its_expiration_is_pruned_without_a_send(tmp_path: Path) -> None:
+    clock = Clock()
+    store = SubscriptionStore(tmp_path)
+    ms = clock() * 1000
+    expired = {**raw_subscription(), "expirationTime": ms}
+    live = {**raw_subscription("https://push.example.invalid/live"), "expirationTime": ms + 1}
+    for raw in (expired, live, raw_subscription("https://push.example.invalid/forever")):
+        _ = store.add(Subscription.model_validate(raw))
+    devices = Devices({})
+    health = DeliveryLog(tmp_path, clock=clock)
+    outcome = fan_out("{}", store.list_all(), deliver=devices, store=store, health=health)
+    assert devices.reached == [
+        "https://push.example.invalid/live",
+        "https://push.example.invalid/forever",
+    ]
+    assert (outcome.sent, outcome.pruned) == (2, 1)
+    assert ENDPOINT not in [one.endpoint for one in store.list_all()]
+    record = health.load()
+    assert record is not None
+    assert record.pruned == 1
+
+
 def test_one_failing_device_does_not_stop_the_others_and_the_gone_are_pruned(
     tmp_path: Path,
 ) -> None:

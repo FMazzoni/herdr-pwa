@@ -4,6 +4,7 @@ import argparse
 import ipaddress
 import logging
 import sys
+import time
 from collections.abc import Callable
 from typing import Final
 
@@ -13,7 +14,7 @@ from herdr_pwa import auth, devreport, pairing, tailscale
 from herdr_pwa.audit import AuditUnavailableError
 from herdr_pwa.engine import EngineError, HerdrClient
 from herdr_pwa.protocol import EXPECTED_PROTOCOL
-from herdr_pwa.push import VapidKeyError
+from herdr_pwa.push import DeliveryLog, VapidKeyError, health_line
 from herdr_pwa.settings import Settings
 from herdr_pwa.web.app import create_app
 from herdr_pwa.web.deps import ClientFactory
@@ -47,6 +48,9 @@ def doctor(
             f"runner at {engine.socket_path}: version {snapshot.version or 'unknown'}, "
             f"{len(snapshot.agents)} agent(s), protocol {live}  {_verdict(live)}"
         )
+    # Informational: a box that never delivered is worth seeing, but the runner decides the verdict.
+    health = DeliveryLog(settings.state_dir.expanduser()).load()
+    lines.append(health_line(health, now=time.time()))
     healthy = live == EXPECTED_PROTOCOL
     lines.append("doctor: OK" if healthy else "doctor: FAIL")
     write("\n".join(lines) + "\n")
