@@ -637,7 +637,7 @@
    * is lifted by the gap between the band's bottom and the layout viewport's. */
   var root = document.documentElement;
   var docking = false;
-  var dockedKb = -1;
+  var dockedBand = -1;
   var dockedH = -1;
   var watched = null;
   // The dock grows with iPhone Text Size and with any banner in it; nothing else says so.
@@ -662,10 +662,11 @@
     var keyboard = !!view && typing() && Math.round(layout - view.height * view.scale) > 0;
     var covered = keyboard ? Math.max(0, Math.round(layout - view.height - view.offsetTop)) : 0;
     var height = bar.offsetHeight;
-    var moved = covered !== dockedKb || height !== dockedH;
-    // A pinned reader stays at the end as the keyboard opens or the dock grows.
-    var wasEnd = moved && pin.pinned;
-    dockedKb = covered;
+    var band = keyboard ? Math.round(view.height) : 0;
+    // A pinned reader stays at the end as the keyboard opens or the dock grows; a pan of the band
+    // is the reader's own scroll (or nothing), so it never moves the page.
+    var wasEnd = (band !== dockedBand || height !== dockedH) && pin.pinned;
+    dockedBand = band;
     dockedH = height;
     root.style.setProperty("--kb", covered + "px");
     // Open for as long as the band is short, not only while it sits above the layout's bottom.

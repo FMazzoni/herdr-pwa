@@ -1136,6 +1136,35 @@ pan();
 return true;
 """
 READ_KEYBOARD = "return window.__hpKb || {};"
+# A pan of the band alone, its height and the page's scroll unchanged, as a browser whose scrollY
+# is the layout viewport's reports one: the keyboard did not move, so no script may move the page.
+PAN_PINNED = r"""
+const [tops] = arguments;
+const done = arguments[arguments.length - 1];
+const kb = window.__hpKb;
+const rest = kb.top;
+let moves = 0;
+const count = (real) => function () { moves += 1; return real.apply(window, arguments); };
+const realTo = window.scrollTo;
+const realBy = window.scrollBy;
+window.scrollTo = count(realTo);
+window.scrollBy = count(realBy);
+const frames = (n, then) => (n ? requestAnimationFrame(() => frames(n - 1, then)) : then());
+const step = (i) => {
+  if (i === tops.length) {
+    kb.top = rest;
+    window.scrollTo = realTo;
+    window.scrollBy = realBy;
+    done(moves);
+    return;
+  }
+  kb.top = tops[i];
+  window.visualViewport.dispatchEvent(new Event("scroll"));
+  frames(2, () => step(i + 1));
+};
+step(0);
+"""
+PAN_TOPS = [400, 300, 200, 100, 0]
 
 
 def keyboard_up(driver: Marionette, base: str, tab: Tab, rig: Rig, home: Path) -> list[str]:
@@ -1147,6 +1176,9 @@ def keyboard_up(driver: Marionette, base: str, tab: Tab, rig: Rig, home: Path) -
     if not seen or not seen.get("scrollable"):
         return [f"{tab.name}: never drew a page taller than the band"]
     driver.script(KEYBOARD, HEIGHT)
+    settle(driver)
+    moves = driver.script_async(PAN_PINNED, PAN_TOPS)
+    pans = [f"{tab.name}: a pan of the band moved the pinned page {moves}x"] if moves else []
     driver.script(SCROLL_UP, STEP, 50, KEYBOARD_STEPS)
     n = _redraw_while(driver, tab, rig, home)
     newest = tab.grow(rig, home, n)
@@ -1154,7 +1186,7 @@ def keyboard_up(driver: Marionette, base: str, tab: Tab, rig: Rig, home: Path) -
         return [f"{tab.name}: the redraw after the reader stopped never landed"]
     found = driver.script(READ_KEYBOARD)
     kb = found if isinstance(found, dict) else {}
-    problems = _walk_problems(tab.name, _walked(driver), STEP * KEYBOARD_STEPS)
+    problems = pans + _walk_problems(tab.name, _walked(driver), STEP * KEYBOARD_STEPS)
     if not _num(kb, "frames"):
         problems.append(f"{tab.name}: the band never moved")
     if kb.get("wrong"):
