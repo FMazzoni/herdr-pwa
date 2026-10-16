@@ -4,7 +4,7 @@ import logging
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
-from herdr_pwa.decisions import Fetched, HerdDecision, decide_herd, effective_status
+from herdr_pwa.decisions import Fetched, HerdDecision, Overlay, decide_herd, effective_status
 from herdr_pwa.engine import (
     Agent,
     AgentStatus,
@@ -50,9 +50,15 @@ def unread_of(web: WebState, agents: Iterable[Agent]) -> Mapping[str, bool] | No
     return seen.unread_map()
 
 
+def overlay_of(web: WebState, agents: Iterable[Agent]) -> Overlay:
+    """What the app read beside herdr's status for *agents*: what the phone showed, who stalled."""
+    herd = tuple(agents)
+    return Overlay(unread_of(web, herd), web.stalls.of(herd))
+
+
 def agent_status(web: WebState, agent: Agent) -> AgentStatus:
     """The status one agent's page shows, by the same rule as its feed card."""
-    return effective_status(agent, unread_of(web, (agent,)))
+    return effective_status(agent, overlay_of(web, (agent,)))
 
 
 def mark_read(web: WebState, session: str) -> None:
@@ -83,7 +89,7 @@ def load_herd(web: WebState) -> Herd:
     decision = decide_herd(
         snapshot.agents,
         prompts=prompts,
-        unread=unread_of(web, snapshot.agents),
+        overlay=overlay_of(web, snapshot.agents),
         fetched=Fetched(now, now - entry.age, failure),
     )
     return Herd(snapshot, decision)

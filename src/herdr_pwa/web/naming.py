@@ -5,7 +5,7 @@ import unicodedata
 from typing import Final
 
 from herdr_pwa.decisions import AgentRow, ScreenDecision
-from herdr_pwa.engine import MenuShape
+from herdr_pwa.engine import CONTEXT_FULL, MenuShape
 from herdr_pwa.panetext import plain
 
 # Spinner and status glyphs a harness prefixes its terminal title with.
@@ -65,6 +65,9 @@ def _reads_as_asking(answer: ScreenDecision, question: str) -> bool:
 
 def card_question(row: AgentRow) -> str:
     """The question a feed card prints, or ``""`` when the screen gave nothing readable."""
+    # Nothing on the screen asks: the log says the context is full, and this is what unblocks it.
+    if row.stalled:
+        return CONTEXT_FULL
     if row.answer is None:
         return ""
     question = plain(row.answer.question).strip()

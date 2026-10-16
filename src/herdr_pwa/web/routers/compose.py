@@ -21,7 +21,7 @@ from herdr_pwa.engine import (
 )
 from herdr_pwa.web.deps import WebState, viewer_guard
 from herdr_pwa.web.failures import AgentGone, Redraw, refused
-from herdr_pwa.web.herd import find_agent, unread_of
+from herdr_pwa.web.herd import find_agent, overlay_of
 from herdr_pwa.web.writing import (
     Posted,
     WriteRoutes,
@@ -70,7 +70,7 @@ def _question(web: WebState, agent: Agent) -> BlockedPrompt | None:
 def shown_status(web: WebState, agent: Agent, sent: KeySent | None = None) -> str:
     """The status word the agent page shows, with what the phone has read and any key just sent."""
     answered = sent is not None and sent.evidence is Evidence.GONE
-    return page_status(agent, unread_of(web, (agent,)), answered=answered)
+    return page_status(agent, overlay_of(web, (agent,)), answered=answered)
 
 
 def answer_context(agent: Agent, prompt: BlockedPrompt | None, status: str) -> dict[str, object]:

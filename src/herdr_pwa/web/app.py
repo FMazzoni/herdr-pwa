@@ -33,6 +33,7 @@ from herdr_pwa.web.routers import (
 )
 from herdr_pwa.web.seams import Seams
 from herdr_pwa.web.security import SecurityHeaders
+from herdr_pwa.web.stalls import Stalls
 from herdr_pwa.web.warm import warm_later
 
 IMMUTABLE: Final = "public, max-age=31536000, immutable"
@@ -115,13 +116,15 @@ def _web_state(settings: Settings, seams: Seams, pages: Pages) -> tuple[WebState
     audit.preflight()
     client = seams.client(settings.engine())
     cache = SnapshotCache(ttl=settings.snapshot_cache_ttl, clock=seams.clock)
-    pushing = open_push(settings, HerdSource(client, cache), seams)
+    stalls = Stalls(settings.transcript_roots or None)
+    pushing = open_push(settings, HerdSource(client, cache, stalls), seams)
     web = WebState(
         settings=settings,
         client=client,
         cache=cache,
         pages=pages,
         audit=audit,
+        stalls=stalls,
         clock=seams.clock,
         pacing=seams.pacing,
         wall=seams.wall,

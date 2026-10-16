@@ -11,6 +11,7 @@ from typing import Final, Protocol, Self
 
 from herdr_pwa.clock import Clock
 from herdr_pwa.engine import (
+    CONTEXT_FULL,
     BlockedPrompt,
     EngineError,
     PaneId,
@@ -44,6 +45,7 @@ from herdr_pwa.push import (
 )
 from herdr_pwa.settings import Settings
 from herdr_pwa.web.seams import Seams
+from herdr_pwa.web.stalls import Stalls
 
 log = logging.getLogger(__name__)
 
@@ -74,6 +76,8 @@ class HerdSource:
 
     reader: HerdReader
     cache: SnapshotCache
+    # The feed's own, so a stall the card shows is the stall that pushes.
+    stalls: Stalls
 
 
 @dataclass(frozen=True, slots=True)
@@ -152,6 +156,9 @@ class Notifier:
         """Arm the sender (raising SubjectError when its contact would be refused) and plan."""
         self._reader: HerdReader = herd.reader
         self._cache: SnapshotCache = herd.cache
+        self._stalls: Stalls = herd.stalls
+        # The sessions stalled at this tick, whose push says what unblocks them.
+        self._stalled: frozenset[str] = frozenset()
         self._stores: PushStores = stores
         self._deliver: Deliver = seams.deliver or arm_sender(
             stores.keys, subject=config.subject, ttl=config.ttl
@@ -185,7 +192,12 @@ class Notifier:
             snapshot = self._read()
             if snapshot is None:
                 return Tick(devices=len(devices), error=self.state.read_error)
-            step = self.planner.step(snapshot.agents, focused_pane=snapshot.focused_pane_id or "")
+            self._stalled = self._stalls.of(snapshot.agents)
+            step = self.planner.step(
+                snapshot.agents,
+                focused_pane=snapshot.focused_pane_id or "",
+                stalled=self._stalled,
+            )
             self._managed.forget([agent.target for agent in snapshot.agents])
             self.state.ticks += 1
             self.state.last_tick_at = self._clock()
@@ -262,6 +274,8 @@ class Notifier:
         return entry.value
 
     def _question(self, agent: AgentView) -> str:
+        if agent.session in self._stalled:
+            return CONTEXT_FULL
         try:
             prompt = self._reader.blocked_prompt(
                 as_pane_id(agent.target), session=as_session_id(agent.session)

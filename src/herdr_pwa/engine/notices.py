@@ -149,6 +149,10 @@ LIMIT: Final = "Limit"
 ERROR: Final = "Error"
 INTERRUPTED: Final = "Interrupted"
 API_ERROR_KINDS: Final = frozenset({CONTEXT, LIMIT, ERROR, INTERRUPTED})
+# What unblocks a full context, in either harness: both take /compact.
+_COMPACT: Final = "run /compact or start a new session"
+# A stalled agent's card and push, which carry no label beside the line as the chat does.
+CONTEXT_FULL: Final = f"Context full · {_COMPACT}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -173,7 +177,7 @@ def api_error(code: str | None, said: str) -> ApiError:
     if code == INTERRUPTED_CODE:
         return ApiError(INTERRUPTED, "", "", failed=False)
     if code == _INVALID_REQUEST and (said.startswith(_TOO_LONG) or _OVERFLOW.search(said)):
-        return ApiError(CONTEXT, "Full · run /compact or start a new session", said)
+        return ApiError(CONTEXT, f"Full · {_COMPACT}", said)
     if code == _RATE_LIMIT:
         return _limit(said)
     return ApiError(ERROR, said, said)

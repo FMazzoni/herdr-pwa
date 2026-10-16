@@ -5,7 +5,7 @@ from pathlib import Path
 
 from pydantic import JsonValue
 
-from herdr_pwa.decisions import read_status
+from herdr_pwa.decisions import Overlay, read_status
 from herdr_pwa.engine import AgentStatus, Snapshot
 from herdr_pwa.notify import Hooks
 from herdr_pwa.notify_state import SeenLedger
@@ -93,13 +93,13 @@ IDLE_EVERYWHERE = {
 
 def test_the_rule_is_one_function_and_only_a_read_finish_moves() -> None:
     read = {S: False}
-    assert read_status(AgentStatus.DONE, S, read) is AgentStatus.IDLE
-    assert read_status(AgentStatus.DONE, S, {S: True}) is AgentStatus.DONE
+    assert read_status(AgentStatus.DONE, S, Overlay(read)) is AgentStatus.IDLE
+    assert read_status(AgentStatus.DONE, S, Overlay({S: True})) is AgentStatus.DONE
     # Never read, or nothing keeping track: still news.
-    assert read_status(AgentStatus.DONE, S, {}) is AgentStatus.DONE
-    assert read_status(AgentStatus.DONE, S, None) is AgentStatus.DONE
+    assert read_status(AgentStatus.DONE, S, Overlay({})) is AgentStatus.DONE
+    assert read_status(AgentStatus.DONE, S, Overlay(None)) is AgentStatus.DONE
     for other in (AgentStatus.BLOCKED, AgentStatus.WORKING, AgentStatus.IDLE):
-        assert read_status(other, S, read) is other
+        assert read_status(other, S, Overlay(read)) is other
 
 
 def test_finish_then_read_is_idle_on_every_surface(tmp_path: Path) -> None:
@@ -156,8 +156,8 @@ def _snapshot(status: str, seq: int) -> Snapshot:
 
 def test_reading_a_finish_is_stale_for_the_feed_and_the_agent_page() -> None:
     herd = _snapshot("done", 21)
-    before = herd_marks(herd, unread={S: True})
-    after = herd_marks(herd, unread={S: False})
+    before = herd_marks(herd, overlay=Overlay({S: True}))
+    after = herd_marks(herd, overlay=Overlay({S: False}))
     assert {"feed", f"agent:{S}"} <= changed(before, after)
 
 
