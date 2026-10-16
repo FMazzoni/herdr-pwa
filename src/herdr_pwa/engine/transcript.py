@@ -16,10 +16,12 @@ from herdr_pwa.diff import EditArgs, FileDiff, tool_diff
 from herdr_pwa.engine.generated.request import IntegrationTarget
 from herdr_pwa.engine.model import Agent, SessionId
 from herdr_pwa.engine.notices import (
+    API_ERROR_KINDS,
     Hidden,
     PeerMessage,
     RecordOrigin,
     TaskNotice,
+    api_error,
     injected,
     without_reminders,
 )
@@ -88,7 +90,7 @@ class Speaker(StrEnum):
 
     system = "system"
 
-    # A background task stopped: one quiet line, never a prompt.
+    # A background task stopped, or the API refused a turn: one quiet line, never a prompt.
     notice = "notice"
 
     # Another agent's message or hand-back report, written into this log by the harness.
@@ -125,11 +127,18 @@ class TranscriptTurn(BaseModel):
     report: bool = False
     # A task notice's task id, or the task a peer message came from: what joins the two.
     task: str = ""
+    # How many identical API errors this one line stands for, retries folded together.
+    times: int = 1
 
 
 def is_message(turn: TranscriptTurn) -> bool:
     """Whether *turn* is a message a page counts: a person's prompt or the agent's prose."""
     return turn.speaker in (Speaker.human, Speaker.agent)
+
+
+def is_api_error(turn: TranscriptTurn) -> bool:
+    """Whether *turn* is the harness saying the API refused a turn, not anything the agent said."""
+    return turn.speaker is Speaker.notice and turn.tool in API_ERROR_KINDS
 
 
 class TurnStamp(NamedTuple):
@@ -382,6 +391,9 @@ class ClaudeRecord(BaseModel):
         default=None, validation_alias="compactMetadata"
     )
     is_compact_summary: Flag = Field(default=None, validation_alias="isCompactSummary")
+    # Measured: the harness writes a refused turn as an assistant record from model "<synthetic>".
+    is_api_error: Flag = Field(default=None, validation_alias="isApiErrorMessage")
+    error: Text = None
 
 
 def claude_record(raw: bytes) -> ClaudeRecord | None:
@@ -1037,8 +1049,28 @@ def _result_parts(body: JsonValue) -> list[_ResultPart]:
         return []
 
 
+def _api_error_turn(record: ClaudeRecord, stamp: TurnStamp) -> TranscriptTurn:
+    """A refused turn as a quiet line saying what unblocks it, opening on the harness's words."""
+    said = "\n".join(block.said for block in _blocks(record) if block.type == "text")
+    found = api_error(record.error, said)
+    line, _ = one_line(found.line)
+    result, cut = clip(found.said, MAX_RESULT_CHARS)
+    return TranscriptTurn(
+        uuid=stamp.uuid,
+        speaker=Speaker.notice,
+        text=line,
+        ts=stamp.written,
+        tool=found.kind,
+        result="" if result == line else result,
+        result_truncated=cut,
+        failed=True,
+    )
+
+
 def _assistant_record(record: ClaudeRecord, stamp: TurnStamp) -> TranscriptTurn | None:
-    """An assistant record: prose, or one collapsed tool call."""
+    """An assistant record: prose, one collapsed tool call, or an API error the harness wrote."""
+    if record.is_api_error is True:
+        return _api_error_turn(record, stamp)
     uuid, ts = stamp.uuid, stamp.written
     for block in _blocks(record):
         btype = block.type
@@ -1081,7 +1113,12 @@ def _claude_turn(record: ClaudeRecord) -> TranscriptTurn | None:
     return None
 
 
-def fold_tool_results(turns: Iterable[TranscriptTurn]) -> list[TranscriptTurn]:
+def fold_turns(turns: Iterable[TranscriptTurn]) -> list[TranscriptTurn]:
+    """Fold each tool result onto its call, and each run of one repeated API error into one line."""
+    return _fold_repeats(_fold_results(turns))
+
+
+def _fold_results(turns: Iterable[TranscriptTurn]) -> list[TranscriptTurn]:
     """Fold each tool RESULT onto the call it answers, by ``tool_use_id``."""
     folded: list[TranscriptTurn] = []
     by_call: dict[str, int] = {}
@@ -1134,6 +1171,36 @@ class Harness:
     stores_context: bool = True
     # Whether the tally's cost is the harness's own price; one recording no money reads zero.
     prices_itself: bool = True
+
+
+# What the harness delivers between retries: each one sets off the next refused turn.
+_RETRY_TRIGGERS: Final = (Speaker.notice, Speaker.peer)
+
+
+def _same_error(a: TranscriptTurn, b: TranscriptTurn) -> bool:
+    return (a.tool, a.text, a.result) == (b.tool, b.text, b.result)
+
+
+def _fold_repeats(turns: list[TranscriptTurn]) -> list[TranscriptTurn]:
+    """Each API error folded into the identical one before it, moved to where the newest stands.
+
+    Measured: a full context refuses every notice and peer message that wakes the agent, so its
+    errors arrive between those, not back to back. Anything the person or the agent says, a
+    tool call, or a harness note such as ``/compact`` ends the run; the next error starts anew.
+    """
+    folded: list[TranscriptTurn] = []
+    open_at = -1
+    for turn in turns:
+        kept = turn
+        if is_api_error(turn):
+            if open_at >= 0 and _same_error(folded[open_at], turn):
+                earlier = folded.pop(open_at)
+                kept = turn.model_copy(update={"times": earlier.times + turn.times})
+            open_at = len(folded)
+        elif turn.speaker not in _RETRY_TRIGGERS:
+            open_at = -1
+        folded.append(kept)
+    return folded
 
 
 class TranscriptAdapter(Protocol):
@@ -1292,7 +1359,7 @@ def history(source: Source, window: Window = NEWEST) -> TranscriptPage:
     except OSError:
         # Found and then unreadable is not "there is none"; the view must not show a quiet chat.
         return TranscriptPage(state=HistoryState.unreadable)
-    return page.model_copy(update={"turns": fold_tool_results(page.turns)})
+    return page.model_copy(update={"turns": fold_turns(page.turns)})
 
 
 def session_origin(agent: Agent, *, root: TranscriptRoots = None) -> str:

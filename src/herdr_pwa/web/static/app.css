@@ -401,7 +401,8 @@ html { -webkit-tap-highlight-color: transparent; }
 .notice > .tool__line { flex-wrap: wrap; }
 .notice__text { flex: 1 1 0; min-width: 4em; max-width: max-content; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); }
 .notice--agent[open] > .tool__line .notice__text, .notice--task[open] > .tool__line .notice__text { white-space: normal; overflow-wrap: anywhere; }
-.notice__status, .notice__time { flex: none; color: var(--ink-3); }
+.notice__status, .notice__time, .notice__times { flex: none; color: var(--ink-3); }
+.notice--still .notice__text { white-space: normal; overflow-wrap: anywhere; }
 .notice--failed .notice__label, .notice--failed .notice__status { color: var(--blocked); font-weight: 600; }
 .notice__body { padding: 0 0 var(--space-4) var(--space-6); border-left: var(--line-1) solid var(--rule); }
 .notice__result { white-space: pre-wrap; overflow-wrap: anywhere; }

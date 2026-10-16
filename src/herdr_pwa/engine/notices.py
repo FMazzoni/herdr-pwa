@@ -1,4 +1,4 @@
-"""What Claude Code writes as a user record but nobody typed: task notices and peer messages."""
+"""What Claude Code writes that nobody typed or said: task notices, peer messages, API errors."""
 
 from __future__ import annotations
 
@@ -128,6 +128,37 @@ class PeerMessage:
 
 
 type Injected = TaskNotice | PeerMessage | Hidden
+
+
+# Measured: the text Claude Code writes when a turn no longer fits, with `error: invalid_request`.
+_TOO_LONG: Final = "Prompt is too long"
+# Measured: "You've hit your session limit · resets 5am (<the user's time zone>)", and "weekly".
+_LIMIT: Final = re.compile(r"\AYou've hit your (\w+) limit · (resets .+)\Z", re.DOTALL)
+# The line's label for each error kind; a task notice's are Agent, Command and Task.
+CONTEXT: Final = "Context"
+LIMIT: Final = "Limit"
+ERROR: Final = "Error"
+API_ERROR_KINDS: Final = frozenset({CONTEXT, LIMIT, ERROR})
+
+
+@dataclass(frozen=True, slots=True)
+class ApiError:
+    """The API refused a turn: what happened, what unblocks it, and the harness's own words."""
+
+    kind: str
+    line: str
+    said: str
+
+
+def api_error(code: str | None, said: str) -> ApiError:
+    """What an assistant record Claude Code wrote in place of an answer means for the person."""
+    said = said.strip()
+    if code == "invalid_request" and said.startswith(_TOO_LONG):
+        return ApiError(CONTEXT, "Full · run /compact or start a new session", said)
+    found = _LIMIT.match(said) if code == "rate_limit" else None
+    if found is not None:
+        return ApiError(LIMIT, f"{found.group(1).capitalize()} limit · {found.group(2)}", said)
+    return ApiError(ERROR, said, said)
 
 
 def without_reminders(text: str) -> str:

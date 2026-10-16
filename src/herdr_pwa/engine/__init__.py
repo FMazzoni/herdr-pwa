@@ -57,6 +57,7 @@ from herdr_pwa.engine.transcript import (
     harness_kinds,
     harness_of,
     has_byte_frontier,
+    is_api_error,
     locate,
     session_origin,
 )
@@ -135,6 +136,7 @@ __all__ = [
     "harness_kinds",
     "harness_of",
     "has_byte_frontier",
+    "is_api_error",
     "locate",
     "rank",
     "screen_digest",

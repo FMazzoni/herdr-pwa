@@ -321,11 +321,25 @@ NOTICES: Final = FIXTURES / "transcript" / "notices" / "notices.jsonl"
 RECORD: Final = TypeAdapter(dict[str, JsonValue])
 
 
-def notice_records() -> list[dict[str, JsonValue]]:
-    """The scrubbed records, in the order they were written."""
-    found = (RECORD.validate_json(line) for line in NOTICES.read_text().splitlines())
+# Real API-error records (every shape found locally) set among the notice records in the order
+# a full context was measured to refuse them: each retry set off by a notice or a peer message.
+API_ERRORS: Final = FIXTURES / "transcript" / "notices" / "api-errors.jsonl"
+
+
+def _records(path: Path) -> list[dict[str, JsonValue]]:
+    found = (RECORD.validate_json(line) for line in path.read_text().splitlines())
     # Its cwd is another machine's repo; kept, it would read as a session started elsewhere.
     return [{k: v for k, v in record.items() if k != "cwd"} for record in found]
+
+
+def notice_records() -> list[dict[str, JsonValue]]:
+    """The scrubbed records, in the order they were written."""
+    return _records(NOTICES)
+
+
+def api_error_records() -> list[dict[str, JsonValue]]:
+    """The scrubbed API-error sequence, in fixture order."""
+    return _records(API_ERRORS)
 
 
 def origin_of(record: dict[str, JsonValue]) -> dict[str, JsonValue]:
