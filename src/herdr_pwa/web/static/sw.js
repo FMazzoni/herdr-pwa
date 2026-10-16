@@ -21,6 +21,7 @@ const PRECACHE = [
   "/static/app.css",
   "/static/hp.js",
   "/static/geometry.js",
+  "/static/chatend.js",
   "/static/app.js",
   "/static/htmx.min.js",
   "/static/icon.svg",

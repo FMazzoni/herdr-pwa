@@ -325,5 +325,17 @@
     run("ready", null);
   });
 
-  window.hp = { logic: logic, bus: bus };
+  /* A region fetches itself as its own source, so its hx-sync rule applies: a key tap's request
+   * replaces this one, and this one waits behind a key already out. With no source htmx uses the
+   * body, and the redraw would land over the key's controls mid-send. */
+  function refetch(node) {
+    window.htmx.ajax("GET", node.getAttribute("data-hp-poll"), { source: node, target: node, swap: "outerHTML" });
+  }
+
+  // A read: a region fetching itself, never a write.
+  function isRead(detail) {
+    return !!(detail.requestConfig && detail.requestConfig.verb === "get");
+  }
+
+  window.hp = { logic: logic, bus: bus, refetch: refetch, isRead: isRead };
 })();
