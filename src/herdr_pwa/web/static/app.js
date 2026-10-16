@@ -458,102 +458,6 @@
     }
   });
 
-  /* ---- The composer dock ----
-   * The composer is fixed to the bottom. The page reserves the dock's real height, and
-   * while the iOS keyboard is open the dock rides on top of it: the layout viewport keeps
-   * its height there and the visible band pans inside it as the reader scrolls, so the dock
-   * is lifted by the gap between the band's bottom and the layout viewport's. */
-  var root = document.documentElement;
-  var docking = false;
-  var dockedBand = -1;
-  var dockedH = -1;
-  var liftedKb = -1;
-  var watched = null;
-  // The dock grows with iPhone Text Size and with any banner in it; nothing else says so.
-  var sizes = typeof window.ResizeObserver === "function" ? new window.ResizeObserver(redock) : null;
-
-  function dock() {
-    docking = false;
-    var bar = document.getElementById("composer");
-    if (!bar) {
-      return;
-    }
-    if (sizes && watched !== bar) {
-      if (watched) {
-        sizes.unobserve(watched);
-      }
-      sizes.observe(bar);
-      watched = bar;
-    }
-    var band = lift();
-    var height = bar.offsetHeight;
-    // A pinned reader stays at the end as the keyboard opens or the dock grows; a pan of the band
-    // is the reader's own scroll (or nothing), so it never moves the page.
-    var wasEnd = (band !== dockedBand || height !== dockedH) && pin.pinned;
-    dockedBand = band;
-    if (height !== dockedH) {
-      root.style.setProperty("--dock-h", height + "px");
-      dockedH = height;
-    }
-    if (wasEnd) {
-      toEnd();
-    }
-  }
-
-  // The keyboard's lift alone, cheap enough to run inside a visualViewport event: iOS swaps the
-  // band's offset mid-fling and draws the next frame with whatever lift the handler left.
-  // Returns the band's height while the keyboard is open, else 0.
-  function lift() {
-    var view = window.visualViewport;
-    // Against the layout viewport the dock is fixed to: WebKit reports innerHeight as the band.
-    var layout = root.clientHeight;
-    var keyboard = !!view && typing() && Math.round(layout - view.height * view.scale) > 0;
-    var covered = keyboard ? Math.max(0, Math.round(layout - view.height - view.offsetTop)) : 0;
-    // On <html> every write restyles the whole chat, so an unchanged lift is not written.
-    if (covered !== liftedKb) {
-      root.style.setProperty("--kb", covered + "px");
-      liftedKb = covered;
-    }
-    // Open for as long as the band is short, not only while it sits above the layout's bottom.
-    root.classList.toggle("is-keyboard", keyboard);
-    return keyboard ? Math.round(view.height) : 0;
-  }
-
-  function viewMoved() {
-    if (document.getElementById("composer")) {
-      lift();
-    }
-    redock();
-  }
-
-  // Only a field that takes text raises the keyboard; a short band without one is the browser's bars.
-  var NO_KEYS = /^(button|checkbox|radio|submit|reset|file|range|color|hidden|image)$/;
-  function typing() {
-    var field = document.activeElement;
-    if (!field) {
-      return false;
-    }
-    return field.tagName === "TEXTAREA" || field.isContentEditable
-      || (field.tagName === "INPUT" && !NO_KEYS.test(field.type));
-  }
-
-  function redock() {
-    if (!docking) {
-      docking = true;
-      window.requestAnimationFrame(dock);
-    }
-  }
-
-  if (window.visualViewport) {
-    window.visualViewport.addEventListener("resize", viewMoved);
-    window.visualViewport.addEventListener("scroll", viewMoved);
-  }
-  window.addEventListener("resize", redock);
-  document.addEventListener("focusin", redock);
-  document.addEventListener("focusout", redock);
-  document.addEventListener("input", redock);
-  document.addEventListener("htmx:afterSettle", redock);
-
   /* ---- An armed interrupt disarms itself ----
    * After data-hp-disarm seconds the answer region is fetched afresh, which draws it
    * unarmed. Never under a thumb: a touch in the last second and a half puts it off,
@@ -662,6 +566,7 @@
    * A pinned page follows the end; any other keeps what the reader is reading where it was. */
   // A redraw waits until the reader's scroll has been still this long, and no finger is down.
   var IDLE_MS = 250;
+  var root = document.documentElement;
   var pin = { pinned: true, lastY: window.scrollY, reader: false };
   var swapEnd = false;
   var swapMark = null;
@@ -903,9 +808,6 @@
     swapY = detail.shouldSwap ? window.scrollY : null;
   });
 
-  /* The page arrives with its view, the question and the composer already drawn, so it lands as
-   * its first swap used to: the dock's room reserved first, which lands a pinned page at the end. */
-  bus.on("ready:scroll", dock);
   document.addEventListener("DOMContentLoaded", function () {
     armTimers(document);
   });
@@ -923,6 +825,14 @@
     pinOn("swapped", { before: swapY });
     swapY = null;
   });
+
+  // What the dock asks of the pin: whether the reader is at the end, and the way back to it.
+  hp.chatend = {
+    pinned: function () {
+      return pin.pinned;
+    },
+    toEnd: toEnd,
+  };
 
   /* ---- "Question waiting" floats above the dock while the question is below the reader ----
    * Shown only when the reader has scrolled away from a question still off screen; a tap takes

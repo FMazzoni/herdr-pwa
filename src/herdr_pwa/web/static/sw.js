@@ -20,6 +20,7 @@ const OFFLINE_URL = "/offline";
 const PRECACHE = [
   "/static/app.css",
   "/static/hp.js",
+  "/static/geometry.js",
   "/static/app.js",
   "/static/htmx.min.js",
   "/static/icon.svg",

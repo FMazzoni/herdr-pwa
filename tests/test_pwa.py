@@ -22,10 +22,11 @@ HARNESS = Path(__file__).parent / "sw" / "harness.mjs"
 SESSION = "11111111-1111-4111-8111-111111111111"
 SHELL_PREFIXES = ("/static/",)
 SHELL_PATHS = ("/manifest.webmanifest", "/offline")
-# The worker's cache name and a digest of the PRECACHE it was named for. A new list under the old
-# name keeps the old cache on phones that already have it; a new name over the same list throws
-# a good cache away. Move both together.
-CACHE_NAMED_FOR = ("v4", "becf01ceebdb")
+# Every name the worker's cache has had, with a digest of the PRECACHE it was named for, newest
+# last. A new list under an old name leaves phones on the cache they already hold; a new name over
+# the same list throws a good cache away. A new PRECACHE takes a new name and a new line here, and
+# a line is never edited: phones in the field still hold caches by the old names.
+CACHE_NAMES = (("v3", "f633629dc2d9"), ("v4", "43aa58e3e0d0"))
 
 
 def precache_paths() -> list[str]:
@@ -61,7 +62,12 @@ def test_the_cache_name_moves_only_when_precache_does() -> None:
     named = re.search(r'const CACHE_NAME = CACHE_PREFIX \+ "([^"]+)";', WORKER.read_text())
     assert named is not None
     listed = hashlib.sha256("\n".join(precache_paths()).encode()).hexdigest()[:12]
-    assert (named.group(1), listed) == CACHE_NAMED_FOR
+    assert (named.group(1), listed) == CACHE_NAMES[-1]
+    assert (
+        len({name for name, _ in CACHE_NAMES})
+        == len({d for _, d in CACHE_NAMES})
+        == len(CACHE_NAMES)
+    )
 
 
 def test_the_worker_names_no_route_that_renders_agent_state() -> None:
