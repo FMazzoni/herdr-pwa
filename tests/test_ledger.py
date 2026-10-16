@@ -21,6 +21,7 @@ from herdr_pwa.decisions import (
     Fetched,
     Freshness,
     HerdDecision,
+    Overlay,
     ScreenDecision,
     decide_herd,
     decide_screen,
@@ -333,7 +334,7 @@ def test_herd_matches_the_ledger(herd_id: str, foreign_root: Path) -> None:
         herd = decide_herd(
             snapshot.agents,
             prompts=prompts,
-            unread=unread,
+            overlay=Overlay(unread),
             fetched=Fetched(NOW, taken_at, error),
         )
         freshness.append(
@@ -344,6 +345,8 @@ def test_herd_matches_the_ledger(herd_id: str, foreign_root: Path) -> None:
                 "result": _freshness_json(herd.freshness),
             }
         )
-    herd = decide_herd(snapshot.agents, prompts=prompts, unread=unread, fetched=Fetched(NOW))
+    herd = decide_herd(
+        snapshot.agents, prompts=prompts, overlay=Overlay(unread), fetched=Fetched(NOW)
+    )
     expected = {k: v for k, v in entry.items() if k != "input"}
     assert _herd_json(herd, prompt_ids, freshness) == expected

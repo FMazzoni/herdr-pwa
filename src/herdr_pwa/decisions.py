@@ -1,12 +1,13 @@
 """What the dashboard decides about a screen and a herd, as typed records the views render."""
 
 import posixpath
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Final
 
 from herdr_pwa.engine import (
+    CONTEXT,
     Agent,
     AgentStatus,
     BlockedPrompt,
@@ -14,6 +15,8 @@ from herdr_pwa.engine import (
     MenuShape,
     PaneId,
     SessionId,
+    TranscriptTurn,
+    ends_refused,
     rank,
 )
 from herdr_pwa.panetext import printed_whole
@@ -127,6 +130,8 @@ class AgentRow:
     feed_key: tuple[int, int, int, str]
     answer: ScreenDecision | None
     workspace_id: str = ""
+    # Stopped on a full context: what it needs is said by the transcript, not asked on the screen.
+    stalled: bool = False
 
 
 @dataclass(frozen=True)
@@ -251,27 +256,57 @@ def identity_doubt(origin: str, cwds: Iterable[str]) -> str:
     )
 
 
-def read_status(
-    status: AgentStatus, session: str, unread: Mapping[str, bool] | None
-) -> AgentStatus:
-    """The status every surface shows: a finish the phone has already shown is idle again."""
+@dataclass(frozen=True, slots=True)
+class Overlay:
+    """What the app read beside herdr's status: finishes the phone showed, and who stalled."""
+
+    # None when nothing tracks what was read; then no finish is taken for read.
+    unread: Mapping[str, bool] | None = None
+    # Sessions whose conversation ends refused for a full context.
+    stalled: frozenset[str] = frozenset()
+
+
+NO_OVERLAY: Final = Overlay()
+# herdr's word for a turn that has ended, and for the moment a retry runs before it is refused.
+_STOPS: Final = frozenset({AgentStatus.IDLE, AgentStatus.DONE})
+_STALLABLE: Final = _STOPS | {AgentStatus.WORKING}
+
+
+def context_stalled(turns: Sequence[TranscriptTurn]) -> bool:
+    """Whether the conversation ends refused for a full context, its woken retries looked past."""
+    refused = ends_refused(turns)
+    return refused is not None and refused.tool == CONTEXT
+
+
+def reads_stall(status: AgentStatus, *, held: bool) -> bool:
+    """Whether an agent's log is worth reading for a stall: at a stop, or retrying while stalled."""
+    # A working agent's newest turn may not be written yet, so only a stall already held is kept.
+    return status in _STOPS or (held and status is AgentStatus.WORKING)
+
+
+def read_status(status: AgentStatus, session: str, overlay: Overlay) -> AgentStatus:
+    """The status every surface shows: a stall needs you, a finish already shown is idle again."""
+    # A full context asks for the person as surely as a question does, and outranks a finish.
+    if session in overlay.stalled and status in _STALLABLE:
+        return AgentStatus.BLOCKED
     # herdr keeps done until the desk focuses the pane; reading it on the phone is our own overlay.
+    unread = overlay.unread
     if status is not AgentStatus.DONE or unread is None:
         return status
     # A session missing from the seen ledger has never been read.
     return status if unread.get(session, True) else AgentStatus.IDLE
 
 
-def effective_status(agent: Agent, unread: Mapping[str, bool] | None = None) -> AgentStatus:
-    """The status the feed acts on: a finished agent already read is idle again."""
-    return read_status(agent.status, agent.session, unread)
+def effective_status(agent: Agent, overlay: Overlay = NO_OVERLAY) -> AgentStatus:
+    """The status the feed acts on: a stall needs you, a finished agent already read is idle."""
+    return read_status(agent.status, agent.session, overlay)
 
 
-def page_status(agent: Agent, unread: Mapping[str, bool] | None, *, answered: bool) -> str:
+def page_status(agent: Agent, overlay: Overlay, *, answered: bool) -> str:
     """The agent page's status word: "updating" over a question just answered, else the feed's."""
     if answered and agent.status is AgentStatus.BLOCKED:
         return UPDATING
-    return effective_status(agent, unread).value
+    return effective_status(agent, overlay).value
 
 
 def still_talking(status: AgentStatus) -> bool:
@@ -316,7 +351,8 @@ def freshness(age: float | None, cadence: int, error: str | None) -> Freshness:
     )
 
 
-def _row(agent: Agent, status: AgentStatus, prompt: BlockedPrompt | None) -> AgentRow:
+def _row(agent: Agent, overlay: Overlay, prompt: BlockedPrompt | None) -> AgentRow:
+    status = effective_status(agent, overlay)
     return AgentRow(
         session=agent.session,
         target=agent.target,
@@ -328,6 +364,7 @@ def _row(agent: Agent, status: AgentStatus, prompt: BlockedPrompt | None) -> Age
         feed_key=agent.feed_key(rank(status)),
         answer=None if prompt is None else decide_screen(prompt),
         workspace_id=agent.workspace_id,
+        stalled=agent.session in overlay.stalled and agent.status in _STALLABLE,
     )
 
 
@@ -362,17 +399,14 @@ def decide_herd(
     agents: Iterable[Agent],
     *,
     prompts: Mapping[str, BlockedPrompt],
-    unread: Mapping[str, bool] | None,
+    overlay: Overlay,
     fetched: Fetched,
 ) -> HerdDecision:
     """Order, section and tally the herd, with its freshness at the injected ``fetched.now``."""
     herd = tuple(agents)
     rows = tuple(
         sorted(
-            (
-                _row(agent, effective_status(agent, unread), prompts.get(agent.session))
-                for agent in herd
-            ),
+            (_row(agent, overlay, prompts.get(agent.session)) for agent in herd),
             key=lambda row: row.feed_key,
         )
     )

@@ -829,6 +829,14 @@ FEED: Final = (
         title="Feed: nothing needs you",
     ),
     State(
+        "feed-context-full",
+        "/",
+        "#feed-list .card--blocked .card__question",
+        runner(lambda: herd(p4="idle")),
+        transcript=api_error_records()[:9],
+        title="Feed: an agent stopped on a full context, its retries folded, asking for /compact",
+    ),
+    State(
         "feed-filtered",
         f"/?ws={LONELY_WORKSPACE}",
         "#feed-list .chips .chip--on",
@@ -1516,6 +1524,7 @@ V2_ONLY: Final = (
     "agent-answer-opencode-question",
     "agent-answer-opencode-listing",
     "feed-build-scrollback",
+    "feed-context-full",
     "workspaces",
     "alerts",
     "agent-unreachable",

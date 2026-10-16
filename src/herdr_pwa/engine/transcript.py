@@ -1208,6 +1208,20 @@ def _fold_repeats(turns: list[TranscriptTurn]) -> list[TranscriptTurn]:
     return folded
 
 
+def ends_refused(turns: Sequence[TranscriptTurn]) -> TranscriptTurn | None:
+    """The API error the conversation ends on, past what only woke it to retry; else ``None``.
+
+    The same run ``_fold_repeats`` folds: a notice or a peer message set off a retry, so it
+    does not end a refusal, and anything else said or run after it does.
+    """
+    for turn in reversed(turns):
+        if is_api_error(turn):
+            return turn
+        if turn.speaker not in _RETRY_TRIGGERS:
+            return None
+    return None
+
+
 class TranscriptAdapter(Protocol):
     """What a harness must answer for its conversation to reach the Chat tab, and what it is."""
 

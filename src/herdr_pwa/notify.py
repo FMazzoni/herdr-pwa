@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Protocol, Self
 
 from herdr_pwa.clock import Clock
-from herdr_pwa.decisions import read_status
+from herdr_pwa.decisions import Overlay, read_status
 from herdr_pwa.engine import AgentStatus
 from herdr_pwa.notify_state import Interrupts, SeenLedger, StatusLedger
 from herdr_pwa.push import (
@@ -85,9 +85,9 @@ class _Shown:
     state_change_seq: int
 
 
-def _shown(agent: AgentView, unread: Mapping[str, bool] | None) -> AgentView:
-    # The rule is the feed's own: a finish the phone has already shown is idle.
-    status = read_status(AgentStatus.coerce(agent.status), str(agent.session), unread)
+def _shown(agent: AgentView, overlay: Overlay) -> AgentView:
+    # The rule is the feed's own: a stall needs you, a finish the phone has already shown is idle.
+    status = read_status(AgentStatus.coerce(agent.status), str(agent.session), overlay)
     if status.value == str(agent.status):
         return agent
     return _Shown(
@@ -481,17 +481,26 @@ class Planner:
         self._restored = False
         self.slot.reset()
 
-    def step(self, agents: Sequence[AgentView], *, focused_pane: str = "") -> Step:
-        """Decide one tick against the herd as just read."""
+    def step(
+        self,
+        agents: Sequence[AgentView],
+        *,
+        focused_pane: str = "",
+        stalled: frozenset[str] = frozenset(),
+    ) -> Step:
+        """Decide one tick against the herd as just read, and the sessions stalled in it."""
         # Observed every tick, priming included, so a finish has a "before" to be unread against.
         self._observe(agents)
-        prior = self._prior_for(statuses_of(agents))
+        # A stall already standing when watching began is primed as blocked, so it is not news.
+        stalls = Overlay(stalled=stalled)
+        prior = self._prior_for(statuses_of([_shown(one, stalls) for one in agents]))
         if prior is None:
             return Step(primed=True)
         unread = self._unread()
         # A finish read on the phone is idle here too, so the alert it raised is taken down.
-        read = _read_map(agents, unread)
-        agents = [_shown(one, read) for one in agents]
+        # A stall stays blocked through the retries that wake it, so it buzzes once per stop.
+        overlay = Overlay(_read_map(agents, unread), stalled)
+        agents = [_shown(one, overlay) for one in agents]
         current = statuses_of(agents)
         self._restore(prior, agents)
         found = transitions(prior, agents, unread=unread or frozenset())

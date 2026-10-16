@@ -16,6 +16,7 @@ from herdr_pwa.settings import Settings
 from herdr_pwa.web.app import create_app
 from herdr_pwa.web.notifier import HerdSource, LoopConfig, Notifier, PushStores, open_push
 from herdr_pwa.web.seams import Seams
+from herdr_pwa.web.stalls import Stalls
 from tests.test_push import ENDPOINT, subscribed
 from tests.waiting import until_async
 from tests.webfakes import (
@@ -88,7 +89,9 @@ def build_loop(tmp_path: Path, notify: NotifyConfig | None = None) -> Loop:
     chosen = notify or NotifyConfig(debounce=0.0, desk_window=0.0)
     config = LoopConfig(interval=2.0, notify=chosen)
     notifier = Notifier(
-        herd=HerdSource(client, SnapshotCache(ttl=2.0, clock=clock)),
+        herd=HerdSource(
+            client, SnapshotCache(ttl=2.0, clock=clock), Stalls(tmp_path / "transcripts")
+        ),
         stores=stores,
         config=config,
         seams=Seams(wall=clock, deliver=sender),
@@ -250,7 +253,9 @@ def test_the_loop_ticks_until_stopped_and_survives_a_bad_tick(
 def test_push_is_not_armed_without_a_contact_and_says_so(tmp_path: Path) -> None:
     settings = Settings(state_dir=tmp_path / "state", socket_path=tmp_path / "no.sock")
     reader = HerdrClient(settings.engine(), transport=FakeWire())
-    state = open_push(settings, HerdSource(reader, SnapshotCache(ttl=1.0)), Seams())
+    state = open_push(
+        settings, HerdSource(reader, SnapshotCache(ttl=1.0), Stalls(tmp_path)), Seams()
+    )
     assert state is not None
     assert state.notifier is None
     assert "HP_PUSH_SUBJECT" in state.reason

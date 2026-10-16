@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Final
 
-from herdr_pwa.decisions import effective_status
+from herdr_pwa.decisions import NO_OVERLAY, Overlay, effective_status
 from herdr_pwa.engine import (
     AgentStatus,
     CachedSnapshot,
@@ -26,7 +26,7 @@ from herdr_pwa.engine import (
     locate,
 )
 from herdr_pwa.web.deps import WebState
-from herdr_pwa.web.herd import unread_of
+from herdr_pwa.web.herd import overlay_of
 
 log = logging.getLogger(__name__)
 
@@ -45,9 +45,7 @@ def topics_of(asked: Iterable[str]) -> frozenset[str]:
     return frozenset(sorted(found)[:MAX_TOPICS])
 
 
-def herd_marks(
-    snapshot: Snapshot, error: str = "", unread: Mapping[str, bool] | None = None
-) -> Marks:
+def herd_marks(snapshot: Snapshot, error: str = "", overlay: Overlay = NO_OVERLAY) -> Marks:
     """What each region shows of the herd, reduced to a value that changes when it should."""
     marks: Marks = {}
     rows: list[tuple[object, ...]] = []
@@ -58,7 +56,7 @@ def herd_marks(
         row = (
             agent.target,
             agent.title,
-            effective_status(agent, unread).value,
+            effective_status(agent, overlay).value,
             agent.agent,
             agent.workspace,
             agent.state_change_seq,
@@ -271,7 +269,7 @@ class Hub:
             return {"feed": ("unreachable",)}
         snapshot = entry.value
         error = type(entry.error).__name__ if entry.error is not None else ""
-        marks = herd_marks(snapshot, error, unread_of(self._web, snapshot.agents))
+        marks = herd_marks(snapshot, error, overlay_of(self._web, snapshot.agents))
         self._upstream.follow(snapshot, self._poke)
         kinds = {str(a.session): (a.agent, a.status.value) for a in snapshot.agents if a.session}
         marks.update(self._chats(viewed, kinds))
