@@ -71,6 +71,7 @@ class ScreenDecision:
     drew_rows: bool
     asked: bool
     is_choice: bool
+    focus: int | None
 
     @property
     def ticked(self) -> tuple[int, ...]:
@@ -214,6 +215,7 @@ def decide_screen(prompt: BlockedPrompt) -> ScreenDecision:
         drew_rows=prompt.drew_rows,
         asked=prompt.asked,
         is_choice=prompt.is_choice,
+        focus=prompt.focus,
     )
 
 

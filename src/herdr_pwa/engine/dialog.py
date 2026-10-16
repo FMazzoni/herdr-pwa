@@ -1,12 +1,22 @@
 """Reading a blocked agent's screen: the question, its options, its key hints."""
 
 import re
+from collections import Counter
 from enum import StrEnum
 from typing import Final, Self
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
 from herdr_pwa.engine.model import PaneId, SessionId, as_pane_id, as_session_id, screen_digest
+
+_EDGE_RE = re.compile(r"^(\s*)[│┃║▏▍▎▊]")
+"""A box-edge bar at line start, with the indent that owns it.
+
+opencode draws its dialogs with a left border only (SplitBorder in its TUI
+source), so every row opens with the bar; the grammar anchors at line start and
+must see past it. The spaces after the bar stay, so an option's indented
+description keeps its depth.
+"""
 
 OPTION_RE = re.compile(r"^\s*[>\u276f▸▶‣*\-•]?\s*(\d{1,2})\s*[.):]\s+(?P<label>\S.*?)\s*$")
 
@@ -78,8 +88,46 @@ _STEPPER_RE = re.compile(
 _HINT_RE = re.compile(
     r"^\s*(?P<keys>[^\s].{0,29}?)\s+to\s+(?P<verb>[A-Za-z][A-Za-z0-9 /+-]{0,28}?)\s*$"
 )
+"""One ``<keys> to <verb>`` hint, the form most harnesses print."""
 
-_HINT_SPLIT = re.compile(r"\s*[·•|\uff5c]\s*|\s{3,}")
+
+_VERB_HINT_RE = re.compile(
+    r"^\s*(?P<keys>[^\s].{0,29}?)\s+(?P<verb>[A-Za-z][A-Za-z0-9 /+-]{0,28}?)\s*$"
+)
+"""One verb-first hint: ``<keys> <verb>`` with no "to" at all.
+
+The verb-first form is trusted only for the verbs opencode is measured to
+print (its TUI source and the live captures agree), because the same shape is
+what status bars print -- claude's ``← for agents`` is not an offer.
+"""
+
+
+_VERB_FIRST_VERBS: Final = frozenset({"select", "submit", "confirm", "toggle", "dismiss", "tab"})
+"""The verbs a verb-first pair must carry to be believed."""
+
+
+def _hint_match(text: str) -> "re.Match[str] | None":
+    """One hint out of a footer piece, the "to" form taking precedence.
+
+    Trying the plain-space join first mis-splits ``tab or esc to clear notes``
+    into keys="tab" and a verb that swallows the rest; the "to" form is the
+    more specific one and is tried first.
+    """
+    if (m := _HINT_RE.match(text)) is not None:
+        return m
+    if (m := _VERB_HINT_RE.match(text)) is not None and m.group(
+        "verb"
+    ).lower() in _VERB_FIRST_VERBS:
+        return m
+    return None
+
+
+_HINT_SPLIT = re.compile(r"\s*[·•|\uff5c]\s*|\s{2,}")
+"""What a terminal separates footer hints with.
+
+opencode puts two spaces between hint pairs on the same line (measured on its
+permission dialog, where the buttons share that line).
+"""
 
 _TRAILING_PAREN_RE = re.compile(r"(?<=\S)\s*\([^()]*\)\s*$")
 
@@ -91,7 +139,7 @@ def _hint_text(segment: str) -> str:
 
 def _whole_hint(text: str) -> bool:
     """Does *text* parse as ONE hint whose keys are all really keys?"""
-    match = _HINT_RE.match(text)
+    match = _hint_match(text)
     if match is None:
         return False
     pieces = _key_pieces(match.group("keys"))
@@ -104,8 +152,14 @@ _KEY_TOKEN_RE = re.compile(
     r"(?i)^(?:(?:ctrl|shift|alt|opt|option|cmd|meta|super)[+-])*"
     r"(?:f\d{1,2}|enter|return|esc|escape|tab|space|spacebar|backspace|del|delete"
     r"|up|down|left|right|arrows?(?:\s+keys?)?|pgup|pgdn|home|end"
-    r"|[a-z0-9]|[\u2191\u2193\u2190\u2192\u21b5\u23ce])$"
+    r"|[a-z0-9]|[\u2191\u2193\u2190\u2192\u21b5\u23ce]"
+    r"|[\u2191][\u2193]|[\u2193][\u2191]|\u21c6)$"
 )
+"""A token that NAMES a key, including the paired glyphs a footer prints whole.
+
+opencode advertises a horizontal select as ``⇆`` and a vertical one as ``↑↓``,
+one token each (measured on its dialogs).
+"""
 
 _KEY_ALIASES: dict[str, tuple[str, ...]] = {
     "enter": ("enter",),
@@ -125,12 +179,19 @@ _KEY_ALIASES: dict[str, tuple[str, ...]] = {
     "↓": ("down",),
     "←": ("left",),
     "→": ("right",),
+    "↑↓": ("up", "down"),
+    "↓↑": ("up", "down"),
     # "Arrow keys" means the vertical pair; left/right only count where the screen draws them.
     "arrow": ("up", "down"),
     "arrows": ("up", "down"),
     "arrow keys": ("up", "down"),
     "arrow key": ("up", "down"),
 }
+"""The key names this app is willing to send, spelled the way herdr's ``send_keys`` spells them.
+
+``⇆`` is absent on purpose: which keys it names depends on the verb printed
+beside it, and that decision lives in :func:`_keys_in`.
+"""
 
 _CTRL_RE = re.compile(r"^ctrl[+-]([a-z])$")
 
@@ -144,12 +205,45 @@ _NO_PANE: Final = PaneId("")
 _NO_SESSION: Final = SessionId("")
 
 
+_MAX_BUTTONS = 9
+
+_MAX_BUTTON_CHARS = 40
+
+_MIN_BUTTONS = 2
+
+_BUTTON_TOKENS = re.compile(r"\s{2,}")
+"""What separates the tokens of the line a permission dialog draws its buttons on.
+
+Measured on opencode: the labels get three spaces between them (one-space pads
+plus its box gap), the hint pairs two.
+"""
+
+_HEADER_TOKEN = re.compile(r"^[A-Za-z][A-Za-z0-9 '/&+.-]{0,23}$")
+"""One tab-strip header: a short word or two, nothing that looks like a sentence."""
+
+_MIN_STRIP_TOKENS: Final = 2
+_MAX_STRIP_TOKENS: Final = 6
+
+_CONFIRM_TOKENS: Final = frozenset({"confirm", "submit", "done"})
+
+_FOCUS_DISTINCT: Final = 2
+"""A focus exists only when the choices carry exactly two backgrounds."""
+_FOCUS_MODAL: Final = 2
+"""And one of them is carried by at least two choices: the unfocused rest."""
+_FOCUS_ODD: Final = 1
+"""Leaving exactly one choice on the background the others lack."""
+"""The strip's own submit tab, which is an affordance and not a question step."""
+
+
 class MenuShape(StrEnum):
     """What KIND of screen this is -- a claim kept separate from "is it live"."""
 
     NONE = "none"
     SINGLE_CHOICE = "single-choice"
     MULTI_SELECT = "multi-select"
+    BUTTONS = "buttons"
+    """A bordered row of unnumbered choices answered by a moving focus: opencode's
+    permission dialog. The arrows are the address, so no row earns a digit."""
     UNKNOWN = "unknown"
 
 
@@ -185,7 +279,7 @@ def _key_pieces(token: str) -> list[str]:
     return [piece for piece in pieces if piece]
 
 
-def _keys_in(token: str) -> tuple[str, ...]:
+def _keys_in(token: str, verb: str = "") -> tuple[str, ...]:
     """Every key name a hint's key-side names, or ``()`` if none is recognised."""
     found: list[str] = []
     for raw in _KEY_PIECE.split(token.strip().lower()):
@@ -195,6 +289,12 @@ def _keys_in(token: str) -> tuple[str, ...]:
         if (ctrl := _CTRL_RE.match(piece)) is not None:
             found.append(f"ctrl-{ctrl.group(1)}")
             continue
+        if piece == "\u21c6":
+            # The glyph names whatever moves between the things the screen shows: on a
+            # permission dialog it prints "⇆ select" (the arrows), on a question set
+            # "⇆ tab" (the tab key). The verb it printed is the only honest reading.
+            found.extend(("tab",) if verb == "tab" else ("left", "right"))
+            continue
         found.extend(_KEY_ALIASES.get(piece, ()))
     return tuple(dict.fromkeys(found))
 
@@ -202,7 +302,7 @@ def _keys_in(token: str) -> tuple[str, ...]:
 def is_key_hint(line: str) -> bool:
     """True when a line is the terminal advertising a KEY, not prose."""
     for segment in _HINT_SPLIT.split(line):
-        match = _HINT_RE.match(segment.strip(" ()[]"))
+        match = _hint_match(segment.strip(" ()[]"))
         if match is None:
             continue
         pieces = _key_pieces(match.group("keys"))
@@ -212,7 +312,13 @@ def is_key_hint(line: str) -> bool:
 
 
 def _footer_lines(lines: list[str]) -> list[str]:
-    """The key-hint footer at the very END of the viewport, and only there."""
+    """The key-hint footer at the very END of the viewport, and only there.
+
+    Measured on the opencode rig: a blocked pane's read ends inside the dialog,
+    whose footer is the bottom line, so the plain walk reaches it. A shell bar
+    drawn below would be furniture too -- what it advertises is not the
+    dialog's offer, and the corpus is the guard on that line.
+    """
     end = len(lines)
     while end and not lines[end - 1].strip():
         end -= 1
@@ -249,14 +355,21 @@ def _hints(footer: list[str]) -> tuple[KeyHint, ...]:
     return tuple(found[:_MAX_HINTS])
 
 
+_OFFER_REFUSED: Final = frozenset({"fullscreen"})
+"""Verbs the screen may print that this app will not offer: a pane-local
+fullscreen toggle redraws the whole screen from the phone for nothing."""
+
+
 def _line_hints(line: str) -> list[KeyHint]:
     """Every hint one footer line names, duplicates included."""
     found: list[KeyHint] = []
     for segment in _segments(line):
-        if (m := _HINT_RE.match(_hint_text(segment))) is None:
+        if (m := _hint_match(_hint_text(segment))) is None:
             continue
         verb = " ".join(m.group("verb").lower().split())
-        found.extend(KeyHint(key=key, verb=verb) for key in _keys_in(m.group("keys")))
+        if verb in _OFFER_REFUSED:
+            continue
+        found.extend(KeyHint(key=key, verb=verb) for key in _keys_in(m.group("keys"), verb))
     return found
 
 
@@ -340,6 +453,20 @@ def _focused(lines: list[str], run: list[tuple[int, int, str]]) -> bool:
     return any(_MARKER_RE.match(lines[i]) for i, _, _ in run)
 
 
+def _colour_focused(run: list[tuple[int, int, str]], ansi: str) -> bool:
+    """Does the ANSI read put the cursor on one of THESE rows, drawn as colour?."""
+    if not ansi:
+        return False
+    ansi_lines = ansi.splitlines()
+    bgs = [
+        _label_bg(ansi_lines[at], label)
+        if (at := _row_line(ansi_lines, PromptOption(number=n, label=label))) is not None
+        else ""
+        for _, n, label in run
+    ]
+    return _focused_index(bgs) >= 0
+
+
 def _rows_are_the_answer(
     lines: list[str], run: list[tuple[int, int, str]], hints: tuple[KeyHint, ...]
 ) -> bool:
@@ -355,14 +482,19 @@ def _shape(
     lines: list[str],
     run: list[tuple[int, int, str]] | None,
     hints: tuple[KeyHint, ...],
-    *,
-    corroborated: bool,
+    buttons: tuple[str, ...] = (),
 ) -> MenuShape:
     """Classify the screen, in the order that fails safe."""
     if _is_multi_select(lines, run, hints):
         return MenuShape.MULTI_SELECT
+    if buttons:
+        return MenuShape.BUTTONS
     # Single-choice is earned, never defaulted to: failing the test means UNKNOWN.
-    if run is not None and corroborated and _rows_are_the_answer(lines, run, hints):
+    if (
+        run is not None
+        and _corroborated(lines, run, hints)
+        and _rows_are_the_answer(lines, run, hints)
+    ):
         return MenuShape.SINGLE_CHOICE
     if hints:
         return MenuShape.UNKNOWN
@@ -384,6 +516,11 @@ class PromptOption(BaseModel):
         return self.checked is not None
 
 
+def _choices(labels: tuple[str, ...]) -> tuple[PromptOption, ...]:
+    """Buttons as options: their position is their number, and no digit is earned."""
+    return tuple(PromptOption(number=i + 1, label=label) for i, label in enumerate(labels))
+
+
 class BlockedPrompt(BaseModel):
     """The question a blocked agent is waiting on, as far as it can be recovered."""
 
@@ -391,6 +528,8 @@ class BlockedPrompt(BaseModel):
 
     target: PaneId = PaneId("")
     session: SessionId = SessionId("")
+    focus: int | None = None
+    """Which option the terminal's own colour marks as the one in play, or None."""
     question: str = ""
     options: tuple[PromptOption, ...] = ()
     raw: str = ""
@@ -467,35 +606,286 @@ class BlockedPrompt(BaseModel):
         *,
         target: PaneId = _NO_PANE,
         session: SessionId = _NO_SESSION,
+        ansi: str = "",
     ) -> Self:
-        """Split detection output into a question and any numbered options."""
-        lines = text.splitlines()
+        """Split detection output into a question and any numbered options.
+
+        *ansi* is the same pane read with its escapes intact, when the caller
+        has it: some harnesses draw the cursor only as colour, and the
+        no-cursor gate may then be satisfied by the ANSI instead of a glyph.
+        Without it the gate is glyph-only, exactly as it has always been.
+        """
+        barred = [bool(_EDGE_RE.match(line)) for line in text.splitlines()]
+        lines = [_EDGE_RE.sub(r"\1", line) for line in text.splitlines()]
         # A drawn panel is the screen; `text` follows it so `raw` is still what was read.
+        # Its rows lost their sides here, so the border no longer marks any of them.
         if (panel := _panel_screen(lines)) is not None:
             lines, text = panel, "\n".join(panel)
-        # `found` is the run as read; `run` is the run as trusted.
+            barred = [False] * len(lines)
         found = _trailing_menu(lines)
-        run = found
         hints = _hints(_footer_lines(lines))
-        # No cursor, no menu, whatever the footer looks like.
-        if run is not None and not _focused(lines, run):
-            run = None
+        buttons, buttons_at = _buttons(lines, barred, hints)
+        run = _trusted(found, lines, ansi)
+        shape = _shape(lines, run, hints, buttons)
         corroborated = run is not None and _corroborated(lines, run, hints)
-        shape = _shape(lines, run, hints, corroborated=corroborated)
-        return cls(
+        stop = run[0][0] if run is not None else (buttons_at if buttons else len(lines))
+        box = range(_box_start(lines, stop, barred), stop)
+        parsed = cls(
             target=target,
             session=session,
-            question=_question(lines, len(lines) if run is None else run[0][0]),
-            options=_options(run, shape),
-            stepper=_stepper(lines, len(lines) if run is None else run[0][0]),
-            body=_body(lines, len(lines) if run is None else run[0][0]),
+            question=_heading(lines, box) if shape is MenuShape.BUTTONS else _question(lines, stop),
+            options=_choices(buttons) if shape is MenuShape.BUTTONS else _options(run, shape),
+            stepper=_stepper(lines, stop) or _tabs_strip(lines, stop, hints),
+            body=_body(lines, box),
             drew_rows=found is not None,
-            asked=bool(_asks(lines, len(lines) if run is None else run[0][0])),
+            asked=bool(_asks(lines, stop)),
             raw=text,
             shape=shape,
-            corroborated=corroborated,
+            corroborated=corroborated or bool(buttons),
             hints=hints,
         )
+        if ansi and parsed.options:
+            return located(parsed, ansi)
+        return parsed
+
+
+def _trusted(
+    found: list[tuple[int, int, str]] | None, lines: list[str], ansi: str
+) -> list[tuple[int, int, str]] | None:
+    """The run the screen has earned: no cursor glyph or colour cursor, no menu."""
+    # No cursor, no menu, whatever the footer looks like -- unless the cursor
+    # is drawn in colour and the ANSI says a row carries it.
+    if found is not None and not _focused(lines, found) and not _colour_focused(found, ansi):
+        return None
+    return found
+
+
+def _buttons(
+    lines: list[str], barred: list[bool], hints: tuple[KeyHint, ...]
+) -> tuple[tuple[str, ...], int]:
+    """The unnumbered button labels of a bordered choose-one row, and where they sit.
+
+    opencode's permission dialog draws its choices as one line of buttons under
+    the same left border as the rest of the dialog, with the hints it advertises
+    on that same line. Both facts are the earning rule: buttons only where the
+    border is, and only when the screen itself says the arrows select and enter
+    confirms.
+    """
+    if not _advertises(hints):
+        return (), -1
+    for i in range(len(lines) - 1, -1, -1):
+        if not barred[i]:
+            return (), -1
+        if not lines[i].strip():
+            continue
+        labels = _button_labels(lines[i])
+        if labels or not _is_chrome(lines[i]):
+            return labels, i
+    return (), -1
+
+
+def _hint_shaped(text: str) -> bool:
+    """Does *text* have the shape of a hint pair, whatever its verb?
+
+    A permission line mixes buttons and hint pairs; the buttons end where a
+    pair begins, and the pair's verb being one we refuse to offer ("ctrl+f
+    fullscreen") must not turn the pair into a button.
+    """
+    for pattern in (_HINT_RE, _VERB_HINT_RE):
+        if (m := pattern.match(_hint_text(text))) is not None:
+            pieces = _key_pieces(m.group("keys"))
+            return bool(pieces) and all(_KEY_TOKEN_RE.match(p) for p in pieces)
+    return False
+
+
+def _button_token(token: str) -> str | None:
+    """A button label, or ``None`` when the token ends the run or voids the line."""
+    if not token or len(token) > _MAX_BUTTON_CHARS:
+        return None
+    if token[:1].isdigit() or _CHECKBOX_RE.match(token):
+        return None
+    return token
+
+
+def _button_labels(line: str) -> tuple[str, ...]:
+    """The leading run of one line that is not hint pairs, when that run is buttons."""
+    labels: list[str] = []
+    for token in _BUTTON_TOKENS.split(line.strip()):
+        if _hint_shaped(token):
+            break
+        label = _button_token(token)
+        if label is None:
+            return ()
+        labels.append(label)
+    return tuple(labels) if _MIN_BUTTONS <= len(labels) <= _MAX_BUTTONS else ()
+
+
+def _advertises(hints: tuple[KeyHint, ...]) -> bool:
+    """Does the screen say the arrows take a choice and enter confirms it?"""
+    sideways = any(h.key in ("left", "right") for h in hints)
+    enter = any(h.key == "enter" and any(v in h.verb for v in _SELECT_VERBS) for h in hints)
+    return sideways and enter
+
+
+_STRIP_WINDOW: Final = 4
+"""How far above the options a tabs strip may sit and still be its own."""
+
+
+def _strip_tokens(line: str) -> tuple[str, ...]:
+    """A candidate tabs-strip line as its header tokens, or ``()``."""
+    tokens = [t.strip() for t in re.split(r"\s{3,}", line.strip()) if t.strip()]
+    if not _MIN_STRIP_TOKENS <= len(tokens) <= _MAX_STRIP_TOKENS:
+        return ()
+    if not all(_HEADER_TOKEN.match(t) for t in tokens):
+        return ()
+    if tokens[-1].lower() in _CONFIRM_TOKENS:
+        tokens = tokens[:-1]
+    return tuple(tokens)
+
+
+def _tabs_strip(lines: list[str], stop: int, hints: tuple[KeyHint, ...]) -> Stepper | None:
+    """The line of question tabs above the question, as a stepper, or ``None``.
+
+    opencode draws one tab per question plus its own Confirm affordance, only
+    when a set holds more than one question or a choice is multi. The strip
+    prints the headers as words, and the footer says tab moves between them;
+    both together are the earning rule. Which tab is active is colour, read
+    later by :func:`located`.
+    """
+    if not any(h.key == "tab" for h in hints):
+        return None
+    for i in range(stop - 1, max(0, stop - _STRIP_WINDOW) - 1, -1):
+        tokens = _strip_tokens(lines[i])
+        if tokens:
+            return Stepper(steps=tokens, answered=0)
+    return None
+
+
+def _bg_of(codes: list[str], i: int) -> tuple[str, int]:
+    """One SGR code as a background and how many codes it consumed."""
+    if i + 1 < len(codes) and codes[i + 1] == "2" and i + 4 < len(codes):
+        return f"rgb({','.join(codes[i + 2 : i + 5])})", 4
+    if i + 1 < len(codes) and codes[i + 1] == "5" and i + 2 < len(codes):
+        return f"c256({codes[i + 2]})", 2
+    return "", 0
+
+
+def _sgr_bg(codes: list[str], bg: str) -> str:
+    """The background one SGR sequence leaves in force."""
+    i = 0
+    while i < len(codes):
+        code = codes[i]
+        if code in ("", "0", "39", "49"):
+            bg = ""
+        elif code == "48":
+            bg, size = _bg_of(codes, i)
+            i += size
+        i += 1
+    return bg
+
+
+def _chunks(line: str) -> list[tuple[str, str]]:
+    """One ANSI line as ``(background, text)`` chunks, reset splitting them."""
+    found: list[tuple[str, str]] = []
+    bg = ""
+    pos = 0
+    for m in re.finditer(r"\x1b\[([0-9;]*)m", line):
+        chunk = line[pos : m.start()]
+        if chunk:
+            found.append((bg, chunk))
+        bg = _sgr_bg(m.group(1).split(";") if m.group(1) else ["0"], bg)
+        pos = m.end()
+    if line[pos:]:
+        found.append((bg, line[pos:]))
+    return found
+
+
+def _label_bg(line: str, label: str) -> str:
+    """The background the chunk carrying *label* was drawn on, or ``""``."""
+    for bg, text in _chunks(line):
+        if label in text:
+            return bg
+    return ""
+
+
+def _focused_index(bgs: list[str]) -> int:
+    """Which entry is drawn on the background the others lack, or ``-1``.
+
+    The focus is a background the other choices do not carry (measured on
+    opencode: theme.warning on the selected button, theme.backgroundElement on
+    the active row, the panel background on everything else). Which colour that
+    is belongs to the theme, so the rule is relative, never a literal.
+    """
+    counts = Counter(bgs)
+    if len(counts) != _FOCUS_DISTINCT:
+        return -1
+    modal, _ = counts.most_common(1)[0]
+    if counts[modal] < _FOCUS_MODAL:
+        return -1
+    odd = [i for i, bg in enumerate(bgs) if bg != modal]
+    return odd[0] if len(odd) == _FOCUS_ODD else -1
+
+
+def located[P: BlockedPrompt](prompt: P, ansi: str) -> P:
+    """The same prompt with the focused choice read from the pane's own ANSI."""
+    if not ansi or not prompt.options:
+        return prompt
+    lines = ansi.splitlines()
+    if prompt.shape is MenuShape.BUTTONS:
+        return _located_buttons(prompt, lines)
+    prompt = _with(prompt, focus=_focused_index(_row_focus(prompt, lines)))
+    return _with(prompt, stepper=_answered_strip(prompt, lines))
+
+
+def _located_buttons[P: BlockedPrompt](prompt: P, lines: list[str]) -> P:
+    """The focus of a buttons row: all its labels share one line."""
+    at = _line_with_all(lines, [option.label for option in prompt.options])
+    bgs = [""] * len(prompt.options)
+    if at is not None:
+        bgs = [_label_bg(lines[at], option.label) for option in prompt.options]
+    return _with(prompt, focus=_focused_index(bgs))
+
+
+def _row_focus(prompt: BlockedPrompt, lines: list[str]) -> list[str]:
+    """Each row's label background, scanning up from where the dialog sits."""
+    return [
+        _label_bg(lines[at], option.label) if (at := _row_line(lines, option)) is not None else ""
+        for option in prompt.options
+    ]
+
+
+def _line_with_all(lines: list[str], labels: list[str]) -> int | None:
+    """The last line that carries every *label*, which is where buttons live."""
+    for i in range(len(lines) - 1, -1, -1):
+        if all(label in lines[i] for label in labels):
+            return i
+    return None
+
+
+def _row_line(lines: list[str], option: PromptOption) -> int | None:
+    """The last line that both numbers and labels *option*, scanning up from the dialog."""
+    for i in range(len(lines) - 1, -1, -1):
+        if option.label in lines[i] and f"{option.number}." in lines[i]:
+            return i
+    return None
+
+
+def _answered_strip(prompt: BlockedPrompt, lines: list[str]) -> Stepper | None:
+    """The tabs strip with the active tab read off the ANSI, when one was parsed."""
+    strip = prompt.stepper
+    if strip is None or not strip.steps:
+        return strip
+    at = _line_with_all(lines, list(strip.steps))
+    if at is None:
+        return strip
+    active = _focused_index([_label_bg(lines[at], step) for step in strip.steps])
+    # Every tab before the active one is a question already answered.
+    return Stepper(steps=strip.steps, answered=active if active > 0 else 0)
+
+
+def _with[P: BlockedPrompt](prompt: P, **update: object) -> P:
+    """A copy of *prompt* carrying what the ANSI read established."""
+    return prompt.model_copy(update=update)
 
 
 def _options(run: list[tuple[int, int, str]] | None, shape: MenuShape) -> tuple[PromptOption, ...]:
@@ -528,10 +918,17 @@ _PANEL_SIDE_RE = re.compile(r"^(\s*)[│┃║](.*?)[│┃║]?\s*$")
 _PANEL_TAIL = 6
 
 
+_TRAILING_SIDE_RE = re.compile(r"^(.*?)[│┃║]\s*$")
+"""A row whose opening side the edge-strip already removed, closing side left."""
+
+
 def _unboxed(line: str) -> str:
     """One panel row with its sides removed and its own indentation kept."""
     match = _PANEL_SIDE_RE.match(line)
-    return f"{match.group(1)}{match.group(2)}" if match else line
+    if match is not None:
+        return f"{match.group(1)}{match.group(2)}"
+    tail = _TRAILING_SIDE_RE.match(line)
+    return tail.group(1) if tail is not None else line
 
 
 def _panel_footer(lines: list[str]) -> list[str]:
@@ -630,10 +1027,23 @@ def _is_chrome(line: str) -> bool:
 _MARKER_LEAD = re.compile(r"^[\s\u25cf\u25cb\u2022\u00b7]+")
 
 
-def _body(lines: list[str], stop: int) -> str:
+def _box_start(lines: list[str], stop: int, barred: list[bool] | None = None) -> int:
+    """Where the dialog box begins: the bordered block, else the last rule's end.
+
+    opencode draws the whole dialog inside a left border, so the contiguous
+    barred run ending at the options IS the box; a transcript above it is not.
+    """
+    if barred is not None and stop > 0 and barred[stop - 1]:
+        at = stop - 1
+        while at > 0 and barred[at - 1]:
+            at -= 1
+        return at
+    return _dialog_start(lines, stop)
+
+
+def _body(lines: list[str], box: range) -> str:
     """What is being asked ABOUT: the dialog's text above the options."""
-    start = _dialog_start(lines, stop)
-    kept = (_MARKER_LEAD.sub("", line).rstrip() for line in lines[start:stop])
+    kept = (_MARKER_LEAD.sub("", line).rstrip() for line in lines[box.start : box.stop])
     return "\n".join(line for line in kept if line)
 
 
@@ -658,6 +1068,16 @@ def _askable(lines: list[str], start: int, stop: int) -> list[str]:
         for paragraph in _paragraphs(lines, start, stop)
         if not _is_option_block(paragraph)
     ]
+
+
+def _heading(lines: list[str], box: range) -> str:
+    """The bordered box's own first paragraph: what the dialog calls itself.
+
+    The first paragraph is the heading by construction: the options and their
+    descriptions sit below the box, and a permission box never opens with one.
+    """
+    found = _paragraphs(lines, box.start, box.stop)
+    return found[0] if found else ""
 
 
 def _question(lines: list[str], stop: int) -> str:

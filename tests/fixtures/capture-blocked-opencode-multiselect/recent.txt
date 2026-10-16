@@ -1,0 +1,48 @@
+  ┃
+  ┃  (no output)
+  ┃
+
+     Done. fixture1.txt created.
+
+     ▣  Build · GLM-5.3 Flash · 23.7s
+
+  ┃
+  ┃  Use the ask tool to ask me: Which database? with options PostgreSQL, SQLite, DuckDB (single choice)
+  ┃
+
+     + Thought: 208ms
+
+  ┃
+  ┃  # Questions
+  ┃
+  ┃  Which database?
+  ┃  SQLite
+  ┃
+
+     SQLite
+
+     ▣  Build · GLM-5.3 Flash · 1.3s
+
+  ┃
+  ┃  Use the ask tool to ask me ONE question: Which databases do you want? with options PostgreSQL, SQLite, DuckDB and allow multiple selections
+  ┃
+
+     → Asked 1 question
+
+     ▣  Build · GLM-5.3 Flash
+
+  ┃
+  ┃   Databases   Confirm
+  ┃
+  ┃  Which databases do you want? (select all that apply)
+  ┃
+  ┃  1. [✓] PostgreSQL
+  ┃     PostgreSQL database
+  ┃  2. [ ] SQLite
+  ┃     SQLite database
+  ┃  3. [ ] DuckDB
+  ┃     DuckDB database
+  ┃  4. [ ] Type your own answer
+  ┃
+  ┃  ⇆ tab  ↑↓ select  enter toggle  esc dismiss
+  ┃

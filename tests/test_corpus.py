@@ -5,7 +5,14 @@ from pathlib import Path
 
 import pytest
 
-from herdr_pwa.engine import Agent, AgentStatus, BlockedPrompt, MenuShape, as_pane_id, as_session_id
+from herdr_pwa.engine import (
+    Agent,
+    AgentStatus,
+    BlockedPrompt,
+    MenuShape,
+    as_pane_id,
+    as_session_id,
+)
 from herdr_pwa.jsontypes import JsonObject, as_object, loads
 from tests.engine_seam import OPTION_RE
 
@@ -23,15 +30,29 @@ PROTOCOL = 19
 MANIFEST_OVERRIDES: dict[str, str] = {
     "capture-blocked-multiselect-checklist": "2026.08.21.1",
     "capture-blocked-plan-approval": "2026.08.21.1",
+    # opencode defers screen detection to its own lifecycle hook, so herdr records
+    # no manifest version for its panes; the explain output says "manifest: none unknown".
+    "capture-blocked-opencode-permission": "unknown",
+    "capture-blocked-opencode-question": "unknown",
+    "capture-blocked-opencode-multiselect": "unknown",
+    "capture-blocked-opencode-questions-tabs": "unknown",
 }
 
 # The same, for herdr version and protocol: recording 0.8.0/19 here would name a machine that never read the pane.
 HERDR_OVERRIDES: dict[str, str] = {
     "capture-blocked-plan-approval": "0.8.2",
+    "capture-blocked-opencode-permission": "0.9.0",
+    "capture-blocked-opencode-question": "0.9.0",
+    "capture-blocked-opencode-multiselect": "0.9.0",
+    "capture-blocked-opencode-questions-tabs": "0.9.0",
 }
 
 PROTOCOL_OVERRIDES: dict[str, int] = {
     "capture-blocked-plan-approval": 20,
+    "capture-blocked-opencode-permission": 22,
+    "capture-blocked-opencode-question": 22,
+    "capture-blocked-opencode-multiselect": 22,
+    "capture-blocked-opencode-questions-tabs": 22,
 }
 
 
@@ -41,6 +62,11 @@ def capture_dirs() -> list[Path]:
 
 def read(name: str, source: str) -> str:
     return (FIXTURES / name / f"{source}.txt").read_text(encoding="utf-8")
+
+
+def read_ansi(name: str) -> str:
+    """The capture's colour half; the four text sources share one ANSI read."""
+    return (FIXTURES / name / "visible.ansi").read_text(encoding="utf-8")
 
 
 def _obj(value: object) -> JsonObject:
@@ -369,6 +395,10 @@ EXPECTED_STATUS: dict[str, AgentStatus] = {
     "capture-blocked-permission-write": AgentStatus.BLOCKED,
     "capture-blocked-plan-approval": AgentStatus.BLOCKED,
     "capture-blocked-trust-folder": AgentStatus.BLOCKED,
+    "capture-blocked-opencode-permission": AgentStatus.BLOCKED,
+    "capture-blocked-opencode-question": AgentStatus.BLOCKED,
+    "capture-blocked-opencode-multiselect": AgentStatus.BLOCKED,
+    "capture-blocked-opencode-questions-tabs": AgentStatus.BLOCKED,
     "capture-idle-claude-prompt": AgentStatus.IDLE,
     "capture-idle-numbered-recap": AgentStatus.IDLE,
     "capture-working-claude": AgentStatus.WORKING,
@@ -401,11 +431,18 @@ def test_capture_status_agrees_with_the_rule_that_matched(name: str) -> None:
     explain = _obj(loads((FIXTURES / name / "explain.json").read_text(encoding="utf-8")))
     assert AgentStatus.coerce(meta(name)["agent_status"]) is expected
     assert AgentStatus.coerce(explain["state"]) is expected
-    assert AgentStatus.coerce(_obj(explain["matched_rule"])["state"]) is expected
     assert AgentStatus.coerce(agent_get(name)["agent_status"]) is expected
     text = (FIXTURES / name / "explain.txt").read_text(encoding="utf-8")
     assert f"state: {expected.value}" in text
-    assert f"rule: {_obj(explain['matched_rule'])['id']} " in text
+    if name in OPENCODE_CAPTURES:
+        # opencode defers detection to its own lifecycle hook: no rule matched, and
+        # herdr records the deferral instead of pretending to have read the screen.
+        assert explain["matched_rule"] is None
+        assert explain["screen_detection_skipped"] is True
+        assert "rule: none" in text
+    else:
+        assert AgentStatus.coerce(_obj(explain["matched_rule"])["state"]) is expected
+        assert f"rule: {_obj(explain['matched_rule'])['id']} " in text
 
 
 def test_the_corpus_spans_enough_statuses_to_kill_a_constant_classifier() -> None:
@@ -545,3 +582,107 @@ def test_context_is_verbatim_screen_text_and_never_the_question(name: str) -> No
 def test_context_is_short_enough_for_a_card(name: str) -> None:
     """The measurement behind card.html's six-line cap."""
     assert len(BlockedPrompt.parse(read(name, "detection")).context) <= 6
+
+
+# The opencode dialog captures. Their focus is drawn only as colour, so the
+# answer path reads the pane twice: stripped text for the grammar, ANSI for the
+# cursor. Text alone parses to what the ledger pipeline sees -- a refused run is
+# an honest degraded state, not a defect -- and the same text WITH the ANSI
+# parses to what the phone drives.
+
+OPENCODE_CAPTURES = (
+    "capture-blocked-opencode-permission",
+    "capture-blocked-opencode-question",
+    "capture-blocked-opencode-multiselect",
+    "capture-blocked-opencode-questions-tabs",
+)
+
+
+@pytest.mark.parametrize("name", OPENCODE_CAPTURES)
+def test_opencode_capture_carries_its_ansi_read(name: str) -> None:
+    """The colour half of the answer path is part of the capture, or it is not evidence."""
+    ansi = FIXTURES / name / "visible.ansi"
+    assert ansi.is_file()
+    assert ansi.read_text().strip()
+    # The four sources are asserted byte-identical above, so one ANSI read serves them.
+    assert "\x1b[48;2;" in ansi.read_text(), f"{name}: its ANSI read carries no background runs"
+
+
+@pytest.mark.parametrize("source", SOURCES)
+@pytest.mark.parametrize("name", OPENCODE_CAPTURES)
+def test_opencode_text_parse_is_honest_without_colour(name: str, source: str) -> None:
+    """Without the ANSI read, opencode's dialogs degrade instead of guessing."""
+    prompt = BlockedPrompt.parse(read(name, source))
+    if name == "capture-blocked-opencode-multiselect":
+        # The tick boxes are printable, so the checklist is claimed even colourless;
+        # the cursor is not, so no row becomes a tap target.
+        assert prompt.shape is MenuShape.MULTI_SELECT
+        assert prompt.options == ()
+    elif name == "capture-blocked-opencode-permission":
+        # The buttons are earned from the border and the screen's own hints; only
+        # WHICH one is in play needs the colour read.
+        assert prompt.shape is MenuShape.BUTTONS
+        assert [o.label for o in prompt.options] == ["Allow once", "Allow always", "Reject"]
+        assert prompt.focus is None
+
+
+PERMISSION = ("permission", ((1, "Allow once"), (2, "Allow always"), (3, "Reject")))
+
+
+@pytest.mark.parametrize("source", SOURCES)
+def test_opencode_permission_dialog_is_buttons_with_a_colour_focus(source: str) -> None:
+    """The permission dialog: unnumbered buttons, arrows the offer, focus in colour."""
+    name = "capture-blocked-opencode-permission"
+    prompt = BlockedPrompt.parse(read(name, source), ansi=read_ansi(name))
+    assert prompt.shape is MenuShape.BUTTONS
+    assert [(o.number, o.label) for o in prompt.options] == list(PERMISSION[1])
+    # The arrows are the address: no row earns a digit, and the hint verbs are the screen's own.
+    assert prompt.focus == 0
+    assert [h.key for h in prompt.hints] == ["left", "right", "enter"]
+    assert [h.verb for h in prompt.hints] == ["select", "select", "confirm"]
+
+
+@pytest.mark.parametrize("source", SOURCES)
+def test_opencode_question_dialog_is_numbered_rows_answerable_by_digit(source: str) -> None:
+    """opencode binds digits 1..9 to move-and-select; the rows earn their digits."""
+    name = "capture-blocked-opencode-question"
+    prompt = BlockedPrompt.parse(read(name, source), ansi=read_ansi(name))
+    assert prompt.shape is MenuShape.SINGLE_CHOICE
+    assert prompt.question == "Which database?"
+    assert [(o.number, o.label) for o in prompt.options] == [
+        (1, "PostgreSQL"),
+        (2, "SQLite"),
+        (3, "DuckDB"),
+        (4, "Type your own answer"),
+    ]
+    assert prompt.focus == 0
+    assert [h.verb for h in prompt.hints] == ["select", "select", "submit", "dismiss"]
+
+
+def test_opencode_multiselect_rows_carry_their_ticks() -> None:
+    """The checklist parses with the tick state the screen drew, cursor colour-only."""
+    name = "capture-blocked-opencode-multiselect"
+    prompt = BlockedPrompt.parse(read(name, "visible"), ansi=read_ansi(name))
+    assert prompt.shape is MenuShape.MULTI_SELECT
+    assert prompt.question == "Which databases do you want? (select all that apply)"
+    # Row 1 was toggled on the rig before the capture, and the screen says so.
+    assert [(o.number, o.checked) for o in prompt.options] == [
+        (1, True),
+        (2, False),
+        (3, False),
+        (4, False),
+    ]
+    assert prompt.focus == 0
+    # A multi-question set names its tabs; one question plus Confirm is one step.
+    assert prompt.stepper is not None
+    assert prompt.stepper.steps == ("Databases",)
+
+
+def test_opencode_tabs_strip_says_the_question_is_one_of_several() -> None:
+    """The tabs strip lifts to the stepper: a row tap answers a step, not the set."""
+    name = "capture-blocked-opencode-questions-tabs"
+    prompt = BlockedPrompt.parse(read(name, "visible"), ansi=read_ansi(name))
+    assert prompt.stepper is not None
+    assert prompt.stepper.steps == ("Vibe", "Budget")
+    assert prompt.stepper.answered == 0
+    assert prompt.stepper.total == 2

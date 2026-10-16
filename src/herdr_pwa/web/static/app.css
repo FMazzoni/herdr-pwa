@@ -640,6 +640,10 @@ textarea { resize: vertical; min-height: 4.5em; }
 /* An option: the numeral in a fixed column, the label beside it, cut after a few lines. */
 .options { display: grid; gap: var(--space-3); }
 .options form { margin: 0; }
+/* The choices of a permission dialog, laid out as the screen lays them out. */
+.options--buttons { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+.choice { padding: var(--space-3) var(--space-4); border: var(--line-1) solid var(--rule); border-radius: var(--radius-2); color: var(--ink-2); }
+.choice--on { border-color: var(--accent); color: var(--ink); }
 .option { display: grid; grid-template-columns: var(--option-n) minmax(0, 1fr); align-items: center; gap: var(--space-2) var(--space-5); width: 100%; margin: 0; text-align: left; line-height: 1.35; }
 .option--boxed { grid-template-columns: var(--check) minmax(0, 1fr); }
 .button.option { padding: var(--space-4) var(--space-5); }
@@ -649,6 +653,9 @@ textarea { resize: vertical; min-height: 4.5em; }
 /* A row with no digit is text, not a control: no fill, no frame, its numeral hollow. */
 .option--still { padding: var(--space-2) var(--space-5); color: var(--ink-2); }
 .option--still .option__n { background: transparent; border-style: dashed; color: var(--ink-3); }
+/* The row the terminal's own colour has the cursor on. */
+.option--on { box-shadow: inset calc(3 * var(--line-1)) 0 0 var(--accent); }
+.option--on .option__n { border-color: var(--accent); color: var(--ink); }
 .option__box { display: grid; place-content: center; width: var(--check); height: var(--check); border: var(--line-1) solid var(--ink-3); border-radius: var(--radius-1); }
 .option__box--on { background: var(--accent); border-color: var(--accent); }
 .option__box--on::after { content: ""; width: var(--tick-w); height: var(--tick-h); margin-top: calc(var(--tick-w) * -0.5); border: solid var(--ground); border-width: 0 var(--line-2) var(--line-2) 0; transform: rotate(45deg); }

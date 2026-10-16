@@ -42,7 +42,51 @@ FOREIGN_CORPUS = REPO / "tests" / "foreign_corpus.json"
 FOREIGN_PREFIX = "foreign/"
 
 # Every deliberate divergence from the ledger, by entry id, with the reason it is better.
-DIVERGENCES: dict[str, str] = {}
+DIVERGENCES: dict[str, str] = {
+    "foreign/relay/qodercli-single-question.ansi": (
+        "qoder prints its footer verb-first ('Enter select'), a convention opencode "
+        "shares and the verb-first grammar now reads; the Enter select pair is a real "
+        "offer this screen always advertised, and the phone can now send it."
+    ),
+    "foreign/relay/qodercli-single-question-with-text.ansi": (
+        "Same verb-first footer ('Enter select'); the offer lifts and the screen with "
+        "hints but no numbered run now reads unknown, which is honest: something is "
+        "asked here that we deliberately do not drive."
+    ),
+    "foreign/relay/qodercli-first-question-multi-question.ansi": (
+        "Same verb-first footer; the Enter select pair lifts onto a multi-question "
+        "wizard whose rows stay unclaimed, so nothing tappable appears prematurely."
+    ),
+    "foreign/relay/qodercli-multi-questions-and-notes.ansi": (
+        "Same verb-first footer; the Enter select pair lifts, and unknown is the "
+        "honest shape for a notes screen we do not model."
+    ),
+    "foreign/relay/qodercli-second-question-single.ansi": (
+        "Same verb-first footer; the Enter select pair lifts. The screen counts two "
+        "questions, and no row claims to end one."
+    ),
+    "foreign/relay/qodercli-submit-answers.ansi": (
+        "Same verb-first footer ('Enter select'); the offer lifts onto a submit "
+        "screen with no rows, so unknown names it rather than none."
+    ),
+    "foreign/relay/omp-plan-approval.ansi": (
+        "omp prints '↑↓ select · ⏎ confirm' verb-first inside a box; the paired-glyph "
+        "token and the verb-first grammar now read the movement and confirm offers, "
+        "and the footer line no longer breaks the numbered run beneath it."
+    ),
+    "foreign/collie/omp--select-multi.txt": (
+        "omp draws its checklist inside a box; the edge-strip unboxes the rows, so "
+        "the checkbox evidence is finally seen and the shape reads multi-select, with "
+        "no tappable rows until a cursor the text can see exists."
+    ),
+    "foreign/collie/omp--select-multi-checked.txt": (
+        "Same boxed checklist; unboxed, its tick evidence reads as multi-select."
+    ),
+    "foreign/collie/omp--select-multi-review.txt": (
+        "Same boxed checklist; unboxed, the shape reads multi-select and the footer's "
+        "verb-first toggle pair lifts."
+    ),
+}
 
 # CSI, OSC and two-byte escapes, exactly as the ledger's decoder stripped them.
 _ANSI = re.compile(r"\x1b(?:\[[0-9;?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[@-Z\\-_])")

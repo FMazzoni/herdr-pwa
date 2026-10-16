@@ -1,0 +1,14 @@
+{
+  "name": "blocked-opencode-permission",
+  "target": "w3:p1",
+  "captured_at": "2026-10-15T23:22:12-04:00",
+  "captured_by": "an agent, in an opencode pane it created for the purpose",
+  "herdr_version": "0.9.0",
+  "protocol": 22,
+  "detection_manifest": {
+    "id": "opencode",
+    "version": "unknown"
+  },
+  "agent_status": "blocked",
+  "note": "opencode 1.18.30 bash permission dialog: Allow once / Allow always / Reject buttons; manufactured by prompting 'Use bash to run: touch fixture1.txt' with project opencode.json permission.bash=ask; keys left/right/enter/esc only (digits and tab dead)"
+}

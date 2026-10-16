@@ -22,7 +22,7 @@ from herdr_pwa.engine.client import (
     StartedAgent,
 )
 from herdr_pwa.engine.config import EngineSettings
-from herdr_pwa.engine.dialog import BlockedPrompt, KeyHint, MenuShape
+from herdr_pwa.engine.dialog import BlockedPrompt, KeyHint, MenuShape, located
 from herdr_pwa.engine.model import (
     Agent,
     AgentStatus,
@@ -109,6 +109,7 @@ __all__ = [
     "as_session_id",
     "chat_window",
     "locate",
+    "located",
     "rank",
     "screen_digest",
 ]

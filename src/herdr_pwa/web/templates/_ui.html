@@ -43,10 +43,11 @@
       <span class="option__sending" aria-hidden="true">Sending&hellip;</span>
 {%- endmacro %}
 
-{# One numbered option. With a digit it is a 44px tap row; without one it is a line of text. #}
-{% macro option(base, target, row, screen=none, tappable=true) -%}
-{% if tappable %}{% call key_form(base, target, row.digit, row.label, screen=screen, kind="option", extra="option" ~ (" option--boxed" if row.checked is not none else "")) %}{{ option_body(row) }}{% endcall %}
-{%- else %}<p class="option option--still{% if row.checked is not none %} option--boxed{% endif %}">{{ option_body(row) }}</p>{% endif %}
+{# One numbered option. With a digit it is a 44px tap row; without one it is a line of text.
+   `on` marks the row the terminal's own colour has the cursor on. #}
+{% macro option(base, target, row, screen=none, tappable=true, on=false) -%}
+{% if tappable %}{% call key_form(base, target, row.digit, row.label, screen=screen, kind="option", extra="option" ~ (" option--boxed" if row.checked is not none else "") ~ (" option--on" if on else "")) %}{{ option_body(row) }}{% endcall %}
+{%- else %}<p class="option option--still{% if row.checked is not none %} option--boxed{% endif %}{% if on %} option--on{% endif %}">{{ option_body(row) }}</p>{% endif %}
 {%- endmacro %}
 
 {# A card in a list. `href` makes the whole card the link, with a chevron on its first line; `inner` is the tag otherwise.

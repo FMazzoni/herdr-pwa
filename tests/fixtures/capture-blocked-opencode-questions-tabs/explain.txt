@@ -1,0 +1,5 @@
+agent: opencode
+state: blocked
+manifest: none unknown
+rule: none
+screen_detection_skip_reason: full_lifecycle_hook_authority

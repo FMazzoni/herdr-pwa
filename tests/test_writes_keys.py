@@ -7,7 +7,13 @@ import pytest
 from herdr_pwa.engine import BlockedPrompt, EngineUnavailable
 from herdr_pwa.jsontypes import JsonObject
 from herdr_pwa.writes.answer import KeyAsk, KeySent, send_key, send_starting_key
-from herdr_pwa.writes.keys import allowed_keys, answer_digits, control_token, key_ends_question
+from herdr_pwa.writes.keys import (
+    allowed_keys,
+    answer_digits,
+    control_token,
+    key_ends_question,
+    pad_keys,
+)
 from herdr_pwa.writes.outcome import (
     ANSWER_INTERVAL,
     MOVE_INTERVAL,
@@ -325,3 +331,33 @@ def test_an_unreadable_frame_still_settles_at_once_on_accepted() -> None:
     # Kept on one read: accepted claims nothing and draws no controls, so a wrong one costs nothing.
     seen, _ = _watch(UNREADABLE, ASKED)
     assert (seen.outcome, seen.evidence, seen.polls) == (Outcome.ACCEPTED, Evidence.UNREAD, 1)
+
+
+# The opencode permission dialog: buttons answered sideways, offered from what
+# the screen itself prints.
+
+OC_PERMISSION = capture("capture-blocked-opencode-permission")
+
+
+def test_the_buttons_pad_offers_the_arrows_the_screen_uses() -> None:
+    prompt = BlockedPrompt.parse(
+        OC_PERMISSION, ansi=capture_ansi("capture-blocked-opencode-permission")
+    )
+    assert prompt.shape.value == "buttons"
+    assert pad_keys(prompt) == ("esc", "left", "right", "enter")
+    # The rows are addressed by the focus, so no digit is ever offered.
+    assert answer_digits(prompt) == ()
+    assert allowed_keys(prompt) == frozenset({"esc", "left", "right", "enter", "ctrl-c"})
+
+
+def test_up_and_down_do_not_count_as_answers_on_a_buttons_screen() -> None:
+    prompt = BlockedPrompt.parse(OC_PERMISSION)
+    assert key_ends_question(prompt, "enter") is True
+    assert key_ends_question(prompt, "esc") is True
+    assert key_ends_question(prompt, "left") is False
+    assert key_ends_question(prompt, "right") is False
+    assert key_ends_question(prompt, "up") is False
+
+
+def capture_ansi(name: str) -> str:
+    return (Path("tests/fixtures") / name / "visible.ansi").read_text(encoding="utf-8")

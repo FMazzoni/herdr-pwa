@@ -37,7 +37,7 @@ from herdr_pwa.web.writing import (
 )
 from herdr_pwa.writes.answer import KeyAsk, KeySent, send_key, send_starting_key
 from herdr_pwa.writes.guard import asks_a_question
-from herdr_pwa.writes.keys import PAD_KEYS, allowed_keys, answer_digits, control_token
+from herdr_pwa.writes.keys import PAD_KEYS, allowed_keys, answer_digits, control_token, pad_keys
 from herdr_pwa.writes.lifecycle import EndAsk, end_agent
 from herdr_pwa.writes.outcome import Evidence, Outcome
 from herdr_pwa.writes.prompt import PromptAsk, PromptSent, send_first_prompt, send_prompt
@@ -91,7 +91,7 @@ def answer_context(agent: Agent, prompt: BlockedPrompt | None) -> dict[str, obje
         "digits": answer_digits(prompt),
         "fingerprint": control_token(prompt) if prompt is not None else "",
         "hints": hints,
-        "pad": [k for k in PAD_KEYS if k not in hinted],
+        "pad": [k for k in pad_keys(prompt) if k not in hinted],
         "interrupt": INTERRUPT_KEY,
         "cadence": ANSWER_CADENCE,
         "status": shown_status(agent),

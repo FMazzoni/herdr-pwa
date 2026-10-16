@@ -8,8 +8,20 @@ from herdr_pwa.panetext import printed_whole
 # The generic pad, with no digits: digits are earned per screen.
 PAD_KEYS: Final = ("esc", "up", "down", "enter")
 
+# The pad of a screen answered sideways: up and down do nothing there.
+BUTTON_PAD_KEYS: Final = ("esc", "left", "right", "enter")
+
 # A synthesised digit past 9 is two keystrokes, and the second one is a guess.
 MAX_TAPPABLE_OPTION: Final = 9
+
+
+def pad_keys(prompt: BlockedPrompt | None) -> tuple[str, ...]:
+    """The generic pad this screen earns: the arrows only where the screen uses them."""
+    if prompt is not None and prompt.shape is MenuShape.BUTTONS:
+        # opencode's permission dialog moves its focus with left/right only
+        # (its TUI binds no up/down there); offering them would send dead keys.
+        return BUTTON_PAD_KEYS
+    return PAD_KEYS
 
 
 def answer_digits(prompt: BlockedPrompt | None) -> tuple[str, ...]:
@@ -31,7 +43,7 @@ def answer_digits(prompt: BlockedPrompt | None) -> tuple[str, ...]:
 def allowed_keys(prompt: BlockedPrompt | None) -> frozenset[str]:
     """Every key this app will send at the screen just read, and no others."""
     hinted = {hint.key for hint in prompt.hints} if prompt is not None else set[str]()
-    return frozenset({*PAD_KEYS, INTERRUPT_KEY, *hinted, *answer_digits(prompt)}) - {""}
+    return frozenset({*pad_keys(prompt), INTERRUPT_KEY, *hinted, *answer_digits(prompt)}) - {""}
 
 
 def key_ends_question(prompt: BlockedPrompt | None, key: str) -> bool:
@@ -40,6 +52,9 @@ def key_ends_question(prompt: BlockedPrompt | None, key: str) -> bool:
         return True
     if prompt is None or not key:
         return False
+    if prompt.shape is MenuShape.BUTTONS:
+        # Enter confirms the focused choice; Esc is the reject the screen binds.
+        return key in ("enter", "esc")
     # A stepper keeps the dialog up for its next step, so a row does not end it.
     if prompt.stepper is not None or prompt.shape is not MenuShape.SINGLE_CHOICE:
         return False

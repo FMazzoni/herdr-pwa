@@ -1,0 +1,48 @@
+     → Asked 1 question
+
+  ┃
+  ┃  Use the ask tool to ask me TWO questions in one go: first 'Which vibe?' with options Rustic, Modern; second 'Which budget?' with options Low, High. Single choice
+  ┃  each.
+  ┃
+
+     + Thought: 451ms
+
+     → Asked 2 questions
+
+  ┃
+  ┃  Use bash to run: touch fixture1.txt
+  ┃
+
+  ┃
+  ┃  $ touch fixture1.txt
+  ┃
+  ┃  (no output)
+  ┃
+
+     Done. fixture1.txt created.
+
+     ▣  Build · GLM-5.3 Flash · 23.7s
+
+  ┃
+  ┃  Use the ask tool to ask me: Which database? with options PostgreSQL, SQLite, DuckDB (single choice)
+  ┃
+
+     + Thought: 208ms
+
+     → Asked 1 question
+
+     ▣  Build · GLM-5.3 Flash
+
+  ┃
+  ┃  Which database?
+  ┃
+  ┃  1. PostgreSQL
+  ┃     PostgreSQL database
+  ┃  2. SQLite
+  ┃     SQLite database
+  ┃  3. DuckDB
+  ┃     DuckDB database
+  ┃  4. Type your own answer
+  ┃
+  ┃  ↑↓ select  enter submit  esc dismiss
+  ┃

@@ -11,7 +11,7 @@ from pydantic import BaseModel, ValidationError
 
 from herdr_pwa import panetext
 from herdr_pwa.engine.config import EngineSettings
-from herdr_pwa.engine.dialog import BlockedPrompt
+from herdr_pwa.engine.dialog import BlockedPrompt, MenuShape
 from herdr_pwa.engine.generated import request as wire_request
 from herdr_pwa.engine.generated import success_response as wire
 from herdr_pwa.engine.model import (
@@ -457,7 +457,28 @@ class HerdrClient:
             source=wire_request.ReadSource.detection,
             timeout=timeout,
         )
-        return BlockedPrompt.parse(text, target=target, session=session)
+        prompt = BlockedPrompt.parse(text, target=target, session=session)
+        # Colour-only cursors: a refused run the screen's own hints still vouch
+        # for, or a buttons row whose focus only the ANSI shows, is worth the
+        # one extra read that can see them.
+        if not (
+            prompt.shape is MenuShape.BUTTONS
+            or (prompt.drew_rows and prompt.hints and not prompt.options)
+        ):
+            return prompt
+        try:
+            ansi = self.read(
+                target,
+                lines=lines,
+                # The detection buffer answers colour reads stripped (measured on
+                # the rig); the visible viewport is the one that keeps the SGR.
+                source=wire_request.ReadSource.visible,
+                colour=True,
+                timeout=timeout,
+            )
+        except EngineError:
+            return prompt
+        return BlockedPrompt.parse(text, target=target, session=session, ansi=ansi)
 
     # ----------------------------------------------------------------------
     # Writes -- every one of these fails closed on an unexpected protocol
