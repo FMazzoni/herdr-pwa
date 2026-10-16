@@ -14,7 +14,13 @@ from herdr_pwa.engine import (
     screen_digest,
 )
 from herdr_pwa.writes.refusal import Refusal, Refused, failed_result, refusal_for
-from herdr_pwa.writes.resolve import Writer, attempt, workspace_now
+from herdr_pwa.writes.resolve import (
+    Writer,
+    attempt,
+    one_at_a_time,
+    workspace_key,
+    workspace_now,
+)
 
 MAX_WORKSPACE_LABEL: Final = 40
 
@@ -97,6 +103,11 @@ def _after(client: HerdrClient, workspace_id: str) -> tuple[bool, Workspace | No
 
 def create_workspace(client: HerdrClient, label: str) -> WorkspaceDone | Refused:
     """Make an empty workspace; nothing is started in it, so nothing asks twice."""
+    # No workspace exists to key on yet, so one create at a time: a double tap makes one, not two.
+    return one_at_a_time("workspace-create", "created", lambda: _create(client, label))
+
+
+def _create(client: HerdrClient, label: str) -> WorkspaceDone | Refused:
     label = label.strip()
     if _bad_label(label, required=False):
         return Refused(Refusal.BAD_LABEL, "created")
@@ -110,6 +121,12 @@ def create_workspace(client: HerdrClient, label: str) -> WorkspaceDone | Refused
 
 def rename_workspace(client: HerdrClient, workspace_id: str, label: str) -> WorkspaceDone | Refused:
     """Relabel a workspace that exists now; reversible, so it asks nothing twice."""
+    return one_at_a_time(
+        workspace_key(workspace_id), "renamed", lambda: _rename(client, workspace_id, label)
+    )
+
+
+def _rename(client: HerdrClient, workspace_id: str, label: str) -> WorkspaceDone | Refused:
     found = workspace_now(client, workspace_id, verb="renamed")
     if isinstance(found, Refused):
         return found
@@ -152,6 +169,10 @@ class WorkspaceCloseAsk:
 
 def close_workspace(writer: Writer, ask: WorkspaceCloseAsk) -> WorkspaceDone | Refused:
     """End every agent in a workspace, counted now, after the confirms its cost earns."""
+    return one_at_a_time(workspace_key(ask.workspace_id), "closed", lambda: _close(writer, ask))
+
+
+def _close(writer: Writer, ask: WorkspaceCloseAsk) -> WorkspaceDone | Refused:
     found = workspace_now(writer.client, ask.workspace_id, verb="closed")
     if isinstance(found, Refused):
         return found

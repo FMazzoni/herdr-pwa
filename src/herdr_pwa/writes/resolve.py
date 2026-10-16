@@ -92,7 +92,7 @@ def attempt(audit: AuditTrail, write: Write, *, verb: str) -> Entry | Refused:
 
 @dataclass
 class InFlight:
-    """Which agents have a write between its first read and its last look, in this process."""
+    """Which agents, panes and workspaces have a write in flight, in this process."""
 
     _guard: threading.Lock = field(default_factory=threading.Lock)
     _held: set[str] = field(default_factory=set[str])
@@ -115,8 +115,13 @@ class InFlight:
 IN_FLIGHT: Final = InFlight()
 
 
+def workspace_key(workspace_id: str) -> str:
+    """The lock key of a workspace: its rename, its close, and every start into it take this one."""
+    return f"workspace:{workspace_id.strip()}"
+
+
 def one_at_a_time[T](key: str, verb: str, write: Callable[[], T]) -> T | Refused:
-    """Run ``write`` unless another write to the same agent is still in flight; then refuse."""
+    """Run ``write`` unless another write to the same ``key`` is still in flight; then refuse."""
     # Refused rather than queued: the second tap was made against what the first one changes, so
     # its sender has to look again either way, and a queue would pin a pool thread for the watch.
     with IN_FLIGHT.hold(key) as mine:
