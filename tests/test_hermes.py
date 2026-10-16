@@ -14,7 +14,7 @@ from tests.engine_seam import (
     HermesAdapter,
     Window,
     adapter_for,
-    fold_tool_results,
+    fold_turns,
     readonly_uri,
 )
 
@@ -132,7 +132,7 @@ def test_a_tool_call_carries_its_name_and_its_identifying_argument(
 
 def test_a_result_is_folded_onto_the_call_it_answers(roots: list[Path]) -> None:
     """``tool_call_id`` is the only thing pairing them; they are separate rows."""
-    folded = fold_tool_results(turns(roots))
+    folded = fold_turns(turns(roots))
     call_turn = next(t for t in folded if t.call == "call_a")
     assert call_turn.result == '{"output": "total 0"}'
     assert not any(t.tool == "result" and t.call == "call_a" for t in folded)

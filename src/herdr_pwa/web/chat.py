@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from typing import Final
 
-from herdr_pwa.engine import HistoryState, Speaker, TranscriptPage, TranscriptTurn
+from herdr_pwa.engine import HistoryState, Speaker, TranscriptPage, TranscriptTurn, is_api_error
 from herdr_pwa.web.markdown import MdNode, render_tree
 from herdr_pwa.web.stats import duration
 
@@ -41,6 +41,9 @@ class ChatTurn:
     # A peer message's sender, and whether it is a subagent's hand-back report.
     sender: str = ""
     report: bool = False
+    # The harness's line that the API refused a turn, and how many identical refusals it stands for.
+    api_error: bool = False
+    times: int = 1
 
 
 @dataclass(frozen=True, slots=True)
@@ -147,6 +150,8 @@ def _turn(turn: TranscriptTurn) -> ChatTurn:
         report=turn.report,
         outcome=turn.outcome,
         output=turn.output,
+        api_error=is_api_error(turn),
+        times=turn.times,
     )
 
 

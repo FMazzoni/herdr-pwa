@@ -232,5 +232,5 @@ def chat_window(source: Source, *, ask: Ask, tails: TailCache) -> TranscriptPage
         # A frontier is a promise about one file; in another it would splice two threads.
         ask = Ask(messages=ask.messages, max_turns=ask.max_turns)
     page = tails.window(path, ask)
-    turns = transcript.fold_tool_results(page.turns)
+    turns = transcript.fold_turns(page.turns)
     return page.model_copy(update={"turns": turns, "reset": moved, "moved": moved})
