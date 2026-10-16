@@ -12,6 +12,7 @@ from pydantic import JsonValue
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from tests.catalogue import AGENT, PERMISSION, WORKING, State, build, capture, herd
+from tests.waiting import eventually
 from tests.webfakes import (
     AGENT_GET,
     READ,
@@ -31,6 +32,9 @@ WAIT_SECONDS = 15.0
 # How long the runner sits on the key: several of app.js's 250ms idle waits, so a redraw held
 # back under the thumb comes due while the key is still out.
 SLOW_SECONDS = 2.0
+# How long the outcome must stay once drawn: past app.js's 250ms idle wait, when a redraw held
+# back under the thumb comes due.
+STAYS_SECONDS = 1.0
 OPTION = "#answer .button--option"
 
 # Every change to the body's sending class, and every read that finished, stamped on one clock.
@@ -54,6 +58,8 @@ const e = new Event(arguments[0], { bubbles: true });
 Object.defineProperty(e, "touches", { value: arguments[0] === "touchstart" ? [{}] : [] });
 document.dispatchEvent(e);
 """
+# The thumb lifts and taps in one task, so a redraw held back under it is still owed.
+LIFT_AND_TAP = TOUCH + "document.querySelector(arguments[1]).click(); return performance.now();"
 STALE = "htmx.trigger(document.querySelector(arguments[0]), 'hp:stale');"
 READS = "return window.__hp.reads;"
 # A control a second tap could land on: any button in the region that is live right now.
@@ -127,7 +133,6 @@ def _hold_back_a_redraw(driver: Marionette) -> list[str]:
     driver.script(STALE, "#answer")
     if not _until(driver, f"return window.__hp.reads > {reads};"):
         return ["send hold: the answer region never answered its stream event"]
-    driver.script(TOUCH, "touchend")
     return []
 
 
@@ -159,9 +164,7 @@ def walk(driver: Marionette, base: str, writes: Writes, release: threading.Event
     problems = _hold_back_a_redraw(driver)
     if problems:
         return problems
-    found = driver.script(
-        "document.querySelector(arguments[0]).click(); return performance.now();", OPTION
-    )
+    found = driver.script(LIFT_AND_TAP, "touchend", OPTION)
     clicked = float(found) if isinstance(found, int | float) else 0.0
     # A stream event for another region lands while the key is out.
     driver.script(STALE, "#agent-view")
@@ -170,6 +173,8 @@ def walk(driver: Marionette, base: str, writes: Writes, release: threading.Event
     release.set()
     if not _until(driver, OUTCOME):
         problems.append("send hold: the key's outcome never showed")
+    elif eventually(lambda: not driver.script(OUTCOME), seconds=STAYS_SECONDS):
+        problems.append("send hold: the key's outcome showed, then a held-back redraw took it away")
     if writes.posts != 1:
         problems.append(f"send hold: one tap sent {writes.posts} key posts")
     if offered:
