@@ -11,14 +11,21 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from markupsafe import Markup
 
 from herdr_pwa import panetext
-from herdr_pwa.decisions import still_talking
-from herdr_pwa.engine import Agent, Ask, EngineError, Source, chat_window
-from herdr_pwa.web.chat import ChatView, chat_view
+from herdr_pwa.engine import (
+    Agent,
+    AgentStatus,
+    Ask,
+    EngineError,
+    SessionUsage,
+    Source,
+    chat_window,
+)
+from herdr_pwa.web.chat import ChatView, Turning, chat_view
 from herdr_pwa.web.deps import WebState, hidden_tick, viewer_guard
-from herdr_pwa.web.herd import agent_status, find_agent
+from herdr_pwa.web.herd import agent_status, asked_by, find_agent
 from herdr_pwa.web.naming import page_title
 from herdr_pwa.web.routers.compose import answer_region, composer_region
-from herdr_pwa.web.stats import Reading, Stats, stats_for
+from herdr_pwa.web.stats import Reading, Stats, stats_for, turn_times
 from herdr_pwa.web.writing import first_note
 from herdr_pwa.writes.resolve import doubt
 
@@ -28,11 +35,16 @@ TABS: Final = ("chat", "pane")
 KEEP_DRAWN: Final = {"HX-Retarget": "#chat-note", "HX-Reswap": "outerHTML"}
 
 
-def read_stats(web: WebState, agent: Agent) -> Stats:
-    """The stats strip for *agent*, from its harness's own record."""
-    usage = web.usage.read(
+def _usage(web: WebState, agent: Agent) -> SessionUsage:
+    """*agent*'s tally, which the strip and the chat's status bubble both read."""
+    return web.usage.read(
         Source.of(agent.session, agent_kind=agent.agent, root=web.settings.transcript_roots or None)
     )
+
+
+def read_stats(web: WebState, agent: Agent) -> Stats:
+    """The stats strip for *agent*, from its harness's own record."""
+    usage = _usage(web, agent)
     status = agent_status(web, agent).value
     return stats_for(Reading(agent.agent or "", status, usage, now=web.wall()))
 
@@ -52,12 +64,21 @@ def read_chat(
     )
     page = chat_window(source, ask=ask, tails=web.tails)
     said = doubt(agent, web.settings.transcript_roots)
-    # Every page reaches the newest turn, an earlier one included, so each says what is on its way.
-    talking = still_talking(agent_status(web, agent))
     drawn = start is not None or before is not None
-    # herdr bumps the sequence on every status change, so it names one working stretch.
-    working = f"{agent.session}:{agent.state_change_seq}" if talking else ""
-    return chat_view(page, working=working, doubt=said, drawn=drawn)
+    # Every page reaches the newest turn, an earlier one included, so each says what is on its way.
+    return chat_view(page, turning=_turning(web, agent), doubt=said, drawn=drawn)
+
+
+def _turning(web: WebState, agent: Agent) -> Turning:
+    """The turn as the agent's status, its card and its tally tell it, beside the log."""
+    status = agent_status(web, agent)
+    return Turning(
+        status=status,
+        # herdr bumps the sequence on every status change, so it names one working stretch.
+        stretch=f"{agent.session}:{agent.state_change_seq}",
+        asked=asked_by(web, agent) if status is AgentStatus.BLOCKED else "",
+        times=turn_times(_usage(web, agent), web.wall()),
+    )
 
 
 def read_pane(web: WebState, agent: Agent) -> panetext.PaneView:

@@ -28,6 +28,15 @@ def duration(seconds: float) -> str:
     return f"{whole // _DAY}d {whole % _DAY // _HOUR}h"
 
 
+def elapsed(seconds: float) -> str:
+    """A span to the second under an hour (42s, 4m 12s, 2m); past that, as duration words it."""
+    whole = _whole(seconds)
+    if whole < _MINUTE or whole >= _HOUR:
+        return duration(whole)
+    minutes, rest = divmod(whole, _MINUTE)
+    return f"{minutes}m {rest}s" if rest else f"{minutes}m"
+
+
 def brief(seconds: float) -> str:
     """A span at a glance, in its largest whole unit: 40s, 4m, 1h, 2d."""
     whole = _whole(seconds)

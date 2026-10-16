@@ -26,6 +26,10 @@ from herdr_pwa.panetext import printed_whole
 UPDATING: Final = "updating"
 IDLE_CADENCE: Final = 12
 WORKING_CADENCE: Final = 5
+# Seconds a working turn's log may stay still before the Chat says "No activity". Past a long
+# thought or a slow test run, both of which write nothing until they end, and short enough that a
+# glance within two minutes learns the agent may be stuck.
+QUIET_AFTER: Final = 90
 # Past this many seconds the herd is offline rather than merely late.
 DISCONNECTED_AFTER: Final = 60
 # A two-digit option needs two keystrokes, and the first one already answers row 1.
@@ -316,6 +320,11 @@ def still_talking(status: AgentStatus) -> bool:
     return status is AgentStatus.WORKING
 
 
+def gone_quiet(quiet: float | None) -> bool:
+    """Whether a working turn's log has been still long enough to say so instead of working."""
+    return quiet is not None and quiet >= QUIET_AFTER
+
+
 def cadence_for(agents: Iterable[Agent]) -> int:
     """Seconds between feed polls: faster while anything is working."""
     working = any(agent.status is AgentStatus.WORKING for agent in agents)
@@ -344,7 +353,8 @@ def freshness(age: float | None, cadence: int, error: str | None) -> Freshness:
     )
 
 
-def _row(agent: Agent, overlay: Overlay, prompt: BlockedPrompt | None) -> AgentRow:
+def agent_row(agent: Agent, overlay: Overlay, prompt: BlockedPrompt | None) -> AgentRow:
+    """One agent's feed row, as its card reads it."""
     status = effective_status(agent, overlay)
     return AgentRow(
         session=agent.session,
@@ -399,7 +409,7 @@ def decide_herd(
     herd = tuple(agents)
     rows = tuple(
         sorted(
-            (_row(agent, overlay, prompts.get(agent.session)) for agent in herd),
+            (agent_row(agent, overlay, prompts.get(agent.session)) for agent in herd),
             key=lambda row: row.feed_key,
         )
     )

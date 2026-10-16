@@ -1,10 +1,11 @@
 {# The notes under the log, a slot of their own: a refresh that cannot read the log redraws only
-   this, so the turns the reader has stay drawn and in place. The agent producing a turn the store
-   has not received yet is said in one small working line, instead of looking complete; that is
-   purely the agent's status, so it cannot flicker between polls, and its first verb is fixed per turn. #}
+   this, so the turns the reader has stay drawn and in place. While the turn is the agent's, a status
+   bubble under the newest turn says what it is doing, how long for, and when it needs you; once
+   the turn is over it folds into one quiet line of how long it worked. #}
 <div id="chat-note" class="chat__notes">
   {%- if chat.held %}<p class="chat__note">The transcript could not be read just now; what is shown is from the last read.</p>{% endif %}
-  {#- One small line under the last turn. VoiceOver hears "Working"; the verb is decoration, which
-      app.js animates from the verbs listed here and the stretch they belong to. #}
-  {%- if chat.catching_up %}<p class="chat__working" data-hp-working="{{ chat.turn }}" data-hp-verbs="{{ chat.verbs|join(' ') }}"><span class="sr-only">Working</span><span class="working" aria-hidden="true"><span class="working__verb">{{ chat.verbs[0] }}&hellip;</span></span></p>{% endif -%}
+  {#- VoiceOver reads the description; app.js says data-hp-said aloud only when the state changes,
+      and animates and ticks the hidden words and timer. #}
+  {%- if chat.bubble %}{% set b = chat.bubble %}<div class="bubble bubble--{{ b.state }}" data-hp-bubble="{{ b.state }}" data-hp-said="{{ b.said }}" data-hp-stretch="{{ b.stretch }}"{% if b.ran is not none %} data-hp-ran="{{ b.ran }}"{% endif %}{% if b.quiet is not none %} data-hp-quiet="{{ b.quiet }}"{% endif %} data-hp-quiet-after="{{ b.quiet_after }}" data-working-palette="{{ b.palette }}" data-working-motion="{{ b.motion }}"><span class="sr-only">{{ b.describe }}</span><span class="bubble__text" aria-hidden="true">{{ b.text }}</span>{% if b.time %}<span class="bubble__time" aria-hidden="true">{{ b.time }}</span>{% endif %}</div>
+  {%- elif chat.receipt %}<p class="chat__receipt" data-hp-bubble="done" data-hp-said="{{ chat.receipt.said }}"><span aria-hidden="true">{{ chat.receipt.text }}</span><span class="sr-only">{{ chat.receipt.said }}</span></p>{% endif -%}
 </div>

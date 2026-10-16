@@ -126,18 +126,17 @@
   /* How far the strip's 44px tap box reaches under its drawn ~28px line; a negative margin of
      the same takes it back out of the layout, so the line stays quiet and the tap stays 44px. */
   --strip-reach: 16px;
-  /* The working line: how high the wave lifts a glyph, how long it takes to cross the verb, how
-     long each verb holds and how much of that it spends turning out of the last. app.js reads
-     the three times; it draws nothing if they are not times. */
-  --working-rise: 0.12em;
-  --working-sweep: 2.4s;
-  --working-hold: 6s;
-  --working-morph: 0.9s;
-  /* The crest's colours, trailing edge to leading: the working green running into the terminal's
-     cyan and blue. Palette tokens, so they follow the theme; at rest every glyph is --ink-3. */
+  /* The status bubble's crest, which a palette preset below sets: three stops, trailing edge to
+     leading, and its peak, how far at the crest a letter turns from the resting ink toward them.
+     How high it lifts a letter is the motion preset's, which app.js sets. */
   --working-glow-1: var(--working);
   --working-glow-2: var(--ansi-cyan);
   --working-glow-3: var(--ansi-blue);
+  --working-peak: 100%;
+  --working-rise: 0em;
+  /* A bubble that needs you: the blocked coral laid low over the surface, and its words lifted. */
+  --needs-ground: color-mix(in oklab, var(--blocked) 18%, var(--surface));
+  --needs-ink: color-mix(in oklab, var(--blocked) 45%, var(--ink));
   /* The strip's facts keep to one line of their own text; a fact that would start a second
      line is not drawn, and the sheet under the tap still names it. */
   --stats-facts-max: 1lh;
@@ -166,6 +165,37 @@
   /* A diff's added and removed rows, tinted from --working and --blocked on --pane-ground. */
   --diff-add: #10261F;
   --diff-del: #2B1714;
+}
+
+/* The status bubble's palettes, every one in this one place, picked by the bubble's
+   data-working-palette (web/chat.py's WORKING_PALETTE names the default). To add one, copy a
+   block, give it a new name, and set its three stops and its peak from the palette tokens above;
+   then name it in WORKING_PALETTE to wear it. */
+[data-working-palette="softer-ember"] {
+  /* Amber into a muted coral, both drawn toward the resting ink, and a lower peak. */
+  --working-glow-1: color-mix(in oklab, var(--ansi-yellow) 75%, var(--ink-3));
+  --working-glow-2: color-mix(in oklab, var(--ansi-red) 65%, var(--ink-3));
+  --working-glow-3: color-mix(in oklab, var(--blocked) 55%, var(--ink-3));
+  --working-peak: 70%;
+}
+[data-working-palette="ember"] {
+  --working-glow-1: var(--ansi-yellow);
+  --working-glow-2: var(--ansi-red);
+  --working-glow-3: var(--blocked);
+  --working-peak: 100%;
+}
+[data-working-palette="current"] {
+  /* The first working line's crest: the working green into the terminal's cyan and blue. */
+  --working-glow-1: var(--working);
+  --working-glow-2: var(--ansi-cyan);
+  --working-glow-3: var(--ansi-blue);
+  --working-peak: 100%;
+}
+[data-working-palette="green"] {
+  --working-glow-1: var(--ansi-green);
+  --working-glow-2: var(--ansi-green);
+  --working-glow-3: var(--ansi-green);
+  --working-peak: 100%;
 }
 
 * { box-sizing: border-box; }
@@ -221,25 +251,28 @@ html { -webkit-tap-highlight-color: transparent; }
 .chat__notes { display: contents; }
 /* A note about the log itself rather than a turn in it: quiet, and centred apart from the turns. */
 .chat__note { color: var(--ink-3); font-size: var(--text-meta); text-align: center; padding: var(--space-6) var(--space-4); }
-/* The working line is a timestamp-sized line tucked under the last turn, flush with its text: the
-   grid's gap is taken back down to a hairline, so it costs one small line and no blank space. */
-.chat__working { margin: calc(var(--space-2) - var(--space-5)) 0 0; padding: 0 var(--space-6); color: var(--ink-3); font-size: var(--text-small); white-space: nowrap; }
-/* app.js lays the glyphs over the drawn verb, which then only keeps the line's place. */
-.working { position: relative; display: inline-block; }
-.working.is-moving > .working__verb { visibility: hidden; }
-.working__glyphs { position: absolute; inset: 0; }
-/* Each glyph at the place the canvas measured for it, lifted as the crest passes and coloured from
-   the crest's gradient where it stands in it, fading back to the resting ink at either edge. */
-.working__glyph {
-  position: absolute;
-  top: 0;
-  left: 0;
-  opacity: var(--glyph-alpha, 1);
+/* The status bubble sits where the agent's next message will land, shaped like one and at its
+   size, as wide as its words; past the screen's width the words ellipsize, never the timer. */
+.bubble { justify-self: start; display: flex; align-items: baseline; gap: var(--space-5); min-width: 0; max-width: 100%; padding: var(--space-5) var(--space-6); border-radius: var(--radius-3); background: var(--surface); font-size: var(--text-body); color: var(--ink-2); white-space: nowrap; }
+.bubble__text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.bubble__time { flex: none; color: var(--ink-3); font-size: var(--text-small); font-variant-numeric: tabular-nums; }
+/* Gone quiet: the sweep stops and the words grey. */
+.bubble--quiet { color: var(--ink-3); }
+.bubble--blocked { background: var(--needs-ground); color: var(--needs-ink); }
+/* Each letter app.js lays out takes the crest's colour where it stands in it, up to the palette's
+   peak, and rests in the bubble's ink either side of it. */
+.bubble__glyph {
   --glyph-glow: color-mix(in oklab, var(--working-glow-2) calc(var(--glyph-near, 0) * 100%), var(--working-glow-1));
   --glyph-hue: color-mix(in oklab, var(--working-glow-3) calc(var(--glyph-far, 0) * 100%), var(--glyph-glow));
-  color: color-mix(in oklab, var(--glyph-hue) calc(var(--glyph-wave, 0) * 100%), var(--ink-3));
-  transform: translate(var(--glyph-x, 0), calc(var(--glyph-wave, 0) * var(--working-rise) * -1));
+  color: color-mix(in oklab, var(--glyph-hue) calc(var(--glyph-wave, 0) * var(--working-peak)), var(--ink-2));
 }
+/* A motion that lifts the letters needs each one a box of its own to move. */
+.bubble.is-lifting .bubble__glyph { display: inline-block; white-space: pre; transform: translateY(calc(var(--glyph-wave, 0) * var(--working-rise) * -1)); }
+/* The finished turn's receipt: one quiet line under the answer, flush with its text. */
+.chat__receipt { margin: 0; padding: 0 var(--space-6); color: var(--ink-3); font-size: var(--text-meta); font-variant-numeric: tabular-nums; }
+/* Drawn as the bubble it replaces goes: it settles into place rather than appearing. */
+.chat__receipt.is-folding { animation: receipt-fold 240ms ease-out; }
+@keyframes receipt-fold { from { opacity: 0; transform: translateY(-0.5em); } }
 
 /* Freshness: everything but live dims the claim the cards make. */
 .feed.is-stale .cards { opacity: 0.55; }

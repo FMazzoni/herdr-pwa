@@ -21,7 +21,7 @@ from herdr_pwa.engine import (
 )
 from herdr_pwa.files.roots import root_id
 from herdr_pwa.protocol import WRITE_METHODS
-from herdr_pwa.web.chat import WORKING_VERBS, chat_view, working_verbs
+from herdr_pwa.web.chat import WORKING_VERBS, Turning, chat_view
 from herdr_pwa.web.security import CSP
 from tests.filefakes import make_repo, stand_in
 from tests.webfakes import (
@@ -400,20 +400,21 @@ def test_the_view_switch_lives_in_the_top_bar_and_the_title_scrolls(tmp_path: Pa
     assert "<h1" not in bar
 
 
-# The Chat tab's catching-up note: the agent's status alone decides it, so it
-# cannot flicker between polls, and a locked store never reads as "nothing said".
+# The Chat tab's status bubble: the agent's status decides whether there is one, so it cannot
+# flicker between polls, and a locked store never reads as "nothing said".
 
-NOTE = '<span class="sr-only">Working</span>'
+NOTE = '<div class="bubble bubble--'
 
 
-def test_the_chat_says_it_is_catching_up_while_the_agent_works(tmp_path: Path) -> None:
+def test_the_chat_says_it_is_working_while_the_agent_works(tmp_path: Path) -> None:
     rig = build_rig(tmp_path)
     body = rig.http.get(f"/agent/{WORKING_SESSION}/chat").text
     assert NOTE in body
+    assert 'data-hp-said="Working"' in body
 
 
 def _verb_in(body: str) -> str:
-    found = re.search(r'<span class="working__verb">(\w+)&hellip;</span>', body)
+    found = re.search(r'<span class="bubble__text" aria-hidden="true">(\w+)\u2026</span>', body)
     assert found is not None, body
     return found.group(1)
 
@@ -427,42 +428,17 @@ def _working_at(tmp_path: Path, seq: int, revision: int = 1) -> str:
     return rig.http.get(f"/agent/{WORKING_SESSION}/chat", headers=FRAGMENT).text
 
 
-def test_the_working_line_says_working_and_hides_its_verb(tmp_path: Path) -> None:
-    """VoiceOver hears one stable word; the verb, and every glyph app.js draws, it skips."""
-    body = _working_at(tmp_path, 7)
-    assert _verb_in(body) in WORKING_VERBS
-    assert '<span class="working" aria-hidden="true">' in body
-    assert "It is talking" not in body
-
-
-def test_the_working_line_lists_every_verb_from_the_turns_own(tmp_path: Path) -> None:
-    """app.js moves through the verbs from the one drawn, so a redraw resumes the same order."""
-    body = _working_at(tmp_path, 7)
-    found = re.search(r'data-hp-working="([^"]+)" data-hp-verbs="([^"]+)"', body)
-    assert found is not None, body
-    verbs = found.group(2).split(" ")
-    assert verbs[0] == _verb_in(body)
-    assert sorted(verbs) == sorted(WORKING_VERBS)
-    assert tuple(verbs) == working_verbs(found.group(1))
-
-
 def test_the_working_verb_holds_for_a_turn_and_changes_with_the_next(tmp_path: Path) -> None:
     """Every poll of one working stretch redraws the same verb; a new stretch may pick another."""
     first = _verb_in(_working_at(tmp_path / "a", 7))
+    assert first in WORKING_VERBS
     # A poll redraws on every new screen (revision); the stretch, and so the verb, is the same.
     assert _verb_in(_working_at(tmp_path / "b", 7, revision=40)) == first
     verbs = {_verb_in(_working_at(tmp_path / f"s{seq}", seq)) for seq in range(8, 20)}
     assert len(verbs) > 1
 
 
-def test_the_working_verb_is_a_function_of_the_turn_alone() -> None:
-    """crc32 of the turn's name, so it survives a restart, unlike Python's salted str hash."""
-    assert working_verbs("s:1")[0] == "Gathering"
-    assert {working_verbs(f"s:{n}")[0] for n in range(200)} == set(WORKING_VERBS)
-    assert working_verbs("s:1")[1] == WORKING_VERBS[WORKING_VERBS.index("Gathering") + 1]
-
-
-def test_the_catching_up_note_is_gone_when_the_agent_stops(tmp_path: Path) -> None:
+def test_the_bubble_is_gone_when_the_agent_stops(tmp_path: Path) -> None:
     frame = snapshot_frame()
     for agent in agents_of(frame):
         agent["agent_status"] = "done"
@@ -522,8 +498,8 @@ def test_an_unreadable_log_on_opening_says_so_in_the_whole_view(tmp_path: Path) 
     assert "could not be read" in response.text
 
 
-def test_the_catching_up_note_stays_on_an_earlier_page(tmp_path: Path) -> None:
-    """An earlier page is drawn down to the newest turn, so Load earlier must not drop the note."""
+def test_the_bubble_stays_on_an_earlier_page(tmp_path: Path) -> None:
+    """An earlier page is drawn down to the newest turn, so Load earlier must not drop it."""
     _talking(tmp_path)
     rig = build_rig(tmp_path, chat_messages=2)
     newest = rig.http.get(f"/agent/{WORKING_SESSION}/chat", headers=FRAGMENT).text
@@ -533,16 +509,16 @@ def test_the_catching_up_note_stays_on_an_earlier_page(tmp_path: Path) -> None:
     assert NOTE in earlier.text
 
 
-def test_the_catching_up_note_is_a_function_of_the_status_alone() -> None:
-    """No clock, no age, no pane read: the same page renders the same note for a status."""
+def test_whether_there_is_a_bubble_is_a_function_of_the_status_alone() -> None:
+    """No pane read decides it: the same page draws a bubble for a working or blocked agent."""
     page = TranscriptPage(
         turns=[TranscriptTurn(uuid="t1", speaker=Speaker.human, text="hi", ts="")],
         state=HistoryState.ok,
     )
     for status in AgentStatus:
-        view = chat_view(page, working="s:1" if status is AgentStatus.WORKING else "")
-        assert view.catching_up is (status is AgentStatus.WORKING), status
-        assert bool(view.verbs) is view.catching_up, status
+        view = chat_view(page, turning=Turning(status=status, stretch="s:1"))
+        shown = status in (AgentStatus.WORKING, AgentStatus.BLOCKED)
+        assert (view.bubble is not None) is shown, status
 
 
 # ---- A GET never writes anything that matters ---------------------------------------------
