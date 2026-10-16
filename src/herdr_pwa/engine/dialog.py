@@ -2,12 +2,14 @@
 
 import re
 from collections import Counter
+from dataclasses import dataclass
 from enum import StrEnum
 from typing import Final, Self
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
 from herdr_pwa.engine.model import PaneId, SessionId, as_pane_id, as_session_id, screen_digest
+from herdr_pwa.panetext import plain
 
 _EDGE_RE = re.compile(r"^(\s*)[│┃║▏▍▎▊]")
 """A box-edge bar at line start, with the indent that owns it.
@@ -453,18 +455,9 @@ def _focused(lines: list[str], run: list[tuple[int, int, str]]) -> bool:
     return any(_MARKER_RE.match(lines[i]) for i, _, _ in run)
 
 
-def _colour_focused(run: list[tuple[int, int, str]], ansi: str) -> bool:
-    """Does the ANSI read put the cursor on one of THESE rows, drawn as colour?."""
-    if not ansi:
-        return False
-    ansi_lines = ansi.splitlines()
-    bgs = [
-        _label_bg(ansi_lines[at], label)
-        if (at := _row_line(ansi_lines, PromptOption(number=n, label=label))) is not None
-        else ""
-        for _, n, label in run
-    ]
-    return _focused_index(bgs) >= 0
+def _colour_focused(run: list[tuple[int, int, str]], colour: tuple[str, ...]) -> bool:
+    """Does the dialog's own colour put the cursor on one of THESE rows?."""
+    return _focused_index([_label_bg(colour[i], label) for i, _, label in run]) >= 0
 
 
 def _rows_are_the_answer(
@@ -567,6 +560,17 @@ class BlockedPrompt(BaseModel):
         return bool(self.options)
 
     @property
+    def wants_colour(self) -> bool:
+        """True when a colour read of the same screen could change this parse.
+
+        A refused run the screen's own hints still vouch for may have a cursor
+        drawn only as colour, and a buttons row shows its focus only that way.
+        """
+        return self.shape is MenuShape.BUTTONS or (
+            self.drew_rows and bool(self.hints) and not self.options
+        )
+
+    @property
     def answerable(self) -> bool:
         """True when there is anything to answer with beyond the generic keypad."""
         return bool(self.hints)
@@ -610,14 +614,16 @@ class BlockedPrompt(BaseModel):
     ) -> Self:
         """Split detection output into a question and any numbered options.
 
-        *ansi* is the same pane read with escapes intact, when the caller has
-        it: the no-cursor gate may then be satisfied by colour, not a glyph.
+        *ansi* is the read *text* was stripped from, when the caller has it:
+        the no-cursor gate may then be satisfied by colour on the dialog's own
+        lines. Colour from any other read is ignored.
         """
-        lines, barred, text = _prepared(text)
+        screen = _prepared(text, ansi)
+        lines, barred = screen.lines, screen.barred
         found = _trailing_menu(lines)
         hints = _hints(_footer_lines(lines))
         buttons, buttons_at = _buttons(lines, barred, hints)
-        run = _trusted(found, lines, ansi)
+        run = _trusted(found, screen)
         shape = _shape(lines, run, hints, buttons)
         corroborated = run is not None and _corroborated(lines, run, hints)
         stop = run[0][0] if run is not None else (buttons_at if buttons else len(lines))
@@ -631,36 +637,91 @@ class BlockedPrompt(BaseModel):
             body=_body(lines, box),
             drew_rows=found is not None,
             asked=bool(_asks(lines, stop)),
-            raw=text,
+            raw=screen.text,
             shape=shape,
             corroborated=corroborated or bool(buttons),
             hints=hints,
         )
-        if ansi and parsed.options:
-            return located(parsed, ansi)
-        return parsed
+        return _located(parsed, screen.colour, _option_lines(parsed, run, buttons_at))
 
 
-def _prepared(text: str) -> tuple[list[str], list[bool], str]:
+def _option_lines(
+    prompt: BlockedPrompt, run: list[tuple[int, int, str]] | None, buttons_at: int
+) -> tuple[int, ...]:
+    """The line each of *prompt*'s options was parsed from."""
+    if prompt.shape is MenuShape.BUTTONS:
+        return (buttons_at,) * len(prompt.options)
+    return tuple(i for i, _, _ in run or ())
+
+
+@dataclass(frozen=True, slots=True)
+class _Screen:
+    """One read as the grammar sees it, with its colour where colour may count."""
+
+    lines: list[str]
+    barred: list[bool]
+    text: str
+    colour: tuple[str, ...]
+    """Per line, the ANSI the same read drew it with -- on the dialog's own lines only."""
+
+
+def _prepared(text: str, ansi: str = "") -> _Screen:
     """The screen as the grammar reads it: bars stripped, and where they were.
 
     A drawn panel is the screen; its rows lost their sides here, so the border
-    no longer marks any of them.
+    no longer marks any of them, and no colour is carried into it.
     """
     barred = [bool(_EDGE_RE.match(line)) for line in text.splitlines()]
     lines = [_EDGE_RE.sub(r"\1", line) for line in text.splitlines()]
     if (panel := _panel_screen(lines)) is not None:
-        return panel, [False] * len(panel), "\n".join(panel)
-    return lines, barred, text
+        return _Screen(panel, [False] * len(panel), "\n".join(panel), ("",) * len(panel))
+    return _Screen(lines, barred, text, _dialog_colour(text, ansi, barred))
+
+
+def _dialog_colour(text: str, ansi: str, barred: list[bool]) -> tuple[str, ...]:
+    """The ANSI of each line of the bordered dialog at the bottom, ``""`` elsewhere.
+
+    Colour is evidence only when it is the same read as the text (every line
+    strips to the line the grammar parsed) and only inside the dialog: an
+    inline code span in the transcript is drawn on the same background a
+    focused row is.
+    """
+    lines = text.splitlines()
+    nothing = ("",) * len(lines)
+    drawn = ansi.splitlines()
+    stripped = plain(ansi).splitlines()
+    if not ansi or len(stripped) < len(lines):
+        return nothing
+    if any(a.rstrip() != b.rstrip() for a, b in zip(lines, stripped, strict=False)):
+        return nothing
+    if any(line.strip() for line in stripped[len(lines) :]):
+        return nothing
+    start = _dialog_block(lines, barred)
+    return tuple(drawn[i] if i >= start else "" for i in range(len(lines)))
+
+
+def _dialog_block(lines: list[str], barred: list[bool]) -> int:
+    """Where the bordered block ending the screen starts, or ``len(lines)`` if none does."""
+    end = len(lines)
+    while end and not lines[end - 1].strip():
+        end -= 1
+    start = end
+    while start and barred[start - 1]:
+        start -= 1
+    return start if start < end else len(lines)
 
 
 def _trusted(
-    found: list[tuple[int, int, str]] | None, lines: list[str], ansi: str
+    found: list[tuple[int, int, str]] | None, screen: _Screen
 ) -> list[tuple[int, int, str]] | None:
     """The run the screen has earned: no cursor glyph or colour cursor, no menu."""
     # No cursor, no menu, whatever the footer looks like -- unless the cursor
-    # is drawn in colour and the ANSI says a row carries it.
-    if found is not None and not _focused(lines, found) and not _colour_focused(found, ansi):
+    # is drawn in colour on the dialog's own rows, in the read the text came from.
+    if (
+        found is not None
+        and not _focused(screen.lines, found)
+        and not _colour_focused(found, screen.colour)
+    ):
         return None
     return found
 
@@ -755,7 +816,7 @@ def _tabs_strip(lines: list[str], stop: int, hints: tuple[KeyHint, ...]) -> Step
     when a set holds more than one question or a choice is multi. The strip
     prints the headers as words, and the footer says tab moves between them;
     both together are the earning rule. Which tab is active is colour, read
-    later by :func:`located`.
+    later off the dialog's own lines.
     """
     if not any(h.key == "tab" for h in hints):
         return None
@@ -831,52 +892,30 @@ def _focused_index(bgs: list[str]) -> int:
     return odd[0] if len(odd) == _FOCUS_ODD else -1
 
 
-def located[P: BlockedPrompt](prompt: P, ansi: str) -> P:
-    """The same prompt with the focused choice read from the pane's own ANSI."""
-    if not ansi or not prompt.options:
+def _located[P: BlockedPrompt](prompt: P, colour: tuple[str, ...], rows: tuple[int, ...]) -> P:
+    """The same prompt with the focused choice read off the line each choice was parsed from."""
+    if not prompt.options:
         return prompt
-    lines = ansi.splitlines()
-    if prompt.shape is MenuShape.BUTTONS:
-        return _located_buttons(prompt, lines)
-    prompt = _with(prompt, focus=_focused_index(_row_focus(prompt, lines)))
-    return _with(prompt, stepper=_answered_strip(prompt, lines))
-
-
-def _located_buttons[P: BlockedPrompt](prompt: P, lines: list[str]) -> P:
-    """The focus of a buttons row: all its labels share one line."""
-    at = _line_with_all(lines, [option.label for option in prompt.options])
-    bgs = [""] * len(prompt.options)
-    if at is not None:
-        bgs = [_label_bg(lines[at], option.label) for option in prompt.options]
-    return _with(prompt, focus=_focused_index(bgs))
-
-
-def _row_focus(prompt: BlockedPrompt, lines: list[str]) -> list[str]:
-    """Each row's label background, scanning up from where the dialog sits."""
-    return [
-        _label_bg(lines[at], option.label) if (at := _row_line(lines, option)) is not None else ""
-        for option in prompt.options
+    bgs = [
+        _label_bg(colour[at], option.label) for option, at in zip(prompt.options, rows, strict=True)
     ]
+    focus = _focused_index(bgs)
+    prompt = _with(prompt, focus=focus if focus >= 0 else None)
+    if prompt.shape is MenuShape.BUTTONS:
+        return prompt
+    return _with(prompt, stepper=_answered_strip(prompt, list(colour)))
 
 
 def _line_with_all(lines: list[str], labels: list[str]) -> int | None:
-    """The last line that carries every *label*, which is where buttons live."""
+    """The last line that carries every *label*, which is where a strip lives."""
     for i in range(len(lines) - 1, -1, -1):
         if all(label in lines[i] for label in labels):
             return i
     return None
 
 
-def _row_line(lines: list[str], option: PromptOption) -> int | None:
-    """The last line that both numbers and labels *option*, scanning up from the dialog."""
-    for i in range(len(lines) - 1, -1, -1):
-        if option.label in lines[i] and f"{option.number}." in lines[i]:
-            return i
-    return None
-
-
 def _answered_strip(prompt: BlockedPrompt, lines: list[str]) -> Stepper | None:
-    """The tabs strip with the active tab read off the ANSI, when one was parsed."""
+    """The tabs strip with the active tab read off the dialog's colour, when one was parsed."""
     strip = prompt.stepper
     if strip is None or not strip.steps:
         return strip
@@ -918,8 +957,6 @@ _PANEL_TOP_RE = re.compile(r"^\s*[╭┌╔]")
 
 _PANEL_BOTTOM_RE = re.compile(r"^\s*[╰└╚]")
 
-_PANEL_SIDE_RE = re.compile(r"^(\s*)[│┃║](.*?)[│┃║]?\s*$")
-
 _PANEL_TAIL = 6
 
 
@@ -928,10 +965,12 @@ _TRAILING_SIDE_RE = re.compile(r"^(.*?)[│┃║]\s*$")
 
 
 def _unboxed(line: str) -> str:
-    """One panel row with its sides removed and its own indentation kept."""
-    match = _PANEL_SIDE_RE.match(line)
-    if match is not None:
-        return f"{match.group(1)}{match.group(2)}"
+    """One panel row with its closing side removed and its own indentation kept.
+
+    The edge-strip already took the opening side, so a bar still leading the
+    row is a column rule inside the panel, and what follows it is that
+    column's body: a plan's numbered steps beside its outline are not options.
+    """
     tail = _TRAILING_SIDE_RE.match(line)
     return tail.group(1) if tail is not None else line
 

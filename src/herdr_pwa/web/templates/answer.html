@@ -41,12 +41,18 @@
   {% endif %}
   <h2 class="answer__question">{{ decision.question }}</h2>
   {% if buttons %}
+  {% if about %}
+  <pre class="answer__about">{{ about|join("\n") }}</pre>
+  {% endif %}
   <p class="answer__note answer__note--line">The screen marks the choice in play. Arrows move it; Enter takes it; Esc rejects.</p>
   <div class="options options--buttons">
     {% for row in decision.options %}
     <span class="choice{% if loop.index0 == decision.focus %} choice--on{% endif %}"{% if loop.index0 == decision.focus %} aria-current="true"{% endif %}>{{ row.label }}</span>
     {% endfor %}
   </div>
+  {% if decision.focus is not none %}
+  <p class="answer__note answer__note--line">Enter now takes <strong>{{ decision.options[decision.focus].label }}</strong>.</p>
+  {% endif %}
   {% endif %}
   {% if still %}
   <p class="answer__note answer__note--line">Rows aren't buttons here. Use the keys below{% if multi %}; Submit is the last row{% endif %}. <a class="answer__go" href="{{ pane_link }}" {{ replace() }}>Pane</a></p>

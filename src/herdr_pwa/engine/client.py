@@ -11,7 +11,7 @@ from pydantic import BaseModel, ValidationError
 
 from herdr_pwa import panetext
 from herdr_pwa.engine.config import EngineSettings
-from herdr_pwa.engine.dialog import BlockedPrompt, MenuShape
+from herdr_pwa.engine.dialog import BlockedPrompt
 from herdr_pwa.engine.generated import request as wire_request
 from herdr_pwa.engine.generated import success_response as wire
 from herdr_pwa.engine.model import (
@@ -464,13 +464,7 @@ class HerdrClient:
             timeout=timeout,
         )
         prompt = BlockedPrompt.parse(text, target=target, session=session)
-        # Colour-only cursors: a refused run the screen's own hints still vouch
-        # for, or a buttons row whose focus only the ANSI shows, is worth the
-        # one extra read that can see them.
-        if not (
-            prompt.shape is MenuShape.BUTTONS
-            or (prompt.drew_rows and prompt.hints and not prompt.options)
-        ):
+        if not prompt.wants_colour:
             return prompt
         try:
             ansi = self.read(
@@ -484,6 +478,8 @@ class HerdrClient:
             )
         except EngineError:
             return prompt
+        # Text and colour from this one read: beside an older text read, a cursor may sit on a moved row.
+        text = panetext.as_text_read(ansi)
         return BlockedPrompt.parse(text, target=target, session=session, ansi=ansi)
 
     # ----------------------------------------------------------------------

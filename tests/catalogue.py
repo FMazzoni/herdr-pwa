@@ -11,6 +11,7 @@ from pydantic import JsonValue
 
 from herdr_pwa.engine import EngineUnavailable
 from herdr_pwa.jsontypes import JsonObject, as_object, loads
+from herdr_pwa.panetext import as_text_read
 from tests.filefakes import make_repo, stand_in
 from tests.webfakes import (
     AGENT_GET,
@@ -127,6 +128,8 @@ MENU: Final = "capture-blocked-askuserquestion-menu"
 MENU_WRAPPED: Final = "capture-blocked-askuserquestion-wrapped"
 CHECKLIST: Final = "capture-blocked-multiselect-checklist"
 PLAN: Final = "capture-blocked-plan-approval"
+OC_PERMISSION: Final = "capture-blocked-opencode-permission"
+OC_QUESTION: Final = "capture-blocked-opencode-question"
 IDLE: Final = "capture-idle-claude-prompt"
 WORKING: Final = "capture-working-claude"
 CAPTURES: Final = (
@@ -601,6 +604,30 @@ def _door(**fields: str) -> Callable[[], JsonObject]:
     return lambda: _set(snapshot_frame(), WORKING_PANE, session="", **fields)
 
 
+def _drawn_in_colour(name: str) -> Callable[[JsonObject], JsonObject]:
+    """A capture's pane read: its text for a text read, its colour read for a colour one."""
+    text = capture(name)
+    ansi = (FIXTURES / name / "visible.ansi").read_text()
+    return lambda params: read_frame(ansi if params.get("format") == "ansi" else text)
+
+
+def _opencode_blocked_on(name: str) -> Replies:
+    """The working pane as an opencode agent stopped on one of its captured dialogs."""
+    frame = lambda: _set(herd(**BLOCKED), WORKING_PANE, agent="opencode")  # noqa: E731
+    return lambda: {SNAPSHOT: frame(), READ: _drawn_in_colour(name)}
+
+
+def _opencode_listing() -> Replies:
+    """An opencode agent whose transcript ends on a numbered list with a coloured row in it."""
+    ansi = (FIXTURES / "rig" / "opencode-scrollback-list.ansi").read_text()
+    text = as_text_read(ansi)
+    frame = lambda: _set(herd(**BLOCKED), WORKING_PANE, agent="opencode")  # noqa: E731
+    return lambda: {
+        SNAPSHOT: frame(),
+        READ: lambda params: read_frame(ansi if params.get("format") == "ansi" else text),
+    }
+
+
 def _two_blocked(first: str, second: str) -> Replies:
     """The working pane and its neighbour blocked, each on its own captured question."""
     frame = lambda: herd(p4="blocked", p3="blocked")  # noqa: E731 -- one call site
@@ -1016,6 +1043,27 @@ AGENT_PAGE: Final = (
         title="Agent page: a permission prompt whose host ran off the edge",
     ),
     State(
+        "agent-answer-opencode-permission",
+        f"{AGENT}?tab=pane",
+        "#answer .answer__question",
+        _opencode_blocked_on(OC_PERMISSION),
+        title="Agent page: opencode's permission dialog, its buttons and the one in focus",
+    ),
+    State(
+        "agent-answer-opencode-question",
+        f"{AGENT}?tab=pane",
+        "#answer .answer__question",
+        _opencode_blocked_on(OC_QUESTION),
+        title="Agent page: opencode's question dialog, rows earned by its colour cursor",
+    ),
+    State(
+        "agent-answer-opencode-listing",
+        f"{AGENT}?tab=pane",
+        "#answer",
+        _opencode_listing(),
+        title="Agent page: a numbered list in opencode's transcript, not a question",
+    ),
+    State(
         "agent-unreadable",
         AGENT,
         "#answer .keys--pad",
@@ -1237,7 +1285,8 @@ def _in_repo(rig: Rig) -> None:
     """The working agent stands in a fixture repository with a change in flight."""
     repo = make_repo(rig.settings.state_dir.parent / "demo-service")
     frame = rig.wire.replies[SNAPSHOT]
-    assert isinstance(frame, dict)
+    assert not callable(frame)
+    assert not isinstance(frame, Exception)
     stand_in(frame, repo)
 
 
@@ -1362,6 +1411,9 @@ STATES: Final = (*FEED, *AGENT_PAGE, *TAPPED, *ANSWERED, *LIFECYCLE, *STATS, *FI
 V2_ONLY: Final = (
     "chat-doubted-identity",
     "feed-herd",
+    "agent-answer-opencode-permission",
+    "agent-answer-opencode-question",
+    "agent-answer-opencode-listing",
     "feed-build-scrollback",
     "workspaces",
     "alerts",

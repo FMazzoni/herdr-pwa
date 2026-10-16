@@ -46,7 +46,8 @@ DIVERGENCES: dict[str, str] = {
     "foreign/relay/qodercli-single-question.ansi": (
         "qoder prints its footer verb-first ('Enter select'), a convention opencode "
         "shares and the verb-first grammar now reads; the Enter select pair is a real "
-        "offer this screen always advertised, and the phone can now send it."
+        "offer this screen always advertised, and it is now named as a hint. Enter was "
+        "always sendable from the pad, so what changed is the label, not the keys."
     ),
     "foreign/relay/qodercli-single-question-with-text.ansi": (
         "Same verb-first footer ('Enter select'); the offer lifts and the screen with "
@@ -69,11 +70,6 @@ DIVERGENCES: dict[str, str] = {
         "Same verb-first footer ('Enter select'); the offer lifts onto a submit "
         "screen with no rows, so unknown names it rather than none."
     ),
-    "foreign/relay/omp-plan-approval.ansi": (
-        "omp prints '↑↓ select · ⏎ confirm' verb-first inside a box; the paired-glyph "
-        "token and the verb-first grammar now read the movement and confirm offers, "
-        "and the footer line no longer breaks the numbered run beneath it."
-    ),
     "foreign/collie/omp--select-multi.txt": (
         "omp draws its checklist inside a box; the edge-strip unboxes the rows, so "
         "the checkbox evidence is finally seen and the shape reads multi-select, with "
@@ -83,8 +79,10 @@ DIVERGENCES: dict[str, str] = {
         "Same boxed checklist; unboxed, its tick evidence reads as multi-select."
     ),
     "foreign/collie/omp--select-multi-review.txt": (
-        "Same boxed checklist; unboxed, the shape reads multi-select and the footer's "
-        "verb-first toggle pair lifts."
+        "omp's review step after its checklist: a summary row and a Submit cursor, no "
+        "checkboxes and no toggle verb. The footer is verb-first ('Enter submit'), so "
+        "the Enter submit pair lifts and a screen with hints but no live run reads "
+        "unknown where the ledger said none, naming Enter as a hint."
     ),
 }
 

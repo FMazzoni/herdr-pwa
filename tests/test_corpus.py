@@ -14,6 +14,8 @@ from herdr_pwa.engine import (
     as_session_id,
 )
 from herdr_pwa.jsontypes import JsonObject, as_object, loads
+from herdr_pwa.panetext import as_text_read
+from herdr_pwa.writes.keys import answer_digits
 from tests.engine_seam import OPTION_RE
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -686,3 +688,35 @@ def test_opencode_tabs_strip_says_the_question_is_one_of_several() -> None:
     assert prompt.stepper.steps == ("Vibe", "Budget")
     assert prompt.stepper.answered == 0
     assert prompt.stepper.total == 2
+
+
+# The colour cursor is evidence only from the read the text came from, and only
+# on the dialog's own lines: a coloured row in the transcript is not a cursor.
+
+RIG = FIXTURES / "rig"
+
+
+def test_a_numbered_list_in_the_transcript_earns_no_digit_from_a_coloured_line() -> None:
+    """An inline code span is drawn on the focus colour; outside the dialog it proves nothing."""
+    ansi = (RIG / "opencode-scrollback-list.ansi").read_text(encoding="utf-8")
+    prompt = BlockedPrompt.parse(as_text_read(ansi), ansi=ansi)
+    assert prompt.options == ()
+    assert prompt.focus is None
+    assert answer_digits(prompt) == ()
+
+
+def test_colour_from_another_moment_is_not_a_cursor() -> None:
+    """Text and colour from two reads disagree somewhere; the colour then counts for nothing."""
+    name = "capture-blocked-opencode-question"
+    moved = read(name, "visible").replace("Done. fixture1.txt created.", "Done.")
+    prompt = BlockedPrompt.parse(moved, ansi=read_ansi(name))
+    assert prompt.options == ()
+    assert prompt.focus is None
+
+
+@pytest.mark.parametrize("name", OPENCODE_CAPTURES)
+def test_the_one_read_parses_like_the_text_read(name: str) -> None:
+    """Stripping the colour read gives the text read, so the grammar sees the same screen."""
+    ansi = read_ansi(name)
+    with_colour = BlockedPrompt.parse(as_text_read(ansi), ansi=ansi)
+    assert with_colour.identity == BlockedPrompt.parse(read(name, "detection"), ansi=ansi).identity

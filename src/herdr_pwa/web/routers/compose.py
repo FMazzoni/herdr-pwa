@@ -15,6 +15,7 @@ from herdr_pwa.engine import (
     AgentStatus,
     BlockedPrompt,
     EngineError,
+    MenuShape,
     PaneId,
     SessionId,
     screen_digest,
@@ -95,7 +96,15 @@ def answer_context(agent: Agent, prompt: BlockedPrompt | None) -> dict[str, obje
         "interrupt": INTERRUPT_KEY,
         "cadence": ANSWER_CADENCE,
         "status": shown_status(agent),
+        "about": _asked_about(prompt),
     }
+
+
+def _asked_about(prompt: BlockedPrompt | None) -> tuple[str, ...]:
+    # A buttons dialog asks about a command its heading does not name.
+    if prompt is None or prompt.shape is not MenuShape.BUTTONS:
+        return ()
+    return prompt.context
 
 
 def answer_region(web: WebState, agent: Agent) -> dict[str, object]:

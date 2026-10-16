@@ -349,6 +349,24 @@ def test_blocked_prompt_reads_the_detection_source() -> None:
     assert [o.label for o in p.options] == ["Yes", "No"]
 
 
+def test_a_colour_read_is_parsed_whole_never_beside_an_older_text_read() -> None:
+    """Text and colour come from ONE read: the colour read is stripped for the grammar."""
+    capture = Path(__file__).parent / "fixtures" / "capture-blocked-opencode-question"
+    ansi = (capture / "visible.ansi").read_text(encoding="utf-8")
+    # The text read is a moment older: the transcript above the dialog has since moved.
+    older = (capture / "detection.txt").read_text(encoding="utf-8").replace("Done.", "Working.")
+
+    def answer(params: JsonObject) -> JsonObject:
+        return read_frame(ansi if params["format"] == "ansi" else older)
+
+    eng, wire = build({READ: answer})
+    p = eng.blocked_prompt(P5, session=SESS)
+    assert [c.params["format"] for c in wire.calls if c.method == READ] == ["text", "ansi"]
+    assert "Working." not in p.raw
+    assert p.focus == 0
+    assert [o.number for o in p.options] == [1, 2, 3, 4]
+
+
 # --------------------------------------------------------------------------
 # Writes
 # --------------------------------------------------------------------------
