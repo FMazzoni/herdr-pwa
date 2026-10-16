@@ -57,10 +57,10 @@ def read_chat(
         root=web.settings.transcript_roots or None,
     )
     said = doubt(agent, web.settings.transcript_roots)
-    # An earlier page is history: the turn on its way belongs under the newest one.
-    newest = before is None
-    talking = newest and still_talking(agent_status(web, agent))
-    return chat_view(page, working=talking, doubt=said, drawn=start is not None or not newest)
+    # Every page reaches the newest turn, an earlier one included, so each says what is on its way.
+    talking = still_talking(agent_status(web, agent))
+    drawn = start is not None or before is not None
+    return chat_view(page, working=talking, doubt=said, drawn=drawn)
 
 
 def read_pane(web: WebState, agent: Agent) -> panetext.PaneView:

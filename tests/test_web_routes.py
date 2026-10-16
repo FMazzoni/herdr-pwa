@@ -435,14 +435,15 @@ def test_an_unreadable_log_on_opening_says_so_in_the_whole_view(tmp_path: Path) 
     assert "could not be read" in response.text
 
 
-def test_the_catching_up_note_is_only_on_the_newest_page(tmp_path: Path) -> None:
+def test_the_catching_up_note_stays_on_an_earlier_page(tmp_path: Path) -> None:
+    """An earlier page is drawn down to the newest turn, so Load earlier must not drop the note."""
     _talking(tmp_path)
     rig = build_rig(tmp_path, chat_messages=2)
     newest = rig.http.get(f"/agent/{WORKING_SESSION}/chat", headers=FRAGMENT).text
     assert NOTE in newest
     earlier = rig.http.get(f"/agent/{WORKING_SESSION}/chat?before=999999", headers=FRAGMENT)
-    assert "Reply" in earlier.text
-    assert NOTE not in earlier.text
+    assert "Reply 3." in earlier.text
+    assert NOTE in earlier.text
 
 
 def test_the_catching_up_note_is_a_function_of_the_status_alone() -> None:
