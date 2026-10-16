@@ -1384,8 +1384,8 @@ class ModelRef(NamedTuple):
     provider: str = ""
 
 
-class SessionUsage(BaseModel):
-    """What one session has spent, summed over every log its thread has lived in."""
+class Spend(BaseModel):
+    """Answers and what they used, summed; a zero is what the provider did not record."""
 
     # Distinct assistant messages, not records.
     messages: int = 0
@@ -1395,11 +1395,37 @@ class SessionUsage(BaseModel):
     cache_creation_tokens: int = 0
     # Measured at 200 000x input on a real session: the figure a naive sum leaves out.
     cache_read_tokens: int = 0
+    # Only where the provider records it; a price table kept here would be worse than a gap. Zero is unknown.
+    cost: float = 0.0
+
+    @property
+    def recorded(self) -> bool:
+        """Whether any token was recorded: a provider that writes all zeros said nothing."""
+        return any(
+            (
+                self.input_tokens,
+                self.output_tokens,
+                self.thinking_tokens,
+                self.cache_creation_tokens,
+                self.cache_read_tokens,
+            )
+        )
+
+
+class ModelSpend(Spend):
+    """What one model, as one provider served it, spent over a session's answers."""
+
+    ref: ModelRef
+
+
+class SessionUsage(Spend):
+    """What one session has spent, summed over every log its thread has lived in."""
+
     # The newest message's whole prompt: how full the window is now, not a total.
     context_tokens: int = 0
     models: list[ModelRef] = Field(default_factory=list)
-    # Only where the provider records it; a price table kept here would be worse than a gap. Zero is unknown.
-    cost: float = 0.0
+    # Only where the store says which model each answer came from; empty means not split.
+    by_model: list[ModelSpend] = Field(default_factory=list)
     logs: int = 0
     # A byte budget stopped the read, so the sums are floors.
     partial: bool = False
@@ -1451,6 +1477,18 @@ def remember(tally: SessionUsage, ref: ModelRef) -> None:
     """Record *ref* as having answered, once, keeping first-seen order."""
     if ref.model and ref not in tally.models:
         tally.models.append(ref)
+
+
+def spend_of(tally: SessionUsage, ref: ModelRef) -> ModelSpend | None:
+    """*ref*'s row of *tally*'s split, added in first-seen order; ``None`` for no model."""
+    if not ref.model:
+        return None
+    for row in tally.by_model:
+        if row.ref == ref:
+            return row
+    row = ModelSpend(ref=ref)
+    tally.by_model.append(row)
+    return row
 
 
 def _prompt_size(usage: _Usage) -> int:

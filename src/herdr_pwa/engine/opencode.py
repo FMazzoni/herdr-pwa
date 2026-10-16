@@ -24,6 +24,7 @@ from herdr_pwa.engine.transcript import (
     SessionUsage,
     Source,
     Speaker,
+    Spend,
     StartRecipe,
     TranscriptAdapter,
     TranscriptPage,
@@ -34,6 +35,7 @@ from herdr_pwa.engine.transcript import (
     first_line,
     one_line,
     remember,
+    spend_of,
 )
 from herdr_pwa.validation import OR_NONE, Count, Flag, Number, Text
 
@@ -640,15 +642,15 @@ def _cache(tokens: _Tokens) -> _Cache:
     return tokens.cache or _Cache()
 
 
-def _add(tally: SessionUsage, tokens: _Tokens, ref: ModelRef) -> None:
-    """Fold one assistant message's tokens into *tally*, in place."""
-    tally.messages += 1
-    tally.input_tokens += _count(tokens.input)
-    tally.output_tokens += _count(tokens.output)
-    tally.thinking_tokens += _count(tokens.reasoning)
-    tally.cache_creation_tokens += _count(_cache(tokens).write)
-    tally.cache_read_tokens += _count(_cache(tokens).read)
-    remember(tally, ref)
+def _add(spend: Spend, tokens: _Tokens, cost: float) -> None:
+    """Fold one assistant message's tokens and money into *spend*, in place."""
+    spend.messages += 1
+    spend.input_tokens += _count(tokens.input)
+    spend.output_tokens += _count(tokens.output)
+    spend.thinking_tokens += _count(tokens.reasoning)
+    spend.cache_creation_tokens += _count(_cache(tokens).write)
+    spend.cache_read_tokens += _count(_cache(tokens).read)
+    spend.cost += cost
 
 
 def _spent(record: _MessageRecord) -> float:
@@ -678,12 +680,18 @@ def _take(tally: SessionUsage, record: _MessageRecord) -> None:
     _clock(tally, record)
     if record.role != "assistant":
         return
-    tally.cost += _spent(record)
+    cost = _spent(record)
     tokens = record.tokens
     if tokens is None:
+        tally.cost += cost
         return
     # Every assistant row names both: the provider is not derivable from the model id.
-    _add(tally, tokens, ModelRef(_text(record.model), _text(record.provider)))
+    ref = ModelRef(_text(record.model), _text(record.provider))
+    _add(tally, tokens, cost)
+    remember(tally, ref)
+    row = spend_of(tally, ref)
+    if row is not None:
+        _add(row, tokens, cost)
     tally.context_tokens = _prompt_size(tokens)
 
 

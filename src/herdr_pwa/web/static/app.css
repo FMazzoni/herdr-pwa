@@ -790,6 +790,8 @@ textarea { resize: vertical; min-height: 4.5em; }
 .stats__row { display: contents; }
 .stats__rows dt { color: var(--ink-3); }
 .stats__rows dd { margin: 0; color: var(--ink); overflow-wrap: anywhere; }
+.stats__row--model > dt { grid-column: 1 / -1; margin-top: var(--space-2); color: var(--ink); overflow-wrap: anywhere; }
+.stats__row--model > dd { grid-column: 1 / -1; color: var(--ink-2); }
 .stats__empty { margin: 0; padding: var(--space-2) 0 var(--space-5); color: var(--ink-3); }
 .files__title { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-body); font-weight: 600; }
 .files__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--space-5); min-height: var(--tap); margin: 0 0 var(--space-4); font-size: var(--text-small); color: var(--ink-3); }

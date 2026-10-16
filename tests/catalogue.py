@@ -14,6 +14,8 @@ from herdr_pwa.engine import EngineUnavailable
 from herdr_pwa.panetext import as_text_read
 from tests._jsonpath import obj
 from tests.filefakes import make_repo, stand_in
+from tests.test_opencode import MIXED_ROWS
+from tests.test_opencode import build as opencode_db
 from tests.webfakes import (
     AGENT_GET,
     FIXTURES,
@@ -564,6 +566,41 @@ def _opencode_store(rig: Rig) -> None:
         if record.get("role") == "user":
             record["time"] = {"created": asked}
         target.write_text(json.dumps(record))
+
+
+MIXED_SESSION: Final = "ses_0dfb24cf5ffemJcBmqyE29sVBi"
+
+
+def _opencode_mixed() -> dict[str, JsonValue]:
+    """The working pane as an opencode agent whose session switched models twice."""
+    frame = _opencode_working()
+    agent = next(a for a in agents_of(frame) if a.get("pane_id") == WORKING_PANE)
+    agent_session = agent["agent_session"]
+    assert isinstance(agent_session, dict)
+    agent_session["value"] = MIXED_SESSION
+    agent["cwd"] = agent["foreground_cwd"] = "/home/owner/project"
+    return frame
+
+
+def _recent(row: dict[str, JsonValue], shift: int) -> dict[str, JsonValue]:
+    """One message row moved *shift* milliseconds later, in its column and in its record."""
+    record = RECORD.validate_json(str(row["data"]))
+    times = record.get("time")
+    if isinstance(times, dict):
+        record["time"] = {k: v + shift if isinstance(v, int) else v for k, v in times.items()}
+    stamp = row["time_created"]
+    moved = stamp + shift if isinstance(stamp, int) else stamp
+    return {**row, "data": json.dumps(record), "time_created": moved}
+
+
+def _opencode_mixed_store(rig: Rig) -> None:
+    """Real rows from four models, one of whose provider records nothing, as opencode's SQLite."""
+    messages = MIXED_ROWS["message"]
+    newest = max(row["time_created"] for row in messages if isinstance(row["time_created"], int))
+    # Moved so the newest answer is a minute old, else the running turn reads as months long.
+    now = int((datetime.now(UTC) - timedelta(minutes=1)).timestamp() * 1000)
+    rows = {**MIXED_ROWS, "message": [_recent(row, now - newest) for row in messages]}
+    opencode_db(rig.settings.state_dir.parent / "transcripts" / "opencode.db", rows)
 
 
 def long_pane(lines: int = 120) -> str:
@@ -1378,6 +1415,16 @@ STATS: Final = (
         runner(_opencode_working),
         prime=_opencode_store,
         title="An opencode agent's strip: a model with no known window shows tokens, not a percent",
+    ),
+    State(
+        "usage-opencode-models",
+        f"/agent/{MIXED_SESSION}?tab=chat",
+        "#agent-stats details[open] .stats__row--model",
+        runner(_opencode_mixed),
+        prime=_opencode_mixed_store,
+        title="An opencode sheet split by model, one whose provider records nothing said so",
+        armed="#agent-stats .stats__line",
+        act=_click("#agent-stats .stats__line"),
     ),
     State(
         "chat-doubted-identity",

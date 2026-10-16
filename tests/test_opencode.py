@@ -638,3 +638,87 @@ def test_info_never_raises_while_the_store_is_held(database: Path) -> None:
         holder.rollback()
         holder.close()
     assert OpencodeAdapter().info(Source(PROBE, [database])).title
+
+
+# ---- spend per model -------------------------------------------------------------------------
+
+# Real rows from one session that switched models, paths anonymised, plus rows borrowed from two
+# other sessions: a model whose provider records nothing, and a free one that records no cost.
+MIXED = "ses_0dfb24cf5ffemJcBmqyE29sVBi"
+MIXED_ROWS = TypeAdapter(dict[str, list[dict[str, JsonValue]]]).validate_json(
+    (STORE / "per-model-rows.json").read_text()
+)
+
+
+def spend_of(rows: dict[str, list[dict[str, JsonValue]]], root: Path) -> list[tuple[object, ...]]:
+    """The tally's per-model rows, as plain tuples a literal can be compared with."""
+    build(root / OPENCODE_DB, rows)
+    tally = usage(Source.of(MIXED, agent_kind="opencode", root=root))
+    return [
+        (
+            row.ref,
+            row.messages,
+            row.input_tokens,
+            row.output_tokens,
+            row.thinking_tokens,
+            row.cache_read_tokens,
+            row.cache_creation_tokens,
+            round(row.cost, 8),
+        )
+        for row in tally.by_model
+    ]
+
+
+def edited(index: int, old: str, new: str) -> dict[str, list[dict[str, JsonValue]]]:
+    """The mixed rows with one message's stored record changed by a text replacement."""
+    messages = [dict(row) for row in MIXED_ROWS["message"]]
+    messages[index]["data"] = str(messages[index]["data"]).replace(old, new)
+    return {**MIXED_ROWS, "message": messages}
+
+
+def test_the_tally_splits_spend_by_provider_and_model_in_first_seen_order(
+    tmp_path: Path,
+) -> None:
+    assert spend_of(MIXED_ROWS, tmp_path) == [
+        (ModelRef("zai-org/GLM-5.2", "togetherai"), 4, 14381, 1475, 2814, 39872, 0, 0.04937172),
+        (ModelRef("MiniMaxAI/MiniMax-M3", "togetherai"), 3, 150367, 1117, 0, 150528, 0, 0.05548218),
+        (ModelRef("zai-org/GLM-5.3-Flash", "togetherai"), 2, 0, 0, 0, 0, 0, 0.0),
+        (ModelRef("hy3-free", "opencode"), 1, 254, 3, 11, 8448, 0, 0.0),
+    ]
+
+
+def test_the_per_model_rows_add_up_to_the_session_total(tmp_path: Path) -> None:
+    build(tmp_path / OPENCODE_DB, MIXED_ROWS)
+    tally = usage(Source.of(MIXED, agent_kind="opencode", root=tmp_path))
+    assert sum(row.messages for row in tally.by_model) == tally.messages == 10
+    assert sum(row.input_tokens for row in tally.by_model) == tally.input_tokens
+    assert sum(row.cache_read_tokens for row in tally.by_model) == tally.cache_read_tokens
+    assert sum(row.cost for row in tally.by_model) == pytest.approx(tally.cost)
+
+
+def test_a_model_whose_provider_records_nothing_is_not_counted(tmp_path: Path) -> None:
+    """All zeros is the provider saying nothing, which is not the same as using nothing."""
+    build(tmp_path / OPENCODE_DB, MIXED_ROWS)
+    tally = usage(Source.of(MIXED, agent_kind="opencode", root=tmp_path))
+    assert [(row.ref.model, row.recorded) for row in tally.by_model] == [
+        ("zai-org/GLM-5.2", True),
+        ("MiniMaxAI/MiniMax-M3", True),
+        ("zai-org/GLM-5.3-Flash", False),
+        ("hy3-free", True),
+    ]
+
+
+def test_the_same_model_from_another_provider_is_another_row(tmp_path: Path) -> None:
+    """A model id alone does not name who served it, or what they charged."""
+    rows = edited(2, '"providerID":"togetherai"', '"providerID":"fireworks"')
+    assert [ref for ref, *_ in spend_of(rows, tmp_path)][:3] == [
+        ModelRef("zai-org/GLM-5.2", "togetherai"),
+        ModelRef("zai-org/GLM-5.2", "fireworks"),
+        ModelRef("MiniMaxAI/MiniMax-M3", "togetherai"),
+    ]
+
+
+def test_cache_written_is_kept_apart_from_cache_read(tmp_path: Path) -> None:
+    """No captured row writes the cache, so one is made to: the two must not be folded."""
+    glm = spend_of(edited(1, '"write":0', '"write":321'), tmp_path)[0]
+    assert glm[5:7] == (39872, 321)
