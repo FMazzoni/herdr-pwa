@@ -98,6 +98,18 @@ def test_a_short_cell_in_a_wide_table_stays_on_one_line() -> None:
     assert cell.cls == "cell-whole"
 
 
+def test_a_sha_path_or_ref_in_a_prose_cell_is_kept_whole() -> None:
+    row = (
+        "| Evidence | x |\n|---|---|\n| Fired on (1234567, f00d123/manifest-0101) for **a-b** too | y |\n"
+    )
+    nodes = _walk(render_tree(row))
+    cell = next(n for n in nodes if n.tag == "td")
+    assert _text(cell) == "Fired on (1234567, f00d123/manifest-0101) for a-b too"
+    kept = [_text(n) for n in _walk((cell,)) if n.cls == "cell-token"]
+    assert kept == ["f00d123/manifest-0101)", "a-b"]
+    assert all(n.tag == "span" for n in _walk((cell,)) if n.cls == "cell-token")
+
+
 def _text(node: MdNode) -> str:
     return node.text + "".join(_text(c) for c in node.children)
 

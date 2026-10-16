@@ -420,6 +420,12 @@ def report_chat() -> list[dict[str, JsonValue]]:
     return [notices_of("human")[1], next(r for r in reports if "The scroll-anchor fix is merged" in json.dumps(r))]
 
 
+def report_table_chat() -> list[dict[str, JsonValue]]:
+    """A prompt and a hand-back report whose table cells hold shas, paths and ticket refs."""
+    reports = notices_of("peer", report=True)
+    return [notices_of("human")[1], next(r for r in reports if "f00d123/manifest-0101" in json.dumps(r))]
+
+
 def peer_message_chat() -> list[dict[str, JsonValue]]:
     """A prompt, then a message another session sent in."""
     others = [r for r in notices_of("peer", report=False) if "cross-session" in json.dumps(r)]
@@ -945,6 +951,16 @@ AGENT_PAGE: Final = (
         act=_click(".chat .turn--peer .turn__more summary"),
     ),
     State(
+        "chat-report-table",
+        f"{AGENT}?tab=chat",
+        ".chat .turn--peer:has(.turn__more[open]) .prose table",
+        runner(_stressed),
+        report_table_chat(),
+        title="Chat: a report opened on a table whose cells hold shas, paths and ticket refs",
+        armed=".chat .turn--peer .turn__more summary",
+        act=_click(".chat .turn--peer .turn__more summary"),
+    ),
+    State(
         "chat-peer-message",
         f"{AGENT}?tab=chat",
         ".chat .turn--peer",
@@ -1430,6 +1446,7 @@ V2_ONLY: Final = (
     "chat-task-failed",
     "chat-report",
     "chat-report-open",
+    "chat-report-table",
     "chat-peer-message",
     "chat-notices",
     "chat-notice-report",

@@ -26,7 +26,19 @@ from herdr_pwa.writes.outcome import (
     watch,
 )
 from herdr_pwa.writes.refusal import Refusal, Refused
-from tests._fake_herd import P3, P5, S1, S2, SETTLED, FakeClock, FakeHerd, Rig, capture, rig
+from tests._fake_herd import (
+    FIXTURES,
+    P3,
+    P5,
+    S1,
+    S2,
+    SETTLED,
+    FakeClock,
+    FakeHerd,
+    Rig,
+    capture,
+    rig,
+)
 
 SEND_KEYS = "agent.send_keys"
 PERMISSION = capture("capture-blocked-permission-prompt")
@@ -360,4 +372,4 @@ def test_up_and_down_do_not_count_as_answers_on_a_buttons_screen() -> None:
 
 
 def capture_ansi(name: str) -> str:
-    return (Path("tests/fixtures") / name / "visible.ansi").read_text(encoding="utf-8")
+    return (FIXTURES / name / "visible.ansi").read_text(encoding="utf-8")

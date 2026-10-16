@@ -427,12 +427,13 @@ html { -webkit-tap-highlight-color: transparent; }
 .prose p { white-space: pre-wrap; }
 .prose blockquote { margin: var(--space-3) 0; padding-left: var(--space-5); border-left: var(--line-2) solid var(--rule); color: var(--ink-2); }
 /* A table scrolls inside its own box, which starts inside the turn, clear of the back swipe. Cells
-   wrap only between words: the turn's break-anywhere would shrink a column to one glyph. */
+   wrap only between words, and a sha, path or ref is one word: the turn's break-anywhere would
+   shrink a column to one glyph. */
 .prose .table-scroll { overflow-x: auto; margin: var(--space-6) 0; }
 .prose table { border-collapse: collapse; }
 .prose th, .prose td { min-width: var(--cell-min); padding: var(--space-3) var(--space-4); border: var(--line-1) solid var(--rule); text-align: left; vertical-align: top; overflow-wrap: normal; word-break: normal; }
 .prose th { background: var(--surface-2); font-weight: 600; }
-.prose th code, .prose td code { white-space: nowrap; }
+.prose th code, .prose td code, .prose .cell-token { white-space: nowrap; }
 .prose th.cell-whole, .prose td.cell-whole { white-space: nowrap; }
 .prose th.align-center, .prose td.align-center { text-align: center; }
 .prose th.align-right, .prose td.align-right { text-align: right; font-variant-numeric: tabular-nums; }
