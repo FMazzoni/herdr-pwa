@@ -27,8 +27,12 @@ from herdr_pwa.engine import (
     HerdrClient,
     InvalidRequest,
     InvalidResponse,
+    Launch,
+    NewTab,
     PaneId,
     ProtocolMismatch,
+    ReadOptions,
+    Seat,
     SessionId,
     TargetNotFound,
     as_pane_id,
@@ -162,7 +166,7 @@ def test_an_explicit_timeout_reaches_the_wire() -> None:
 def test_a_write_is_marked_as_never_safe_to_resend() -> None:
     """The retry rule and the write guard are driven off the same set."""
     eng, wire = build({GET: agent_frame()})
-    eng.prompt(P3, "hi")
+    eng.prompt(Seat(P3), "hi")
     issued = {c.method: c.idempotent for c in wire.calls}
     assert issued[PROMPT] is False
     assert issued[SNAPSHOT] is True
@@ -240,7 +244,7 @@ def test_agent_get_unwraps_result_agent() -> None:
 
 def test_read_builds_the_documented_params() -> None:
     eng, wire = build({READ: read_frame("viewport text")})
-    assert eng.read(P3, lines=40, source="detection") == "viewport text"
+    assert eng.read(P3, ReadOptions(lines=40, source="detection")) == "viewport text"
     assert wire.last.method == READ
     assert wire.last.params == {
         "target": "w1:p3",
@@ -277,7 +281,7 @@ def test_a_named_source_still_beats_the_configured_default() -> None:
         {READ: read_frame("viewport text")},
         settings=replace(SETTINGS, read_source="detection"),
     )
-    eng.read(P3, source="visible")
+    eng.read(P3, ReadOptions(source="visible"))
     assert wire.last.params["source"] == "visible"
     eng.blocked_prompt(P3)
     assert wire.last.params["source"] == "detection"
@@ -296,7 +300,7 @@ def test_a_configured_recent_default_is_capped_like_an_explicit_one() -> None:
 
 def test_a_recent_read_is_capped_so_it_cannot_outrun_the_timeout() -> None:
     eng, wire = build({READ: read_frame("viewport text")})
-    eng.read(P3, lines=200, source="recent")
+    eng.read(P3, ReadOptions(lines=200, source="recent"))
     lines = wire.last.params["lines"]
     assert isinstance(lines, int)
     assert lines == eng.settings.recent_max_lines
@@ -305,7 +309,7 @@ def test_a_recent_read_is_capped_so_it_cannot_outrun_the_timeout() -> None:
 
 def test_a_visible_read_takes_its_line_count_as_given() -> None:
     eng, wire = build({READ: read_frame("viewport text")})
-    eng.read(P3, lines=200)
+    eng.read(P3, ReadOptions(lines=200))
     assert wire.last.params["lines"] == 200
 
 
@@ -376,14 +380,14 @@ def test_a_colour_read_is_parsed_whole_never_beside_an_older_text_read() -> None
 def test_prompt_sends_the_text_as_a_named_parameter() -> None:
     """The CLI's positional-argv trap is gone with the CLI."""
     eng, wire = build({GET: agent_frame()})
-    eng.prompt(P3, "--not-a-flag")
+    eng.prompt(Seat(P3), "--not-a-flag")
     assert wire.last.method == PROMPT
     assert wire.last.params == {"target": "w1:p3", "text": "--not-a-flag"}
 
 
 def test_send_keys_forwards_every_key_as_a_list() -> None:
     eng, wire = build({GET: agent_frame()})
-    eng.send_keys(P3, "1", "enter")
+    eng.send_keys(Seat(P3), "1", "enter")
     assert wire.last.method == SEND_KEYS
     assert wire.last.params == {"target": "w1:p3", "keys": ["1", "enter"]}
 
@@ -392,7 +396,7 @@ def test_send_keys_requires_a_key() -> None:
     """And says so inside the taxonomy: a bare ``ValueError`` out of a public verb is a 500 with a traceback the moment a route forwards user input."""
     eng, wire = build()
     with pytest.raises(InvalidRequest) as caught:
-        eng.send_keys(P3)
+        eng.send_keys(Seat(P3))
     assert isinstance(caught.value, EngineError | ValueError)  # pyright: ignore[reportUnnecessaryIsInstance]
     assert caught.value.code == "invalid_request"
     assert wire.calls == []
@@ -402,7 +406,7 @@ def test_an_unknown_read_source_is_an_engine_error_not_a_bare_valueerror() -> No
     """``?source=`` off a phone is a typo, not a crash. It never leaves the process either way -- but it has to arrive as something a route can map."""
     eng, wire = build()
     with pytest.raises(InvalidRequest) as caught:
-        eng.read(P3, source="visable")
+        eng.read(P3, ReadOptions(source="visable"))
     assert isinstance(caught.value, EngineError)  # pyright: ignore[reportUnnecessaryIsInstance]
     assert caught.value.code == "invalid_request"
     assert wire.calls == []
@@ -424,7 +428,7 @@ def test_keys_are_refused_to_an_agent_that_is_still_launching() -> None:
     """The safety the socket unlocks and the CLI could not."""
     eng, wire = build({GET: agent_frame(launch_pending=True)})
     with pytest.raises(EngineError) as exc:
-        eng.send_keys(P3, "1")
+        eng.send_keys(Seat(P3), "1")
     assert exc.value.code == NOT_READY_CODE
     assert SEND_KEYS not in wire.methods  # nothing was typed
 
@@ -432,7 +436,7 @@ def test_keys_are_refused_to_an_agent_that_is_still_launching() -> None:
 def test_a_prompt_is_refused_when_the_agent_is_not_interactive() -> None:
     eng, wire = build({GET: agent_frame(interactive_ready=False)})
     with pytest.raises(EngineError) as exc:
-        eng.prompt(P3, "hi")
+        eng.prompt(Seat(P3), "hi")
     assert exc.value.code == NOT_READY_CODE
     assert PROMPT not in wire.methods
 
@@ -443,13 +447,13 @@ def test_a_runner_that_does_not_report_readiness_is_not_blocked() -> None:
     assert "launch_pending" not in raw
     assert "interactive_ready" not in raw
     eng, wire = build({GET: {"id": "x", "result": {"type": "agent_info", "agent": raw}}})
-    eng.prompt(P3, "hi")
+    eng.prompt(Seat(P3), "hi")
     assert PROMPT in wire.methods
 
 
 def test_a_ready_agent_is_written_to() -> None:
     eng, wire = build({GET: agent_frame(interactive_ready=True, launch_pending=False)})
-    eng.send_keys(P3, "enter")
+    eng.send_keys(Seat(P3), "enter")
     assert wire.methods == [SNAPSHOT, GET, SEND_KEYS]
 
 
@@ -457,7 +461,7 @@ def test_the_readiness_check_is_fail_closed_on_a_frame_it_cannot_read() -> None:
     """A write may not proceed on a frame this build cannot validate."""
     eng, _ = build({GET: agent_frame(agent_status="vibing")})
     with pytest.raises(InvalidResponse):
-        eng.prompt(P3, "hi")
+        eng.prompt(Seat(P3), "hi")
 
 
 # --------------------------------------------------------------------------
@@ -468,7 +472,7 @@ def test_the_readiness_check_is_fail_closed_on_a_frame_it_cannot_read() -> None:
 def test_the_interrupt_is_sent_to_an_agent_that_is_not_accepting_input() -> None:
     """Ctrl-c is the way out of busy, so a busy agent cannot refuse it."""
     eng, wire = build({GET: agent_frame(interactive_ready=False)})
-    eng.send_keys(P3, INTERRUPT_KEY)
+    eng.send_keys(Seat(P3), INTERRUPT_KEY)
     assert SEND_KEYS in wire.methods
 
 
@@ -476,7 +480,7 @@ def test_every_other_key_is_still_refused_to_an_agent_that_is_not_accepting() ->
     """The exemption is one key wide. An answer to a prompt is still swallowed."""
     eng, wire = build({GET: agent_frame(interactive_ready=False)})
     with pytest.raises(EngineError) as exc:
-        eng.send_keys(P3, "enter")
+        eng.send_keys(Seat(P3), "enter")
     assert exc.value.code == NOT_READY_CODE
     assert SEND_KEYS not in wire.methods
 
@@ -485,7 +489,7 @@ def test_the_interrupt_bundled_with_another_key_is_not_exempt() -> None:
     """``ctrl-c`` then ``enter`` is not an interrupt; the second key is input."""
     eng, wire = build({GET: agent_frame(interactive_ready=False)})
     with pytest.raises(EngineError) as exc:
-        eng.send_keys(P3, INTERRUPT_KEY, "enter")
+        eng.send_keys(Seat(P3), INTERRUPT_KEY, "enter")
     assert exc.value.code == NOT_READY_CODE
     assert SEND_KEYS not in wire.methods
 
@@ -494,7 +498,7 @@ def test_the_interrupt_is_still_refused_while_the_agent_is_launching() -> None:
     """The other half of the guard stands: launching is not busy."""
     eng, wire = build({GET: agent_frame(launch_pending=True, interactive_ready=False)})
     with pytest.raises(EngineError) as exc:
-        eng.send_keys(P3, INTERRUPT_KEY)
+        eng.send_keys(Seat(P3), INTERRUPT_KEY)
     assert exc.value.code == NOT_READY_CODE
     assert SEND_KEYS not in wire.methods
 
@@ -502,7 +506,7 @@ def test_the_interrupt_is_still_refused_while_the_agent_is_launching() -> None:
 def test_a_key_reaches_an_agent_that_is_launching_and_blocked() -> None:
     """`blocked` beside `launch_pending` is the state a key is FOR."""
     eng, wire = build({GET: agent_frame(launch_pending=True, agent_status="blocked")})
-    eng.send_keys(P3, "enter")
+    eng.send_keys(Seat(P3), "enter")
     assert SEND_KEYS in wire.methods
 
 
@@ -511,7 +515,7 @@ def test_a_launching_agent_that_is_not_blocked_still_refuses_the_key() -> None:
     for status in ("idle", "working", "unknown"):
         eng, wire = build({GET: agent_frame(launch_pending=True, agent_status=status)})
         with pytest.raises(EngineError) as exc:
-            eng.send_keys(P3, "enter")
+            eng.send_keys(Seat(P3), "enter")
         assert exc.value.code == NOT_READY_CODE
         assert SEND_KEYS not in wire.methods
 
@@ -520,7 +524,7 @@ def test_a_launching_blocked_agent_at_a_recycled_pane_is_still_refused() -> None
     """The session-holder check is untouched: a key must not reach the wrong agent."""
     eng, wire = build({GET: agent_frame(launch_pending=True, agent_status="blocked")})
     with pytest.raises(TargetNotFound):
-        eng.send_keys(P3, "enter", session=as_session_id("not-the-holder"))
+        eng.send_keys(Seat(P3, as_session_id("not-the-holder")), "enter")
     assert SEND_KEYS not in wire.methods
 
 
@@ -528,7 +532,7 @@ def test_the_interrupt_is_still_refused_at_a_pane_somebody_else_holds() -> None:
     """Pane ids are recycled: an exempt key must not go to the wrong agent."""
     eng, wire = build({GET: agent_frame(interactive_ready=False)})
     with pytest.raises(TargetNotFound):
-        eng.send_keys(P3, INTERRUPT_KEY, session=as_session_id("not-the-holder"))
+        eng.send_keys(Seat(P3, as_session_id("not-the-holder")), INTERRUPT_KEY)
     assert SEND_KEYS not in wire.methods
 
 
@@ -566,8 +570,8 @@ def test_the_protocol_warning_is_not_repeated_every_poll(
 def test_protocol_drift_fails_every_write_closed(verb: str) -> None:
     eng, wire = build({GET: agent_frame()}, protocol_number=DRIFTED)
     drive: dict[str, Callable[[], object]] = {
-        "prompt": lambda: eng.prompt(P3, "x"),
-        "send_keys": lambda: eng.send_keys(P3, "x"),
+        "prompt": lambda: eng.prompt(Seat(P3), "x"),
+        "send_keys": lambda: eng.send_keys(Seat(P3), "x"),
         "focus": lambda: eng.focus(P3),
     }
     with pytest.raises(ProtocolMismatch):
@@ -587,7 +591,7 @@ def test_a_write_verb_runs_the_protocol_guard_once_not_twice() -> None:
         {GET: agent_frame()},
         settings=replace(SETTINGS, protocol_max_age=1e-6),
     )
-    eng.prompt(P3, "hi")
+    eng.prompt(Seat(P3), "hi")
     assert wire.methods == [SNAPSHOT, GET, PROMPT]
 
 
@@ -618,7 +622,7 @@ def test_a_stale_protocol_ok_no_longer_authorises_a_write() -> None:
     eng.last_protocol_at -= eng.settings.protocol_max_age + 1  # the OK went stale
     wire.replies[SNAPSHOT] = snapshot_frame(DRIFTED)  # runner restarted on a new one
     with pytest.raises(ProtocolMismatch):
-        eng.prompt(P3, "hi")
+        eng.prompt(Seat(P3), "hi")
     assert wire.methods == [SNAPSHOT, SNAPSHOT]  # re-checked, not driven
 
 
@@ -626,7 +630,7 @@ def test_a_stale_but_still_correct_protocol_is_simply_refreshed() -> None:
     eng, wire = build({GET: agent_frame()})
     eng.snapshot()
     eng.last_protocol_at -= eng.settings.protocol_max_age + 1
-    eng.prompt(P3, "hi")
+    eng.prompt(Seat(P3), "hi")
     assert wire.methods == [SNAPSHOT, SNAPSHOT, GET, PROMPT]
 
 
@@ -665,7 +669,7 @@ def test_a_write_through_the_private_caller_still_fails_closed(
     """The guard is a property of issuing a request, not of remembering to ask."""
     eng, wire = build(protocol_number=DRIFTED)
     with pytest.raises(ProtocolMismatch):
-        eng._call(request_type, params)  # pyright: ignore[reportPrivateUsage]
+        _ = eng._call(request_type, params)  # pyright: ignore[reportPrivateUsage]
     assert wire.methods == [SNAPSHOT]  # nothing was driven
 
 
@@ -772,7 +776,7 @@ def test_a_request_type_that_pins_no_single_method_is_refused() -> None:
 def test_the_request_that_goes_on_the_wire_is_what_the_schema_dumps() -> None:
     """Params are serialized by the generated model, not assembled by hand."""
     eng, wire_ = build({READ: read_frame("x")})
-    eng.read(P3, lines=5, source="detection")
+    eng.read(P3, ReadOptions(lines=5, source="detection"))
     assert wire_.last.params == {
         "target": "w1:p3",
         "lines": 5,
@@ -881,14 +885,14 @@ def test_there_is_no_module_level_protocol_state_left() -> None:
 
 # Every line of this type-checked clean while the write verbs took a plain str.
 PROBE = """
-from herdr_pwa.engine import HerdrClient
+from herdr_pwa.engine import HerdrClient, Seat
 from herdr_pwa.engine import Snapshot
 
 def probe(c: HerdrClient) -> None:
     s = Snapshot()
     a = s.agents[0]
-    c.send_keys(a.session, "1")
-    c.prompt(a.session, "rm -rf /")
+    c.send_keys(Seat(a.session), "1")
+    c.prompt(Seat(a.session), "rm -rf /")
     s.by_session(a.target)
 """
 
@@ -929,8 +933,8 @@ def test_a_session_id_handed_to_a_write_verb_raises_at_runtime() -> None:
     # PaneId() checks nothing: it is how an untyped value reaches a verb unvalidated.
     uuid = PaneId("5b609dba-d756-493a-a3fc-b4e09bf0a183")
     calls: tuple[Callable[[], object], ...] = (
-        lambda: eng.send_keys(uuid, "1"),
-        lambda: eng.prompt(uuid, "hi"),
+        lambda: eng.send_keys(Seat(uuid), "1"),
+        lambda: eng.prompt(Seat(uuid), "hi"),
         lambda: eng.focus(uuid),
         lambda: eng.agent(uuid),
         lambda: eng.read(uuid),
@@ -983,24 +987,24 @@ def test_a_recycled_pane_id_refuses_the_keystroke() -> None:
     eng, wire = build({GET: agent_frame()})
     someone_else = as_session_id("11111111-1111-4111-8111-111111111111")
     with pytest.raises(TargetNotFound) as exc:
-        eng.send_keys(P3, "1", session=someone_else)
+        eng.send_keys(Seat(P3, someone_else), "1")
     assert exc.value.code == SESSION_MOVED_CODE
     assert SEND_KEYS not in wire.methods  # nothing was typed
     with pytest.raises(TargetNotFound):
-        eng.prompt(P3, "hi", session=someone_else)
+        eng.prompt(Seat(P3, someone_else), "hi")
     assert PROMPT not in wire.methods
 
 
 def test_the_identity_re_check_passes_when_the_pane_still_holds_that_agent() -> None:
     eng, wire = build({GET: agent_frame()})
-    eng.send_keys(P3, "1", session=SESS)
+    eng.send_keys(Seat(P3, SESS), "1")
     assert wire.methods == [SNAPSHOT, GET, SEND_KEYS]
 
 
 def test_the_identity_re_check_is_opt_in() -> None:
     """A caller that never learned the session is exactly as it was: address only."""
     eng, wire = build({GET: agent_frame()})
-    eng.send_keys(P3, "1")
+    eng.send_keys(Seat(P3), "1")
     assert SEND_KEYS in wire.methods
 
 
@@ -1077,7 +1081,7 @@ def tab_created_frame() -> dict[str, JsonValue]:
 def test_a_created_tab_answers_with_the_pane_to_start_in() -> None:
     """``tab.create`` carries two payload objects, which is why the lifecycle verbs cannot go through ``_result``: there is no single field to unwrap."""
     eng, wire = build({TAB_CREATE: tab_created_frame()})
-    assert eng.create_tab(workspace_id="w1", cwd="/somewhere", label="x") == "w1:p9"
+    assert eng.create_tab(NewTab("w1", "/somewhere", "x")) == "w1:p9"
     assert wire.last.params["focus"] is False, (
         "creating an agent from a phone must not move the desktop's cursor"
     )
@@ -1086,7 +1090,7 @@ def test_a_created_tab_answers_with_the_pane_to_start_in() -> None:
 def test_a_create_is_never_re_sent_by_the_transport() -> None:
     """A re-sent create leaks a tab with a live shell in it that nothing tidies."""
     eng, wire = build({TAB_CREATE: tab_created_frame()})
-    eng.create_tab(workspace_id="w1", cwd="/somewhere", label="x")
+    eng.create_tab(NewTab("w1", "/somewhere", "x"))
     assert wire.last.idempotent is False
 
 
@@ -1094,7 +1098,7 @@ def test_a_start_waits_for_the_shell_before_it_asks() -> None:
     """The readiness gate: ``agent.start`` does not wait for a settled shell, so this does."""
     busy = iter([process_info_frame(settled=False), process_info_frame()])
     eng, wire = build({PROCESS_INFO: lambda _: next(busy), START: started_frame("s-1")})
-    eng.start_agent(name="n", kind="claude", pane_id="w1:p9")
+    eng.start_agent(Launch("n", "claude", "w1:p9"))
     assert wire.methods.count(PROCESS_INFO) == 2
     assert wire.methods[-1] == START, "the start went out after the pane settled"
 
@@ -1105,7 +1109,7 @@ def test_a_pane_that_never_settles_refuses_the_start_rather_than_hanging(
     monkeypatch.setattr(client_module, "_SHELL_POLLS", 3)
     eng, wire = build({PROCESS_INFO: process_info_frame(settled=False)})
     with pytest.raises(EngineError) as caught:
-        eng.start_agent(name="n", kind="claude", pane_id="w1:p9")
+        eng.start_agent(Launch("n", "claude", "w1:p9"))
     assert caught.value.code == PANE_BUSY_CODE
     assert START not in wire.methods
 
@@ -1124,26 +1128,26 @@ def test_a_busy_pane_is_the_one_write_this_client_retries() -> None:
         return reply
 
     eng, wire = build({PROCESS_INFO: process_info_frame(), START: answer})
-    assert eng.start_agent(name="n", kind="claude", pane_id="w1:p9").session == "s-1"
+    assert eng.start_agent(Launch("n", "claude", "w1:p9")).session == "s-1"
     assert wire.methods.count(START) == 2
 
 
 def test_every_other_start_failure_is_raised_on_the_first_attempt() -> None:
     eng, wire = build({PROCESS_INFO: process_info_frame(), START: EngineTimeout("too slow")})
     with pytest.raises(EngineTimeout):
-        eng.start_agent(name="n", kind="claude", pane_id="w1:p9")
+        eng.start_agent(Launch("n", "claude", "w1:p9"))
     assert wire.methods.count(START) == 1
 
 
 def test_a_started_agent_with_no_session_says_so_as_the_empty_string() -> None:
     """A start with no session yet says so as the empty string, never ``None``."""
     eng, _ = build({PROCESS_INFO: process_info_frame(), START: started_frame(None)})
-    assert eng.start_agent(name="n", kind="claude", pane_id="w1:p9").session == ""
+    assert eng.start_agent(Launch("n", "claude", "w1:p9")).session == ""
 
 
 def test_the_model_argument_reaches_the_runner_after_a_bare_dash_dash() -> None:
     eng, wire = build({PROCESS_INFO: process_info_frame(), START: started_frame("s")})
-    eng.start_agent(name="n", kind="claude", pane_id="w1:p9", args=("--model", "haiku"))
+    eng.start_agent(Launch("n", "claude", "w1:p9", ("--model", "haiku")))
     start = next(c for c in wire.calls if c.method == START)
     assert start.params["args"] == ["--model", "haiku"]
     timeout_ms = start.params["timeout_ms"]
@@ -1156,25 +1160,25 @@ def test_a_close_re_checks_the_pane_is_still_held_by_that_session() -> None:
     eng, wire = build({GET: agent_frame()})
     someone_else = as_session_id("11111111-1111-4111-8111-111111111111")
     with pytest.raises(TargetNotFound) as caught:
-        eng.close_pane(P3, session=someone_else)
+        eng.close_pane(Seat(P3, someone_else))
     assert caught.value.code == SESSION_MOVED_CODE
     assert PANE_CLOSE not in wire.methods, "somebody else's pane was closed"
 
-    eng.close_pane(P3, session=SESS)
+    eng.close_pane(Seat(P3, SESS))
     assert wire.methods[-1] == PANE_CLOSE
 
 
 def test_a_close_is_never_re_sent_by_the_transport() -> None:
     """The guard that matters most here: a close retried after an ambiguous failure lands on whatever now holds the recycled id."""
     eng, wire = build({GET: agent_frame()})
-    eng.close_pane(P3, session=SESS)
+    eng.close_pane(Seat(P3, SESS))
     assert wire.last.idempotent is False
 
 
 def test_a_close_fails_closed_on_an_unexpected_protocol() -> None:
     eng, wire = build({GET: agent_frame()}, protocol_number=DRIFTED)
     with pytest.raises(ProtocolMismatch):
-        eng.close_pane(P3, session=SESS)
+        eng.close_pane(Seat(P3, SESS))
     assert PANE_CLOSE not in wire.methods
 
 

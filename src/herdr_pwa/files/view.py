@@ -5,7 +5,9 @@ from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
-from typing import Final
+from typing import Annotated, Final
+
+from pydantic import BaseModel, BeforeValidator, ConfigDict
 
 from herdr_pwa.files.reader import Reader, Stat
 from herdr_pwa.files.roots import is_secret
@@ -159,6 +161,24 @@ def _textless(name: str, st: Stat, head: bytes, *, held: bool) -> str:
     return "too_large" if st.size > SHOWN_BYTES else ""
 
 
+# A flag is set by any value at all, as a link's ``?reveal=1`` sets it, and unset by none.
+type Flag = Annotated[bool, BeforeValidator(bool)]
+
+
+class Look(BaseModel):
+    """How a file is asked to be shown: the line to open at, past the secret tap, as source."""
+
+    model_config = ConfigDict(frozen=True)
+
+    line: int = 0
+    reveal: Flag = False
+    source: Flag = False
+
+
+# A file opened at its top, rendered, with a secret held behind its tap.
+FIRST_LOOK: Final = Look()
+
+
 @dataclass
 class Viewer:
     """Builds file views, holding the highlight cache and the limit on highlights in flight."""
@@ -174,25 +194,24 @@ class Viewer:
     _prose: _Lru[Key, tuple[MdNode, ...]] = field(default_factory=lambda: _Lru(CACHE_ENTRIES))
     _pages: _Lru[Key, tuple[int, ...]] = field(default_factory=lambda: _Lru(CACHE_ENTRIES))
 
-    def open(
-        self, reader: Reader, real: Path, *, line: int, reveal: bool, source: bool
-    ) -> FileView:
-        """The view of the regular file ``real``; ``line`` picks the page of a paged file."""
+    def open(self, reader: Reader, real: Path, look: Look = FIRST_LOOK) -> FileView:
+        """The view of the regular file ``real``; ``look.line`` picks the page of a paged file."""
         st = reader.stat(real)
         base = FileView("", real.name, st.size, st.version)
         # A file held behind the secret tap is never read, not even its first bytes.
-        held = is_secret(real.name) and not reveal
+        held = is_secret(real.name) and not look.reveal
         head = b"" if held or not st.size else reader.read_range(real, 0, SNIFF_BYTES)
         kind = _textless(base.name, st, head, held=held)
         if kind:
             return replace(base, kind=kind)
-        return self._text(_Source(reader, real, st), base, line=line, source=source)
+        return self._text(_Source(reader, real, st), base, look)
 
-    def _text(self, src: "_Source", base: FileView, *, line: int, source: bool) -> FileView:
+    def _text(self, src: "_Source", base: FileView, look: Look) -> FileView:
+        line = look.line
         if src.stat.size > HIGHLIGHT_BYTES:
             return self._paged(src, base, line)
         text = src.reader.read_range(src.real, 0, src.stat.size).decode("utf-8", "replace")
-        if source or PurePosixPath(base.name).suffix.lower() not in _MARKDOWN:
+        if look.source or PurePosixPath(base.name).suffix.lower() not in _MARKDOWN:
             return self._code_or_paged(src, base, text, line)
         if src.stat.size > MARKDOWN_BYTES:
             shown = self._code_or_paged(src, base, text, line)

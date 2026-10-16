@@ -14,7 +14,10 @@ from herdr_pwa.engine import (
     AgentStatus,
     EngineError,
     HerdrClient,
+    Launch,
+    NewTab,
     PaneId,
+    Seat,
     SessionId,
     StartedAgent,
     as_pane_id,
@@ -168,7 +171,7 @@ def _prompt_refusal(request: StartRequest) -> Refused | None:
 def _abandon(client: HerdrClient, pane: str) -> None:
     # The one close by bare pane id: a pane this same request created a moment ago.
     try:
-        _ = client.close_pane(as_pane_id(pane))
+        _ = client.close_pane(Seat(as_pane_id(pane)))
     except (EngineError, ValueError):
         log.exception("the pane %s could not be closed and has leaked", pane)
 
@@ -189,14 +192,12 @@ def _launch(client: HerdrClient, request: StartRequest, name: str) -> StartedAge
     harness = HARNESSES[request.kind]
     try:
         pane = client.create_tab(
-            workspace_id=request.workspace_id, cwd=request.cwd.strip(), label=name, env=harness.env
+            NewTab(request.workspace_id, request.cwd.strip(), name, env=harness.env)
         )
     except EngineError as exc:
         return Refused(refusal_for(exc), "created", detail=str(exc))
     try:
-        return client.start_agent(
-            name=name, kind=harness.kind, pane_id=pane, args=harness.args(request.model)
-        )
+        return client.start_agent(Launch(name, harness.kind, pane, harness.args(request.model)))
     except EngineError as exc:
         _abandon(client, pane)
         return Refused(refusal_for(exc), "created", detail=str(exc))
@@ -292,7 +293,7 @@ def _end_agent(writer: Writer, ask: EndAsk) -> AgentEnded | Refused:
         return entry
     with entry:
         try:
-            _ = writer.client.close_pane(agent.target, session=ask.session)
+            _ = writer.client.close_pane(Seat(agent.target, ask.session))
         except EngineError as exc:
             entry.outcome(failed_result(exc))
             return Refused(refusal_for(exc), "closed", detail=str(exc))

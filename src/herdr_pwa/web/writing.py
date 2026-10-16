@@ -1,11 +1,12 @@
 """What every write route shares: the form, the ids in the URL, and a writer that audits who asks."""
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Annotated, Final
+from typing import Annotated, Final, Self
 from urllib.parse import parse_qs, quote
 
-from fastapi import Body, Request
+from fastapi import Body, Depends, Request
 from fastapi.responses import RedirectResponse, Response
 
 from herdr_pwa import auth
@@ -67,6 +68,38 @@ def writer_for(web: WebState, request: Request, identity: auth.Identity) -> Writ
     return Writer(
         web.client, Recorder(web.audit, origin), web.pacing, web.settings.transcript_roots
     )
+
+
+@dataclass(frozen=True, slots=True)
+class Posted:
+    """One write as its route acts on it: the app, the request, its writer and its form's fields."""
+
+    web: WebState
+    request: Request
+    writer: Writer
+    values: dict[str, str]
+
+
+@dataclass(frozen=True, slots=True)
+class WriteRoutes:
+    """What a write router's builders share: the app, and the dependency each post is read by."""
+
+    web: WebState
+    # FastAPI calls it with the request, the router guard's identity and the body.
+    post: Callable[..., Posted]
+
+    @classmethod
+    def guarded_by(cls, web: WebState, guard: Callable[[Request], auth.Identity]) -> Self:
+        """Posts checked by the router's own ``guard``, so a request is authorized once."""
+
+        def read_post(
+            request: Request,
+            identity: Annotated[auth.Identity, Depends(guard)],
+            body: FormBody = b"",
+        ) -> Posted:
+            return Posted(web, request, writer_for(web, request, identity), form(body))
+
+        return cls(web, read_post)
 
 
 def agent_url(session: str) -> str:

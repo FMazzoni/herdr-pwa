@@ -340,16 +340,32 @@ def _sections(rows: tuple[AgentRow, ...]) -> tuple[Section, ...]:
     return tuple(s for s in cut if s.rows or s.key is AgentStatus.BLOCKED)
 
 
-def decide_herd(  # noqa: PLR0913 -- every input is a separate fact the feed is decided from
+@dataclass(frozen=True, slots=True)
+class Fetched:
+    """When the herd was read: the injected ``now``, when the snapshot was taken, what failed.
+
+    ``taken_at`` is ``None`` when no snapshot was ever read; ``error`` names the last refresh's
+    failure class while the feed serves an older one.
+    """
+
+    now: float
+    taken_at: float | None = None
+    error: str | None = None
+
+    @property
+    def age(self) -> float | None:
+        """How old the snapshot is, or ``None`` when there is none."""
+        return None if self.taken_at is None else self.now - self.taken_at
+
+
+def decide_herd(
     agents: Iterable[Agent],
     *,
     prompts: Mapping[str, BlockedPrompt],
     unread: Mapping[str, bool] | None,
-    now: float,
-    taken_at: float | None,
-    error: str | None,
+    fetched: Fetched,
 ) -> HerdDecision:
-    """Order, section and tally the herd, with its freshness at the injected ``now``."""
+    """Order, section and tally the herd, with its freshness at the injected ``fetched.now``."""
     herd = tuple(agents)
     rows = tuple(
         sorted(
@@ -369,7 +385,7 @@ def decide_herd(  # noqa: PLR0913 -- every input is a separate fact the feed is 
         sections=_sections(rows),
         counts=counts,
         cadence=cadence,
-        freshness=freshness(None if taken_at is None else now - taken_at, cadence, error),
+        freshness=freshness(fetched.age, cadence, fetched.error),
     )
 
 

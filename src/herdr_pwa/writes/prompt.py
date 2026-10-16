@@ -6,7 +6,16 @@ from dataclasses import dataclass, field
 from typing import Final
 
 from herdr_pwa.audit import OMITTED_NO_ECHO, PROMPT, Write
-from herdr_pwa.engine import AgentStatus, EngineError, HerdrClient, PaneId, SessionId, screen_digest
+from herdr_pwa.engine import (
+    VISIBLE_READ,
+    AgentStatus,
+    EngineError,
+    HerdrClient,
+    PaneId,
+    Seat,
+    SessionId,
+    screen_digest,
+)
 from herdr_pwa.writes.guard import (
     asks_a_question,
     destructive_reason,
@@ -95,7 +104,7 @@ def _text_refusal(text: str) -> Refused | None:
 
 def _read_now(client: HerdrClient, target: PaneId) -> str | Refused:
     try:
-        return client.read(target, source="visible")
+        return client.read(target, VISIBLE_READ)
     except EngineError as exc:
         log.warning("prompt refused: %s could not be read first: %s", target, exc)
         return Refused(Refusal.UNREADABLE, _VERB, detail=str(exc))
@@ -120,7 +129,7 @@ def _preflight(send: _Send, screen: str) -> Refused | None:
 def _landed(client: HerdrClient, send: _Send, before: str, pacing: Pacing) -> bool:
     for _ in range(CONFIRM_ATTEMPTS):
         try:
-            after = client.read(send.target, source="visible")
+            after = client.read(send.target, VISIBLE_READ)
         except EngineError:
             after = ""
         if landed(send.text, before, after):
@@ -145,7 +154,7 @@ def _type(writer: Writer, send: _Send) -> PromptSent | Refused:
         return entry
     with entry:
         try:
-            _ = client.prompt(send.target, send.text, session=send.session)
+            _ = client.prompt(Seat(send.target, send.session), send.text)
         except EngineError as exc:
             entry.outcome(failed_result(exc))
             return _failed(client, send, exc)
@@ -210,7 +219,7 @@ def _look(client: HerdrClient, pane: PaneId, *, by_address: bool) -> str | Refus
     # One look at a starting pane: its screen once it reads input, "" before that.
     try:
         started = client.started_agent(pane)
-        screen = client.read(pane, source="visible") if started.ready else ""
+        screen = client.read(pane, VISIBLE_READ) if started.ready else ""
     except EngineError as exc:
         return Refused(refusal_for(exc), _VERB, detail=str(exc))
     return Refused(Refusal.HAS_IDENTITY, _VERB) if by_address and started.session else screen

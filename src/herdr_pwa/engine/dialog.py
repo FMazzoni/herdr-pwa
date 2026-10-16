@@ -375,13 +375,19 @@ def _line_hints(line: str) -> list[KeyHint]:
     return found
 
 
-def _is_multi_select(
-    lines: list[str],
-    run: list[tuple[int, int, str]] | None,
-    hints: tuple[KeyHint, ...],
-) -> bool:
+@dataclass(frozen=True, slots=True)
+class _Seen:
+    """What the shape tests weigh: the screen's lines, its trusted numbered run, its footer hints."""
+
+    lines: list[str]
+    run: list[tuple[int, int, str]] | None
+    hints: tuple[KeyHint, ...]
+
+
+def _is_multi_select(seen: _Seen) -> bool:
     """Positive evidence that this screen TOGGLES rather than chooses."""
-    if any(v in hint.verb for hint in hints for v in _TOGGLE_VERBS):
+    lines, run = seen.lines, seen.run
+    if any(v in hint.verb for hint in seen.hints for v in _TOGGLE_VERBS):
         return True
     if run is not None:
         return any(_CHECKBOX_RE.match(label) for _, _, label in run)
@@ -389,13 +395,11 @@ def _is_multi_select(
     return sum(bool(_CHECKBOX_RE.match(line)) for line in lines[start:]) >= _MIN_CHECKBOX_ROWS
 
 
-def _corroborated(
-    lines: list[str],
-    run: list[tuple[int, int, str]],
-    hints: tuple[KeyHint, ...],
-) -> bool:
+def _corroborated(seen: _Seen) -> bool:
     """Is the trailing numbered run a LIVE menu?."""
-    return bool(hints) or any(_MARKER_RE.match(lines[i]) for i, _, _ in run)
+    if seen.run is None:
+        return False
+    return bool(seen.hints) or any(_MARKER_RE.match(seen.lines[i]) for i, _, _ in seen.run)
 
 
 class Stepper(BaseModel):
@@ -460,36 +464,28 @@ def _colour_focused(run: list[tuple[int, int, str]], colour: tuple[str, ...]) ->
     return _focused_index([_label_bg(colour[i], label) for i, _, label in run]) >= 0
 
 
-def _rows_are_the_answer(
-    lines: list[str], run: list[tuple[int, int, str]], hints: tuple[KeyHint, ...]
-) -> bool:
+def _rows_are_the_answer(seen: _Seen) -> bool:
     """Does the screen SAY that taking a row answers it, and nothing more?."""
-    if _asks(lines, run[0][0]):
+    if seen.run is None:
+        return False
+    if _asks(seen.lines, seen.run[0][0]):
         return True
     return any(
-        hint.key == "enter" and any(verb in hint.verb for verb in _SELECT_VERBS) for hint in hints
+        hint.key == "enter" and any(verb in hint.verb for verb in _SELECT_VERBS)
+        for hint in seen.hints
     )
 
 
-def _shape(
-    lines: list[str],
-    run: list[tuple[int, int, str]] | None,
-    hints: tuple[KeyHint, ...],
-    buttons: tuple[str, ...] = (),
-) -> MenuShape:
+def _shape(seen: _Seen, buttons: tuple[str, ...] = ()) -> MenuShape:
     """Classify the screen, in the order that fails safe."""
-    if _is_multi_select(lines, run, hints):
+    if _is_multi_select(seen):
         return MenuShape.MULTI_SELECT
     if buttons:
         return MenuShape.BUTTONS
     # Single-choice is earned, never defaulted to: failing the test means UNKNOWN.
-    if (
-        run is not None
-        and _corroborated(lines, run, hints)
-        and _rows_are_the_answer(lines, run, hints)
-    ):
+    if _corroborated(seen) and _rows_are_the_answer(seen):
         return MenuShape.SINGLE_CHOICE
-    if hints:
+    if seen.hints:
         return MenuShape.UNKNOWN
     return MenuShape.NONE
 
@@ -624,8 +620,9 @@ class BlockedPrompt(BaseModel):
         hints = _hints(_footer_lines(lines))
         buttons, buttons_at = _buttons(lines, barred, hints)
         run = _trusted(found, screen)
-        shape = _shape(lines, run, hints, buttons)
-        corroborated = run is not None and _corroborated(lines, run, hints)
+        seen = _Seen(lines, run, hints)
+        shape = _shape(seen, buttons)
+        corroborated = _corroborated(seen)
         stop = run[0][0] if run is not None else (buttons_at if buttons else len(lines))
         box = range(_box_start(lines, stop, barred), stop)
         parsed = cls(

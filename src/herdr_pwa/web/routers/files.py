@@ -7,6 +7,7 @@ from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from pydantic import BaseModel, Field
 
 from herdr_pwa.engine import Agent, InvalidRequest, as_session_id
 from herdr_pwa.files import diffs, fuzzy
@@ -27,6 +28,7 @@ from herdr_pwa.files.view import (
     PAGE_LINES,
     SNIFF_BYTES,
     FileView,
+    Look,
     Viewer,
     human_size,
     image_type,
@@ -42,6 +44,51 @@ VIEWS: Final = ("changes", "tree", "find")
 NO_STORE: Final = {"Cache-Control": "no-store"}
 
 type From = Annotated[str, Query(alias="from")]
+
+
+class _At(BaseModel):
+    """A path inside one root, and the agent page the reader came from (``?from=``)."""
+
+    path: str = ""
+    from_: str = Field("", alias="from")
+
+
+class TreeQuery(_At):
+    """A folder's listing; ``?all=`` lists what git does not track too."""
+
+    everything: str = Field("", alias="all")
+
+
+class FileQuery(_At, Look):
+    """One file, and how the viewer is asked to show it."""
+
+
+class DiffQuery(_At):
+    """One file's change, past the secret tap when ``reveal`` is set."""
+
+    reveal: str = ""
+
+
+class RawQuery(BaseModel):
+    """One image's bytes, past the secret tap when ``reveal`` is set."""
+
+    path: str = ""
+    reveal: str = ""
+
+
+class WatchQuery(_At):
+    """An open file's re-check, against the version ``v`` it was drawn at."""
+
+    v: str = ""
+
+
+class AgentFilesQuery(BaseModel):
+    """Where an agent's Files tab, or a path in its chat, should land in its root."""
+
+    path: str = ""
+    line: int = 0
+    to: str = ""
+    q: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -114,6 +161,16 @@ class Explorer:
         }
         return self.web.pages.page(name, {**shared, **context})
 
+    def at(self, root_id: str, back: str) -> tuple[Root, Nav]:
+        """The root with this id, and the links inside it that carry the page ``back`` names."""
+        root = self.root(root_id)
+        return root, Nav(root.id, _back(back))
+
+    def spot(self, root: Root, path: str) -> "_Spot":
+        """``path`` resolved inside ``root``, behind the fence."""
+        real = resolve(root, path, self.fence)
+        return _Spot(root, real, relative(root, real))
+
     def agent(self, session: str) -> Agent | None:
         """The agent whose Files tab this is, or None once it has gone."""
         if not session:
@@ -124,14 +181,22 @@ class Explorer:
             return None
 
 
+@dataclass(frozen=True, slots=True)
+class _Spot:
+    """One path inside a root, resolved: the root, the real path on disk and its relative name."""
+
+    root: Root
+    real: Path
+    rel: str
+
+
 def _redirect(url: str) -> RedirectResponse:
     return RedirectResponse(url, status_code=303, headers=NO_STORE)
 
 
-def _children(
-    explorer: Explorer, root: Root, real: Path, rel: str, *, everything: bool
-) -> list[tuple[str, bool, int]]:
-    listing = LocalReader(root.path).list_dir(real)
+def _children(explorer: Explorer, spot: _Spot, *, everything: bool) -> list[tuple[str, bool, int]]:
+    root, rel = spot.root, spot.rel
+    listing = LocalReader(root.path).list_dir(spot.real)
     entries = [(e.name, e.is_dir, e.size) for e in listing.entries]
     if everything:
         return entries
@@ -144,10 +209,11 @@ def _children(
     return [e for e in entries if e[0] in known]
 
 
-def _diff(explorer: Explorer, root: Root, real: Path, rel: str, status: Status) -> diffs.FileDiff:
+def _diff(explorer: Explorer, spot: _Spot, status: Status) -> diffs.FileDiff:
+    root, rel = spot.root, spot.rel
     change = status.of(rel)
     if change is not None and change.kind == "new":
-        raw = LocalReader(root.path).read_range(real, 0, IMAGE_BYTES)
+        raw = LocalReader(root.path).read_range(spot.real, 0, IMAGE_BYTES)
         if b"\0" in raw[:SNIFF_BYTES]:
             return diffs.FileDiff((), note=diffs.BINARY)
         return diffs.added(raw.decode("utf-8", "replace"))
@@ -187,75 +253,61 @@ def _register_pages(router: APIRouter, explorer: Explorer) -> None:
 
     @router.get("/files/{root_id}")
     def changes(root_id: str, from_: From = "") -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
-        root = explorer.root(root_id)
-        return explorer.page("files_changes.html", root, Nav(root.id, _back(from_)), "changes")
+        root, nav = explorer.at(root_id, from_)
+        return explorer.page("files_changes.html", root, nav, "changes")
 
     @router.get("/files/{root_id}/tree")
-    def tree(  # pyright: ignore[reportUnusedFunction]
-        root_id: str,
-        path: str = "",
-        everything: Annotated[str, Query(alias="all")] = "",
-        from_: From = "",
-    ) -> Response:
-        root = explorer.root(root_id)
-        nav = Nav(root.id, _back(from_))
-        real = resolve(root, path, explorer.fence)
-        rel = relative(root, real)
-        if real.is_file():
-            return _redirect(nav.href("file", rel))
-        entries = _children(explorer, root, real, rel, everything=bool(everything))
-        context = {"rel": rel, "entries": entries, "everything": bool(everything)}
+    def tree(root_id: str, query: Annotated[TreeQuery, Query()]) -> Response:  # pyright: ignore[reportUnusedFunction]
+        root, nav = explorer.at(root_id, query.from_)
+        spot = explorer.spot(root, query.path)
+        if spot.real.is_file():
+            return _redirect(nav.href("file", spot.rel))
+        everything = bool(query.everything)
+        entries = _children(explorer, spot, everything=everything)
+        context = {"rel": spot.rel, "entries": entries, "everything": everything}
         return explorer.page("files_tree.html", root, nav, "tree", **context)
 
     @router.get("/files/{root_id}/find")
     def find(root_id: str, q: str = "", from_: From = "") -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
-        root = explorer.root(root_id)
+        root, nav = explorer.at(root_id, from_)
         found = fuzzy.find(q, explorer.git.files(root.path))
-        context = {"q": q, "found": found}
-        return explorer.page("files_find.html", root, Nav(root.id, _back(from_)), "find", **context)
+        return explorer.page("files_find.html", root, nav, "find", q=q, found=found)
 
 
 def _register_file(router: APIRouter, explorer: Explorer) -> None:
     @router.get("/files/{root_id}/file")
-    def file(  # noqa: PLR0913, PLR0917 - a route's parameters are its query string  # pyright: ignore[reportUnusedFunction]
-        root_id: str,
-        path: str = "",
-        line: int = 0,
-        reveal: str = "",
-        source: str = "",
-        from_: From = "",
-    ) -> Response:
-        root = explorer.root(root_id)
-        nav = Nav(root.id, _back(from_))
-        real = resolve(root, path, explorer.fence)
-        rel = relative(root, real)
-        if real.is_dir():
-            return _redirect(nav.href("tree", rel))
-        shown: FileView = explorer.viewer.open(
-            LocalReader(root.path), real, line=line, reveal=bool(reveal), source=bool(source)
-        )
-        context = {
-            "rel": rel,
-            "file": shown,
-            "at": line,
-            "source": bool(source),
-            "cadence": WATCH_CADENCE,
-        }
-        return explorer.page("files_file.html", root, nav, "tree", **context)
+    def file(root_id: str, query: Annotated[FileQuery, Query()]) -> Response:  # pyright: ignore[reportUnusedFunction]
+        return _file_page(explorer, root_id, query)
 
     @router.get("/files/{root_id}/diff")
-    def diff(  # pyright: ignore[reportUnusedFunction]
-        root_id: str, path: str = "", reveal: str = "", from_: From = ""
-    ) -> HTMLResponse:
-        root = explorer.root(root_id)
-        nav = Nav(root.id, _back(from_))
-        real = resolve(root, path, explorer.fence)
-        rel = relative(root, real)
-        status = explorer.git.status(root.path)
-        gated = is_secret(real.name) and not reveal
-        found = None if gated else _diff(explorer, root, real, rel, status)
-        context = {"rel": rel, "diff": found, "change": status.of(rel), "gated": gated}
-        return explorer.page("files_diff.html", root, nav, "changes", **context)
+    def diff(root_id: str, query: Annotated[DiffQuery, Query()]) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
+        return _diff_page(explorer, root_id, query)
+
+
+def _file_page(explorer: Explorer, root_id: str, query: FileQuery) -> Response:
+    root, nav = explorer.at(root_id, query.from_)
+    spot = explorer.spot(root, query.path)
+    if spot.real.is_dir():
+        return _redirect(nav.href("tree", spot.rel))
+    shown: FileView = explorer.viewer.open(LocalReader(root.path), spot.real, query)
+    context = {
+        "rel": spot.rel,
+        "file": shown,
+        "at": query.line,
+        "source": query.source,
+        "cadence": WATCH_CADENCE,
+    }
+    return explorer.page("files_file.html", root, nav, "tree", **context)
+
+
+def _diff_page(explorer: Explorer, root_id: str, query: DiffQuery) -> HTMLResponse:
+    root, nav = explorer.at(root_id, query.from_)
+    spot = explorer.spot(root, query.path)
+    status = explorer.git.status(root.path)
+    gated = is_secret(spot.real.name) and not query.reveal
+    found = None if gated else _diff(explorer, spot, status)
+    context = {"rel": spot.rel, "diff": found, "change": status.of(spot.rel), "gated": gated}
+    return explorer.page("files_diff.html", root, nav, "changes", **context)
 
 
 def _image(root: Root, real: Path, path: str) -> Response:
@@ -278,24 +330,22 @@ def _version(root: Root, real: Path) -> str:
 
 def _register_bytes(router: APIRouter, explorer: Explorer) -> None:
     @router.get("/files/{root_id}/raw")
-    def raw(root_id: str, path: str = "", reveal: str = "") -> Response:  # pyright: ignore[reportUnusedFunction]
+    def raw(root_id: str, query: Annotated[RawQuery, Query()]) -> Response:  # pyright: ignore[reportUnusedFunction]
         root = explorer.root(root_id)
-        real = resolve(root, path, explorer.fence)
-        if is_secret(real.name) and not reveal:
-            raise OutsideRoot(path)
-        return _image(root, real, path)
+        real = resolve(root, query.path, explorer.fence)
+        if is_secret(real.name) and not query.reveal:
+            raise OutsideRoot(query.path)
+        return _image(root, real, query.path)
 
     @router.get("/files/{root_id}/watch", dependencies=[Depends(hidden_tick)])
-    def watch(root_id: str, path: str = "", v: str = "", from_: From = "") -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
-        root = explorer.root(root_id)
-        nav = Nav(root.id, _back(from_))
-        real = resolve(root, path, explorer.fence)
-        now = _version(root, real)
+    def watch(root_id: str, query: Annotated[WatchQuery, Query()]) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
+        root, nav = explorer.at(root_id, query.from_)
+        spot = explorer.spot(root, query.path)
         context = {
             "nav": nav,
-            "rel": relative(root, real),
-            "version": v,
-            "now": now,
+            "rel": spot.rel,
+            "version": query.v,
+            "now": _version(root, spot.real),
             "cadence": WATCH_CADENCE,
         }
         return explorer.web.pages.fragment("files_watch.html", context)
@@ -303,12 +353,10 @@ def _register_bytes(router: APIRouter, explorer: Explorer) -> None:
 
 def _register_agent(router: APIRouter, explorer: Explorer) -> None:
     @router.get("/agent/{session}/files")
-    def from_agent(  # pyright: ignore[reportUnusedFunction]
-        session: str, path: str = "", line: int = 0, to: str = "", q: str = ""
-    ) -> Response:
+    def from_agent(session: str, query: Annotated[AgentFilesQuery, Query()]) -> Response:  # pyright: ignore[reportUnusedFunction]
         agent = find_agent(explorer.web, session)
         try:
-            return _redirect(_agent_url(explorer, agent, _Ask(path, line, to, q)))
+            return _redirect(_agent_url(explorer, agent, query))
         except UnknownRoot:
             # The tab stays, so the bar keeps its shape; the page says why it is empty.
             context = {
@@ -319,15 +367,7 @@ def _register_agent(router: APIRouter, explorer: Explorer) -> None:
             return explorer.web.pages.page("files_none.html", context)
 
 
-@dataclass(frozen=True, slots=True)
-class _Ask:
-    path: str
-    line: int
-    to: str
-    q: str
-
-
-def _agent_url(explorer: Explorer, agent: Agent, ask: _Ask) -> str:
+def _agent_url(explorer: Explorer, agent: Agent, ask: AgentFilesQuery) -> str:
     path, line, to = ask.path, ask.line, ask.to
     cwd = Path(agent.cwd or "/").resolve()
     root = _agent_root(explorer, cwd)

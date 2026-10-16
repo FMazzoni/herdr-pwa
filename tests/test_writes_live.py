@@ -6,7 +6,15 @@ from pathlib import Path
 import pytest
 
 from herdr_pwa.audit import AuditLog, Origin, Recorder
-from herdr_pwa.engine import Agent, AgentStatus, EngineSettings, HerdrClient, PaneId, SessionId
+from herdr_pwa.engine import (
+    VISIBLE_READ,
+    Agent,
+    AgentStatus,
+    EngineSettings,
+    HerdrClient,
+    PaneId,
+    SessionId,
+)
 from herdr_pwa.writes.answer import KeyAsk, KeySent, send_key, send_starting_key
 from herdr_pwa.writes.keys import control_token
 from herdr_pwa.writes.lifecycle import (
@@ -45,7 +53,7 @@ def say(label: str, text: str = "") -> None:
 
 
 def show(client: HerdrClient, pane: PaneId, label: str, rows: int = 14) -> str:
-    screen = client.read(pane, source="visible")
+    screen = client.read(pane, VISIBLE_READ)
     tail = [line.rstrip() for line in screen.splitlines() if line.strip()][-rows:]
     say(f"pane {pane} after {label}", "\n".join(tail))
     return screen
@@ -103,7 +111,7 @@ def _wait_status(client: HerdrClient, pane: PaneId, *wanted: AgentStatus) -> Age
 def _replied(client: HerdrClient, pane: PaneId, word: str) -> str:
     # The prompt itself shows the word once; the reply is the second copy.
     return until(
-        lambda: s if (s := client.read(pane, source="visible")).count(word) >= 2 else None,
+        lambda: s if (s := client.read(pane, VISIBLE_READ)).count(word) >= 2 else None,
         seconds=120,
         step=1.0,
     )

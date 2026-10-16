@@ -18,6 +18,7 @@ from herdr_pwa.decisions import (
     TAPPABLE_SHAPES,
     WORKING_CADENCE,
     AgentRow,
+    Fetched,
     Freshness,
     HerdDecision,
     ScreenDecision,
@@ -333,9 +334,7 @@ def test_herd_matches_the_ledger(herd_id: str, foreign_root: Path) -> None:
             snapshot.agents,
             prompts=prompts,
             unread=unread,
-            now=NOW,
-            taken_at=taken_at,
-            error=error,
+            fetched=Fetched(NOW, taken_at, error),
         )
         freshness.append(
             {
@@ -345,8 +344,6 @@ def test_herd_matches_the_ledger(herd_id: str, foreign_root: Path) -> None:
                 "result": _freshness_json(herd.freshness),
             }
         )
-    herd = decide_herd(
-        snapshot.agents, prompts=prompts, unread=unread, now=NOW, taken_at=None, error=None
-    )
+    herd = decide_herd(snapshot.agents, prompts=prompts, unread=unread, fetched=Fetched(NOW))
     expected = {k: v for k, v in entry.items() if k != "input"}
     assert _herd_json(herd, prompt_ids, freshness) == expected

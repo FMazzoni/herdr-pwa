@@ -375,20 +375,20 @@ def test_the_highlight_limit_sends_a_third_file_plain(tmp_path: Path) -> None:
     reader = LocalReader(tmp_path.resolve())
 
     def open_one(n: int) -> None:
-        viewer.open(reader, tmp_path / f"f{n}.py", line=0, reveal=False, source=False)
+        viewer.open(reader, tmp_path / f"f{n}.py")
 
     busy = [threading.Thread(target=open_one, args=(n,)) for n in range(2)]
     for thread in busy:
         thread.start()
     assert started.acquire(timeout=5)
     assert started.acquire(timeout=5)
-    third = viewer.open(reader, tmp_path / "f2.py", line=0, reveal=False, source=False)
+    third = viewer.open(reader, tmp_path / "f2.py")
     assert third.note == BUSY_NOTE
     assert [r.text for r in third.lines[0].runs] == ["x = 2"]
     gate.set()
     for thread in busy:
         thread.join(5)
-    assert viewer.open(reader, tmp_path / "f2.py", line=0, reveal=False, source=False).note == ""
+    assert viewer.open(reader, tmp_path / "f2.py").note == ""
 
 
 def _hold_both_slots(
@@ -412,7 +412,6 @@ def _hold_both_slots(
         threading.Thread(
             target=viewer.open,
             args=(reader, tmp_path / f"held{n}.py"),
-            kwargs={"line": 0, "reveal": False, "source": False},
         )
         for n in range(2)
     ]
@@ -434,14 +433,14 @@ def test_markdown_waits_for_a_highlight_slot_like_code(tmp_path: Path) -> None:
     gate, busy = _hold_both_slots(viewer, tmp_path)
     (tmp_path / "notes.md").write_text("# Notes\n")
     reader = LocalReader(tmp_path.resolve())
-    shown = viewer.open(reader, tmp_path / "notes.md", line=0, reveal=False, source=False)
+    shown = viewer.open(reader, tmp_path / "notes.md")
     assert shown.note == BUSY_NOTE
     assert shown.kind == "code"
     assert rendered == []
     gate.set()
     for thread in busy:
         thread.join(5)
-    shown = viewer.open(reader, tmp_path / "notes.md", line=0, reveal=False, source=False)
+    shown = viewer.open(reader, tmp_path / "notes.md")
     assert (shown.kind, shown.note, rendered) == ("markdown", "", ["# Notes\n"])
 
 
@@ -456,7 +455,7 @@ def test_markdown_past_its_cap_is_shown_as_source(tmp_path: Path) -> None:
     (tmp_path / "big.md").write_text("[" * 100_000 + "\n")
     viewer = Viewer(render=render)
     reader = LocalReader(tmp_path.resolve())
-    shown = viewer.open(reader, tmp_path / "big.md", line=0, reveal=False, source=False)
+    shown = viewer.open(reader, tmp_path / "big.md")
     assert shown.kind == "code"
     assert "too long to render" in shown.note
     assert rendered == []
@@ -484,7 +483,7 @@ def test_a_page_with_no_newline_is_read_only_up_to_its_byte_cap(tmp_path: Path) 
     # A literal: a few MB with no newline is one page, which must not be read whole.
     (tmp_path / "one.log").write_bytes(b"y" * (6 * 1024 * 1024))
     reader = _Counting(tmp_path.resolve())
-    shown = Viewer().open(reader, tmp_path / "one.log", line=0, reveal=False, source=False)
+    shown = Viewer().open(reader, tmp_path / "one.log")
     assert shown.kind == "paged"
     assert reader.longest <= 2 * 1024 * 1024
     assert [line.n for line in shown.lines] == [1]

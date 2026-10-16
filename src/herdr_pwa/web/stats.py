@@ -160,10 +160,27 @@ def _context(kind: str, usage: SessionUsage) -> _Context | None:
     return _Context(usage.context_tokens, window_of(_newest(usage).model))
 
 
-def _turn(usage: SessionUsage, status: str, now: float) -> float | None:
-    if status != "working" or not usage.turn_started:
+@dataclass(frozen=True, slots=True)
+class Reading:
+    """One agent's tally as the strip reads it: its harness, its status word, and when it is."""
+
+    agent_kind: str
+    status: str
+    usage: SessionUsage
+    # Wall-clock seconds, injected, so the strip says how long ago against a held clock.
+    now: float
+
+    @property
+    def kind(self) -> str:
+        """The harness name as the registries spell it."""
+        return self.agent_kind.strip().lower()
+
+
+def _turn(reading: Reading) -> float | None:
+    usage = reading.usage
+    if reading.status != "working" or not usage.turn_started:
         return None
-    return _seconds_since(usage.turn_started, now)
+    return _seconds_since(usage.turn_started, reading.now)
 
 
 @dataclass(frozen=True, slots=True)
@@ -178,11 +195,12 @@ class _Found:
     idle: float | None
 
 
-def _found(kind: str, status: str, usage: SessionUsage, now: float) -> _Found:
+def _found(reading: Reading) -> _Found:
+    kind, usage, now = reading.kind, reading.usage, reading.now
     return _Found(
         model=_newest(usage),
         context=_context(kind, usage),
-        turn=_turn(usage, status, now),
+        turn=_turn(reading),
         # Zero is the tally's word for "the harness recorded no money"; claude records none.
         cost=usage.cost if kind != "claude" else 0.0,
         usage=usage,
@@ -273,13 +291,12 @@ _QUIET: Final = {
 }
 
 
-def stats_for(agent_kind: str, status: str, usage: SessionUsage, *, now: float) -> Stats:
-    """The strip for one agent, from its harness's tally, at wall-clock *now*."""
-    kind = agent_kind.strip().lower()
-    found = _found(kind, status, usage, now)
+def stats_for(reading: Reading) -> Stats:
+    """The strip for one agent, from its harness's tally, at the reading's wall-clock time."""
+    found = _found(reading)
     sentence = _sentence(found)
     if not sentence:
-        note = _QUIET.get(usage.state, "No usage recorded yet")
+        note = _QUIET.get(reading.usage.state, "No usage recorded yet")
         return Stats(rows=_rows(found), sentence=f"Stats: {note.lower()}", note=note)
     context = found.context
     percent = context.percent if context is not None else None

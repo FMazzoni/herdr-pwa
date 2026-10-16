@@ -1,24 +1,23 @@
 """Writes that shape the herd: starting an agent, and making, renaming or closing a workspace."""
 
-from collections.abc import Callable
 from typing import Annotated
 from urllib.parse import quote, urlencode
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, Response
 
-from herdr_pwa import auth
 from herdr_pwa.engine import Snapshot, Workspace
 from herdr_pwa.web.deps import WebState, viewer_guard
-from herdr_pwa.web.failures import refused
+from herdr_pwa.web.failures import Redraw, refused
 from herdr_pwa.web.writing import (
     FormBody,
+    Posted,
+    WriteRoutes,
     agent_url,
     first_code,
     form,
     opened,
     ticked,
-    writer_for,
 )
 from herdr_pwa.writes.lifecycle import (
     HARNESSES,
@@ -64,34 +63,41 @@ def build(web: WebState) -> APIRouter:
     """The herd-shaping routes; every one sits behind the identity and origin guard."""
     guard = viewer_guard(web)
     router = APIRouter(dependencies=[Depends(guard)])
+    writes = WriteRoutes.guarded_by(web, guard)
+    _new_routes(router, writes)
+    _workspace_routes(router, web)
+    _close_routes(router, writes)
+    return router
+
+
+def _new_routes(router: APIRouter, writes: WriteRoutes) -> None:
+    web = writes.web
 
     @router.get("/new")
     def new_form() -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
         return web.pages.page("new.html", _new_context(web.client.snapshot(), {}))
 
     @router.post("/new", response_model=None)
-    def new(  # pyright: ignore[reportUnusedFunction]
-        request: Request, identity: Annotated[auth.Identity, Depends(guard)], body: FormBody = b""
-    ) -> Response:
-        values = form(body)
-        ask = StartRequest(
-            name=values.get("name", ""),
-            kind=values.get("kind", ""),
-            workspace_id=values.get("workspace", ""),
-            cwd=values.get("cwd", ""),
-            model=values.get("model", "").strip(),
-            prompt=values.get("prompt", ""),
-            confirmed=ticked(values, "confirm"),
-        )
-        result = start_agent(writer_for(web, request, identity), ask)
-        if isinstance(result, Refused):
-            context = _new_context(web.client.snapshot(), values)
-            return refused(web.pages, "new.html", context, result, whole=True)
-        return _started(request, result)
+    def new(post: Annotated[Posted, Depends(writes.post)]) -> Response:  # pyright: ignore[reportUnusedFunction]
+        return _new(post)
 
-    _workspace_routes(router, web)
-    _close_routes(router, web, guard)
-    return router
+
+def _new(post: Posted) -> Response:
+    web, values = post.web, post.values
+    ask = StartRequest(
+        name=values.get("name", ""),
+        kind=values.get("kind", ""),
+        workspace_id=values.get("workspace", ""),
+        cwd=values.get("cwd", ""),
+        model=values.get("model", "").strip(),
+        prompt=values.get("prompt", ""),
+        confirmed=ticked(values, "confirm"),
+    )
+    result = start_agent(post.writer, ask)
+    if isinstance(result, Refused):
+        context = _new_context(web.client.snapshot(), values)
+        return refused(web.pages, Redraw("new.html", context, as_page=True), result)
+    return _started(post.request, result)
 
 
 def _find(snapshot: Snapshot, workspace_id: str) -> Workspace | None:
@@ -100,7 +106,8 @@ def _find(snapshot: Snapshot, workspace_id: str) -> Workspace | None:
 
 def _no_workspace(web: WebState, name: str, verb: str) -> HTMLResponse:
     context: dict[str, object] = {"workspace": None, "label": "", "cost": None, "armed": False}
-    return refused(web.pages, name, context, Refused(Refusal.NO_WORKSPACE, verb), whole=True)
+    drawn = Redraw(name, context, as_page=True)
+    return refused(web.pages, drawn, Refused(Refusal.NO_WORKSPACE, verb))
 
 
 def _workspace_routes(router: APIRouter, web: WebState) -> None:
@@ -114,7 +121,8 @@ def _workspace_routes(router: APIRouter, web: WebState) -> None:
         label = form(body).get("label", "")
         result = create_workspace(web.client, label)
         if isinstance(result, Refused):
-            return refused(web.pages, "workspace_new.html", {"label": label}, result, whole=True)
+            drawn = Redraw("workspace_new.html", {"label": label}, as_page=True)
+            return refused(web.pages, drawn, result)
         return opened(request, _workspace_back(result.workspace_id))
 
     @router.get("/workspaces/{workspace_id}/rename")
@@ -131,7 +139,9 @@ def _workspace_routes(router: APIRouter, web: WebState) -> None:
         if isinstance(result, Refused):
             found = _find(web.client.snapshot(), workspace_id)
             context = {"workspace": found, "label": label}
-            return refused(web.pages, "workspace_rename.html", context, result, whole=True)
+            return refused(
+                web.pages, Redraw("workspace_rename.html", context, as_page=True), result
+            )
         return opened(request, _workspace_back(workspace_id))
 
 
@@ -141,9 +151,9 @@ def _close_context(web: WebState, workspace_id: str, *, armed: bool) -> dict[str
     return {"cost": cost_of(found, snapshot) if found is not None else None, "armed": armed}
 
 
-def _close_routes(
-    router: APIRouter, web: WebState, guard: Callable[[Request], auth.Identity]
-) -> None:
+def _close_routes(router: APIRouter, writes: WriteRoutes) -> None:
+    web = writes.web
+
     @router.get("/workspaces/{workspace_id}/close")
     def close_form(workspace_id: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
         context = _close_context(web, workspace_id, armed=False)
@@ -152,23 +162,22 @@ def _close_routes(
         return web.pages.page("workspace_close.html", context)
 
     @router.post("/workspaces/{workspace_id}/close", response_model=None)
-    def close(  # pyright: ignore[reportUnusedFunction]
-        workspace_id: str,
-        request: Request,
-        identity: Annotated[auth.Identity, Depends(guard)],
-        body: FormBody = b"",
-    ) -> Response:
-        values = form(body)
-        ask = WorkspaceCloseAsk(
-            workspace_id,
-            confirmed=ticked(values, "confirm"),
-            armed=ticked(values, "armed"),
-            saw=values.get("saw", "").strip(),
-        )
-        result = close_workspace(writer_for(web, request, identity), ask)
-        if isinstance(result, Refused):
-            # The second step is armed once the first confirm has been given against a cost.
-            armed = ask.confirmed and result.refusal in (Refusal.CONFIRM, Refusal.COUNT_CHANGED)
-            context = _close_context(web, workspace_id, armed=armed)
-            return refused(web.pages, "workspace_close.html", context, result, whole=True)
-        return opened(request, "/workspaces")
+    def close(workspace_id: str, post: Annotated[Posted, Depends(writes.post)]) -> Response:  # pyright: ignore[reportUnusedFunction]
+        return _close(workspace_id, post)
+
+
+def _close(workspace_id: str, post: Posted) -> Response:
+    web, values = post.web, post.values
+    ask = WorkspaceCloseAsk(
+        workspace_id,
+        confirmed=ticked(values, "confirm"),
+        armed=ticked(values, "armed"),
+        saw=values.get("saw", "").strip(),
+    )
+    result = close_workspace(post.writer, ask)
+    if isinstance(result, Refused):
+        # The second step is armed once the first confirm has been given against a cost.
+        armed = ask.confirmed and result.refusal in (Refusal.CONFIRM, Refusal.COUNT_CHANGED)
+        context = _close_context(web, workspace_id, armed=armed)
+        return refused(web.pages, Redraw("workspace_close.html", context, as_page=True), result)
+    return opened(post.request, "/workspaces")
