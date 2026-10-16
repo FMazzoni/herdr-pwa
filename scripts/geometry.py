@@ -135,9 +135,11 @@ HTMX_SETTLED = r"""() => {
   return true;
 }"""
 
+# After a native submit the next document has no root until its first byte parses: not loaded.
 PROBE_LOADED = r"""
 const ready = arguments[0];
 const base = arguments[1];
+const root = document.documentElement;
 const statics = performance.getEntriesByType("resource")
   .map((e) => new URL(e.name).pathname)
   .filter((p) => p.startsWith("/static/"));
@@ -146,12 +148,12 @@ return {
   url: location.href,
   errorPage: !location.href.startsWith(base) || document.documentURI.startsWith("about:"),
   build: build ? build.content : "",
-  ground: getComputedStyle(document.documentElement).getPropertyValue("--ground").trim(),
+  ground: root ? getComputedStyle(root).getPropertyValue("--ground").trim() : "",
   statics: statics,
   htmx: typeof window.htmx,
   hidden: document.hidden,
-  ready: document.querySelector(ready) !== null,
-  settled: (HTMX_SETTLED)(),
+  ready: root !== null && document.querySelector(ready) !== null,
+  settled: root !== null && (HTMX_SETTLED)(),
 };
 """.replace("HTMX_SETTLED", HTMX_SETTLED)
 
