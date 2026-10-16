@@ -745,6 +745,7 @@
   var docking = false;
   var dockedBand = -1;
   var dockedH = -1;
+  var liftedKb = -1;
   var watched = null;
   // The dock grows with iPhone Text Size and with any banner in it; nothing else says so.
   var sizes = typeof window.ResizeObserver === "function" ? new window.ResizeObserver(redock) : null;
@@ -762,25 +763,45 @@
       sizes.observe(bar);
       watched = bar;
     }
+    var band = lift();
+    var height = bar.offsetHeight;
+    // A pinned reader stays at the end as the keyboard opens or the dock grows; a pan of the band
+    // is the reader's own scroll (or nothing), so it never moves the page.
+    var wasEnd = (band !== dockedBand || height !== dockedH) && pin.pinned;
+    dockedBand = band;
+    if (height !== dockedH) {
+      root.style.setProperty("--dock-h", height + "px");
+      dockedH = height;
+    }
+    if (wasEnd) {
+      toEnd();
+    }
+  }
+
+  // The keyboard's lift alone, cheap enough to run inside a visualViewport event: iOS swaps the
+  // band's offset mid-fling and draws the next frame with whatever lift the handler left.
+  // Returns the band's height while the keyboard is open, else 0.
+  function lift() {
     var view = window.visualViewport;
     // Against the layout viewport the dock is fixed to: WebKit reports innerHeight as the band.
     var layout = root.clientHeight;
     var keyboard = !!view && typing() && Math.round(layout - view.height * view.scale) > 0;
     var covered = keyboard ? Math.max(0, Math.round(layout - view.height - view.offsetTop)) : 0;
-    var height = bar.offsetHeight;
-    var band = keyboard ? Math.round(view.height) : 0;
-    // A pinned reader stays at the end as the keyboard opens or the dock grows; a pan of the band
-    // is the reader's own scroll (or nothing), so it never moves the page.
-    var wasEnd = (band !== dockedBand || height !== dockedH) && pin.pinned;
-    dockedBand = band;
-    dockedH = height;
-    root.style.setProperty("--kb", covered + "px");
+    // On <html> every write restyles the whole chat, so an unchanged lift is not written.
+    if (covered !== liftedKb) {
+      root.style.setProperty("--kb", covered + "px");
+      liftedKb = covered;
+    }
     // Open for as long as the band is short, not only while it sits above the layout's bottom.
     root.classList.toggle("is-keyboard", keyboard);
-    root.style.setProperty("--dock-h", height + "px");
-    if (wasEnd) {
-      toEnd();
+    return keyboard ? Math.round(view.height) : 0;
+  }
+
+  function viewMoved() {
+    if (document.getElementById("composer")) {
+      lift();
     }
+    redock();
   }
 
   // Only a field that takes text raises the keyboard; a short band without one is the browser's bars.
@@ -802,8 +823,8 @@
   }
 
   if (window.visualViewport) {
-    window.visualViewport.addEventListener("resize", redock);
-    window.visualViewport.addEventListener("scroll", redock);
+    window.visualViewport.addEventListener("resize", viewMoved);
+    window.visualViewport.addEventListener("scroll", viewMoved);
   }
   window.addEventListener("resize", redock);
   document.addEventListener("focusin", redock);

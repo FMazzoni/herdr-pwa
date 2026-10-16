@@ -1177,6 +1177,57 @@ const step = (i) => {
 step(0);
 """
 PAN_TOPS = [400, 300, 200, 100, 0]
+# iOS swaps the band's offset between 0 and the keyboard mid-fling (device-report.jsonl), and the
+# composer drawn in that frame carries whatever lift the handler left: it must be right as soon as
+# the event returns, not a frame later. A repeat of the same offset writes nothing, because --kb
+# sits on <html> and every write restyles the whole chat.
+SWAP = r"""
+const [tops] = arguments;
+const done = arguments[arguments.length - 1];
+const kb = window.__hpKb;
+const root = document.documentElement;
+const view = window.visualViewport;
+const rest = kb.top;
+const late = [];
+const frames = (n, then) => (n ? requestAnimationFrame(() => frames(n - 1, then)) : then());
+for (const top of tops) {
+  kb.top = top;
+  view.dispatchEvent(new Event("scroll"));
+  const lift = parseFloat(root.style.getPropertyValue("--kb")) || 0;
+  const want = Math.round(root.clientHeight - window.innerHeight - top);
+  if (Math.abs(lift - want) > 1) late.push([top, lift, want]);
+}
+frames(2, () => {
+  let writes = 0;
+  const style = root.style;
+  const real = style.setProperty;
+  style.setProperty = function (name) {
+    if (name === "--kb") writes += 1;
+    return real.apply(style, arguments);
+  };
+  view.dispatchEvent(new Event("scroll"));
+  frames(2, () => {
+    delete style.setProperty;
+    kb.top = rest;
+    view.dispatchEvent(new Event("scroll"));
+    done({ late: late, writes: writes });
+  });
+});
+"""
+SWAP_TOPS = [0, 241.7, 413]
+
+
+def _swap_problems(name: str, found: object) -> list[str]:
+    swap = found if isinstance(found, dict) else {}
+    problems: list[str] = []
+    if swap.get("late"):
+        problems.append(
+            f"{name}: the lift trailed an offset swap past the event that told it "
+            f"([band offset, lift, wanted]): {swap['late']}"
+        )
+    if swap.get("writes") != 0:
+        problems.append(f"{name}: an unchanged offset rewrote --kb {swap.get('writes')}x")
+    return problems
 
 
 def keyboard_up(driver: Marionette, base: str, tab: Tab, rig: Rig, home: Path) -> list[str]:
@@ -1191,6 +1242,7 @@ def keyboard_up(driver: Marionette, base: str, tab: Tab, rig: Rig, home: Path) -
     settle(driver)
     moves = driver.script_async(PAN_PINNED, PAN_TOPS)
     pans = [f"{tab.name}: a pan of the band moved the pinned page {moves}x"] if moves else []
+    pans += _swap_problems(tab.name, driver.script_async(SWAP, SWAP_TOPS))
     driver.script(SCROLL_UP, STEP, 50, KEYBOARD_STEPS)
     n = _redraw_while(driver, tab, rig, home)
     newest = tab.grow(rig, home, n)
