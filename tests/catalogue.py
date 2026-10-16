@@ -363,9 +363,9 @@ def failed_notice_chat() -> list[JsonObject]:
 
 
 def report_chat() -> list[JsonObject]:
-    """A prompt and the longest hand-back report a subagent sent in answer."""
+    """A prompt and a long hand-back report a subagent sent in answer, a bulleted list in it."""
     reports = notices_of("peer", report=True)
-    return [notices_of("human")[1], max(reports, key=lambda r: len(json.dumps(r)))]
+    return [notices_of("human")[1], next(r for r in reports if "The scroll-anchor fix is merged" in json.dumps(r))]
 
 
 def peer_message_chat() -> list[JsonObject]:
