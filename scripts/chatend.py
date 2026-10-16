@@ -11,7 +11,8 @@ twenty messages, "Load earlier" lands the page above without moving the reader, 
 one refresh, and a lost stream falls back to polling and then recovers.
 
 A reader who scrolls up from the end in small steps while the agent works is never pulled back
-to it, and the line they are reading stays where it was across every redraw."""
+to it, and the line they are reading stays where it was across every redraw, even one that lands
+before their scroll is heard."""
 
 import json
 import time
@@ -640,6 +641,71 @@ def unheard_scroll(driver: Marionette, base: str, tab: Tab, rig: Rig, home: Path
     return []
 
 
+# Before the view's own redraw is swapped in, scroll up from the end: the redraw lands between
+# the reader's scroll and its event, as one does when the page's next frame is late.
+UNHEARD_READ = r"""
+const [by] = arguments;
+const gap = () => document.documentElement.scrollHeight - innerHeight - scrollY;
+const seen = { up: null, heard: 0, atEnd: 0, swaps: 0 };
+window.__hpUnheard = seen;
+// On the window, capturing: ahead of app.js's own listener on the document.
+window.addEventListener("htmx:beforeSwap", (event) => {
+  const target = event.detail.target;
+  if (seen.up !== null || !target || target.id !== "agent-view") return;
+  window.scrollBy({ top: -by, behavior: "instant" });
+  seen.up = window.scrollY;
+}, { capture: true });
+document.addEventListener("htmx:afterSettle", (event) => {
+  if (seen.up !== null && event.detail.target && event.detail.target.id === "agent-view") {
+    seen.swaps += 1;
+  }
+});
+addEventListener("scroll", () => {
+  if (seen.up === null) return;
+  seen.heard += 1;
+  if (gap() <= 2) seen.atEnd += 1;
+}, { passive: true });
+htmx.trigger(document.body, "hp:poke");
+return true;
+"""
+READ_UNHEARD = r"""
+const seen = window.__hpUnheard || {};
+const busy = document.querySelector(".htmx-request, .htmx-swapping, .htmx-settling");
+const gap = document.documentElement.scrollHeight - innerHeight - scrollY;
+return { up: seen.up, heard: seen.heard || 0, atEnd: seen.atEnd || 0, swaps: seen.swaps || 0,
+  gap: gap, busy: !!busy };
+"""
+
+
+def unheard_read(driver: Marionette, base: str, tab: Tab, rig: Rig, home: Path) -> list[str]:
+    """The view's redraw that lands before the reader's scroll is heard does not pull them back."""
+    driver.send("WebDriver:Navigate", {"url": base + tab.state.path})
+    seen = _wait_for(driver, tab.newest)
+    if not seen or not seen.get("scrollable"):
+        return [f"{tab.name}: never drew a page tall enough to scroll"]
+    tab.grow(rig, home, 1)
+    driver.script(UNHEARD_READ, UNHEARD_PX)
+
+    def landed() -> dict[str, object]:
+        found = driver.script(READ_UNHEARD)
+        return found if isinstance(found, dict) else {}
+
+    if not _until(lambda: _num(landed(), "heard") >= 1 and _num(landed(), "swaps") >= 1):
+        return [f"{tab.name}: the view's redraw never landed after the reader's scroll"]
+    if not _until(lambda: not landed().get("busy")):
+        return [f"{tab.name}: the view never settled"]
+    after = landed()
+    problems: list[str] = []
+    if _num(after, "atEnd"):
+        problems.append(f"{tab.name}: a redraw pulled the reader back to the end")
+    if _num(after, "gap") < UNHEARD_PX / 2:
+        problems.append(
+            f"{tab.name}: scrolled {UNHEARD_PX}px up as the view redrew, "
+            f"the reader ended {_num(after, 'gap'):.0f}px from the end"
+        )
+    return problems
+
+
 # Paging and the event stream.
 
 PAGE_MESSAGES = 20
@@ -1059,6 +1125,8 @@ def _tabs() -> tuple[tuple[Tab, Callable[[Marionette, str, Tab, Rig, Path], list
         (Tab("tool result", tool, "Reply after the tests", _say), kept_open),
         (Tab("chat end", chat, last_reply, _say), follow),
         (Tab("unheard scroll", chat, last_reply, _say), unheard_scroll),
+        (Tab("unheard read", chat, last_reply, _say), unheard_read),
+        (Tab("pane unheard read", pane, last_line, _scroll_pane), unheard_read),
         (Tab("strip under a finger", strip, "", _say), strip_under_finger),
         (Tab("pane end", pane, last_line, _print), follow),
         (Tab("pane nudged up", pane, last_line, _scroll_pane), scrolling_up(0.4, 10)),
