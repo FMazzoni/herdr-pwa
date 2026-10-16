@@ -3,7 +3,7 @@
 import json
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Annotated, Final
+from typing import Annotated, Final, Self
 from urllib.parse import parse_qs, quote
 
 from fastapi import Body, Depends, Request
@@ -72,26 +72,34 @@ def writer_for(web: WebState, request: Request, identity: auth.Identity) -> Writ
 
 @dataclass(frozen=True, slots=True)
 class Posted:
-    """One write as its route acts on it: the request, its audited writer and its form's fields."""
+    """One write as its route acts on it: the app, the request, its writer and its form's fields."""
 
+    web: WebState
     request: Request
     writer: Writer
     values: dict[str, str]
 
 
-# A dependency FastAPI calls with the request, the guard's identity and the body.
-type Posting = Callable[..., Posted]
+@dataclass(frozen=True, slots=True)
+class WriteRoutes:
+    """What a write router's builders share: the app, and the dependency each post is read by."""
 
+    web: WebState
+    # FastAPI calls it with the request, the router guard's identity and the body.
+    post: Callable[..., Posted]
 
-def posted(web: WebState, guard: Callable[[Request], auth.Identity]) -> Posting:
-    """The dependency a write route takes its post from, checked by the router's own ``guard``."""
+    @classmethod
+    def guarded_by(cls, web: WebState, guard: Callable[[Request], auth.Identity]) -> Self:
+        """Posts checked by the router's own ``guard``, so a request is authorized once."""
 
-    def read_post(
-        request: Request, identity: Annotated[auth.Identity, Depends(guard)], body: FormBody = b""
-    ) -> Posted:
-        return Posted(request, writer_for(web, request, identity), form(body))
+        def read_post(
+            request: Request,
+            identity: Annotated[auth.Identity, Depends(guard)],
+            body: FormBody = b"",
+        ) -> Posted:
+            return Posted(web, request, writer_for(web, request, identity), form(body))
 
-    return read_post
+        return cls(web, read_post)
 
 
 def agent_url(session: str) -> str:

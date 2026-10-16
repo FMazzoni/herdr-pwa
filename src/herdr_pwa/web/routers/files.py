@@ -59,16 +59,8 @@ class TreeQuery(_At):
     everything: str = Field("", alias="all")
 
 
-class FileQuery(_At):
-    """One file: the line to open at, past the secret tap, and as source rather than rendered."""
-
-    line: int = 0
-    reveal: str = ""
-    source: str = ""
-
-    def look(self) -> Look:
-        """How the viewer is asked to show it."""
-        return Look(line=self.line, reveal=bool(self.reveal), source=bool(self.source))
+class FileQuery(_At, Look):
+    """One file, and how the viewer is asked to show it."""
 
 
 class DiffQuery(_At):
@@ -297,12 +289,12 @@ def _file_page(explorer: Explorer, root_id: str, query: FileQuery) -> Response:
     spot = explorer.spot(root, query.path)
     if spot.real.is_dir():
         return _redirect(nav.href("tree", spot.rel))
-    shown: FileView = explorer.viewer.open(LocalReader(root.path), spot.real, query.look())
+    shown: FileView = explorer.viewer.open(LocalReader(root.path), spot.real, query)
     context = {
         "rel": spot.rel,
         "file": shown,
         "at": query.line,
-        "source": bool(query.source),
+        "source": query.source,
         "cadence": WATCH_CADENCE,
     }
     return explorer.page("files_file.html", root, nav, "tree", **context)

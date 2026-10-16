@@ -53,26 +53,28 @@ def _static_route(app: FastAPI, web: WebState, assets: Assets) -> None:
 
 
 @dataclass(frozen=True, slots=True)
-class _Live:
+class _Background:
     """What runs beside the requests: the event stream's hub and push, when it is on."""
 
     hub: Hub
     pushing: PushState | None
 
 
-def _lifespan(live: _Live, web: WebState) -> Callable[[FastAPI], AbstractAsyncContextManager[None]]:
+def _lifespan(
+    background: _Background, web: WebState
+) -> Callable[[FastAPI], AbstractAsyncContextManager[None]]:
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
         if web.settings.prewarm:
             warm_later(web)
-        state = live.pushing
+        state = background.pushing
         notifier = state.notifier if state is not None else None
         if notifier is not None:
             notifier.start()
         try:
             yield
         finally:
-            await live.hub.close()
+            await background.hub.close()
             if notifier is not None:
                 await notifier.stop()
             if web.seen is not None:
@@ -87,15 +89,17 @@ def create_app(settings: Settings, seams: Seams) -> FastAPI:
     assets = Assets.load()
     pages = Pages(assets, device_report=settings.device_report, fallback=settings.events_fallback)
     web, pushing = _web_state(settings, seams, pages)
-    live = _Live(Hub(web, _hub_config(settings)), pushing)
-    app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=_lifespan(live, web))
+    background = _Background(Hub(web, _hub_config(settings)), pushing)
+    app = FastAPI(
+        docs_url=None, redoc_url=None, openapi_url=None, lifespan=_lifespan(background, web)
+    )
     # The gate rigs reach in to drop every stream, to prove a page falls back and recovers.
-    app.state.events = live.hub
+    app.state.events = background.hub
     # And to its caches, to count what a page read from disk.
     app.state.web = web
     failures.install(app, pages)
-    _routes(app, web, assets, live)
-    _middleware(app, web, assets)
+    _routes(app, web, assets, background)
+    _middleware(app, web, assets.build)
     return app
 
 
@@ -135,7 +139,7 @@ def _hub_config(settings: Settings) -> HubConfig:
     )
 
 
-def _routes(app: FastAPI, web: WebState, assets: Assets, live: _Live) -> None:
+def _routes(app: FastAPI, web: WebState, assets: Assets, background: _Background) -> None:
     @app.get("/healthz", include_in_schema=False)
     def healthz() -> dict[str, str]:  # pyright: ignore[reportUnusedFunction]
         return {"status": "ok"}
@@ -150,17 +154,17 @@ def _routes(app: FastAPI, web: WebState, assets: Assets, live: _Live) -> None:
         files.build,
     ):
         app.include_router(build(web))
-    app.include_router(push.build(web, live.pushing))
-    app.include_router(events.build(web, live.hub))
+    app.include_router(push.build(web, background.pushing))
+    app.include_router(events.build(web, background.hub))
     app.include_router(shell.build(web, assets))
     # Off means the route does not exist at all, so a stray post is an ordinary 404.
     if web.settings.device_report:
         app.include_router(devreport.build(web))
 
 
-def _middleware(app: FastAPI, web: WebState, assets: Assets) -> None:
+def _middleware(app: FastAPI, web: WebState, build: str) -> None:
     app.add_middleware(GZipMiddleware, minimum_size=GZIP_MIN_BYTES)
     # Outside routing, so an unknown caller is refused before any route reads its body.
     app.add_middleware(IdentityGate, access=web.access(), pages=web.pages)
     # Added last, so it is outermost and stamps refusals and crashes too.
-    app.add_middleware(SecurityHeaders, build=assets.build)
+    app.add_middleware(SecurityHeaders, build=build)

@@ -669,7 +669,7 @@ def test_a_write_through_the_private_caller_still_fails_closed(
     """The guard is a property of issuing a request, not of remembering to ask."""
     eng, wire = build(protocol_number=DRIFTED)
     with pytest.raises(ProtocolMismatch):
-        eng._call(request_type, params)  # pyright: ignore[reportPrivateUsage]
+        _ = eng._call(request_type, params)  # pyright: ignore[reportPrivateUsage]
     assert wire.methods == [SNAPSHOT]  # nothing was driven
 
 

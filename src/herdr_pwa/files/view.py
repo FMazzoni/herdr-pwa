@@ -5,7 +5,9 @@ from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
-from typing import Final
+from typing import Annotated, Final
+
+from pydantic import BaseModel, BeforeValidator, ConfigDict
 
 from herdr_pwa.files.reader import Reader, Stat
 from herdr_pwa.files.roots import is_secret
@@ -159,13 +161,18 @@ def _textless(name: str, st: Stat, head: bytes, *, held: bool) -> str:
     return "too_large" if st.size > SHOWN_BYTES else ""
 
 
-@dataclass(frozen=True, slots=True)
-class Look:
+# A flag is set by any value at all, as a link's ``?reveal=1`` sets it, and unset by none.
+type Flag = Annotated[bool, BeforeValidator(bool)]
+
+
+class Look(BaseModel):
     """How a file is asked to be shown: the line to open at, past the secret tap, as source."""
 
+    model_config = ConfigDict(frozen=True)
+
     line: int = 0
-    reveal: bool = False
-    source: bool = False
+    reveal: Flag = False
+    source: Flag = False
 
 
 # A file opened at its top, rendered, with a secret held behind its tap.

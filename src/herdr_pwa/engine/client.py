@@ -233,30 +233,25 @@ class HerdrClient:
         *,
         timeout: float | None = None,
         guarded: bool = False,
-    ) -> Frame:
-        """Issue one request, with the write guard applied first."""
+    ) -> _Reply:
+        """Issue one request, with the write guard applied first; the reply names its method."""
         method = method_of(request_type)
         writes = method in WRITE_METHODS
         if writes and not guarded:
             self._require_writable(timeout)
         frame = request_type.model_validate({"id": _UNSENT, "method": method, "params": params})
         dumped = frame.model_dump(mode="json", exclude_none=True)
-        return self.transport.call(
+        payload = self.transport.call(
             method,
             # A json-mode dump is JSON by construction, and the schema pins params to an object.
             cast(Frame, dumped["params"]),
             timeout=self._resolve_timeout(timeout),
             idempotent=not writes,
         )
+        return _Reply(method, payload)
 
     def _resolve_timeout(self, timeout: float | None) -> float:
         return self.settings.command_timeout if timeout is None else timeout
-
-    def _asked(
-        self, request_type: type[BaseModel], params: BaseModel, *, timeout: float | None
-    ) -> _Reply:
-        """Issue one request, keeping the method it was so a bad reply can name it."""
-        return _Reply(method_of(request_type), self._call(request_type, params, timeout=timeout))
 
     def _result(
         self, reply: _Reply, arm: type[_Arm], *, degrade: bool
@@ -326,7 +321,7 @@ class HerdrClient:
 
     def snapshot(self, *, timeout: float | None = None) -> Snapshot:
         """Fetch the whole session state, agents already ranked most-urgent-first."""
-        reply = self._asked(
+        reply = self._call(
             wire_request.SessionSnapshotRequest, wire_request.EmptyParams(), timeout=timeout
         )
         _, raw = self._result(reply, wire.SessionSnapshotResponseResult, degrade=True)
@@ -367,7 +362,7 @@ class HerdrClient:
     def _agent_result(
         self, target: PaneId, *, timeout: float | None, degrade: bool
     ) -> tuple[wire.AgentInfoResponseResult | None, Frame]:
-        reply = self._asked(
+        reply = self._call(
             wire_request.AgentGetRequest, wire_request.AgentTarget(target=target), timeout=timeout
         )
         return self._result(reply, wire.AgentInfoResponseResult, degrade=degrade)
@@ -375,7 +370,7 @@ class HerdrClient:
     def read(self, target: PaneId, options: ReadOptions = PLAIN_READ) -> str:
         """Read an agent's terminal output."""
         target = as_pane_id(target)
-        reply = self._asked(
+        reply = self._call(
             wire_request.AgentReadRequest,
             self._read_params(target, options),
             timeout=options.timeout,
@@ -452,7 +447,7 @@ class HerdrClient:
             wire_request.AgentExplainRequest,
             wire_request.AgentTarget(target=as_pane_id(target)),
             timeout=timeout,
-        )
+        ).payload
         return self._sub_object(payload, _EXPLAIN_FIELD, method=method)
 
     def agent_frame(self, target: PaneId, *, timeout: float | None = None) -> Frame:
@@ -461,7 +456,7 @@ class HerdrClient:
             wire_request.AgentGetRequest,
             wire_request.AgentTarget(target=as_pane_id(target)),
             timeout=timeout,
-        )
+        ).payload
 
     def blocked_prompt(
         self,
@@ -575,7 +570,7 @@ class HerdrClient:
             wire_request.AgentPromptParams(target=target, text=text),
             timeout=timeout,
             guarded=True,
-        )
+        ).payload
 
     def send_keys(self, seat: Seat, *keys: str, timeout: float | None = None) -> Frame:
         """Send key presses to the agent in ``seat`` (``"1"``, ``"enter"``, ``"ctrl-c"``...)."""
@@ -590,7 +585,7 @@ class HerdrClient:
             wire_request.AgentSendKeysParams(target=target, keys=list(keys)),
             timeout=timeout,
             guarded=True,
-        )
+        ).payload
 
     def focus(self, target: PaneId, *, timeout: float | None = None) -> Frame:
         """Focus an agent's pane in the running session."""
@@ -598,7 +593,7 @@ class HerdrClient:
             wire_request.AgentFocusRequest,
             wire_request.AgentTarget(target=as_pane_id(target)),
             timeout=timeout,
-        )
+        ).payload
 
     # ----------------------------------------------------------------------
     # Lifecycle: the two writes that make a herd able to shrink as well as grow
@@ -607,7 +602,7 @@ class HerdrClient:
     def shell_pane(self, pane_id: str, *, timeout: float | None = None) -> bool:
         """Is this pane a settled shell, ready for an agent to be started in it?"""
         info = self._arm(
-            self._asked(
+            self._call(
                 wire_request.PaneProcessInfoRequest,
                 wire_request.PaneProcessInfoParams(pane_id=pane_id),
                 timeout=timeout,
@@ -620,7 +615,7 @@ class HerdrClient:
     def pane_pids(self, pane_id: str, *, timeout: float | None = None) -> tuple[int, ...]:
         """Every process in this pane, shell first. A runner that will not say answers `()`."""
         arm, raw = self._result(
-            self._asked(
+            self._call(
                 wire_request.PaneProcessInfoRequest,
                 wire_request.PaneProcessInfoParams(pane_id=pane_id),
                 timeout=timeout,
@@ -638,7 +633,7 @@ class HerdrClient:
 
     def create_tab(self, tab: NewTab, *, timeout: float | None = None) -> str:
         """Make a new tab with one shell pane in it, and return its root pane."""
-        reply = self._asked(
+        reply = self._call(
             wire_request.TabCreateRequest,
             wire_request.TabCreateParams(
                 workspace_id=tab.workspace_id,
@@ -663,8 +658,7 @@ class HerdrClient:
             args=list(launch.args) or None,
             timeout_ms=START_TIMEOUT_MS,
         )
-        payload = self._start_with_retries(wire_request.AgentStartRequest, params, timeout)
-        reply = _Reply(method_of(wire_request.AgentStartRequest), payload)
+        reply = self._start_with_retries(wire_request.AgentStartRequest, params, timeout)
         arm = self._written(reply, wire.AgentStartedResponseResult)
         return self._started(arm.agent)
 
@@ -699,7 +693,7 @@ class HerdrClient:
             wire_request.PaneTarget(pane_id=str(target)),
             timeout=timeout,
             guarded=True,
-        )
+        ).payload
 
     # ----------------------------------------------------------------------
     # Workspaces: the container the herd is grouped by
@@ -709,7 +703,7 @@ class HerdrClient:
         self, *, label: str = "", cwd: str = "", timeout: float | None = None
     ) -> Workspace:
         """Make an empty workspace and hand it back -- no tab is filled, no agent starts."""
-        reply = self._asked(
+        reply = self._call(
             wire_request.WorkspaceCreateRequest,
             wire_request.WorkspaceCreateParams(label=label or None, cwd=cwd or None, focus=False),
             timeout=timeout,
@@ -725,7 +719,7 @@ class HerdrClient:
             wire_request.WorkspaceRenameRequest,
             wire_request.WorkspaceRenameParams(workspace_id=workspace_id, label=label),
             timeout=timeout,
-        )
+        ).payload
 
     def close_workspace(self, workspace_id: str, *, timeout: float | None = None) -> Frame:
         """End every agent in a workspace at once -- the largest write this app makes."""
@@ -733,7 +727,7 @@ class HerdrClient:
             wire_request.WorkspaceCloseRequest,
             wire_request.WorkspaceCloseParams(workspace_id=workspace_id),
             timeout=timeout,
-        )
+        ).payload
 
     # -- the two halves of start_agent, kept out of it for readability ------
 
@@ -755,7 +749,7 @@ class HerdrClient:
         request_type: type[BaseModel],
         params: "wire_request.AgentStartParams",
         timeout: float | None,
-    ) -> Frame:
+    ) -> _Reply:
         """``agent.start``, retried on ``agent_pane_busy`` and on nothing else."""
         budget = _START_BUDGET if timeout is None else timeout
         last: EngineError | None = None

@@ -24,14 +24,13 @@ from herdr_pwa.web.failures import AgentGone, Redraw, refused
 from herdr_pwa.web.herd import find_agent, unread_of
 from herdr_pwa.web.writing import (
     Posted,
-    Posting,
+    WriteRoutes,
     address_of,
     agent_url,
     expected,
     first_note,
     identity_of,
     opened,
-    posted,
     raise_if_gone,
     ticked,
 )
@@ -177,7 +176,8 @@ def _after(web: WebState, session: SessionId, prior: Agent | None) -> Agent:
     return agent
 
 
-def _key(web: WebState, session: SessionId, post: Posted) -> HTMLResponse:
+def _key(session: SessionId, post: Posted) -> HTMLResponse:
+    web = post.web
     prior = _lookup(web, session)
     values = post.values
     ask = KeyAsk(
@@ -217,7 +217,8 @@ def _answered(web: WebState, agent: Agent, result: KeySent) -> HTMLResponse:
     return web.pages.fragment("answer.html", context, headers={"HX-Trigger": "hp:poke"})
 
 
-def _prompt(web: WebState, session: SessionId, post: Posted) -> HTMLResponse:
+def _prompt(session: SessionId, post: Posted) -> HTMLResponse:
+    web = post.web
     prior = _lookup(web, session)
     values = post.values
     ask = PromptAsk(
@@ -247,8 +248,8 @@ def _composed(web: WebState, agent: Agent, result: PromptSent) -> HTMLResponse:
     return web.pages.fragment("compose.html", context, headers={"HX-Trigger": "hp:poke"})
 
 
-def _close(web: WebState, session: SessionId, post: Posted) -> Response:
-    values = post.values
+def _close(session: SessionId, post: Posted) -> Response:
+    web, values = post.web, post.values
     ask = EndAsk(
         session,
         expected_target=expected(values),
@@ -267,46 +268,52 @@ def build(web: WebState) -> APIRouter:
     """The per-agent write routes; every one sits behind the identity and origin guard."""
     guard = viewer_guard(web)
     router = APIRouter(dependencies=[Depends(guard)])
-    posting = posted(web, guard)
-    _composer_routes(router, web, posting)
-    _answer_routes(router, web, posting)
-    _close_routes(router, web, posting)
+    writes = WriteRoutes.guarded_by(web, guard)
+    _composer_routes(router, writes)
+    _answer_routes(router, writes)
+    _close_routes(router, writes)
     _door_page(router, web)
-    _door_writes(router, web, posting)
+    _door_writes(router, writes)
     return router
 
 
-def _composer_routes(router: APIRouter, web: WebState, posting: Posting) -> None:
+def _composer_routes(router: APIRouter, writes: WriteRoutes) -> None:
+    web = writes.web
+
     @router.get("/agent/{session}/compose")
     def composer(session: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
         agent = find_agent(web, identity_of(session))
         return web.pages.fragment("compose.html", composer_region(web, agent))
 
     @router.post("/agent/{session}/prompt")
-    def prompt(session: str, post: Annotated[Posted, Depends(posting)]) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
-        return _prompt(web, identity_of(session), post)
+    def prompt(session: str, post: Annotated[Posted, Depends(writes.post)]) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
+        return _prompt(identity_of(session), post)
 
 
-def _answer_routes(router: APIRouter, web: WebState, posting: Posting) -> None:
+def _answer_routes(router: APIRouter, writes: WriteRoutes) -> None:
+    web = writes.web
+
     @router.get("/agent/{session}/answer")
     def answer(session: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
         agent = find_agent(web, identity_of(session))
         return web.pages.fragment("answer.html", answer_region(web, agent))
 
     @router.post("/agent/{session}/keys")
-    def keys(session: str, post: Annotated[Posted, Depends(posting)]) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
-        return _key(web, identity_of(session), post)
+    def keys(session: str, post: Annotated[Posted, Depends(writes.post)]) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
+        return _key(identity_of(session), post)
 
 
-def _close_routes(router: APIRouter, web: WebState, posting: Posting) -> None:
+def _close_routes(router: APIRouter, writes: WriteRoutes) -> None:
+    web = writes.web
+
     @router.get("/agent/{session}/close")
     def close_form(session: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
         agent = find_agent(web, identity_of(session))
         return web.pages.page("close.html", {"agent": agent})
 
     @router.post("/agent/{session}/close", response_model=None)
-    def close(session: str, post: Annotated[Posted, Depends(posting)]) -> Response:  # pyright: ignore[reportUnusedFunction]
-        return _close(web, identity_of(session), post)
+    def close(session: str, post: Annotated[Posted, Depends(writes.post)]) -> Response:  # pyright: ignore[reportUnusedFunction]
+        return _close(identity_of(session), post)
 
 
 def _door_page(router: APIRouter, web: WebState) -> None:
@@ -320,9 +327,11 @@ def _door_page(router: APIRouter, web: WebState) -> None:
         return web.pages.page("starting.html", context)
 
 
-def _door_writes(router: APIRouter, web: WebState, posting: Posting) -> None:
+def _door_writes(router: APIRouter, writes: WriteRoutes) -> None:
+    web = writes.web
+
     @router.post("/starting/{pane}/prompt")
-    def first_prompt(pane: str, post: Annotated[Posted, Depends(posting)]) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
+    def first_prompt(pane: str, post: Annotated[Posted, Depends(writes.post)]) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
         values = post.values
         target = address_of(pane)
         text = values.get("text", "")
@@ -336,7 +345,7 @@ def _door_writes(router: APIRouter, web: WebState, posting: Posting) -> None:
         return _door(web, target, _Knock(result, text=text))
 
     @router.post("/starting/{pane}/keys")
-    def first_key(pane: str, post: Annotated[Posted, Depends(posting)]) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
+    def first_key(pane: str, post: Annotated[Posted, Depends(writes.post)]) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
         target = address_of(pane)
         key = post.values.get("key", "")
         confirmed = ticked(post.values, "confirm")
