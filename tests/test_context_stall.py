@@ -13,7 +13,7 @@ from herdr_pwa.engine.notices import CONTEXT_FULL
 from herdr_pwa.engine.transcript import parse_claude_line
 from herdr_pwa.web.events import changed, herd_marks
 from tests._jsonpath import obj
-from tests.catalogue import api_error_records
+from tests.catalogue import api_error_records, slash_command_records
 from tests.test_notifier_loop import PAST_THE_CACHE, build_loop
 from tests.test_opencode import errored_page
 from tests.webfakes import (
@@ -71,6 +71,18 @@ def test_a_conversation_stalls_on_its_last_refusal_and_retries_do_not_end_it(
 ) -> None:
     # A notice or a peer message only woke it to be refused again; a prompt or /compact moved on.
     assert context_stalled(_upto(count)) is stalled
+
+
+def test_compact_run_after_a_full_context_ends_the_stall() -> None:
+    refused = next(r for r in api_error_records() if r.get("error") == "invalid_request")
+    slash = slash_command_records()
+    start = next(i for i, r in enumerate(slash) if "/compact" in json.dumps(r))
+    # The caveat, the command and what it printed, as Claude Code writes them after a /compact.
+    compacted = _turns([refused, *slash[start - 1 : start + 2]])
+    assert [t.tool for t in compacted] == ["Context", "Ran", "Output"]
+    assert context_stalled(compacted[:1]) is True
+    assert context_stalled(compacted[:2]) is False
+    assert context_stalled(compacted) is False
 
 
 def test_another_refusal_is_not_a_full_context() -> None:

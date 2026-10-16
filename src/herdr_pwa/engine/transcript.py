@@ -1245,7 +1245,7 @@ _RETRY_TRIGGERS: Final = (Speaker.notice, Speaker.peer)
 
 
 def _wakes(turn: TranscriptTurn) -> bool:
-    """Whether *turn* is a delivery that sets off a retry; a slash command is the person acting."""
+    """Whether *turn* only woke the agent to retry; a slash command is the person acting."""
     return turn.speaker in _RETRY_TRIGGERS and not is_slash_command(turn)
 
 
@@ -1278,13 +1278,13 @@ def _fold_repeats(turns: list[TranscriptTurn]) -> list[TranscriptTurn]:
 def ends_refused(turns: Sequence[TranscriptTurn]) -> TranscriptTurn | None:
     """The API error the conversation ends on, past what only woke it to retry; else ``None``.
 
-    The same run ``_fold_repeats`` folds: a notice or a peer message set off a retry, so it
-    does not end a refusal, and anything else said or run after it does.
+    The same run ``_fold_repeats`` folds, by the same ``_wakes``: a notice or a peer message set
+    off a retry, so it does not end a refusal; a slash command, or anything said, does.
     """
     for turn in reversed(turns):
         if is_api_error(turn):
             return turn
-        if turn.speaker not in _RETRY_TRIGGERS:
+        if not _wakes(turn):
             return None
     return None
 
