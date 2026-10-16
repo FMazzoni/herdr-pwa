@@ -3,9 +3,10 @@
 import re
 from pathlib import Path
 
+from pydantic import JsonValue
+
 from herdr_pwa.decisions import read_status
 from herdr_pwa.engine import AgentStatus, Snapshot
-from herdr_pwa.jsontypes import JsonObject
 from herdr_pwa.notify import Hooks
 from herdr_pwa.notify_state import SeenLedger
 from herdr_pwa.push import EVENT_CLEAR, EVENT_DONE
@@ -29,7 +30,7 @@ FRAGMENT = {"HX-Request": "true"}
 S = IDLE_SESSION
 
 
-def _frame(status: str, seq: int) -> JsonObject:
+def _frame(status: str, seq: int) -> dict[str, JsonValue]:
     frame = snapshot_frame()
     for raw in agents_of(frame):
         if S in str(raw.get("agent_session")):
