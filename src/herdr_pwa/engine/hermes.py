@@ -10,7 +10,6 @@ from pydantic import BaseModel, ConfigDict, Json, TypeAdapter, ValidationError
 from herdr_pwa.diff import tool_diff
 from herdr_pwa.engine.store import Row, SessionStore, consult
 from herdr_pwa.engine.transcript import (
-    MAX_PAGE_BYTES,
     MAX_PROSE_CHARS,
     MAX_RESULT_CHARS,
     MAX_USAGE_BYTES,
@@ -18,11 +17,13 @@ from herdr_pwa.engine.transcript import (
     HistoryState,
     ModelRef,
     SessionUsage,
+    Source,
     Speaker,
     ToolInput,
     TranscriptAdapter,
     TranscriptPage,
     TranscriptTurn,
+    Window,
     clip,
     remember,
     tool_summary,
@@ -204,17 +205,16 @@ def _charged(row: Row | None) -> int:
     return text + _ROW_BYTES
 
 
-def _page(
-    db: SessionStore, *, gather: Gather, before: int | None, max_bytes: int
-) -> TranscriptPage:
-    """Turns until *gather* is full, ending at frontier *before*, oldest first."""
+def _page(db: SessionStore, window: Window) -> TranscriptPage:
+    """The *window*'s turns or messages, ending at frontier ``before``, oldest first."""
     stream = _stream(db)
     size = len(stream)
+    before = window.before
     end = size if before is None else max(0, min(before, size))
-    limit = gather.limit
+    limit = window.limit
     rows = _rows(db, stream[max(0, end - limit) : end])
     positions = range(end, max(0, end - limit), -1)
-    turns, last = _take(stream, rows, positions, gather=gather, max_bytes=max_bytes)
+    turns, last = _take(stream, rows, positions, Gather(window))
     cursor = end if last is None else last - 1
     turns.reverse()
     return TranscriptPage(
@@ -227,16 +227,17 @@ def _page(
     )
 
 
-def _since(db: SessionStore, *, after: int, limit: int, max_bytes: int) -> TranscriptPage:
-    """Whatever the store has grown past frontier *after*, oldest first."""
+def _since(db: SessionStore, window: Window) -> TranscriptPage:
+    """Whatever the store has grown past the *window*'s frontier ``after``, oldest first."""
     stream = _stream(db)
     size = len(stream)
-    start = max(0, after)
+    start = max(0, window.after or 0)
     if start > size:
         return TranscriptPage(size=size, end=size, reset=True, state=HistoryState.empty)
+    limit = window.limit
     rows = _rows(db, stream[start : start + limit])
     positions = range(start + 1, min(size, start + limit) + 1)
-    turns, last = _take(stream, rows, positions, gather=Gather(limit), max_bytes=max_bytes)
+    turns, last = _take(stream, rows, positions, Gather(window))
     end = start if last is None else last
     return TranscriptPage(
         turns=turns,
@@ -249,9 +250,10 @@ def _since(db: SessionStore, *, after: int, limit: int, max_bytes: int) -> Trans
 
 
 def _take(
-    stream: list[int], rows: dict[int, Row], positions: range, *, gather: Gather, max_bytes: int
+    stream: list[int], rows: dict[int, Row], positions: range, gather: Gather
 ) -> tuple[list[TranscriptTurn], int | None]:
     """Turns at *positions* in walk order, and the last position the budget paid for."""
+    max_bytes = gather.budget
     spent = 0
     last: int | None = None
     for position in positions:
@@ -315,62 +317,43 @@ class HermesAdapter(TranscriptAdapter):
     default_roots: ClassVar[tuple[str, ...]] = (HERMES_ROOT,)
 
     @override
-    def page(
-        self,
-        session: str,
-        *,
-        roots: Sequence[Path],
-        limit: int = 40,
-        before: int | None = None,
-        max_bytes: int = MAX_PAGE_BYTES,
-        expect: str = "",
-        messages: int = 0,
-    ) -> TranscriptPage:
-        """Up to *limit* turns, or *messages* messages, ending at *before*, oldest first."""
+    def page(self, source: Source, window: Window) -> TranscriptPage:
+        """The *window*'s turns or messages, ending at frontier ``before``, oldest first."""
         # `expect` is ignored: one file holds every session, so it cannot move under a cursor.
-        gather = Gather(limit, messages)
         return consult(
-            lambda: _open(roots, session),
-            lambda db: _page(db, gather=gather, before=before, max_bytes=max_bytes),
+            lambda: _open(source.roots, source.session),
+            lambda db: _page(db, window),
             absent=TranscriptPage(state=HistoryState.absent),
             locked=TranscriptPage(state=HistoryState.unreadable),
         )
 
     @override
-    def since(
-        self,
-        session: str,
-        *,
-        roots: Sequence[Path],
-        after: int,
-        limit: int = 40,
-        max_bytes: int = MAX_PAGE_BYTES,
-        expect: str = "",
-    ) -> TranscriptPage:
-        """Whatever the store has grown past frontier *after*, oldest first."""
+    def since(self, source: Source, window: Window) -> TranscriptPage:
+        """Whatever the store has grown past the *window*'s frontier ``after``, oldest first."""
         return consult(
-            lambda: _open(roots, session),
-            lambda db: _since(db, after=after, limit=limit, max_bytes=max_bytes),
+            lambda: _open(source.roots, source.session),
+            lambda db: _since(db, window),
             absent=TranscriptPage(state=HistoryState.absent),
             locked=TranscriptPage(state=HistoryState.unreadable),
         )
 
-    def origin(self, session: str, *, roots: Sequence[Path]) -> str:
-        """The directory Hermes recorded *session* as started in, or ``""``."""
-        return consult(lambda: _open(roots, session), _origin, absent="", locked="")
+    @override
+    def origin(self, source: Source) -> str:
+        """The directory Hermes recorded the session as started in, or ``""``."""
+        return consult(lambda: _open(source.roots, source.session), _origin, absent="", locked="")
 
-    def info(self, session: str, *, roots: Sequence[Path] = ()) -> tuple[str, str]:
-        """``(title, model)`` off *session*'s own row. Never raises."""
-        where = roots or [Path(root) for root in self.default_roots]
-        return consult(lambda: _open(where, session), _info, absent=("", ""), locked=("", ""))
+    def info(self, source: Source) -> tuple[str, str]:
+        """``(title, model)`` off the session's own row. Never raises."""
+        where = source.roots or [Path(root) for root in self.default_roots]
+        return consult(
+            lambda: _open(where, source.session), _info, absent=("", ""), locked=("", "")
+        )
 
     @override
-    def tally(
-        self, session: str, *, roots: Sequence[Path], max_bytes: int = MAX_USAGE_BYTES
-    ) -> SessionUsage:
+    def tally(self, source: Source, *, max_bytes: int = MAX_USAGE_BYTES) -> SessionUsage:
         """What this session has spent. Hermes records no money, so cost stays 0."""
         return consult(
-            lambda: _open(roots, session),
+            lambda: _open(source.roots, source.session),
             _tally,
             absent=SessionUsage(state=HistoryState.absent),
             locked=SessionUsage(state=HistoryState.unreadable),

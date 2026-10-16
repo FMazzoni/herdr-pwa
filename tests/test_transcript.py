@@ -8,13 +8,14 @@ from pathlib import Path
 import pytest
 from pydantic import JsonValue, TypeAdapter
 
-from herdr_pwa.engine import HistoryState, Speaker, TranscriptPage, locate
+from herdr_pwa.engine import HistoryState, Source, Speaker, TranscriptPage, locate
 from tests.engine_seam import (
     AGENT_KINDS,
     MAX_NOTE_CHARS,
     MAX_PROSE_CHARS,
     MAX_RESULT_CHARS,
     ClaudeRecord,
+    Window,
     adapter_for,
     claude_record,
     history,
@@ -105,7 +106,7 @@ def test_locate_refuses_a_session_id_that_is_really_a_path(
 
 
 def test_the_page_is_a_conversation_not_a_screen() -> None:
-    page = read_page(TRANSCRIPT, limit=100)
+    page = read_page(TRANSCRIPT, Window(limit=100))
     speakers = [turn.speaker for turn in page.turns]
     assert Speaker.human in speakers
     assert Speaker.agent in speakers
@@ -115,14 +116,14 @@ def test_the_page_is_a_conversation_not_a_screen() -> None:
 
 
 def test_turns_come_back_oldest_first_and_in_file_order() -> None:
-    page = read_page(TRANSCRIPT, limit=100)
+    page = read_page(TRANSCRIPT, Window(limit=100))
     order = [record.uuid for record in _records() if record.uuid]
     got = [turn.uuid for turn in page.turns]
     assert got == [uuid for uuid in order if uuid in set(got)]
 
 
 def test_the_human_turns_are_the_two_prompts_that_were_typed() -> None:
-    page = read_page(TRANSCRIPT, limit=100)
+    page = read_page(TRANSCRIPT, Window(limit=100))
     typed = [turn.text for turn in page.turns if turn.speaker is Speaker.human]
     assert typed == [
         "Reply with one short sentence about the colour of the sky. Do not use any tools.",
@@ -132,7 +133,7 @@ def test_the_human_turns_are_the_two_prompts_that_were_typed() -> None:
 
 def test_a_tool_result_is_not_filed_as_the_human() -> None:
     """A tool result filed as ``role: "user"`` must not render in the person's column."""
-    page = read_page(TRANSCRIPT, limit=100)
+    page = read_page(TRANSCRIPT, Window(limit=100))
     human = " ".join(t.text for t in page.turns if t.speaker is Speaker.human)
     assert "hello-from-agent\n" not in human
     results = [t for t in page.turns if t.speaker is Speaker.tool and t.tool == "result"]
@@ -141,14 +142,14 @@ def test_a_tool_result_is_not_filed_as_the_human() -> None:
 
 
 def test_a_tool_call_carries_its_name() -> None:
-    page = read_page(TRANSCRIPT, limit=100)
+    page = read_page(TRANSCRIPT, Window(limit=100))
     calls = [t for t in page.turns if t.speaker is Speaker.tool and t.tool != "result"]
     assert [t.tool for t in calls] == ["Bash"]
 
 
 def test_bookkeeping_records_never_reach_the_chat() -> None:
     """Attachments, system records and sidecar types are not messages."""
-    page = read_page(TRANSCRIPT, limit=100)
+    page = read_page(TRANSCRIPT, Window(limit=100))
     text = " ".join(turn.text for turn in page.turns)
     assert "deferred_tools_delta" not in text
     assert "total_tokens_reminder" not in text
@@ -157,7 +158,7 @@ def test_bookkeeping_records_never_reach_the_chat() -> None:
 
 def test_every_turn_has_a_stable_id_to_append_by() -> None:
     """Overlapping pages dedupe on the provider's uuid, never on text."""
-    page = read_page(TRANSCRIPT, limit=100)
+    page = read_page(TRANSCRIPT, Window(limit=100))
     uuids = [turn.uuid for turn in page.turns]
     assert all(uuids)
     assert len(uuids) == len(set(uuids))
@@ -167,14 +168,14 @@ def test_every_turn_has_a_stable_id_to_append_by() -> None:
 
 
 def test_paging_upward_walks_the_whole_file_without_repeating() -> None:
-    whole = read_page(TRANSCRIPT, limit=100)
+    whole = read_page(TRANSCRIPT, Window(limit=100))
     collected: list[str] = []
     page = TranscriptPage(cursor=TRANSCRIPT.stat().st_size, has_more=True)
     guard = 0
     before: int | None = None
     while guard < 50:
         guard += 1
-        page = read_page(TRANSCRIPT, limit=2, before=before)
+        page = read_page(TRANSCRIPT, Window(limit=2, before=before))
         if not page.turns and not page.has_more:
             break
         collected = [turn.uuid for turn in page.turns] + collected
@@ -189,7 +190,7 @@ def test_a_page_never_reads_more_than_its_byte_budget(tmp_path: Path) -> None:
     fat = tmp_path / "fat.jsonl"
     noise = json.dumps({"type": "attachment", "attachment": {"pad": "x" * 20000}})
     fat.write_text("\n".join([noise] * 500) + "\n")
-    page = read_page(fat, limit=40, max_bytes=200_000)
+    page = read_page(fat, Window(limit=40, max_bytes=200_000))
     assert page.turns == []
     assert page.has_more  # stopped early rather than reading the file
 
@@ -210,7 +211,7 @@ def test_an_oversized_turn_is_clipped_and_says_so(tmp_path: Path) -> None:
         )
         + "\n"
     )
-    page = read_page(big, limit=5)
+    page = read_page(big, Window(limit=5))
     assert len(page.turns) == 1
     assert page.turns[0].truncated
     assert len(page.turns[0].text) == MAX_PROSE_CHARS
@@ -267,7 +268,7 @@ def test_a_tool_result_gets_a_gist_and_prose_gets_room(tmp_path: Path) -> None:
         )
         + "\n"
     )
-    page = read_page(mixed, limit=9)
+    page = read_page(mixed, Window(limit=9))
     by_uuid = {turn.uuid: turn for turn in page.turns}
     assert len(by_uuid["res"].text) == MAX_RESULT_CHARS
     assert by_uuid["res"].truncated
@@ -291,7 +292,7 @@ def test_injected_context_is_capped_at_what_can_be_seen(tmp_path: Path) -> None:
         )
         + "\n"
     )
-    page = read_page(injected, limit=5)
+    page = read_page(injected, Window(limit=5))
     assert page.turns[0].speaker is Speaker.system
     assert len(page.turns[0].text) == MAX_NOTE_CHARS
     assert page.turns[0].truncated
@@ -316,7 +317,7 @@ def test_a_record_whose_fields_drifted_still_reaches_the_chat(tmp_path: Path) ->
     }
     log = tmp_path / "drift.jsonl"
     log.write_text("not json\n" + json.dumps(drifted) + "\n[1, 2]\n")
-    (turn,) = read_page(log, limit=40).turns
+    (turn,) = read_page(log, Window(limit=40)).turns
     assert (turn.uuid, turn.speaker, turn.ts, turn.call) == ("drifted", Speaker.tool, "", "")
     assert turn.tool == "Bash"
 
@@ -326,7 +327,7 @@ def test_a_torn_final_line_is_skipped_rather_than_raised(tmp_path: Path) -> None
     torn = tmp_path / "torn.jsonl"
     good = TRANSCRIPT.read_text()
     torn.write_text(good + '{"type": "assistant", "uuid": "half", "mess')
-    page = read_page(torn, limit=100)
+    page = read_page(torn, Window(limit=100))
     assert page.turns
     assert "half" not in {turn.uuid for turn in page.turns}
 
@@ -339,7 +340,7 @@ def test_a_torn_final_line_does_not_take_the_live_cursor_with_it(
     good = TRANSCRIPT.read_text()
     torn.write_text(good + '{"type": "assistant", "uuid": "half", "mess')
 
-    page = read_page(torn, limit=100)
+    page = read_page(torn, Window(limit=100))
 
     assert page.end == len(good.encode()), "the cursor stepped over a partial record"
     assert page.size == torn.stat().st_size, "size is the file, end is the frontier"
@@ -353,7 +354,7 @@ def test_a_torn_line_longer_than_one_read_still_holds_the_cursor(
     good = TRANSCRIPT.read_text()
     torn.write_text(good + '{"type": "assistant", "uuid": "half", "x": "' + "y" * 900_000)
 
-    page = read_page(torn, limit=100)
+    page = read_page(torn, Window(limit=100))
 
     assert page.end == len(good.encode())
 
@@ -363,7 +364,7 @@ def test_a_file_holding_no_whole_line_yet_delivers_no_cursor(tmp_path: Path) -> 
     partial = tmp_path / "partial.jsonl"
     partial.write_text('{"type": "user", "uuid": "h1", "mess')
 
-    page = read_page(partial, limit=100)
+    page = read_page(partial, Window(limit=100))
 
     assert page.turns == []
     assert page.end == 0
@@ -375,7 +376,7 @@ def test_a_file_holding_no_whole_line_yet_delivers_no_cursor(tmp_path: Path) -> 
 def test_history_reads_the_real_file_through_the_registry(
     transcript_root: Path,
 ) -> None:
-    page = history(SESSION, agent_kind="claude", root=transcript_root)
+    page = history(Source.of(SESSION, agent_kind="claude", root=transcript_root))
     assert [t.speaker for t in page.turns].count(Speaker.human) == 2
 
 
@@ -384,7 +385,7 @@ def test_a_provider_with_no_adapter_simply_has_no_history(
 ) -> None:
     """A provider with no session log is unsupported, not absent."""
     assert adapter_for("cursor") is None
-    assert history(SESSION, agent_kind="cursor", root=transcript_root).turns == []
+    assert history(Source.of(SESSION, agent_kind="cursor", root=transcript_root)).turns == []
 
 
 def test_the_registry_and_the_kinds_agree() -> None:
@@ -398,19 +399,21 @@ def test_a_qualified_root_is_searched_only_by_the_harness_it_names(
 ) -> None:
     """A root entry may name the provider it is for."""
     entry = f"claude:{transcript_root}"
-    assert history(SESSION, agent_kind="claude", root=entry).turns
-    assert history(SESSION, agent_kind="opencode", root=entry).state is (HistoryState.absent)
+    assert history(Source.of(SESSION, agent_kind="claude", root=entry)).turns
+    assert history(Source.of(SESSION, agent_kind="opencode", root=entry)).state is (
+        HistoryState.absent
+    )
 
 
 def test_an_unqualified_root_replaces_every_provider_default(
     transcript_root: Path,
 ) -> None:
     """An override leaves no provider free to fall back to the real store."""
-    page = history("ses_whatever", agent_kind="opencode", root=transcript_root)
+    page = history(Source.of("ses_whatever", agent_kind="opencode", root=transcript_root))
     assert page.state is HistoryState.absent
     assert page.turns == []
 
 
 def test_history_never_raises_on_a_missing_tree(tmp_path: Path) -> None:
-    page = history(SESSION, agent_kind="claude", root=tmp_path / "nope")
+    page = history(Source.of(SESSION, agent_kind="claude", root=tmp_path / "nope"))
     assert page == TranscriptPage()

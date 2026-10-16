@@ -9,8 +9,8 @@ from pathlib import Path
 import pytest
 from pydantic import JsonValue, TypeAdapter
 
-from herdr_pwa.engine import HistoryState, locate
-from tests.engine_seam import history
+from herdr_pwa.engine import HistoryState, Source, locate
+from tests.engine_seam import Window, history
 
 FIXTURES = Path(__file__).parent / "fixtures" / "transcript" / "lineage"
 
@@ -298,7 +298,7 @@ def test_the_chat_reads_the_copy_the_conversation_is_actually_in(
         + "\n",
         encoding="utf-8",
     )
-    page = history(ROOT, root=project.parent)
+    page = history(Source.of(ROOT, root=project.parent))
     assert page.state is HistoryState.ok
     assert "the invisible hours" in {turn.text for turn in page.turns}
 
@@ -309,12 +309,16 @@ def test_a_held_cursor_names_the_file_it_was_taken_against(project: Path) -> Non
     copy = _log(project, COPY, last="2026-08-20T20:59:00.000Z", records=9, copied_from=ROOT)
     assert named.exists()
     assert locate(ROOT, root=project.parent) == copy
-    honoured = history(ROOT, root=project.parent, after=copy.stat().st_size, log=copy.stem)
+    honoured = history(
+        Source.of(ROOT, root=project.parent, log=copy.stem), Window(after=copy.stat().st_size)
+    )
     assert honoured.turns == []
     assert honoured.reset is False
     assert honoured.log == copy.stem
 
-    stale = history(ROOT, root=project.parent, after=named.stat().st_size, log=named.stem)
+    stale = history(
+        Source.of(ROOT, root=project.parent, log=named.stem), Window(after=named.stat().st_size)
+    )
     assert stale.reset is True, "a cursor from another file must never be honoured"
     assert stale.turns == []
     assert stale.end == copy.stat().st_size
@@ -326,15 +330,19 @@ def test_the_scroll_back_cursor_names_its_file_too(project: Path) -> None:
     copy = _log(project, COPY, last="2026-08-20T20:59:00.000Z", records=60, copied_from=ROOT)
     assert locate(ROOT, root=project.parent) == copy
 
-    honoured = history(ROOT, root=project.parent, before=copy.stat().st_size, log=copy.stem)
+    honoured = history(
+        Source.of(ROOT, root=project.parent, log=copy.stem), Window(before=copy.stat().st_size)
+    )
     assert honoured.reset is False
     assert honoured.moved is False
 
-    stale = history(ROOT, root=project.parent, before=named.stat().st_size, log=named.stem)
+    stale = history(
+        Source.of(ROOT, root=project.parent, log=named.stem), Window(before=named.stat().st_size)
+    )
     assert stale.reset is True, "a cursor from another file must never be honoured"
     assert stale.moved is True, "and the reason is a MOVE, not a rewrite"
     # Its own tail, which is what a first read of this file would have answered.
-    fresh = history(ROOT, root=project.parent)
+    fresh = history(Source.of(ROOT, root=project.parent))
     assert [t.uuid for t in stale.turns] == [t.uuid for t in fresh.turns]
 
 
@@ -343,7 +351,7 @@ def test_a_scroll_back_cursor_that_names_no_file_is_trusted_as_it_always_was(
 ) -> None:
     """An older client holding a `before` from before still pages upward."""
     named = _log(project, ROOT, last="2026-08-20T18:12:00.000Z", records=60)
-    page = history(ROOT, root=project.parent, before=named.stat().st_size)
+    page = history(Source.of(ROOT, root=project.parent), Window(before=named.stat().st_size))
     assert page.reset is False
     assert page.moved is False
 
@@ -353,7 +361,7 @@ def test_a_cursor_that_names_no_file_is_trusted_as_it_always_was(
 ) -> None:
     """An older client, and any provider whose pages carry no log, still work."""
     named = _log(project, ROOT, last="2026-08-20T18:12:00.000Z")
-    page = history(ROOT, root=project.parent, after=named.stat().st_size)
+    page = history(Source.of(ROOT, root=project.parent), Window(after=named.stat().st_size))
     assert page.reset is False
     assert page.turns == []
 

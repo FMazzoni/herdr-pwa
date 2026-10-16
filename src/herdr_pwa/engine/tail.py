@@ -7,14 +7,15 @@ from pathlib import Path
 from typing import Final
 
 from herdr_pwa.engine import transcript
-from herdr_pwa.engine.model import SessionId
 from herdr_pwa.engine.transcript import (
     MAX_HISTORY_BYTES,
     MAX_PAGE_TURNS,
+    ClaudeAdapter,
     HistoryState,
+    Source,
     TranscriptPage,
-    TranscriptRoots,
     TranscriptTurn,
+    Window,
     is_message,
     parse_claude_line,
     read_page,
@@ -128,7 +129,7 @@ class TailCache:
 
     def _build(self, path: Path, ident: tuple[int, int], ask: Ask) -> Held:
         page = read_page(
-            path, limit=ask.max_turns, messages=ask.messages, max_bytes=MAX_HISTORY_BYTES
+            path, Window(limit=ask.max_turns, messages=ask.messages, max_bytes=MAX_HISTORY_BYTES)
         )
         self.bytes_read += page.end - page.cursor
         held = Held(ident, end=page.end, cursor=page.cursor, turns=list(page.turns))
@@ -137,7 +138,9 @@ class TailCache:
 
     def _append(self, path: Path, held: Held) -> None:
         """Read only what was written past the held end."""
-        page = read_since(path, after=held.end, limit=self._max_held, max_bytes=MAX_HISTORY_BYTES)
+        page = read_since(
+            path, Window(limit=self._max_held, after=held.end, max_bytes=MAX_HISTORY_BYTES)
+        )
         self.bytes_read += page.end - held.end
         if page.reset:
             raise FileNotFoundError(path)
@@ -172,10 +175,12 @@ class TailCache:
         missing = ask.messages - sum(map(is_message, inside))
         page = read_page(
             path,
-            limit=ask.max_turns,
-            before=held.cursor,
-            messages=missing,
-            max_bytes=MAX_HISTORY_BYTES,
+            Window(
+                limit=ask.max_turns,
+                before=held.cursor,
+                messages=missing,
+                max_bytes=MAX_HISTORY_BYTES,
+            ),
         )
         self.bytes_read += held.cursor - page.cursor
         held.turns[:0] = page.turns
@@ -203,53 +208,26 @@ class TailCache:
         held.cursor = first if len(kept) == len(found) else kept[0].at if kept else held.cursor
 
 
-def _uncached(
-    session: str, kind: str, ask: Ask, *, log: str, root: TranscriptRoots
-) -> TranscriptPage:
+def _uncached(source: Source, ask: Ask) -> TranscriptPage:
     """A window read afresh, for a harness whose frontier is not a byte offset to append at."""
     start = ask.start
     if ask.before is not None:
-        start = transcript.history(
-            session,
-            agent_kind=kind,
-            limit=ask.max_turns,
-            before=ask.before,
-            messages=ask.messages,
-            log=log,
-            root=root,
-        ).cursor
+        asked = Window(limit=ask.max_turns, before=ask.before, messages=ask.messages)
+        start = transcript.history(source, asked).cursor
     if start is None:
-        return transcript.history(
-            session,
-            agent_kind=kind,
-            limit=ask.max_turns,
-            messages=ask.messages,
-            log=log,
-            root=root,
-        )
-    page = transcript.history(
-        session, agent_kind=kind, limit=MAX_HELD_TURNS, after=start, log=log, root=root
-    )
+        return transcript.history(source, Window(limit=ask.max_turns, messages=ask.messages))
+    page = transcript.history(source, Window(limit=MAX_HELD_TURNS, after=start))
     return page.model_copy(update={"cursor": start, "has_more": start > 0})
 
 
-def chat_window(  # noqa: PLR0913
-    session: SessionId | str,
-    *,
-    agent_kind: str | None,
-    ask: Ask,
-    tails: TailCache,
-    log: str = "",
-    root: TranscriptRoots = None,
-) -> TranscriptPage:
-    """What the Chat tab shows: the asked window of *session*'s conversation. Never raises."""
-    kind = (agent_kind or "").strip().lower()
-    if kind != "claude":
-        return _uncached(str(session), kind, ask, log=log, root=root)
-    path = transcript.locate(session, root=root)
+def chat_window(source: Source, *, ask: Ask, tails: TailCache) -> TranscriptPage:
+    """What the Chat tab shows: the asked window of *source*'s conversation. Never raises."""
+    if source.kind != "claude":
+        return _uncached(source, ask)
+    path = ClaudeAdapter.log(source)
     if path is None:
         return TranscriptPage(state=HistoryState.absent)
-    moved = bool(log) and log != path.stem
+    moved = bool(source.expect) and source.expect != path.stem
     if moved:
         # A frontier is a promise about one file; in another it would splice two threads.
         ask = Ask(messages=ask.messages, max_turns=ask.max_turns)

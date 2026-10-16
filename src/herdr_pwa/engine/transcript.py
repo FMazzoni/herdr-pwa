@@ -5,9 +5,10 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Callable, Iterable, Iterator, Sequence
+from dataclasses import dataclass, replace
 from enum import StrEnum
 from pathlib import Path
-from typing import Annotated, ClassVar, Final, NamedTuple, Protocol
+from typing import Annotated, ClassVar, Final, NamedTuple, Protocol, override
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter, ValidationError
 
@@ -129,12 +130,73 @@ def is_message(turn: TranscriptTurn) -> bool:
     return turn.speaker in (Speaker.human, Speaker.agent)
 
 
+class TurnStamp(NamedTuple):
+    """The record a turn is drawn from: its id, and when it was written."""
+
+    uuid: str
+    written: str
+
+
+@dataclass(frozen=True, slots=True)
+class Window:
+    """Which stretch of a conversation one read returns, and what it may spend finding it."""
+
+    limit: int = 40
+    # A page ends at frontier `before`; a read past `after` returns only what was added since.
+    before: int | None = None
+    after: int | None = None
+    # Above 0, a read also stops once it holds this many messages.
+    messages: int = 0
+    # None leaves the budget to the reader.
+    max_bytes: int | None = None
+
+    @property
+    def budget(self) -> int:
+        """The bytes this read may spend: the asked budget, or one page's."""
+        return MAX_PAGE_BYTES if self.max_bytes is None else self.max_bytes
+
+
+# What a read that names no window asks for: the newest page of turns.
+NEWEST: Final = Window()
+
+
+@dataclass(frozen=True, slots=True)
+class Source:
+    """Where one session's conversation is read from, and which log a held frontier was read in."""
+
+    session: str
+    roots: Sequence[Path] = ()
+    # A frontier is a promise about one log; read in another, it must not be honoured.
+    expect: str = ""
+    # The harness whose adapter reads it, set by `of`; an adapter called directly never looks.
+    kind: str = ""
+
+    @classmethod
+    def of(
+        cls,
+        session: SessionId | str,
+        *,
+        agent_kind: str | None = "claude",
+        root: TranscriptRoots = None,
+        log: str = "",
+    ) -> Source:
+        """*session* of harness *agent_kind*, searched for under the configured *root*."""
+        kind = (agent_kind or "").strip().lower()
+        adapter = adapter_for(kind)
+        roots = (
+            () if adapter is None else tuple(_roots(root, kind=kind, default=adapter.default_roots))
+        )
+        # A session id off a URL segment must not walk the tree, so a path reads as no session.
+        return cls(_session_id(session), roots, expect=log, kind=kind)
+
+
 class Gather:
     """The turns a page has taken so far, and whether it is full by turns or by messages."""
 
-    def __init__(self, limit: int, messages: int = 0) -> None:
-        self.limit = limit
-        self.messages = messages
+    def __init__(self, window: Window) -> None:
+        self.limit = window.limit
+        self.messages = window.messages
+        self.budget = window.budget
         self.turns: list[TranscriptTurn] = []
         self.said = 0
 
@@ -691,8 +753,9 @@ def _lines_reaching(path: Path, before: int, room: int) -> tuple[list[tuple[int,
         window *= 2
 
 
-def _walk_back(path: Path, end: int, parse: TurnParser, gather: Gather, *, max_bytes: int) -> int:
+def _walk_back(path: Path, end: int, parse: TurnParser, gather: Gather) -> int:
     """Gather turns newest first from byte *end* backwards; return the page cursor."""
+    max_bytes = gather.budget
     frontier = end
     cursor = end
     spent = 0
@@ -710,24 +773,19 @@ def _walk_back(path: Path, end: int, parse: TurnParser, gather: Gather, *, max_b
     return cursor
 
 
-def read_page(  # noqa: PLR0913
-    path: Path,
-    *,
-    limit: int = 40,
-    before: int | None = None,
-    max_bytes: int = MAX_PAGE_BYTES,
-    parse: TurnParser | None = None,
-    messages: int = 0,
+def read_page(
+    path: Path, window: Window = NEWEST, *, parse: TurnParser | None = None
 ) -> TranscriptPage:
-    """Up to *limit* turns, or *messages* messages, ending at byte *before*, oldest first."""
+    """The *window*'s turns or messages, ending at byte ``before``, oldest first."""
     parse = parse or parse_claude_line
     try:
         size = path.stat().st_size
     except OSError:
         return TranscriptPage(state=HistoryState.unreadable)
+    before = window.before
     end = _complete_end(path, size if before is None else max(0, min(before, size)))
-    gather = Gather(limit, messages)
-    cursor = _walk_back(path, end, parse, gather, max_bytes=max_bytes)
+    gather = Gather(window)
+    cursor = _walk_back(path, end, parse, gather)
     turns = gather.turns
     turns.reverse()
     return TranscriptPage(
@@ -741,29 +799,22 @@ def read_page(  # noqa: PLR0913
     )
 
 
-def read_since(
-    path: Path,
-    *,
-    after: int,
-    limit: int = 40,
-    max_bytes: int = MAX_PAGE_BYTES,
-    parse: TurnParser | None = None,
-) -> TranscriptPage:
-    """Whatever has been appended past byte *after*, oldest first."""
+def read_since(path: Path, window: Window, *, parse: TurnParser | None = None) -> TranscriptPage:
+    """Whatever has been appended past the *window*'s byte ``after``, oldest first."""
     parse = parse or parse_claude_line
     try:
         size = path.stat().st_size
     except OSError:
         return TranscriptPage(state=HistoryState.unreadable)
-    start = max(0, after)
+    start = max(0, window.after or 0)
     if start > size:
         return TranscriptPage(
             size=size, end=size, reset=True, state=HistoryState.empty, log=path.stem
         )
     with path.open("rb") as handle:
         handle.seek(start)
-        window = handle.read(min(max_bytes, size - start))
-    tail = window.rfind(b"\n")
+        chunk = handle.read(min(window.budget, size - start))
+    tail = chunk.rfind(b"\n")
     if tail < 0:
         # No whole line yet, so the cursor must not move past bytes never delivered.
         return TranscriptPage(
@@ -773,8 +824,8 @@ def read_since(
             state=HistoryState.empty,
             log=path.stem,
         )
-    gather = Gather(limit)
-    end = _take_forward(window[:tail], start, parse, gather)
+    gather = Gather(window)
+    end = _take_forward(chunk[:tail], start, parse, gather)
     return TranscriptPage(
         turns=gather.turns,
         cursor=start,
@@ -786,11 +837,11 @@ def read_since(
     )
 
 
-def _take_forward(window: bytes, start: int, parse: TurnParser, gather: Gather) -> int:
-    """Take the turns in *window* oldest first until *gather* is full; return the end offset."""
+def _take_forward(chunk: bytes, start: int, parse: TurnParser, gather: Gather) -> int:
+    """Take the turns in *chunk* oldest first until *gather* is full; return the end offset."""
     end = start
     offset = start
-    for raw in window.split(b"\n"):
+    for raw in chunk.split(b"\n"):
         at = offset
         offset += len(raw) + 1
         end = offset
@@ -867,7 +918,8 @@ def _blocks(record: ClaudeRecord) -> list[_Block]:
     return [block for block in content if block is not None]
 
 
-def _injected_turn(found: TaskNotice | PeerMessage, uuid: str, ts: str) -> TranscriptTurn:
+def _injected_turn(found: TaskNotice | PeerMessage, stamp: TurnStamp) -> TranscriptTurn:
+    uuid, ts = stamp.uuid, stamp.written
     if isinstance(found, TaskNotice):
         detail, _ = one_line(found.detail)
         # A command opens on the whole of what was run; anything else on what it said.
@@ -902,14 +954,14 @@ def _injected_turn(found: TaskNotice | PeerMessage, uuid: str, ts: str) -> Trans
     )
 
 
-def _user_text(record: ClaudeRecord, content: str, uuid: str, ts: str) -> TranscriptTurn | None:
+def _user_text(record: ClaudeRecord, content: str, stamp: TurnStamp) -> TranscriptTurn | None:
     """A user record whose content is one string: a prompt, or something the harness wrote."""
     human = _is_human(record)
     found = injected(record.origin, content, human=human)
     if isinstance(found, Hidden):
         return None
     if found is not None:
-        return _injected_turn(found, uuid, ts)
+        return _injected_turn(found, stamp)
     if record.is_meta:
         return None
     # The cap follows the speaker: injected machinery gets the note cap, as the view shows three lines.
@@ -917,29 +969,30 @@ def _user_text(record: ClaudeRecord, content: str, uuid: str, ts: str) -> Transc
     if not text:
         return None
     return TranscriptTurn(
-        uuid=uuid,
+        uuid=stamp.uuid,
         speaker=Speaker.human if human else Speaker.system,
         text=text,
-        ts=ts,
+        ts=stamp.written,
         truncated=cut,
     )
 
 
-def _user_record(record: ClaudeRecord, uuid: str, ts: str) -> TranscriptTurn | None:
+def _user_record(record: ClaudeRecord, stamp: TurnStamp) -> TranscriptTurn | None:
     """A ``role: "user"`` record, which is where the whole trap lives."""
     content = record.message.content if record.message is not None else None
     if isinstance(content, str):
-        return _user_text(record, content, uuid, ts)
+        return _user_text(record, content, stamp)
     meta = record.is_meta is True
     for block in _blocks(record):
-        turn = _user_block(block, uuid, ts, meta=meta)
+        turn = _user_block(block, stamp, meta=meta)
         if turn is not None:
             return turn
     return None
 
 
-def _user_block(block: _Block, uuid: str, ts: str, *, meta: bool) -> TranscriptTurn | None:
+def _user_block(block: _Block, stamp: TurnStamp, *, meta: bool) -> TranscriptTurn | None:
     """One content block of a user record, or ``None`` if it is not conversation."""
+    uuid, ts = stamp.uuid, stamp.written
     kind = block.type
     if kind == "tool_result":
         text, cut = clip(_result_text(block.content), MAX_RESULT_CHARS)
@@ -982,8 +1035,9 @@ def _result_parts(body: JsonValue) -> list[_ResultPart]:
         return []
 
 
-def _assistant_record(record: ClaudeRecord, uuid: str, ts: str) -> TranscriptTurn | None:
+def _assistant_record(record: ClaudeRecord, stamp: TurnStamp) -> TranscriptTurn | None:
     """An assistant record: prose, or one collapsed tool call."""
+    uuid, ts = stamp.uuid, stamp.written
     for block in _blocks(record):
         btype = block.type
         if btype == "text":
@@ -1017,11 +1071,11 @@ def _claude_turn(record: ClaudeRecord) -> TranscriptTurn | None:
     uuid = record.uuid
     if not uuid or record.message is None:
         return None
-    ts = record.timestamp or ""
+    stamp = TurnStamp(uuid, record.timestamp or "")
     if kind == "user":
-        return _user_record(record, uuid, ts)
+        return _user_record(record, stamp)
     if kind == "assistant":
-        return _assistant_record(record, uuid, ts)
+        return _assistant_record(record, stamp)
     return None
 
 
@@ -1053,100 +1107,67 @@ class TranscriptAdapter(Protocol):
 
     default_roots: ClassVar[tuple[str, ...]]
 
-    def page(  # noqa: PLR0913
-        self,
-        session: str,
-        *,
-        roots: Sequence[Path],
-        limit: int = 40,
-        before: int | None = None,
-        expect: str = "",
-        messages: int = 0,
-    ) -> TranscriptPage:
-        """Up to *limit* turns, or *messages* messages, ending at frontier *before*, oldest first."""
+    def page(self, source: Source, window: Window) -> TranscriptPage:
+        """The *window*'s turns or messages, ending at frontier ``before``, oldest first."""
         ...
 
-    def since(
-        self,
-        session: str,
-        *,
-        roots: Sequence[Path],
-        after: int,
-        limit: int = 40,
-        expect: str = "",
-    ) -> TranscriptPage:
-        """Whatever has been recorded past frontier *after*, oldest first."""
+    def since(self, source: Source, window: Window) -> TranscriptPage:
+        """Whatever has been recorded past the *window*'s frontier ``after``, oldest first."""
         ...
 
-    def tally(
-        self, session: str, *, roots: Sequence[Path], max_bytes: int = MAX_USAGE_BYTES
-    ) -> SessionUsage:
-        """What *session* has spent, over everything its thread has lived in."""
+    def tally(self, source: Source, *, max_bytes: int = MAX_USAGE_BYTES) -> SessionUsage:
+        """What the session has spent, over everything its thread has lived in."""
         ...
 
-    def origin(self, session: str, *, roots: Sequence[Path]) -> str:
-        """The directory *session* was started in, or ``""`` when its store does not say."""
+    def origin(self, source: Source) -> str:
+        """The directory the session was started in, or ``""`` when its store does not say."""
         ...
 
 
-class ClaudeAdapter:
+class ClaudeAdapter(TranscriptAdapter):
     """Claude Code: one JSONL per session, and the frontier is a BYTE OFFSET."""
 
     default_roots: ClassVar[tuple[str, ...]] = (CLAUDE_TRANSCRIPT_ROOT,)
 
-    def page(  # noqa: PLR0913
-        self,
-        session: str,
-        *,
-        roots: Sequence[Path],
-        limit: int = 40,
-        before: int | None = None,
-        expect: str = "",
-        messages: int = 0,
-    ) -> TranscriptPage:
-        """Up to *limit* turns, or *messages* messages, ending at byte *before*, oldest first."""
-        path = self._log(session, roots, follow=True)
+    @override
+    def page(self, source: Source, window: Window) -> TranscriptPage:
+        """The *window*'s turns or messages, ending at byte ``before``, oldest first."""
+        path = self.log(source)
         if path is None:
             return TranscriptPage(state=HistoryState.absent)
-        # Counting messages, the budget must reach past inline screenshots to find them.
-        budget = MAX_HISTORY_BYTES if messages else MAX_PAGE_BYTES
-        if expect and expect != path.stem:
+        if window.max_bytes is None and window.messages:
+            # Counting messages, the budget must reach past inline screenshots to find them.
+            window = replace(window, max_bytes=MAX_HISTORY_BYTES)
+        if source.expect and source.expect != path.stem:
             # A `before` offset into another file would be clamped, not refused, so drop it.
-            page = read_page(path, limit=limit, messages=messages, max_bytes=budget)
+            page = read_page(path, replace(window, before=None))
             return page.model_copy(update={"reset": True, "moved": True})
-        return read_page(path, limit=limit, before=before, messages=messages, max_bytes=budget)
+        return read_page(path, window)
 
-    def since(
-        self,
-        session: str,
-        *,
-        roots: Sequence[Path],
-        after: int,
-        limit: int = 40,
-        expect: str = "",
-    ) -> TranscriptPage:
-        """Whatever has been APPENDED past byte *after*, oldest first."""
-        path = self._log(session, roots, follow=True)
+    @override
+    def since(self, source: Source, window: Window) -> TranscriptPage:
+        """Whatever has been APPENDED past byte ``after``, oldest first."""
+        path = self.log(source)
         if path is None:
             return TranscriptPage(state=HistoryState.absent)
-        if expect and expect != path.stem:
+        if source.expect and source.expect != path.stem:
             # A held cursor is a promise about one file; reading it here would splice two threads.
-            page = read_since(path, after=_ANOTHER_FILE, limit=limit)
+            page = read_since(path, replace(window, after=_ANOTHER_FILE))
             return page.model_copy(update={"moved": True})
-        return read_since(path, after=after, limit=limit)
+        return read_since(path, window)
 
-    def tally(
-        self, session: str, *, roots: Sequence[Path], max_bytes: int = MAX_USAGE_BYTES
-    ) -> SessionUsage:
-        """What *session* has spent, summed over its whole lineage."""
-        path = self._log(session, roots, follow=True)
+    @override
+    def tally(self, source: Source, *, max_bytes: int = MAX_USAGE_BYTES) -> SessionUsage:
+        """What the session has spent, summed over its whole lineage."""
+        path = self.log(source)
         if path is None:
             return SessionUsage(state=HistoryState.absent)
         return _tally_lineage(path, max_bytes=max_bytes)
 
-    def origin(self, session: str, *, roots: Sequence[Path]) -> str:
+    @override
+    def origin(self, source: Source) -> str:
         """The first ``cwd`` the log records: where it began, not where a tool wandered."""
-        path = self._log(session, roots, follow=False)
+        path = self._log(source, follow=False)
         if path is None:
             return ""
         for record in _head_records(_head_window(path)):
@@ -1155,15 +1176,18 @@ class ClaudeAdapter:
                 return cwd
         return ""
 
-    def log(self, session: str, roots: Sequence[Path]) -> Path | None:
-        """The file *session*'s conversation is in now, forks followed, or ``None``."""
-        return self._log(session, roots, follow=True)
+    @classmethod
+    def log(cls, source: Source) -> Path | None:
+        """The file the session's conversation is in now, forks followed, or ``None``."""
+        return cls._log(source, follow=True)
 
     @staticmethod
-    def _log(session: str, roots: Sequence[Path], *, follow: bool) -> Path | None:
-        """*session*'s log in the first root holding it, contained to THAT root."""
-        for base in roots:
-            found = _in_root(base, session, follow=follow)
+    def _log(source: Source, *, follow: bool) -> Path | None:
+        """The session's log in the first root holding it, contained to THAT root."""
+        if not source.session:
+            return None
+        for base in source.roots:
+            found = _in_root(base, source.session, follow=follow)
             if found is not None:
                 return found
         return None
@@ -1190,33 +1214,18 @@ def adapter_for(agent_kind: str | None) -> TranscriptAdapter | None:
     return _registry().get((agent_kind or "").strip().lower())
 
 
-def history(  # noqa: PLR0913
-    session: SessionId | str,
-    *,
-    agent_kind: str | None = "claude",
-    limit: int = 40,
-    before: int | None = None,
-    after: int | None = None,
-    log: str = "",
-    root: TranscriptRoots = None,
-    messages: int = 0,
-) -> TranscriptPage:
-    """One page of *session*'s conversation, oldest first. Never raises."""
-    kind = (agent_kind or "").strip().lower()
-    adapter = adapter_for(kind)
-    text = _session_id(session)
+def history(source: Source, window: Window = NEWEST) -> TranscriptPage:
+    """One *window* of *source*'s conversation, oldest first. Never raises."""
+    adapter = adapter_for(source.kind)
     if adapter is None:
         return TranscriptPage(state=HistoryState.unsupported)
-    if not text:
+    if not source.session:
         return TranscriptPage(state=HistoryState.absent)
-    roots = _roots(root, kind=kind, default=adapter.default_roots)
     try:
         page = (
-            adapter.since(text, roots=roots, after=after, limit=limit, expect=log)
-            if after is not None
-            else adapter.page(
-                text, roots=roots, limit=limit, before=before, expect=log, messages=messages
-            )
+            adapter.since(source, window)
+            if window.after is not None
+            else adapter.page(source, window)
         )
     except OSError:
         # Found and then unreadable is not "there is none"; the view must not show a quiet chat.
@@ -1226,13 +1235,12 @@ def history(  # noqa: PLR0913
 
 def session_origin(agent: Agent, *, root: TranscriptRoots = None) -> str:
     """Where *agent*'s reported session was started, as its own store says, or ``""``."""
-    kind = agent.agent.strip().lower()
-    adapter = adapter_for(kind)
-    text = _session_id(agent.session)
-    if adapter is None or not text:
+    source = Source.of(agent.session, agent_kind=agent.agent, root=root)
+    adapter = adapter_for(source.kind)
+    if adapter is None or not source.session:
         return ""
     try:
-        return adapter.origin(text, roots=_roots(root, kind=kind, default=adapter.default_roots))
+        return adapter.origin(source)
     except OSError:
         return ""
 
@@ -1438,23 +1446,14 @@ def _tally_lineage(path: Path, *, max_bytes: int) -> SessionUsage:
     return tally_claude(path, max_bytes=max_bytes).tally
 
 
-def usage(
-    session: SessionId | str,
-    *,
-    agent_kind: str | None = "claude",
-    root: TranscriptRoots = None,
-    max_bytes: int = MAX_USAGE_BYTES,
-) -> SessionUsage:
-    """What *session* has spent so far, across its whole lineage. Never raises."""
-    kind = (agent_kind or "").strip().lower()
-    adapter = adapter_for(kind)
-    text = _session_id(session)
+def usage(source: Source, *, max_bytes: int = MAX_USAGE_BYTES) -> SessionUsage:
+    """What *source*'s session has spent so far, across its whole lineage. Never raises."""
+    adapter = adapter_for(source.kind)
     if adapter is None:
         return SessionUsage(state=HistoryState.unsupported)
-    if not text:
+    if not source.session:
         return SessionUsage(state=HistoryState.absent)
-    roots = _roots(root, kind=kind, default=adapter.default_roots)
     try:
-        return adapter.tally(text, roots=roots, max_bytes=max_bytes)
+        return adapter.tally(source, max_bytes=max_bytes)
     except OSError:
         return SessionUsage(state=HistoryState.unreadable)

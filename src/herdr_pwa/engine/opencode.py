@@ -12,7 +12,6 @@ from herdr_pwa.diff import EditArgs, tool_diff
 from herdr_pwa.engine.store import SessionStore, consult
 from herdr_pwa.engine.transcript import (
     MAX_NOTE_CHARS,
-    MAX_PAGE_BYTES,
     MAX_PROSE_CHARS,
     MAX_RESULT_CHARS,
     MAX_SUMMARY_CHARS,
@@ -21,10 +20,13 @@ from herdr_pwa.engine.transcript import (
     HistoryState,
     ModelRef,
     SessionUsage,
+    Source,
     Speaker,
     TranscriptAdapter,
     TranscriptPage,
     TranscriptTurn,
+    TurnStamp,
+    Window,
     clip,
     first_line,
     one_line,
@@ -467,7 +469,7 @@ def _moment(part: _Part, message: _MessageRecord) -> str:
     return ""
 
 
-def _text_turn(part: _Part, uuid: str, ts: str, role: str) -> TranscriptTurn | None:
+def _text_turn(part: _Part, stamp: TurnStamp, role: str) -> TranscriptTurn | None:
     """A ``text`` part, where the whole speaker question lives."""
     body = part.text
     if body is None:
@@ -478,11 +480,14 @@ def _text_turn(part: _Part, uuid: str, ts: str, role: str) -> TranscriptTurn | N
     if not text:
         return None
     speaker = Speaker.human if human else Speaker.system if system else Speaker.agent
-    return TranscriptTurn(uuid=uuid, speaker=speaker, text=text, ts=ts, truncated=cut)
+    return TranscriptTurn(
+        uuid=stamp.uuid, speaker=speaker, text=text, ts=stamp.written, truncated=cut
+    )
 
 
-def _tool_turn(part: _Part, uuid: str, ts: str) -> TranscriptTurn:
+def _tool_turn(part: _Part, stamp: TurnStamp) -> TranscriptTurn:
     """A ``tool`` part, which carries the call AND its result in one record."""
+    uuid, ts = stamp.uuid, stamp.written
     state = part.state or _State()
     args = state.input
     text, cut = ("", False) if args is None else first_line(args.naming(), MAX_SUMMARY_CHARS)
@@ -504,7 +509,7 @@ def _tool_turn(part: _Part, uuid: str, ts: str) -> TranscriptTurn:
     )
 
 
-def _mention_turn(part: _Part, uuid: str, ts: str) -> TranscriptTurn | None:
+def _mention_turn(part: _Part, stamp: TurnStamp) -> TranscriptTurn | None:
     """A ``file`` or ``agent`` part: the ``@`` a person typed into their prompt."""
     source = part.source or _MentionSource()
     written = source.value
@@ -513,7 +518,9 @@ def _mention_turn(part: _Part, uuid: str, ts: str) -> TranscriptTurn | None:
     text, cut = one_line(written if written is not None else (part.filename or part.name))
     if not text:
         return None
-    return TranscriptTurn(uuid=uuid, speaker=Speaker.system, text=text, ts=ts, truncated=cut)
+    return TranscriptTurn(
+        uuid=stamp.uuid, speaker=Speaker.system, text=text, ts=stamp.written, truncated=cut
+    )
 
 
 def _turn(part: _Part, message: _MessageRecord) -> TranscriptTurn | None:
@@ -522,13 +529,13 @@ def _turn(part: _Part, message: _MessageRecord) -> TranscriptTurn | None:
     uuid = part.id
     if kind in _QUIET_TYPES or not uuid:
         return None
-    ts = _moment(part, message)
+    stamp = TurnStamp(uuid, _moment(part, message))
     if kind == "text":
-        return _text_turn(part, uuid, ts, message.role or "")
+        return _text_turn(part, stamp, message.role or "")
     if kind == "tool":
-        return _tool_turn(part, uuid, ts)
+        return _tool_turn(part, stamp)
     if kind in ("file", "agent"):
-        return _mention_turn(part, uuid, ts)
+        return _mention_turn(part, stamp)
     return None
 
 
@@ -558,16 +565,18 @@ def _charge(
     return part, messages.spent > max_bytes
 
 
-def _page(store: _Store, *, gather: Gather, before: int | None, max_bytes: int) -> TranscriptPage:
-    """Turns until *gather* is full, ending at frontier *before*, oldest first."""
+def _page(store: _Store, window: Window) -> TranscriptPage:
+    """The *window*'s turns or messages, ending at frontier ``before``, oldest first."""
     stream = store.stream()
     size = len(stream)
+    before = window.before
     end = size if before is None else max(0, min(before, size))
+    gather = Gather(window)
     messages = _Messages(store)
     cursor = end
     for position in range(end, 0, -1):
         identifier, key = stream[position - 1]
-        part, over = _charge(store, messages, key, max_bytes)
+        part, over = _charge(store, messages, key, gather.budget)
         if over:
             break
         cursor = position - 1
@@ -586,20 +595,20 @@ def _page(store: _Store, *, gather: Gather, before: int | None, max_bytes: int) 
     )
 
 
-def _since(store: _Store, *, after: int, limit: int, max_bytes: int) -> TranscriptPage:
-    """Whatever the store has grown past frontier *after*, oldest first."""
+def _since(store: _Store, window: Window) -> TranscriptPage:
+    """Whatever the store has grown past the *window*'s frontier ``after``, oldest first."""
     stream = store.stream()
     size = len(stream)
-    start = max(0, after)
+    start = max(0, window.after or 0)
     if start > size:
         return TranscriptPage(size=size, end=size, reset=True, state=HistoryState.empty)
     messages = _Messages(store)
-    gather = Gather(limit)
+    gather = Gather(window)
     turns = gather.turns
     end = start
     for position in range(start + 1, size + 1):
         identifier, key = stream[position - 1]
-        part, over = _charge(store, messages, key, max_bytes)
+        part, over = _charge(store, messages, key, gather.budget)
         if over or part is None:
             break
         end = position
@@ -698,72 +707,47 @@ class OpencodeAdapter(TranscriptAdapter):
     default_roots: ClassVar[tuple[str, ...]] = (OPENCODE_ROOT,)
 
     @override
-    def page(
-        self,
-        session: str,
-        *,
-        roots: Sequence[Path],
-        limit: int = 40,
-        before: int | None = None,
-        max_bytes: int = MAX_PAGE_BYTES,
-        expect: str = "",
-        messages: int = 0,
-    ) -> TranscriptPage:
-        """Up to *limit* turns, or *messages* messages, ending at *before*, oldest first."""
+    def page(self, source: Source, window: Window) -> TranscriptPage:
+        """The *window*'s turns or messages, ending at frontier ``before``, oldest first."""
         # `expect` is ignored: one directory per session cannot move under a cursor.
-        gather = Gather(limit, messages)
         return consult(
-            lambda: _open(roots, session),
-            lambda store: _page(store, gather=gather, before=before, max_bytes=max_bytes),
+            lambda: _open(source.roots, source.session),
+            lambda store: _page(store, window),
             absent=TranscriptPage(state=HistoryState.absent),
             locked=TranscriptPage(state=HistoryState.unreadable),
         )
 
     @override
-    def since(
-        self,
-        session: str,
-        *,
-        roots: Sequence[Path],
-        after: int,
-        limit: int = 40,
-        max_bytes: int = MAX_PAGE_BYTES,
-        expect: str = "",
-    ) -> TranscriptPage:
-        """Whatever the store has grown past frontier *after*, oldest first."""
+    def since(self, source: Source, window: Window) -> TranscriptPage:
+        """Whatever the store has grown past the *window*'s frontier ``after``, oldest first."""
         # `expect` is ignored: one directory per session cannot move under a cursor.
         return consult(
-            lambda: _open(roots, session),
-            lambda store: _since(store, after=after, limit=limit, max_bytes=max_bytes),
+            lambda: _open(source.roots, source.session),
+            lambda store: _since(store, window),
             absent=TranscriptPage(state=HistoryState.absent),
             locked=TranscriptPage(state=HistoryState.unreadable),
         )
 
     @override
-    def tally(
-        self,
-        session: str,
-        *,
-        roots: Sequence[Path],
-        max_bytes: int = MAX_USAGE_BYTES,
-    ) -> SessionUsage:
-        """What *session* has spent so far, across its message records."""
+    def tally(self, source: Source, *, max_bytes: int = MAX_USAGE_BYTES) -> SessionUsage:
+        """What the session has spent so far, across its message records."""
         return consult(
-            lambda: _open(roots, session),
+            lambda: _open(source.roots, source.session),
             lambda store: _tally(store, max_bytes=max_bytes),
             absent=SessionUsage(state=HistoryState.absent),
             locked=SessionUsage(state=HistoryState.unreadable),
         )
 
-    def origin(self, session: str, *, roots: Sequence[Path]) -> str:
-        """The directory opencode recorded *session* as started in, or ``""``."""
-        return consult(lambda: _open(roots, session), _origin, absent="", locked="")
+    @override
+    def origin(self, source: Source) -> str:
+        """The directory opencode recorded the session as started in, or ``""``."""
+        return consult(lambda: _open(source.roots, source.session), _origin, absent="", locked="")
 
-    def info(self, session: str, *, roots: Sequence[Path] = ()) -> SessionInfo:
-        """What *session*'s own record calls it and what it is set to. Never raises."""
-        where = roots or [Path(root) for root in self.default_roots]
+    def info(self, source: Source) -> SessionInfo:
+        """What the session's own record calls it and what it is set to. Never raises."""
+        where = source.roots or [Path(root) for root in self.default_roots]
         return consult(
-            lambda: _open(where, session), _info, absent=SessionInfo(), locked=SessionInfo()
+            lambda: _open(where, source.session), _info, absent=SessionInfo(), locked=SessionInfo()
         )
 
 

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from herdr_pwa.engine import HistoryState, locate
+from herdr_pwa.engine import HistoryState, Source, locate
 from tests.engine_seam import history
 
 SESSION = "11111111-2222-3333-4444-555555555555"
@@ -52,7 +52,7 @@ def test_a_symlinked_project_directory_is_not_followed(root: Path, outside: Path
 def test_the_escape_is_indistinguishable_from_an_absent_file(root: Path, outside: Path):
     """What the client sees, which is the half that matters at the URL."""
     (root / "-home-someone-repo" / f"{SESSION}.jsonl").symlink_to(outside)
-    page = history(SESSION, root=root)
+    page = history(Source.of(SESSION, root=root))
     assert page.state is HistoryState.absent
     assert page.turns == []
     assert "ssh-rsa" not in page.model_dump_json()
