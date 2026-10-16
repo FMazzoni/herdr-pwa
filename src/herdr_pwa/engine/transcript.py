@@ -7,14 +7,21 @@ import os
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from enum import StrEnum
 from pathlib import Path
-from typing import ClassVar, Final, NamedTuple, Protocol
+from typing import Annotated, ClassVar, Final, NamedTuple, Protocol
 
-from pydantic import BaseModel, Field, JsonValue
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter, ValidationError
 
-from herdr_pwa.diff import FileDiff, tool_diff
+from herdr_pwa.diff import EditArgs, FileDiff, tool_diff
 from herdr_pwa.engine.model import Agent, SessionId
-from herdr_pwa.engine.notices import Hidden, PeerMessage, TaskNotice, injected, without_reminders
-from herdr_pwa.jsontypes import JsonObject, as_object, loads, objects
+from herdr_pwa.engine.notices import (
+    Hidden,
+    PeerMessage,
+    RecordOrigin,
+    TaskNotice,
+    injected,
+    without_reminders,
+)
+from herdr_pwa.validation import OR_NONE, Count, Flag, Text
 
 CLAUDE_TRANSCRIPT_ROOT: Final = "~/.claude/projects"
 
@@ -26,7 +33,7 @@ type OneRoot = str | os.PathLike[str]
 # One root, several searched in order, or the provider's default.
 type TranscriptRoots = OneRoot | Sequence[OneRoot] | None
 
-type TurnParser = Callable[[JsonObject], TranscriptTurn | None]
+type TurnParser = Callable[[bytes], TranscriptTurn | None]
 
 MAX_PAGE_BYTES: Final = 4 * 1024 * 1024
 
@@ -160,6 +167,167 @@ class TranscriptPage(BaseModel):
     log: str = ""
 
 
+# What a Claude Code record holds, as far as this reader looks
+
+
+class ToolInput(EditArgs):
+    """A tool call's arguments: the one that names the call, and any file it changes."""
+
+    command: Text = None
+    pattern: Text = None
+    query: Text = None
+    url: Text = None
+    description: Text = None
+    summary: Text = None
+    skill: Text = None
+    subagent_type: Text = None
+    name: Text = None
+    prompt: Text = None
+    text: Text = None
+
+    def naming(self) -> tuple[str | None, ...]:
+        """The arguments that can name the call, most telling first, as Collie's summary orders them."""
+        return (
+            self.command,
+            self.file_path,
+            self.notebook_path,
+            self.path,
+            self.pattern,
+            self.query,
+            self.url,
+            self.description,
+            self.summary,
+            self.skill,
+            self.subagent_type,
+            self.name,
+            self.prompt,
+            self.text,
+        )
+
+
+class _Block(BaseModel):
+    """One content block of a message: prose, a tool call, or a tool's result."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    type: Text = None
+    text: Text = None
+    id: Text = None
+    name: Text = None
+    input: Annotated[ToolInput | None, OR_NONE] = None
+    tool_use_id: Text = None
+    is_error: Flag = None
+    # Kept whole: a result that is not text and images is shown as the JSON it was.
+    content: JsonValue = None
+
+    @property
+    def said(self) -> str:
+        """The block's text, empty when it has none."""
+        return self.text or ""
+
+    @property
+    def called(self) -> str:
+        """The tool a ``tool_use`` block calls, empty when it names none."""
+        return self.name or ""
+
+
+class _ResultPart(BaseModel):
+    """One part of a tool result's content list."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    type: Text = None
+    text: Text = None
+
+
+_RESULT_PARTS: Final = TypeAdapter(list[_ResultPart])
+
+
+class _Details(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    thinking_tokens: Count = None
+
+
+class _Usage(BaseModel):
+    """What one assistant message cost, in tokens."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    input_tokens: Count = None
+    output_tokens: Count = None
+    cache_creation_input_tokens: Count = None
+    cache_read_input_tokens: Count = None
+    output_tokens_details: Annotated[_Details | None, OR_NONE] = None
+
+
+class _Message(BaseModel):
+    """A record's ``message``: its content, and on an answer, what it cost."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    content: Annotated[str | list[Annotated[_Block | None, OR_NONE]] | None, OR_NONE] = None
+    id: Text = None
+    model: Text = None
+    usage: Annotated[_Usage | None, OR_NONE] = None
+
+
+class _Kind(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    kind: Text = None
+
+
+class _Fork(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    session_id: Text = Field(default=None, validation_alias="sessionId")
+
+
+class _Opaque(BaseModel):
+    """An object this reader only needs to know is there."""
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class ClaudeRecord(BaseModel):
+    """One line of a Claude Code log, holding only the fields this reader looks at."""
+
+    # Claude Code adds fields every release; one it renames reads as absent, never as an error.
+    model_config = ConfigDict(extra="ignore")
+
+    type: Text = None
+    uuid: Text = None
+    timestamp: Text = None
+    subtype: Text = None
+    cwd: Text = None
+    is_meta: Flag = Field(default=None, validation_alias="isMeta")
+    message: Annotated[_Message | None, OR_NONE] = None
+    origin: Annotated[RecordOrigin | None, OR_NONE] = None
+    prompt_source: Annotated[str | _Kind | None, OR_NONE] = Field(
+        default=None, validation_alias="promptSource"
+    )
+    session: Text = Field(default=None, validation_alias="sessionId")
+    # A background session's stamp is spelled the other way.
+    stamp: Text = Field(default=None, validation_alias="session_id")
+    session_kind: Text = Field(default=None, validation_alias="sessionKind")
+    forked_from: Annotated[_Fork | None, OR_NONE] = Field(
+        default=None, validation_alias="forkedFrom"
+    )
+    compact_metadata: Annotated[_Opaque | None, OR_NONE] = Field(
+        default=None, validation_alias="compactMetadata"
+    )
+    is_compact_summary: Flag = Field(default=None, validation_alias="isCompactSummary")
+
+
+def claude_record(raw: bytes) -> ClaudeRecord | None:
+    """One JSONL line as a record, or ``None`` for a line that is not one."""
+    try:
+        return ClaudeRecord.model_validate_json(raw)
+    except ValidationError:
+        return None
+
+
 # Locating the file
 
 
@@ -217,30 +385,24 @@ def _head_window(path: Path) -> bytes:
         return b""
 
 
-def _head_records(window: bytes) -> Iterator[JsonObject]:
+def _head_records(window: bytes) -> Iterator[ClaudeRecord]:
     """Every record *window* holds whole, in order."""
     # The trailing fragment is half a record past the budget, or empty at EOF.
     for raw in window.split(b"\n")[:-1]:
-        yield _loads(raw)
+        yield _record(raw)
 
 
-def _loads(raw: bytes) -> JsonObject:
-    """One JSONL line as a dict, or an empty one for anything that is not."""
+def _record(raw: bytes) -> ClaudeRecord:
+    """One JSONL line as a record, or an empty one for anything that is not."""
     if not raw.strip():
-        return {}
-    try:
-        record = loads(raw)
-    except (ValueError, UnicodeDecodeError):
-        return {}
-    found = as_object(record)
-    return found if found is not None else {}
+        return ClaudeRecord()
+    return claude_record(raw) or ClaudeRecord()
 
 
-def _forked_from(record: JsonObject) -> str:
+def _forked_from(record: ClaudeRecord) -> str:
     """The declared parent on *record*, as logs up to 2.1.214 spell it."""
-    forked = as_object(record.get("forkedFrom"))
-    parent = forked.get("sessionId") if forked is not None else None
-    return parent if isinstance(parent, str) else ""
+    forked = record.forked_from
+    return (forked.session_id or "") if forked is not None else ""
 
 
 def _stamped_parent(window: bytes, own: str) -> str:
@@ -250,10 +412,10 @@ def _stamped_parent(window: bytes, own: str) -> str:
         return ""
     stamp = ""
     for record in _head_records(window):
-        value = record.get("session_id")
-        if not stamp and isinstance(value, str) and value and value != own:
+        value = record.stamp
+        if not stamp and value and value != own:
             stamp = value
-        if record.get("sessionKind") == "bg":
+        if record.session_kind == "bg":
             return stamp or _first_stamp(window, own)
     return ""
 
@@ -262,8 +424,8 @@ def _first_stamp(window: bytes, own: str) -> str:
     """The first foreign ``session_id`` in *window*, once the kind is confirmed."""
     # Reached when the confirming record came before any stamp, so the first pass carried none.
     for record in _head_records(window):
-        value = record.get("session_id")
-        if isinstance(value, str) and value and value != own:
+        value = record.stamp
+        if value and value != own:
             return value
     return ""
 
@@ -271,20 +433,16 @@ def _first_stamp(window: bytes, own: str) -> str:
 def _copied_from(path: Path) -> str:
     """The session *path*'s thread was COPIED OUT OF, per its own head window."""
     window = _head_window(path)
-    head: JsonObject = {}
-    for record in _head_records(window):
-        if isinstance(record.get("sessionId"), str):
-            head = record
-            break
-    return _forked_from(head) or _stamped_parent(window, str(head.get("sessionId", "")))
+    head = next((r for r in _head_records(window) if r.session is not None), ClaudeRecord())
+    return _forked_from(head) or _stamped_parent(window, head.session or "")
 
 
-def _is_compact(record: JsonObject) -> bool:
+def _is_compact(record: ClaudeRecord) -> bool:
     """Whether *record* is a compaction boundary, however the CLI spelled it."""
     return (
-        isinstance(record.get("compactMetadata"), dict)
-        or record.get("isCompactSummary") is True
-        or record.get("subtype") == "compact_boundary"
+        record.compact_metadata is not None
+        or record.is_compact_summary is True
+        or record.subtype == "compact_boundary"
     )
 
 
@@ -296,7 +454,7 @@ def _background_handoff(path: Path) -> bool:
     background = False
     compacted = False
     for record in _head_records(window):
-        background = background or record.get("sessionKind") == "bg"
+        background = background or record.session_kind == "bg"
         compacted = compacted or _is_compact(record)
         if background and compacted:
             return True
@@ -313,8 +471,8 @@ def _last_timestamp(path: Path) -> str:
     except OSError:
         return ""
     for raw in reversed(window.split(b"\n")):
-        stamp = _loads(raw).get("timestamp")
-        if isinstance(stamp, str) and stamp:
+        stamp = _record(raw).timestamp
+        if stamp:
             return stamp
     return ""
 
@@ -502,18 +660,10 @@ def _complete_end(path: Path, end: int, max_bytes: int = MAX_PAGE_BYTES) -> int:
     return 0 if frontier == 0 else end
 
 
-def _parse_line(raw: bytes, parse: TurnParser) -> TranscriptTurn | None:
-    """One JSONL line as a turn, or ``None`` for anything that is not one."""
-    try:
-        record = as_object(loads(raw))
-    except (ValueError, UnicodeDecodeError):
-        return None
-    return parse(record) if record is not None else None
-
-
 def parse_claude_line(raw: bytes) -> TranscriptTurn | None:
     """One Claude Code JSONL line as a turn, or ``None`` for anything that is not one."""
-    return _parse_line(raw, _claude_turn)
+    record = claude_record(raw)
+    return _claude_turn(record) if record is not None else None
 
 
 def _take_backwards(
@@ -522,7 +672,7 @@ def _take_backwards(
     """Take the turns in *lines*, newest first, until *gather* is full."""
     oldest: int | None = None
     for offset, raw in reversed(lines):
-        turn = _parse_line(raw, parse)
+        turn = parse(raw)
         if turn is None:
             continue
         oldest = offset
@@ -571,7 +721,7 @@ def read_page(  # noqa: PLR0913
     messages: int = 0,
 ) -> TranscriptPage:
     """Up to *limit* turns, or *messages* messages, ending at byte *before*, oldest first."""
-    parse = parse or _claude_turn
+    parse = parse or parse_claude_line
     try:
         size = path.stat().st_size
     except OSError:
@@ -601,7 +751,7 @@ def read_since(
     parse: TurnParser | None = None,
 ) -> TranscriptPage:
     """Whatever has been appended past byte *after*, oldest first."""
-    parse = parse or _claude_turn
+    parse = parse or parse_claude_line
     try:
         size = path.stat().st_size
     except OSError:
@@ -647,7 +797,7 @@ def _take_forward(window: bytes, start: int, parse: TurnParser, gather: Gather) 
         end = offset
         if not raw.strip():
             continue
-        if gather.take(_parse_line(raw, parse), at):
+        if gather.take(parse(raw), at):
             break
     return end
 
@@ -673,14 +823,12 @@ _SKIP_TYPES: Final = frozenset(
 _HUMAN_SOURCES: Final = frozenset({"typed", "queued", "pasted"})
 
 
-def _is_human(record: JsonObject) -> bool:
-    source: JsonValue = record.get("promptSource")
-    if isinstance(source, dict):
-        source = source.get("kind")
-    if isinstance(source, str) and source in _HUMAN_SOURCES:
+def _is_human(record: ClaudeRecord) -> bool:
+    source = record.prompt_source
+    said = source.kind if isinstance(source, _Kind) else source
+    if said in _HUMAN_SOURCES:
         return True
-    origin = as_object(record.get("origin"))
-    return origin is not None and origin.get("kind") == "human"
+    return record.origin is not None and record.origin.kind == "human"
 
 
 def clip(text: str, limit: int) -> tuple[str, bool]:
@@ -691,52 +839,33 @@ def clip(text: str, limit: int) -> tuple[str, bool]:
     return text[:limit], True
 
 
-_TOOL_ARGUMENT_KEYS: Final = (
-    "command",
-    "file_path",
-    "notebook_path",
-    "path",
-    "pattern",
-    "query",
-    "url",
-    "description",
-    "summary",
-    "skill",
-    "subagent_type",
-    "name",
-    "prompt",
-    "text",
-)
-
-
-def one_line(value: object, limit: int = MAX_SUMMARY_CHARS) -> tuple[str, bool]:
+def one_line(value: str | None, limit: int = MAX_SUMMARY_CHARS) -> tuple[str, bool]:
     """*value* as a single collapsed line, clipped, with whether it was clipped."""
-    if not isinstance(value, str):
+    if value is None:
         return "", False
     return clip(" ".join(value.split()), limit)
 
 
-def tool_summary(params: object) -> tuple[str, bool]:
-    """The one identifying argument of a tool call (see `_TOOL_ARGUMENT_KEYS`)."""
-    args = as_object(params)
-    if args is None:
-        return "", False
-    for key in _TOOL_ARGUMENT_KEYS:
-        if key in args:
-            line, cut = one_line(args.get(key))
-            if line:
-                return line, cut
+def first_line(values: Iterable[str | None], limit: int = MAX_SUMMARY_CHARS) -> tuple[str, bool]:
+    """The first of *values* with something on it, as `one_line`."""
+    for value in values:
+        line, cut = one_line(value, limit)
+        if line:
+            return line, cut
     return "", False
 
 
-def _blocks(content: object) -> Iterator[JsonObject]:
-    yield from objects(content)
+def tool_summary(args: ToolInput | None) -> tuple[str, bool]:
+    """The one argument that identifies a tool call (see `ToolInput.naming`)."""
+    return ("", False) if args is None else first_line(args.naming())
 
 
-def _content(record: JsonObject) -> JsonValue:
-    """``record["message"]["content"]``; callers have already checked the message is an object."""
-    message = as_object(record.get("message"))
-    return message.get("content") if message is not None else None
+def _blocks(record: ClaudeRecord) -> list[_Block]:
+    """The blocks of *record*'s content, when it is a list of them."""
+    content = record.message.content if record.message is not None else None
+    if not isinstance(content, list):
+        return []
+    return [block for block in content if block is not None]
 
 
 def _injected_turn(found: TaskNotice | PeerMessage, uuid: str, ts: str) -> TranscriptTurn:
@@ -774,15 +903,15 @@ def _injected_turn(found: TaskNotice | PeerMessage, uuid: str, ts: str) -> Trans
     )
 
 
-def _user_text(record: JsonObject, content: str, uuid: str, ts: str) -> TranscriptTurn | None:
+def _user_text(record: ClaudeRecord, content: str, uuid: str, ts: str) -> TranscriptTurn | None:
     """A user record whose content is one string: a prompt, or something the harness wrote."""
     human = _is_human(record)
-    found = injected(record, content, human=human)
+    found = injected(record.origin, content, human=human)
     if isinstance(found, Hidden):
         return None
     if found is not None:
         return _injected_turn(found, uuid, ts)
-    if record.get("isMeta"):
+    if record.is_meta:
         return None
     # The cap follows the speaker: injected machinery gets the note cap, as the view shows three lines.
     text, cut = clip(without_reminders(content), MAX_PROSE_CHARS if human else MAX_NOTE_CHARS)
@@ -797,24 +926,24 @@ def _user_text(record: JsonObject, content: str, uuid: str, ts: str) -> Transcri
     )
 
 
-def _user_record(record: JsonObject, uuid: str, ts: str) -> TranscriptTurn | None:
+def _user_record(record: ClaudeRecord, uuid: str, ts: str) -> TranscriptTurn | None:
     """A ``role: "user"`` record, which is where the whole trap lives."""
-    content = _content(record)
+    content = record.message.content if record.message is not None else None
     if isinstance(content, str):
         return _user_text(record, content, uuid, ts)
-    meta = bool(record.get("isMeta"))
-    for block in _blocks(content):
+    meta = record.is_meta is True
+    for block in _blocks(record):
         turn = _user_block(block, uuid, ts, meta=meta)
         if turn is not None:
             return turn
     return None
 
 
-def _user_block(block: JsonObject, uuid: str, ts: str, *, meta: bool) -> TranscriptTurn | None:
+def _user_block(block: _Block, uuid: str, ts: str, *, meta: bool) -> TranscriptTurn | None:
     """One content block of a user record, or ``None`` if it is not conversation."""
-    kind = block.get("type")
+    kind = block.type
     if kind == "tool_result":
-        text, cut = clip(_result_text(block.get("content")), MAX_RESULT_CHARS)
+        text, cut = clip(_result_text(block.content), MAX_RESULT_CHARS)
         return TranscriptTurn(
             uuid=uuid,
             speaker=Speaker.tool,
@@ -822,11 +951,11 @@ def _user_block(block: JsonObject, uuid: str, ts: str, *, meta: bool) -> Transcr
             ts=ts,
             tool="result",
             truncated=cut,
-            call=str(block.get("tool_use_id") or ""),
-            failed=block.get("is_error") is True,
+            call=block.tool_use_id or "",
+            failed=block.is_error is True,
         )
     if kind == "text" and not meta:
-        text, cut = clip(str(block.get("text", "")), MAX_NOTE_CHARS)
+        text, cut = clip(block.said, MAX_NOTE_CHARS)
         if text:
             return TranscriptTurn(
                 uuid=uuid, speaker=Speaker.system, text=text, ts=ts, truncated=cut
@@ -834,39 +963,46 @@ def _user_block(block: JsonObject, uuid: str, ts: str, *, meta: bool) -> Transcr
     return None
 
 
-def _result_text(body: object) -> str:
+def _result_text(body: JsonValue) -> str:
     """A tool result as text; an inline image is named, never dumped as its base64."""
     if isinstance(body, str):
         return body
-    parts = list(objects(body))
-    if not parts or any(part.get("type") not in ("text", "image") for part in parts):
+    parts = _result_parts(body)
+    if not parts or any(part.type not in ("text", "image") for part in parts):
         return json.dumps(body, ensure_ascii=False)
-    return "\n".join(
-        str(part.get("text", "")) if part.get("type") == "text" else "[image]" for part in parts
-    )
+    return "\n".join(part.text or "" if part.type == "text" else "[image]" for part in parts)
 
 
-def _assistant_record(record: JsonObject, uuid: str, ts: str) -> TranscriptTurn | None:
+def _result_parts(body: JsonValue) -> list[_ResultPart]:
+    """*body* as a list of result parts, or none when it is not one."""
+    if not isinstance(body, list):
+        return []
+    try:
+        return _RESULT_PARTS.validate_python(body)
+    except ValidationError:
+        return []
+
+
+def _assistant_record(record: ClaudeRecord, uuid: str, ts: str) -> TranscriptTurn | None:
     """An assistant record: prose, or one collapsed tool call."""
-    for block in _blocks(_content(record)):
-        btype = block.get("type")
+    for block in _blocks(record):
+        btype = block.type
         if btype == "text":
-            text, cut = clip(str(block.get("text", "")), MAX_PROSE_CHARS)
+            text, cut = clip(block.said, MAX_PROSE_CHARS)
             if not text:
                 return None
             return TranscriptTurn(uuid=uuid, speaker=Speaker.agent, text=text, ts=ts, truncated=cut)
         if btype == "tool_use":
-            params = block.get("input")
-            text, cut = tool_summary(params)
+            text, cut = tool_summary(block.input)
             return TranscriptTurn(
                 uuid=uuid,
                 speaker=Speaker.tool,
                 text=text,
                 ts=ts,
-                tool=str(block.get("name", "")),
+                tool=block.called,
                 truncated=cut,
-                call=str(block.get("id") or ""),
-                diff=tool_diff(params),
+                call=block.id or "",
+                diff=tool_diff(block.input),
             )
         if btype == "thinking":
             # Measured: an empty `thinking` string and a signature blob, so nothing to render.
@@ -874,18 +1010,15 @@ def _assistant_record(record: JsonObject, uuid: str, ts: str) -> TranscriptTurn 
     return None
 
 
-def _claude_turn(record: JsonObject) -> TranscriptTurn | None:
+def _claude_turn(record: ClaudeRecord) -> TranscriptTurn | None:
     """One Claude Code JSONL record as a chat turn, or ``None`` to drop it."""
-    kind = record.get("type")
+    kind = record.type
     if kind in _SKIP_TYPES:
         return None
-    uuid = record.get("uuid")
-    if not isinstance(uuid, str) or not uuid:
+    uuid = record.uuid
+    if not uuid or record.message is None:
         return None
-    if not isinstance(record.get("message"), dict):
-        return None
-    stamp = record.get("timestamp")
-    ts = stamp if isinstance(stamp, str) else ""
+    ts = record.timestamp or ""
     if kind == "user":
         return _user_record(record, uuid, ts)
     if kind == "assistant":
@@ -1001,7 +1134,7 @@ class ClaudeAdapter:
             # A held cursor is a promise about one file; reading it here would splice two threads.
             page = read_since(path, after=_ANOTHER_FILE, limit=limit)
             return page.model_copy(update={"moved": True})
-        return read_since(path, after=after, limit=limit, parse=_claude_turn)
+        return read_since(path, after=after, limit=limit)
 
     def tally(
         self, session: str, *, roots: Sequence[Path], max_bytes: int = MAX_USAGE_BYTES
@@ -1018,9 +1151,9 @@ class ClaudeAdapter:
         if path is None:
             return ""
         for record in _head_records(_head_window(path)):
-            cwd = record.get("cwd")
-            if isinstance(cwd, str) and cwd.strip():
-                return cwd.strip()
+            cwd = (record.cwd or "").strip()
+            if cwd:
+                return cwd
         return ""
 
     def log(self, session: str, roots: Sequence[Path]) -> Path | None:
@@ -1145,40 +1278,34 @@ class SessionUsage(BaseModel):
 _SYNTHETIC_MODEL: Final = "<synthetic>"
 
 
-def _usage_of(record: JsonObject) -> tuple[str, JsonObject, str] | None:
+def _usage_of(record: ClaudeRecord) -> tuple[str, _Usage, str] | None:
     """An assistant record's ``(message id, usage, model)``, or ``None``."""
-    if record.get("type") != "assistant":
+    message = record.message
+    if record.type != "assistant" or message is None:
         return None
-    message = as_object(record.get("message"))
-    if message is None:
+    if message.usage is None or not message.id:
         return None
-    usage = as_object(message.get("usage"))
-    identifier = message.get("id")
-    if usage is None or not isinstance(identifier, str) or not identifier:
-        return None
-    named = message.get("model")
-    model = named if isinstance(named, str) else ""
+    model = message.model or ""
     if model == _SYNTHETIC_MODEL:
         return None
-    return identifier, usage, model
+    return message.id, message.usage, model
 
 
-def _count(usage: JsonObject, key: str) -> int:
+def _count(value: int | None) -> int:
     """One usage field as a non-negative int, whatever the provider actually wrote."""
-    value = usage.get(key)
-    return value if isinstance(value, int) and value > 0 else 0
+    return value if value is not None and value > 0 else 0
 
 
-def _add_usage(tally: SessionUsage, usage: JsonObject, model: str) -> None:
+def _add_usage(tally: SessionUsage, usage: _Usage, model: str) -> None:
     """Fold one message's usage into *tally*, in place."""
-    details = as_object(usage.get("output_tokens_details"))
+    details = usage.output_tokens_details
     tally.messages += 1
-    tally.input_tokens += _count(usage, "input_tokens")
-    tally.output_tokens += _count(usage, "output_tokens")
-    tally.cache_creation_tokens += _count(usage, "cache_creation_input_tokens")
-    tally.cache_read_tokens += _count(usage, "cache_read_input_tokens")
+    tally.input_tokens += _count(usage.input_tokens)
+    tally.output_tokens += _count(usage.output_tokens)
+    tally.cache_creation_tokens += _count(usage.cache_creation_input_tokens)
+    tally.cache_read_tokens += _count(usage.cache_read_input_tokens)
     if details is not None:
-        tally.thinking_tokens += _count(details, "thinking_tokens")
+        tally.thinking_tokens += _count(details.thinking_tokens)
     if model:
         # Claude Code answers from one provider, so the reference carries none.
         remember(tally, ModelRef(model))
@@ -1190,12 +1317,12 @@ def remember(tally: SessionUsage, ref: ModelRef) -> None:
         tally.models.append(ref)
 
 
-def _prompt_size(usage: JsonObject) -> int:
+def _prompt_size(usage: _Usage) -> int:
     """Everything that went UP with one message: fresh, cache-written, cache-read."""
     return (
-        _count(usage, "input_tokens")
-        + _count(usage, "cache_creation_input_tokens")
-        + _count(usage, "cache_read_input_tokens")
+        _count(usage.input_tokens)
+        + _count(usage.cache_creation_input_tokens)
+        + _count(usage.cache_read_input_tokens)
     )
 
 
@@ -1234,16 +1361,13 @@ def _tally_log(path: Path, live: LiveTally, *, newest: bool, start: int = 0) -> 
     return end
 
 
-def _stamp_of(record: JsonObject) -> str:
-    stamp = record.get("timestamp")
-    return stamp if isinstance(stamp, str) else ""
-
-
-def _tally_prompt(record: JsonObject, tally: SessionUsage, seen: set[str], *, newest: bool) -> None:
+def _tally_prompt(
+    record: ClaudeRecord, tally: SessionUsage, seen: set[str], *, newest: bool
+) -> None:
     """Count one prompt the person sent; the newest log's last one starts the current turn."""
     if newest:
-        tally.turn_started = _stamp_of(record)
-    key = f"prompt:{record.get('uuid')}"
+        tally.turn_started = record.timestamp or ""
+    key = f"prompt:{record.uuid}"
     if key not in seen:
         seen.add(key)
         tally.prompts += 1
@@ -1251,10 +1375,10 @@ def _tally_prompt(record: JsonObject, tally: SessionUsage, seen: set[str], *, ne
 
 def _tally_line(raw: bytes, tally: SessionUsage, seen: set[str], *, newest: bool) -> None:
     """Add one record to *tally*: its message unless already counted, or the prompt it is."""
-    record = _loads(raw)
-    if newest and _stamp_of(record):
-        tally.last_at = _stamp_of(record)
-    if record.get("type") == "user" and not record.get("isMeta") and _is_human(record):
+    record = _record(raw)
+    if newest and record.timestamp:
+        tally.last_at = record.timestamp
+    if record.type == "user" and not record.is_meta and _is_human(record):
         _tally_prompt(record, tally, seen, newest=newest)
         return
     found = _usage_of(record)

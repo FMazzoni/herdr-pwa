@@ -8,9 +8,9 @@ from collections.abc import Callable
 from pathlib import Path
 
 from firefox import Marionette, phone_window
+from pydantic import JsonValue
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from herdr_pwa.jsontypes import JsonObject
 from tests.catalogue import AGENT, PERMISSION, WORKING, State, build, capture, herd
 from tests.webfakes import (
     AGENT_GET,
@@ -80,7 +80,7 @@ class Writes:
         await self.app(scope, receive, send)
 
 
-def agent_info(frame: JsonObject) -> JsonObject:
+def agent_info(frame: dict[str, JsonValue]) -> dict[str, JsonValue]:
     """The ``agent.get`` reply for the agent the walk taps at, as ``frame`` has it."""
     agent = next(a for a in agents_of(frame) if a.get("pane_id") == WORKING_PANE)
     return {"id": "x", "result": {"type": "agent_info", "agent": agent}}

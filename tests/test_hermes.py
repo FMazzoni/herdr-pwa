@@ -2,6 +2,8 @@
 
 import json
 import sqlite3
+from collections.abc import Generator
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
@@ -13,7 +15,7 @@ from tests.engine_seam import (
     HermesAdapter,
     adapter_for,
     fold_tool_results,
-    hermes_readonly_uri,
+    readonly_uri,
 )
 
 STORE = Path(__file__).parent / "fixtures" / "transcript" / "hermes"
@@ -226,7 +228,7 @@ def test_a_file_that_is_not_hermes_is_refused_rather_than_read(
 
 def test_the_store_is_opened_read_only(roots: list[Path]) -> None:
     """A live Hermes is writing to this file; the URI's ``mode=ro`` makes a write raise."""
-    uri = hermes_readonly_uri(roots[0] / HERMES_DB)
+    uri = readonly_uri(roots[0] / HERMES_DB)
     assert "mode=ro" in uri
     with sqlite3.connect(uri, uri=True) as db, pytest.raises(sqlite3.OperationalError):
         db.execute(
@@ -328,3 +330,36 @@ def test_a_priced_row_is_reported(tmp_path: Path) -> None:
     path = build(tmp_path / HERMES_DB)
     spend(path, cost_status="actual", actual_cost_usd=2.5, estimated_cost_usd=1.5)
     assert HermesAdapter().tally(SESSION, roots=[tmp_path]).cost == 2.5
+
+
+@contextmanager
+def held(path: Path) -> Generator[None]:
+    """Hermes mid-write: an exclusive transaction blocks every other connection, readers too."""
+    holder = sqlite3.connect(path)
+    holder.execute("begin exclusive")
+    try:
+        yield
+    finally:
+        holder.rollback()
+        holder.close()
+
+
+def test_a_locked_store_reads_as_unreadable_not_empty(roots: list[Path]) -> None:
+    """A writer holding the store must not read as "nothing said yet"."""
+    adapter = HermesAdapter()
+    with held(roots[0] / HERMES_DB):
+        page = adapter.page(SESSION, roots=roots)
+        assert page.state is HistoryState.unreadable
+        assert not page.turns
+        assert adapter.since(SESSION, roots=roots, after=0).state is HistoryState.unreadable
+        assert adapter.tally(SESSION, roots=roots).state is HistoryState.unreadable
+        assert adapter.origin(SESSION, roots=roots) == ""
+    assert adapter.page(SESSION, roots=roots).state is HistoryState.ok
+
+
+def test_info_never_raises_while_the_store_is_held(roots: list[Path]) -> None:
+    """Its docstring promises as much; a title asked mid-write is simply not known yet."""
+    named(roots[0] / HERMES_DB, "Plan the migration")
+    with held(roots[0] / HERMES_DB):
+        assert HermesAdapter().info(SESSION, roots=roots) == ("", "")
+    assert HermesAdapter().info(SESSION, roots=roots)[0] == "Plan the migration"

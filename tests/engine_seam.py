@@ -9,14 +9,14 @@ place outside the engine that imports its submodules.
 
 from herdr_pwa.engine import cache as cache_module
 from herdr_pwa.engine import client as client_module
-from herdr_pwa.engine import generated, hermes, opencode, transcript
+from herdr_pwa.engine import generated, transcript
 from herdr_pwa.engine.client import discovery_subscriptions, method_of, payload_field
 from herdr_pwa.engine.dialog import OPTION_RE, is_key_hint
 from herdr_pwa.engine.generated import request as wire_request
 from herdr_pwa.engine.generated import success_response as wire_response
 from herdr_pwa.engine.generated.event import EventKind
 from herdr_pwa.engine.hermes import HERMES_DB, HermesAdapter
-from herdr_pwa.engine.notices import HIDDEN, PeerMessage, TaskNotice, injected
+from herdr_pwa.engine.notices import HIDDEN, PeerMessage, RecordOrigin, TaskNotice, injected
 from herdr_pwa.engine.opencode import (
     OPENCODE_DB,
     OPENCODE_ROOT,
@@ -24,12 +24,15 @@ from herdr_pwa.engine.opencode import (
     OpencodeAdapter,
     SessionInfo,
 )
+from herdr_pwa.engine.store import readonly_uri
 from herdr_pwa.engine.transcript import (
     AGENT_KINDS,
     MAX_NOTE_CHARS,
     MAX_PROSE_CHARS,
     MAX_RESULT_CHARS,
+    ClaudeRecord,
     adapter_for,
+    claude_record,
     fold_tool_results,
     history,
     is_message,
@@ -48,8 +51,6 @@ from herdr_pwa.engine.transport import (
 )
 
 # Private to their modules; a test pins each directly because no public call shows it.
-hermes_readonly_uri = hermes._readonly  # pyright: ignore[reportPrivateUsage]
-opencode_readonly_uri = opencode._readonly  # pyright: ignore[reportPrivateUsage]
 copied_from = transcript._copied_from  # pyright: ignore[reportPrivateUsage]
 head_records = transcript._head_records  # pyright: ignore[reportPrivateUsage]
 head_window = transcript._head_window  # pyright: ignore[reportPrivateUsage]
@@ -70,15 +71,18 @@ __all__ = [
     "OPENCODE_ROOT",
     "OPENCODE_STORAGE_ROOT",
     "OPTION_RE",
+    "ClaudeRecord",
     "EventKind",
     "HermesAdapter",
     "OpencodeAdapter",
     "PeerMessage",
+    "RecordOrigin",
     "SessionInfo",
     "SocketTransport",
     "TaskNotice",
     "adapter_for",
     "cache_module",
+    "claude_record",
     "client_module",
     "copied_from",
     "discovery_subscriptions",
@@ -86,16 +90,15 @@ __all__ = [
     "generated",
     "head_records",
     "head_window",
-    "hermes_readonly_uri",
     "history",
     "injected",
     "is_key_hint",
     "is_message",
     "method_of",
-    "opencode_readonly_uri",
     "payload_field",
     "raise_for_error_frame",
     "read_page",
+    "readonly_uri",
     "tally_claude",
     "usage",
     "wire_request",

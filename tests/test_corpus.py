@@ -4,6 +4,7 @@ import re
 from pathlib import Path
 
 import pytest
+from pydantic import JsonValue, TypeAdapter
 
 from herdr_pwa.engine import (
     Agent,
@@ -13,7 +14,6 @@ from herdr_pwa.engine import (
     as_pane_id,
     as_session_id,
 )
-from herdr_pwa.jsontypes import JsonObject, as_object, loads
 from herdr_pwa.panetext import as_text_read
 from herdr_pwa.writes.keys import answer_digits
 from tests.engine_seam import OPTION_RE
@@ -71,14 +71,21 @@ def read_ansi(name: str) -> str:
     return (FIXTURES / name / "visible.ansi").read_text(encoding="utf-8")
 
 
-def _obj(value: object) -> JsonObject:
-    found = as_object(value)
-    assert found is not None
-    return found
+def _obj(value: JsonValue) -> dict[str, JsonValue]:
+    assert isinstance(value, dict)
+    return value
 
 
-def meta(name: str) -> JsonObject:
-    return _obj(loads((FIXTURES / name / "meta.json").read_text(encoding="utf-8")))
+# A capture's sidecar JSON, read whole: the capture's own record of what herdr said.
+_DOCUMENT = TypeAdapter(dict[str, JsonValue])
+
+
+def _document(path: Path) -> dict[str, JsonValue]:
+    return _DOCUMENT.validate_json(path.read_text(encoding="utf-8"))
+
+
+def meta(name: str) -> dict[str, JsonValue]:
+    return _document(FIXTURES / name / "meta.json")
 
 
 # Corpus shape and provenance
@@ -407,9 +414,9 @@ EXPECTED_STATUS: dict[str, AgentStatus] = {
 }
 
 
-def agent_get(name: str) -> JsonObject:
+def agent_get(name: str) -> dict[str, JsonValue]:
     """The ``agents[]``-shaped payload from a capture's ``herdr agent get``."""
-    raw = _obj(loads((FIXTURES / name / "agent-get.json").read_text(encoding="utf-8")))
+    raw = _document(FIXTURES / name / "agent-get.json")
     return _obj(_obj(raw["result"])["agent"])
 
 
@@ -430,7 +437,7 @@ def test_capture_status_survives_the_model(name: str) -> None:
 def test_capture_status_agrees_with_the_rule_that_matched(name: str) -> None:
     """Three independent records of the same fact must not have drifted apart."""
     expected = EXPECTED_STATUS[name]
-    explain = _obj(loads((FIXTURES / name / "explain.json").read_text(encoding="utf-8")))
+    explain = _document(FIXTURES / name / "explain.json")
     assert AgentStatus.coerce(meta(name)["agent_status"]) is expected
     assert AgentStatus.coerce(explain["state"]) is expected
     assert AgentStatus.coerce(agent_get(name)["agent_status"]) is expected

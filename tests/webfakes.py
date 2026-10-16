@@ -7,13 +7,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from fastapi.testclient import TestClient
-from pydantic import JsonValue
+from pydantic import JsonValue, TypeAdapter
 
 from herdr_pwa.engine import EngineSettings, HerdrClient
-from herdr_pwa.jsontypes import JsonObject, as_object, loads
 from herdr_pwa.settings import Settings
 from herdr_pwa.web.app import create_app
 from herdr_pwa.writes.outcome import Pacing
+from tests._jsonpath import at, obj
 from tests.engine_seam import method_of, wire_request
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -32,29 +32,24 @@ WORKING_PANE = "w1:p3"
 IDLE_SESSION = "5b609dba-d756-493a-a3fc-b4e09bf0a183"
 
 # A callable answers from the request, as a runner answers a text and a colour read differently.
-type Reply = JsonObject | Exception | Callable[[JsonObject], JsonObject]
+type Reply = (
+    dict[str, JsonValue] | Exception | Callable[[dict[str, JsonValue]], dict[str, JsonValue]]
+)
 
 
-def _object(value: JsonValue) -> JsonObject:
-    found = as_object(value)
-    assert found is not None
-    return found
-
-
-def snapshot_frame() -> JsonObject:
+def snapshot_frame() -> dict[str, JsonValue]:
     """A fresh, mutable copy of the recorded snapshot frame."""
-    return _object(loads(SNAPSHOT_FIXTURE.read_text()))
+    return TypeAdapter(dict[str, JsonValue]).validate_json(SNAPSHOT_FIXTURE.read_text())
 
 
-def agents_of(frame: JsonObject) -> list[JsonObject]:
+def agents_of(frame: dict[str, JsonValue]) -> list[dict[str, JsonValue]]:
     """The raw agent objects inside a snapshot frame, for a test to edit in place."""
-    snapshot = _object(_object(frame["result"])["snapshot"])
-    agents = snapshot["agents"]
+    agents = at(frame, "result", "snapshot", "agents")
     assert isinstance(agents, list)
-    return [_object(a) for a in agents]
+    return [obj(a) for a in agents]
 
 
-def read_frame(text: str, pane: str = WORKING_PANE) -> JsonObject:
+def read_frame(text: str, pane: str = WORKING_PANE) -> dict[str, JsonValue]:
     """An ``agent.read`` reply carrying ``text``, read from ``pane``."""
     workspace = pane.split(":", 1)[0]
     return {
@@ -93,11 +88,11 @@ class FakeWire:
     def call(
         self,
         method: str,
-        params: JsonObject,
+        params: dict[str, JsonValue],
         *,
         timeout: float | None = None,
         idempotent: bool = True,
-    ) -> JsonObject:
+    ) -> dict[str, JsonValue]:
         del timeout, idempotent
         self.calls.append(method)
         target = params.get("target")
@@ -172,7 +167,7 @@ def build_rig(
     return Rig(wire, clock, http, settings)
 
 
-def write_transcript(root: Path, session: str, records: list[JsonObject]) -> None:
+def write_transcript(root: Path, session: str, records: list[dict[str, JsonValue]]) -> None:
     """Lay a Claude Code transcript out the way Claude Code does."""
     project = root / "-tmp"
     project.mkdir(parents=True, exist_ok=True)
@@ -180,7 +175,7 @@ def write_transcript(root: Path, session: str, records: list[JsonObject]) -> Non
     (project / f"{session}.jsonl").write_text("\n".join(lines) + "\n")
 
 
-def assistant_says(text: str, uuid: str = "a1") -> JsonObject:
+def assistant_says(text: str, uuid: str = "a1") -> dict[str, JsonValue]:
     """One assistant prose record."""
     return {
         "type": "assistant",
@@ -190,7 +185,7 @@ def assistant_says(text: str, uuid: str = "a1") -> JsonObject:
     }
 
 
-def human_says(text: str, uuid: str = "u1") -> JsonObject:
+def human_says(text: str, uuid: str = "u1") -> dict[str, JsonValue]:
     """One typed human record."""
     return {
         "type": "user",

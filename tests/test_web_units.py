@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Final
 
 import pytest
+from pydantic import JsonValue
 
 from herdr_pwa.cli import doctor
 from herdr_pwa.decisions import AgentRow, decide_screen
@@ -19,7 +20,6 @@ from herdr_pwa.engine import (
     SessionId,
     as_pane_id,
 )
-from herdr_pwa.jsontypes import JsonObject
 from herdr_pwa.protocol import EXPECTED_PROTOCOL
 from herdr_pwa.push import DeliveryLog
 from herdr_pwa.settings import Settings
@@ -235,7 +235,7 @@ def _doctor(tmp_path: Path, wire: FakeWire) -> tuple[int, str]:
     return code, "".join(out)
 
 
-def _frame(protocol: int) -> JsonObject:
+def _frame(protocol: int) -> dict[str, JsonValue]:
     frame = snapshot_frame()
     snapshot = frame["result"]
     assert isinstance(snapshot, dict)

@@ -7,18 +7,16 @@ import os
 from pathlib import Path
 
 import pytest
+from pydantic import JsonValue, TypeAdapter
 
 from herdr_pwa.engine import HistoryState, locate
-from herdr_pwa.jsontypes import JsonObject, as_object, loads
 from tests.engine_seam import history
 
 FIXTURES = Path(__file__).parent / "fixtures" / "transcript" / "lineage"
 
 
-def _fixture(name: str) -> JsonObject:
-    record = as_object(loads((FIXTURES / name).read_text()))
-    assert record is not None, name
-    return record
+def _fixture(name: str) -> dict[str, JsonValue]:
+    return TypeAdapter(dict[str, JsonValue]).validate_json((FIXTURES / name).read_text())
 
 
 FORKED_HEAD = _fixture("forked-head.json")
@@ -28,9 +26,9 @@ BG_STAMP = _fixture("bg-parent-stamp-2.1.241.json")
 PLAIN_FORK = _fixture("plain-fork-head-2.1.241.json")
 
 
-def _forked(head: JsonObject) -> JsonObject:
-    parent = as_object(head["forkedFrom"])
-    assert parent is not None
+def _forked(head: dict[str, JsonValue]) -> dict[str, JsonValue]:
+    parent = head["forkedFrom"]
+    assert isinstance(parent, dict)
     return parent
 
 

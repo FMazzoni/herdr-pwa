@@ -3,10 +3,12 @@
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from herdr_pwa.jsontypes import JsonObject
+from pydantic import JsonValue
 
 # A canned frame, a failure to raise, or a function of the request params.
-type Reply = JsonObject | Exception | Callable[[JsonObject], JsonObject]
+type Reply = (
+    dict[str, JsonValue] | Exception | Callable[[dict[str, JsonValue]], dict[str, JsonValue]]
+)
 
 
 class TickingClock:
@@ -23,7 +25,7 @@ class TickingClock:
 @dataclass
 class Call:
     method: str
-    params: JsonObject
+    params: dict[str, JsonValue]
     timeout: float | None
     idempotent: bool
 
@@ -39,11 +41,11 @@ class FakeTransport:
     def call(
         self,
         method: str,
-        params: JsonObject,
+        params: dict[str, JsonValue],
         *,
         timeout: float | None = None,
         idempotent: bool = True,
-    ) -> JsonObject:
+    ) -> dict[str, JsonValue]:
         self.calls.append(Call(method, dict(params), timeout, idempotent))
         reply = self.replies.get(method, {"id": "x", "result": {"type": "ok"}})
         if isinstance(reply, Exception):

@@ -7,8 +7,8 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from pydantic import JsonValue, TypeAdapter
 
-from herdr_pwa.jsontypes import JsonObject, as_object, loads
 from herdr_pwa.web.assets import STATIC_DIR
 from herdr_pwa.web.routers.shell import TOUCH_ICONS
 from tests.webfakes import build_rig
@@ -16,6 +16,8 @@ from tests.webfakes import build_rig
 WORKER = STATIC_DIR / "sw.js"
 APP_JS = STATIC_DIR / "app.js"
 MANIFEST = STATIC_DIR / "manifest.webmanifest"
+# The manifest and the worker harness's report, read whole as JSON documents.
+_DOCUMENT = TypeAdapter(dict[str, JsonValue])
 HARNESS = Path(__file__).parent / "sw" / "harness.mjs"
 SESSION = "11111111-1111-4111-8111-111111111111"
 SHELL_PREFIXES = ("/static/",)
@@ -75,7 +77,7 @@ def test_the_worker_swaps_itself_only_when_the_page_asks() -> None:
     assert source.count("self.skipWaiting()") == 1
 
 
-def observed() -> JsonObject:
+def observed() -> dict[str, JsonValue]:
     result = subprocess.run(  # noqa: S603 - fixed argv, our own files
         ["node", str(HARNESS), str(WORKER)],  # noqa: S607 - node from PATH, skipped when absent
         capture_output=True,
@@ -84,9 +86,7 @@ def observed() -> JsonObject:
         check=False,
     )
     assert result.returncode == 0, result.stderr
-    found = as_object(loads(result.stdout))
-    assert found is not None
-    return found
+    return _DOCUMENT.validate_json(result.stdout)
 
 
 needs_node = pytest.mark.skipif(shutil.which("node") is None, reason="the harness needs node")
@@ -95,8 +95,8 @@ needs_node = pytest.mark.skipif(shutil.which("node") is None, reason="the harnes
 @needs_node
 def test_the_running_worker_never_answers_for_agent_state_and_never_stores_a_document() -> None:
     seen = observed()
-    intercepted = as_object(seen["intercepted"])
-    assert intercepted is not None
+    intercepted = seen["intercepted"]
+    assert isinstance(intercepted, dict)
     for probe in ("feed", "chat", "pane", "pushKey", "postToFeed", "crossOrigin"):
         assert intercepted[probe] is False, probe
     # A file's contents are never the worker's to answer: not a watch, an image or a search.
@@ -127,11 +127,11 @@ def test_the_running_worker_swaps_only_on_the_pages_message() -> None:
 @needs_node
 def test_a_push_shows_the_servers_text_and_a_tap_opens_that_agent() -> None:
     seen = observed()
-    shown = as_object(seen["blockedNotification"])
-    assert shown is not None
+    shown = seen["blockedNotification"]
+    assert isinstance(shown, dict)
     assert shown["title"] == "needs you: fix the parser"
     assert shown["tag"] == "herd"
-    assert as_object(shown["data"]) == {
+    assert shown["data"] == {
         "session": SESSION,
         "event": "blocked",
         "url": f"/agent/{SESSION}",
@@ -149,8 +149,8 @@ def test_a_push_is_quiet_when_on_screen_or_told_so_and_never_dropped() -> None:
     assert seen["onScreen"] == {"shown": True, "silent": True, "renotify": False}
     assert seen["elsewhereSilent"] is False
     assert seen["backgroundSilent"] is False
-    quiet = as_object(seen["quietUpdate"])
-    assert quiet is not None
+    quiet = seen["quietUpdate"]
+    assert isinstance(quiet, dict)
     assert (quiet["silent"], quiet["requireInteraction"]) == (True, True)
     assert seen["unreadableTitle"] == "herdr"
 
@@ -213,8 +213,7 @@ def test_ios_finds_a_home_screen_icon_at_each_root_name(tmp_path: Path, route: s
 
 
 def test_the_manifest_is_a_standalone_app_rooted_at_slash() -> None:
-    manifest = as_object(loads(MANIFEST.read_text()))
-    assert manifest is not None
+    manifest = _DOCUMENT.validate_json(MANIFEST.read_text())
     assert (manifest["start_url"], manifest["scope"], manifest["id"]) == ("/", "/", "/")
     assert manifest["display"] == "standalone"
     assert manifest["name"]
@@ -222,14 +221,13 @@ def test_the_manifest_is_a_standalone_app_rooted_at_slash() -> None:
 
 
 def test_every_manifest_icon_exists_at_its_declared_size() -> None:
-    manifest = as_object(loads(MANIFEST.read_text()))
-    assert manifest is not None
+    manifest = _DOCUMENT.validate_json(MANIFEST.read_text())
     icons = manifest["icons"]
     assert isinstance(icons, list)
     sizes: set[str] = set()
     for raw in icons:
-        icon = as_object(raw)
-        assert icon is not None
+        icon = raw
+        assert isinstance(icon, dict)
         src, size = str(icon["src"]), str(icon["sizes"])
         assert src.startswith("/static/")
         body = (STATIC_DIR / src.removeprefix("/static/")).read_bytes()
@@ -288,6 +286,5 @@ def test_the_status_bar_is_the_top_bars_colour() -> None:
     assert surface is not None
     base = (STATIC_DIR.parent / "templates" / "base.html").read_text()
     assert f'<meta name="theme-color" content="{surface.group(1)}">' in base
-    manifest = as_object(loads(MANIFEST.read_text()))
-    assert manifest is not None
+    manifest = _DOCUMENT.validate_json(MANIFEST.read_text())
     assert manifest["theme_color"] == surface.group(1)

@@ -11,6 +11,8 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
+from pydantic import JsonValue, TypeAdapter
+
 BINARY = "firefox"
 # A popup has no toolbar, so it can be narrower than the 500px a normal window stops at.
 OPENER_WIDTH = 600
@@ -23,6 +25,10 @@ PREFS = {
     "ui.useOverlayScrollbars": "1",
     "dom.disable_open_during_load": "false",
 }
+
+
+# Marionette's frames are its own JSON; nothing here narrows them further than JSON.
+_MESSAGE = TypeAdapter(JsonValue)
 
 
 class BrowserError(RuntimeError):
@@ -53,7 +59,7 @@ class Marionette:
         while len(rest) < size:
             rest += self._read_some()
         self.buffer = rest[size:]
-        return json.loads(rest[:size])
+        return _MESSAGE.validate_json(rest[:size])
 
     def send(self, command: str, params: dict[str, object]) -> object:
         """Send one command and wait for the reply carrying its id."""

@@ -68,7 +68,7 @@ def pair(
     local = api or tailscale.LocalApi(settings.tailscaled_socket)
     try:
         result = pairing.pair(local, port=settings.port, bind_host=settings.host, write=publish)
-    except pairing.PairingError as exc:
+    except (pairing.PairingError, tailscale.LocalApiError) as exc:
         write(f"pair: {exc}\n")
         return 1
     lines = [result.note]

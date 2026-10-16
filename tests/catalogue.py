@@ -1,5 +1,6 @@
 """Every named screen the app can draw, each over its own fake runner, for gates and shots alike."""
 
+import copy
 import json
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -7,11 +8,11 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Final
 
-from pydantic import JsonValue
+from pydantic import JsonValue, TypeAdapter
 
 from herdr_pwa.engine import EngineUnavailable
-from herdr_pwa.jsontypes import JsonObject, as_object, loads
 from herdr_pwa.panetext import as_text_read
+from tests._jsonpath import obj
 from tests.filefakes import make_repo, stand_in
 from tests.webfakes import (
     AGENT_GET,
@@ -104,7 +105,7 @@ class State:
     path: str
     ready: str
     replies: Replies
-    transcript: list[JsonObject] = field(default_factory=list[JsonObject])
+    transcript: list[dict[str, JsonValue]] = field(default_factory=list[dict[str, JsonValue]])
     title: str = ""
     armed: str = ""
     act: str = ""
@@ -154,15 +155,11 @@ PANES: Final = (
 )
 
 
-def _snapshot(frame: JsonObject) -> JsonObject:
-    result = as_object(frame["result"])
-    snapshot = as_object(result["snapshot"]) if result is not None else None
-    if snapshot is None:
-        raise RuntimeError("the snapshot fixture changed shape")
-    return snapshot
+def _snapshot(frame: dict[str, JsonValue]) -> dict[str, JsonValue]:
+    return obj(frame, "result", "snapshot")
 
 
-def _set(frame: JsonObject, pane: str, **fields: str) -> JsonObject:
+def _set(frame: dict[str, JsonValue], pane: str, **fields: str) -> dict[str, JsonValue]:
     """Edit the agent at ``pane`` in place; a ``session`` of ``""`` takes its identity away."""
     agent = next(a for a in agents_of(frame) if a.get("pane_id") == pane)
     for key, value in fields.items():
@@ -176,7 +173,7 @@ def _set(frame: JsonObject, pane: str, **fields: str) -> JsonObject:
     return frame
 
 
-def herd(**statuses: str) -> JsonObject:
+def herd(**statuses: str) -> dict[str, JsonValue]:
     """The recorded snapshot with chosen panes moved to a status, keyed ``p<index>``."""
     frame = snapshot_frame()
     for key, status in statuses.items():
@@ -184,7 +181,7 @@ def herd(**statuses: str) -> JsonObject:
     return frame
 
 
-def _stressed() -> JsonObject:
+def _stressed() -> dict[str, JsonValue]:
     """The recorded snapshot, edited to hold every status and the longest names a card can get."""
     frame = snapshot_frame()
     edits = (
@@ -204,7 +201,7 @@ def _stressed() -> JsonObject:
     return frame
 
 
-def _empty() -> JsonObject:
+def _empty() -> dict[str, JsonValue]:
     frame = snapshot_frame()
     _snapshot(frame)["agents"] = []
     return frame
@@ -228,8 +225,8 @@ def _wide_pane() -> str:
     return "\n".join(rows) + "\n"
 
 
-def _chat() -> list[JsonObject]:
-    tool_call: JsonObject = {
+def _chat() -> list[dict[str, JsonValue]]:
+    tool_call: dict[str, JsonValue] = {
         "type": "assistant",
         "uuid": "call",
         "timestamp": "2026-10-10T10:00:01.000Z",
@@ -240,7 +237,7 @@ def _chat() -> list[JsonObject]:
             ],
         },
     }
-    tool_result: JsonObject = {
+    tool_result: dict[str, JsonValue] = {
         "type": "user",
         "uuid": "res",
         "timestamp": "2026-10-10T10:00:02.000Z",
@@ -296,14 +293,14 @@ The runbook is at https://example.com/runbook#restart.
 """
 
 
-def rich_chat() -> list[JsonObject]:
+def rich_chat() -> list[dict[str, JsonValue]]:
     """One agent turn using every kind of prose the Chat tab renders."""
     return [human_says("what changed?", uuid="u0"), assistant_says(RICH_PROSE, uuid="a1")]
 
 
-def long_chat(turns: int = 24) -> list[JsonObject]:
+def long_chat(turns: int = 24) -> list[dict[str, JsonValue]]:
     """A back-and-forth several screens tall, numbered so the newest turn is easy to find."""
-    records: list[JsonObject] = []
+    records: list[dict[str, JsonValue]] = []
     for n in range(turns):
         if n % 2:
             text = f"Reply {n}: checked the cluster and the rollback.\n\n" + "- a step\n" * 3
@@ -317,35 +314,40 @@ def long_chat(turns: int = 24) -> list[JsonObject]:
 NOTICES: Final = FIXTURES / "transcript" / "notices" / "notices.jsonl"
 
 
-def notice_records() -> list[JsonObject]:
+# A fixture record as Claude Code wrote it, every field kept, for a test to edit.
+RECORD: Final = TypeAdapter(dict[str, JsonValue])
+
+
+def notice_records() -> list[dict[str, JsonValue]]:
     """The scrubbed records, in the order they were written."""
-    found = (as_object(loads(line)) for line in NOTICES.read_text().splitlines())
+    found = (RECORD.validate_json(line) for line in NOTICES.read_text().splitlines())
     # Its cwd is another machine's repo; kept, it would read as a session started elsewhere.
-    return [
-        {k: v for k, v in record.items() if k != "cwd"} for record in found if record is not None
-    ]
+    return [{k: v for k, v in record.items() if k != "cwd"} for record in found]
 
 
-def _origin_kind(record: JsonObject) -> str:
-    origin = as_object(record.get("origin")) or {}
-    kind = origin.get("kind")
+def origin_of(record: dict[str, JsonValue]) -> dict[str, JsonValue]:
+    """A record's ``origin``, empty when it has none."""
+    origin = record.get("origin")
+    return origin if isinstance(origin, dict) else {}
+
+
+def _origin_kind(record: dict[str, JsonValue]) -> str:
+    kind = origin_of(record).get("kind")
     return kind if isinstance(kind, str) else ""
 
 
-def notices_of(kind: str, *, report: bool | None = None) -> list[JsonObject]:
+def notices_of(kind: str, *, report: bool | None = None) -> list[dict[str, JsonValue]]:
     """The fixture's records of one ``origin.kind``, peers narrowed to hand-backs or not."""
     found = [r for r in notice_records() if _origin_kind(r) == kind]
     if report is None:
         return found
-    return [
-        r for r in found if ((as_object(r.get("origin")) or {}).get("handback") is True) == report
-    ]
+    return [r for r in found if (origin_of(r).get("handback") is True) == report]
 
 
-def failed_notice(status: str = "failed", uuid: str = "failed-notice") -> JsonObject:
+def failed_notice(status: str = "failed", uuid: str = "failed-notice") -> dict[str, JsonValue]:
     """A real task notification with its status rewritten, since every one recorded completed."""
-    record = as_object(loads(json.dumps(notices_of("task-notification")[0]))) or {}
-    message = as_object(record.get("message")) or {}
+    record = copy.deepcopy(notices_of("task-notification")[0])
+    message = obj(record, "message")
     text = str(message["content"]).replace(
         "<status>completed</status>", f"<status>{status}</status>"
     )
@@ -354,7 +356,7 @@ def failed_notice(status: str = "failed", uuid: str = "failed-notice") -> JsonOb
     return record
 
 
-def notice_record(uuid: str) -> JsonObject:
+def notice_record(uuid: str) -> dict[str, JsonValue]:
     """The fixture's record whose uuid starts with *uuid*."""
     return next(r for r in notice_records() if str(r.get("uuid", "")).startswith(uuid))
 
@@ -369,10 +371,10 @@ REPORTED_AFTER: Final = "ed3ba510"
 UNREPORTED: Final = "1a962ca2"
 
 
-def failed_command() -> JsonObject:
+def failed_command() -> dict[str, JsonValue]:
     """A real background command with the ending a failed one is recorded with."""
-    record = as_object(loads(json.dumps(notice_record(COMMAND_EXIT_1)))) or {}
-    message = as_object(record.get("message")) or {}
+    record = copy.deepcopy(notice_record(COMMAND_EXIT_1))
+    message = obj(record, "message")
     text = str(message["content"]).replace("<status>completed</status>", "<status>failed</status>")
     ending = " completed (exit code 1: No matches found)</summary>"
     message["content"] = text.replace(ending, " failed with exit code 1</summary>")
@@ -385,7 +387,7 @@ def failed_command() -> JsonObject:
 SURVEYED: Final = "a8d1211107eec7f53"
 
 
-def notice_report_chat() -> list[JsonObject]:
+def notice_report_chat() -> list[dict[str, JsonValue]]:
     """A prompt, an agent's notice and its report, one yet to report, and two commands."""
     task = [r for r in notice_records() if SURVEYED in json.dumps(r)]
     return [
@@ -397,7 +399,7 @@ def notice_report_chat() -> list[JsonObject]:
     ]
 
 
-def task_notice_chat() -> list[JsonObject]:
+def task_notice_chat() -> list[dict[str, JsonValue]]:
     """A prompt, the three tasks it started finishing, and the agent's answer."""
     humans = notices_of("human")
     # The answer without its usage: five days of turn time on the strip is the log's age, not news.
@@ -406,32 +408,32 @@ def task_notice_chat() -> list[JsonObject]:
     return [humans[0], *tasks, assistant_says(answer, uuid="a-tasks")]
 
 
-def failed_notice_chat() -> list[JsonObject]:
+def failed_notice_chat() -> list[dict[str, JsonValue]]:
     """A prompt, then one task that completed, one that failed and one that was killed."""
     done = notices_of("task-notification")[0]
     return [notices_of("human")[0], done, failed_notice(), failed_notice("killed", "killed-notice")]
 
 
-def report_chat() -> list[JsonObject]:
+def report_chat() -> list[dict[str, JsonValue]]:
     """A prompt and a long hand-back report a subagent sent in answer, a bulleted list in it."""
     reports = notices_of("peer", report=True)
     return [notices_of("human")[1], next(r for r in reports if "The scroll-anchor fix is merged" in json.dumps(r))]
 
 
-def peer_message_chat() -> list[JsonObject]:
+def peer_message_chat() -> list[dict[str, JsonValue]]:
     """A prompt, then a message another session sent in."""
     others = [r for r in notices_of("peer", report=False) if "cross-session" in json.dumps(r)]
     return [notices_of("human")[1], *others]
 
 
-def _tool_record(kind: str, uuid: str, content: JsonValue) -> JsonObject:
-    message: JsonObject = {"role": kind, "content": content}
+def _tool_record(kind: str, uuid: str, content: JsonValue) -> dict[str, JsonValue]:
+    message: dict[str, JsonValue] = {"role": kind, "content": content}
     return {"type": kind, "uuid": uuid, "timestamp": "2026-10-10T10:00:00.000Z", "message": message}
 
 
-def tool_heavy_chat(messages: int = 60, calls: int = 6) -> list[JsonObject]:
+def tool_heavy_chat(messages: int = 60, calls: int = 6) -> list[dict[str, JsonValue]]:
     """An agent at work: every message followed by a burst of tool calls and their results."""
-    records: list[JsonObject] = []
+    records: list[dict[str, JsonValue]] = []
     n = 0
     for m in range(messages):
         if m % 5 == 0:
@@ -441,13 +443,13 @@ def tool_heavy_chat(messages: int = 60, calls: int = 6) -> list[JsonObject]:
             records.append(assistant_says(text, uuid=f"a{m}"))
         for _ in range(calls):
             n += 1
-            use: JsonObject = {
+            use: dict[str, JsonValue] = {
                 "type": "tool_use",
                 "id": f"tu{n}",
                 "name": "Bash",
                 "input": {"command": f"pytest -q tests/test_step_{n}.py"},
             }
-            result: JsonObject = {
+            result: dict[str, JsonValue] = {
                 "type": "tool_result",
                 "tool_use_id": f"tu{n}",
                 "content": f"{n} passed in 0.{n % 10}s",
@@ -466,10 +468,11 @@ def _ago(minutes: float) -> str:
     return moment.isoformat().replace("+00:00", "Z")
 
 
-def _spent(record: JsonObject, message: str, *, prompt: int, out: int) -> JsonObject:
+def _spent(
+    record: dict[str, JsonValue], message: str, *, prompt: int, out: int
+) -> dict[str, JsonValue]:
     """``record`` as an answer that carries the usage Claude Code writes beside it."""
-    body = as_object(record["message"])
-    assert body is not None
+    body = obj(record, "message")
     body.update(
         id=message,
         model="claude-haiku-4-5-20251001",
@@ -484,7 +487,7 @@ def _spent(record: JsonObject, message: str, *, prompt: int, out: int) -> JsonOb
     return record
 
 
-def usage_chat() -> list[JsonObject]:
+def usage_chat() -> list[dict[str, JsonValue]]:
     """The chat fixture, its prompt sent four minutes ago and its answers carrying usage."""
     records = _chat()
     records[0]["timestamp"] = _ago(4)
@@ -503,7 +506,7 @@ OPENCODE_SESSION: Final = "ses_3fd62ba5bffemIxWVhRda5wgS7"
 OPENCODE_DIRECTORY: Final = "/home/user/projects/herdr-pwa"
 
 
-def _opencode_working() -> JsonObject:
+def _opencode_working() -> dict[str, JsonValue]:
     """The working pane as an opencode agent, holding the captured opencode session."""
     frame = snapshot_frame()
     agent = next(a for a in agents_of(frame) if a.get("pane_id") == WORKING_PANE)
@@ -519,7 +522,7 @@ def _opencode_working() -> JsonObject:
     return frame
 
 
-def _opencode_elsewhere() -> JsonObject:
+def _opencode_elsewhere() -> dict[str, JsonValue]:
     """The opencode pane reporting a session its store says was started in another directory."""
     frame = _opencode_working()
     agent = next(a for a in agents_of(frame) if a.get("pane_id") == WORKING_PANE)
@@ -534,10 +537,10 @@ def _opencode_store(rig: Rig) -> None:
     for source in OPENCODE_STORE.rglob("*.json"):
         target = root / source.relative_to(OPENCODE_STORE)
         target.parent.mkdir(parents=True, exist_ok=True)
-        record = as_object(loads(source.read_text()))
-        if record is not None and record.get("role") == "user":
+        record = RECORD.validate_json(source.read_text())
+        if record.get("role") == "user":
             record["time"] = {"created": asked}
-        target.write_text(json.dumps(record) if record is not None else source.read_text())
+        target.write_text(json.dumps(record))
 
 
 def long_pane(lines: int = 120) -> str:
@@ -545,12 +548,12 @@ def long_pane(lines: int = 120) -> str:
     return "".join(f"\x1b[32m$\x1b[0m step {n:03d}: applied to the cluster\n" for n in range(lines))
 
 
-def runner(frame: Callable[[], JsonObject], screen: str = "") -> Replies:
+def runner(frame: Callable[[], dict[str, JsonValue]], screen: str = "") -> Replies:
     """A runner whose snapshot is ``frame()`` and whose every pane shows ``screen``."""
     return lambda: {SNAPSHOT: frame(), READ: read_frame(screen)}
 
 
-def per_pane(frame: Callable[[], JsonObject], screens: dict[str, str]) -> Replies:
+def per_pane(frame: Callable[[], dict[str, JsonValue]], screens: dict[str, str]) -> Replies:
     """A runner whose panes each show their own screen, and an idle prompt elsewhere."""
 
     def replies() -> dict[str, Reply]:
@@ -566,7 +569,7 @@ def _unreachable() -> dict[str, Reply]:
     return {SNAPSHOT: EngineUnavailable("catalogue: no runner")}
 
 
-def _unreadable(frame: Callable[[], JsonObject]) -> Replies:
+def _unreadable(frame: Callable[[], dict[str, JsonValue]]) -> Replies:
     return lambda: {SNAPSHOT: frame(), READ: EngineUnavailable("catalogue: the read failed")}
 
 
@@ -582,7 +585,7 @@ def _outage(after: float, *, failing: bool) -> Prime:
     return prime
 
 
-def _untitled() -> JsonObject:
+def _untitled() -> dict[str, JsonValue]:
     """Three agents in one repo whose titles are the shell's prompt string."""
     frame = snapshot_frame()
     shell = "user@host:~/projects"
@@ -591,7 +594,7 @@ def _untitled() -> JsonObject:
     return frame
 
 
-def _opencode() -> JsonObject:
+def _opencode() -> dict[str, JsonValue]:
     """Four opencode panes that all write the same constant terminal title."""
     frame = snapshot_frame()
     for pane in PANES[:4]:
@@ -599,12 +602,12 @@ def _opencode() -> JsonObject:
     return frame
 
 
-def _door(**fields: str) -> Callable[[], JsonObject]:
+def _door(**fields: str) -> Callable[[], dict[str, JsonValue]]:
     """The working pane with no session yet, as a just-started agent has."""
     return lambda: _set(snapshot_frame(), WORKING_PANE, session="", **fields)
 
 
-def _drawn_in_colour(name: str) -> Callable[[JsonObject], JsonObject]:
+def _drawn_in_colour(name: str) -> Callable[[dict[str, JsonValue]], dict[str, JsonValue]]:
     """A capture's pane read: its text for a text read, its colour read for a colour one."""
     text = capture(name)
     ansi = (FIXTURES / name / "visible.ansi").read_text()
@@ -634,7 +637,7 @@ def _two_blocked(first: str, second: str) -> Replies:
     return per_pane(frame, {WORKING_PANE: capture(first), PANES[3]: capture(second)})
 
 
-def _lonely_gone() -> JsonObject:
+def _lonely_gone() -> dict[str, JsonValue]:
     """The snapshot with the one agent of its workspace closed."""
     frame = snapshot_frame()
     snapshot = _snapshot(frame)
@@ -646,7 +649,7 @@ def _untick(screen: str) -> str:
     return screen.replace("[✔] autumn", "[ ] autumn")
 
 
-def _agent_info(frame: JsonObject) -> JsonObject:
+def _agent_info(frame: dict[str, JsonValue]) -> dict[str, JsonValue]:
     agent = next(a for a in agents_of(frame) if a.get("pane_id") == WORKING_PANE)
     return {"id": "x", "result": {"type": "agent_info", "agent": agent}}
 

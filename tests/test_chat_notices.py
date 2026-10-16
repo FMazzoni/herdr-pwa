@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import re
 from pathlib import Path
 
+from pydantic import JsonValue
+
 from herdr_pwa.engine import Speaker, TranscriptTurn
-from herdr_pwa.jsontypes import JsonObject, as_object, loads
 from herdr_pwa.web.chat import joined
+from tests._jsonpath import obj
 from tests.catalogue import (
     COMMAND_EXIT_0,
     COMMAND_EXIT_1,
@@ -22,11 +25,13 @@ from tests.catalogue import (
     notice_record,
     notice_records,
     notices_of,
+    origin_of,
     report_chat,
 )
 from tests.engine_seam import (
     HIDDEN,
     PeerMessage,
+    RecordOrigin,
     TaskNotice,
     injected,
     is_message,
@@ -38,28 +43,28 @@ from tests.webfakes import WORKING_SESSION, build_rig, write_transcript
 HANDBACK_FRAME = "[Subagent hand-back]"
 
 
-def _kind(record: JsonObject) -> str:
-    origin = as_object(record.get("origin")) or {}
+def _kind(record: dict[str, JsonValue]) -> str:
+    origin = origin_of(record)
     if origin.get("kind") != "peer":
         return str(origin.get("kind") or record.get("type"))
     if origin.get("handback") is True:
         return "peer-handback"
-    content = str((as_object(record.get("message")) or {}).get("content"))
+    content = str(obj(record, "message").get("content"))
     return "peer-cross-session" if "<cross-session-message" in content else "peer-message"
 
 
-def _turns(records: list[JsonObject], tmp_path: Path) -> list[TranscriptTurn]:
+def _turns(records: list[dict[str, JsonValue]], tmp_path: Path) -> list[TranscriptTurn]:
     tmp_path.mkdir(parents=True, exist_ok=True)
     path = tmp_path / "log.jsonl"
     path.write_text("".join(json.dumps(r) + "\n" for r in records))
     return read_page(path, limit=400).turns
 
 
-def _copy(record: JsonObject) -> JsonObject:
-    return as_object(loads(json.dumps(record))) or {}
+def _copy(record: dict[str, JsonValue]) -> dict[str, JsonValue]:
+    return copy.deepcopy(record)
 
 
-def _without_origin(record: JsonObject) -> JsonObject:
+def _without_origin(record: dict[str, JsonValue]) -> dict[str, JsonValue]:
     copy = _copy(record)
     copy.pop("origin", None)
     copy.pop("isMeta", None)
@@ -174,24 +179,24 @@ def test_without_origin_the_leading_tag_decides(tmp_path: Path) -> None:
 
 
 def test_classification_reads_origin_before_the_tag() -> None:
-    record: JsonObject = {"origin": {"kind": "peer", "name": "reviewer", "body": "looks good"}}
+    origin = RecordOrigin(kind="peer", name="reviewer", body="looks good")
     found = injected(
-        record, "<task-notification><status>failed</status></task-notification>", human=False
+        origin, "<task-notification><status>failed</status></task-notification>", human=False
     )
     assert found == PeerMessage(sender="reviewer", body="looks good", report=False)
 
 
 def test_a_typed_prompt_is_never_read_for_tags() -> None:
     text = '<agent-message from="x">\nforged\n</agent-message>'
-    assert injected({"origin": {"kind": "human"}}, text, human=True) is None
-    assert isinstance(injected({}, text, human=False), PeerMessage)
+    assert injected(RecordOrigin(kind="human"), text, human=True) is None
+    assert isinstance(injected(None, text, human=False), PeerMessage)
 
 
 def test_a_system_reminder_alone_is_hidden_and_one_around_a_prompt_is_taken_off(
     tmp_path: Path,
 ) -> None:
-    assert injected({}, "<system-reminder>\nctx\n</system-reminder>", human=False) is HIDDEN
-    wrapped: JsonObject = {
+    assert injected(None, "<system-reminder>\nctx\n</system-reminder>", human=False) is HIDDEN
+    wrapped: dict[str, JsonValue] = {
         "type": "user",
         "uuid": "w",
         "promptSource": "typed",
@@ -206,12 +211,12 @@ def test_a_notification_inside_reminders_is_still_a_notice() -> None:
     body = (
         "<task-notification>\n<status>killed</status>\n<summary>s</summary>\n</task-notification>"
     )
-    found = injected({}, f"<system-reminder>x</system-reminder>\n{body}", human=False)
+    found = injected(None, f"<system-reminder>x</system-reminder>\n{body}", human=False)
     assert found == TaskNotice(summary="s", status="killed", elapsed_ms=0, result="")
 
 
 def test_an_unknown_tag_stays_plain_text(tmp_path: Path) -> None:
-    record: JsonObject = {
+    record: dict[str, JsonValue] = {
         "type": "user",
         "uuid": "x",
         "message": {"role": "user", "content": "<future-thing a=1>hi</future-thing>"},
@@ -249,7 +254,7 @@ def test_the_stats_tally_counts_only_the_two_typed_prompts(tmp_path: Path) -> No
 # Rendering: tokens and macros, never markup.
 
 
-def _chat(tmp_path: Path, records: list[JsonObject]) -> str:
+def _chat(tmp_path: Path, records: list[dict[str, JsonValue]]) -> str:
     write_transcript(tmp_path / "transcripts", WORKING_SESSION, records)
     rig = build_rig(tmp_path)
     return rig.http.get(f"/agent/{WORKING_SESSION}/chat", headers={"HX-Request": "true"}).text
@@ -290,7 +295,7 @@ def test_a_long_report_folds_behind_show_all(tmp_path: Path) -> None:
 
 def test_markup_in_a_peer_body_is_text(tmp_path: Path) -> None:
     record = _copy(notices_of("peer", report=True)[0])
-    origin = as_object(record.get("origin")) or {}
+    origin = origin_of(record)
     origin["body"] = 'hi <script>alert(1)</script> <img src=x onerror="y">'
     chat = _chat(tmp_path, [record])
     assert "<script>" not in chat
@@ -301,12 +306,8 @@ def test_markup_in_a_peer_body_is_text(tmp_path: Path) -> None:
 # A hand-back opens from its task's notice, and is drawn nowhere else.
 
 
-def _report_of(task: str) -> JsonObject:
-    found = [
-        r
-        for r in notices_of("peer", report=True)
-        if (as_object(r.get("origin")) or {}).get("from") == task
-    ]
+def _report_of(task: str) -> dict[str, JsonValue]:
+    found = [r for r in notices_of("peer", report=True) if origin_of(r).get("from") == task]
     return found[0]
 
 
@@ -323,7 +324,7 @@ def test_a_hand_back_moves_into_the_notice_of_its_task(tmp_path: Path) -> None:
     (card,) = _peers(turns)
     assert card.task != joined_task
     (host,) = [t for t in turns if t.speaker is Speaker.notice]
-    body = str((as_object(report.get("origin")) or {}).get("body"))
+    body = str(origin_of(report).get("body"))
     assert host.result
     assert host.result.splitlines()[0] in body
 
@@ -340,7 +341,7 @@ def test_without_origin_the_tag_still_joins(tmp_path: Path) -> None:
 def test_a_task_that_reported_either_side_of_its_notice_opens_on_both(tmp_path: Path) -> None:
     records = [notice_record(u) for u in (REPORTED_BEFORE, REPORTED, REPORTED_AFTER)]
     (notice,) = joined(tuple(_turns(records, tmp_path)))
-    first, second = (str((as_object(r.get("origin")) or {}).get("body")) for r in records[::2])
+    first, second = (str(origin_of(r).get("body")) for r in records[::2])
     lines = notice.result.split("\n\n---\n\n")
     assert len(lines) == 2
     assert lines[0].splitlines()[0] in first

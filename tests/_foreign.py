@@ -3,7 +3,7 @@
 import os
 from pathlib import Path
 
-from herdr_pwa.jsontypes import as_object, get_object, get_str, loads
+from pydantic import BaseModel, ConfigDict, Field
 
 REPO = Path(__file__).resolve().parents[1]
 LEDGER_PATH = REPO / "tests" / "fixtures" / "ledger.json"
@@ -24,14 +24,31 @@ def default_root() -> Path:
     return Path(named) if named else DEFAULT_ROOT
 
 
+class _Source(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    commit: str = ""
+    captures: str = ""
+
+
+class _Meta(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    foreign_sources: dict[str, _Source] = Field(default_factory=dict[str, _Source])
+
+
+class _Ledger(BaseModel):
+    """The ledger as far as the corpus pins go."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    meta: _Meta = Field(default_factory=_Meta)
+
+
 def sources() -> dict[str, dict[str, str]]:
     """Each clone's pinned commit and captures directory, as the ledger recorded them."""
-    found = get_object(get_object(loads(LEDGER_PATH.read_bytes()), "meta"), "foreign_sources")
-    return {
-        name: {key: get_str(entry, key) for key in ("commit", "captures")}
-        for name, entry in (found or {}).items()
-        if as_object(entry) is not None
-    }
+    found = _Ledger.model_validate_json(LEDGER_PATH.read_bytes()).meta.foreign_sources
+    return {name: {"commit": s.commit, "captures": s.captures} for name, s in found.items()}
 
 
 def head(clone: Path) -> str | None:

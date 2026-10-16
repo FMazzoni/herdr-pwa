@@ -6,15 +6,17 @@ import json
 from pathlib import Path
 
 import pytest
+from pydantic import JsonValue, TypeAdapter
 
 from herdr_pwa.engine import HistoryState, Speaker, TranscriptPage, locate
-from herdr_pwa.jsontypes import get_object, get_str, loads, objects
 from tests.engine_seam import (
     AGENT_KINDS,
     MAX_NOTE_CHARS,
     MAX_PROSE_CHARS,
     MAX_RESULT_CHARS,
+    ClaudeRecord,
     adapter_for,
+    claude_record,
     history,
     read_page,
 )
@@ -40,17 +42,26 @@ def test_fixture_is_one_json_object_per_line() -> None:
     """4269 lines parsed to 4269 records on the 13 MB original; hold the shape."""
     lines = TRANSCRIPT.read_text().splitlines()
     assert lines
+    # The raw shape on disk, every field kept: this holds the capture, not the reader.
+    line_shape = TypeAdapter(dict[str, JsonValue])
     for line in lines:
-        assert isinstance(json.loads(line), dict)
+        assert line_shape.validate_json(line)
+
+
+def _records() -> list[ClaudeRecord]:
+    found = (claude_record(line.encode()) for line in TRANSCRIPT.read_text().splitlines())
+    return [record for record in found if record is not None]
 
 
 def test_fixture_covers_every_shape_the_reader_branches_on() -> None:
-    kinds = {json.loads(line)["type"] for line in TRANSCRIPT.read_text().splitlines()}
+    kinds = {record.type for record in _records()}
     assert {"user", "assistant", "attachment", "system"} <= kinds
     blocks = {
-        get_str(block, "type")
-        for line in TRANSCRIPT.read_text().splitlines()
-        for block in objects((get_object(loads(line), "message") or {}).get("content", []))
+        block.type
+        for record in _records()
+        if record.message is not None and isinstance(record.message.content, list)
+        for block in record.message.content
+        if block is not None
     }
     assert {"thinking", "text", "tool_use", "tool_result"} <= blocks
 
@@ -105,11 +116,7 @@ def test_the_page_is_a_conversation_not_a_screen() -> None:
 
 def test_turns_come_back_oldest_first_and_in_file_order() -> None:
     page = read_page(TRANSCRIPT, limit=100)
-    order = [
-        get_str(loads(line), "uuid")
-        for line in TRANSCRIPT.read_text().splitlines()
-        if get_str(loads(line), "uuid")
-    ]
+    order = [record.uuid for record in _records() if record.uuid]
     got = [turn.uuid for turn in page.turns]
     assert got == [uuid for uuid in order if uuid in set(got)]
 
@@ -288,6 +295,30 @@ def test_injected_context_is_capped_at_what_can_be_seen(tmp_path: Path) -> None:
     assert page.turns[0].speaker is Speaker.system
     assert len(page.turns[0].text) == MAX_NOTE_CHARS
     assert page.turns[0].truncated
+
+
+def test_a_record_whose_fields_drifted_still_reaches_the_chat(tmp_path: Path) -> None:
+    """A field the harness renamed, retyped or added reads as absent, never as a lost line."""
+    drifted = {
+        "type": "assistant",
+        "uuid": "drifted",
+        "timestamp": 1780000000,
+        "isMeta": "no",
+        "someFutureField": {"nested": [1, 2]},
+        "message": {
+            "role": "assistant",
+            "usage": "not an object",
+            "content": [
+                {"type": "tool_use", "id": 7, "name": "Bash", "input": {"command": ["ls"]}},
+                {"type": "text", "text": "still here", "citations": None},
+            ],
+        },
+    }
+    log = tmp_path / "drift.jsonl"
+    log.write_text("not json\n" + json.dumps(drifted) + "\n[1, 2]\n")
+    (turn,) = read_page(log, limit=40).turns
+    assert (turn.uuid, turn.speaker, turn.ts, turn.call) == ("drifted", Speaker.tool, "", "")
+    assert turn.tool == "Bash"
 
 
 def test_a_torn_final_line_is_skipped_rather_than_raised(tmp_path: Path) -> None:

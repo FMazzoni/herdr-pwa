@@ -6,9 +6,9 @@ import sys
 from pathlib import Path
 
 import pytest
+from pydantic import JsonValue, TypeAdapter
 
 from herdr_pwa.engine import AgentStatus, Snapshot
-from herdr_pwa.jsontypes import JsonObject, JsonValue, as_object, loads
 from herdr_pwa.protocol import EXPECTED_PROTOCOL
 from tests.engine_seam import EventKind, generated
 from tests.engine_seam import wire_request as request
@@ -20,17 +20,16 @@ SCHEMA_PATH = FIXTURES / "herdr-api-schema.json"
 GENERATOR = ROOT / "scripts" / "generate_models.py"
 
 
-def _obj(value: object) -> JsonObject:
-    found = as_object(value)
-    assert found is not None
-    return found
+def _obj(value: JsonValue) -> dict[str, JsonValue]:
+    assert isinstance(value, dict)
+    return value
 
 
 def _capture(name: str) -> JsonValue:
-    return loads((FIXTURES / name).read_text(encoding="utf-8"))
+    return TypeAdapter(JsonValue).validate_json((FIXTURES / name).read_text(encoding="utf-8"))
 
 
-SCHEMA_DOC = _obj(loads(SCHEMA_PATH.read_text(encoding="utf-8")))
+SCHEMA_DOC = _obj(_capture(SCHEMA_PATH.name))
 
 
 # The vendored contract itself

@@ -6,10 +6,10 @@ from collections.abc import Callable
 from pathlib import Path
 
 from firefox import Marionette, phone_window
+from pydantic import JsonValue
 from settle import READER_STILL_MS, settle
 from starlette.types import ASGIApp
 
-from herdr_pwa.jsontypes import JsonArray, JsonObject, get_object
 from tests.catalogue import State, build
 from tests.waiting import eventually
 from tests.webfakes import READ, SNAPSHOT, Rig, agents_of, read_frame, snapshot_frame
@@ -46,11 +46,11 @@ return {
 POKE = "htmx.trigger(document.body, 'hp:poke');"
 
 
-def crowd(blocked: tuple[str, ...] = ()) -> JsonObject:
+def crowd(blocked: tuple[str, ...] = ()) -> dict[str, JsonValue]:
     """The recorded snapshot copied out to a herd several screens tall, ``blocked`` waiting."""
     frame = snapshot_frame()
     seeds = agents_of(frame)
-    agents: JsonArray = []
+    agents: list[JsonValue] = []
     for n in range(AGENTS):
         agent = dict(seeds[n % len(seeds)])
         pane = f"{agent['pane_id']}{n}"
@@ -64,9 +64,10 @@ def crowd(blocked: tuple[str, ...] = ()) -> JsonObject:
         agent["agent_status"] = "blocked" if pane in blocked else ("working", "idle")[n % 2]
         agent["terminal_title"] = agent["terminal_title_stripped"] = f"Agent number {n}"
         agents.append(agent)
-    snapshot = get_object(get_object(frame, "result"), "snapshot")
-    if snapshot is None:
-        raise RuntimeError("the snapshot fixture changed shape")
+    result = frame.get("result")
+    snapshot = result.get("snapshot") if isinstance(result, dict) else None
+    if not isinstance(snapshot, dict):
+        raise TypeError("the snapshot fixture changed shape")
     snapshot["agents"] = agents
     return frame
 

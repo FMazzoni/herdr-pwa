@@ -7,9 +7,9 @@ import os
 from pathlib import Path
 
 import pytest
+from pydantic import JsonValue, TypeAdapter, ValidationError
 
-from herdr_pwa.jsontypes import JsonObject, get_object
-from tests.engine_seam import copied_from, head_records, head_window
+from tests.engine_seam import copied_from, head_window
 
 # Opt-in, so the gate stays hermetic: point it at ~/.claude/projects to read the real box.
 CORPUS = os.environ.get("HERDR_PWA_CORPUS", "")
@@ -39,16 +39,30 @@ def _transcripts() -> list[Path]:
         return []
 
 
-def _heads() -> list[tuple[Path, list[JsonObject]]]:
-    found: list[tuple[Path, list[JsonObject]]] = []
-    for path in _transcripts():
-        window = head_window(path)
-        if window:
-            found.append((path, list(head_records(window))))
+# Measured as written on disk, every field kept: this checks the format, not the reader.
+_LINE = TypeAdapter(dict[str, JsonValue])
+
+
+def _raw_records(window: bytes) -> list[dict[str, JsonValue]]:
+    found: list[dict[str, JsonValue]] = []
+    for raw in window.split(b"\n")[:-1]:
+        try:
+            found.append(_LINE.validate_json(raw))
+        except ValidationError:
+            found.append({})
     return found
 
 
-def _versions_seen(heads: list[tuple[Path, list[JsonObject]]]) -> dict[str, int]:
+def _heads() -> list[tuple[Path, list[dict[str, JsonValue]]]]:
+    found: list[tuple[Path, list[dict[str, JsonValue]]]] = []
+    for path in _transcripts():
+        window = head_window(path)
+        if window:
+            found.append((path, _raw_records(window)))
+    return found
+
+
+def _versions_seen(heads: list[tuple[Path, list[dict[str, JsonValue]]]]) -> dict[str, int]:
     counts: dict[str, int] = {}
     for _, records in heads:
         for record in records:
@@ -118,7 +132,7 @@ def test_a_foreign_provenance_stamp_never_disagrees_with_a_declared_fork() -> No
             (
                 sid
                 for r in records
-                if (parent := get_object(r, "forkedFrom")) is not None
+                if isinstance(parent := r.get("forkedFrom"), dict)
                 and isinstance(sid := parent.get("sessionId"), str)
             ),
             "",

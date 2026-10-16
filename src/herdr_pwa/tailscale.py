@@ -1,13 +1,15 @@
 """tailscaled's LocalAPI over its unix socket: no CLI, no cloud API, no PyPI wrapper."""
 
-import json
 import socket
 from dataclasses import dataclass
 from http import HTTPStatus
 from http.client import HTTPConnection, HTTPException
 from pathlib import Path
+from typing import Annotated, Final
 
-from herdr_pwa import jsonio
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter, ValidationError
+
+from herdr_pwa.validation import OR_NONE, Text, is_not_json, or_default
 
 # LocalAPI refuses any request whose Host is not this exact name (its CSRF guard).
 LOCALAPI_HOST = "local-tailscaled.sock"
@@ -129,29 +131,57 @@ class LocalApi:
         return f"Could not reach {path} on {where}: {exc}"
 
 
-def status(api: LocalApi) -> dict[str, object]:
-    """The parsed status object, refusing when the tailnet is not up."""
+class _Node(BaseModel):
+    """This node, as the status names it."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    dns_name: Text = Field(default=None, validation_alias="DNSName")
+    # A number in Self, while the User table's keys are the same number as a string.
+    user_id: Annotated[int | str | None, OR_NONE] = Field(default=None, validation_alias="UserID")
+
+
+class _User(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    login: Text = Field(default=None, validation_alias="LoginName")
+
+
+class TailnetStatus(BaseModel):
+    """tailscaled's status, holding only what this app reads of it."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    backend_state: Text = Field(default=None, validation_alias="BackendState")
+    node: Annotated[_Node | None, OR_NONE] = Field(default=None, validation_alias="Self")
+    users: Annotated[dict[str, Annotated[_User | None, OR_NONE]], or_default({})] = Field(
+        default={}, validation_alias="User"
+    )
+
+
+def status(api: LocalApi) -> TailnetStatus:
+    """The parsed status, refusing when the tailnet is not up."""
     raw = api.read(STATUS_PATH).body
     try:
-        parsed = jsonio.as_dict(jsonio.loads(raw))
-    except json.JSONDecodeError as exc:
-        raise LocalApiError(f"tailscaled's status was not JSON: {exc}") from exc
-    if parsed is None:
-        raise LocalApiError("tailscaled's status was not a JSON object.")
-    state = parsed.get("BackendState")
-    if state != "Running":
+        parsed = TailnetStatus.model_validate_json(raw)
+    except ValidationError as exc:
+        if is_not_json(exc):
+            raise LocalApiError(f"tailscaled's status was not JSON: {exc}") from exc
+        raise LocalApiError("tailscaled's status was not a JSON object.") from exc
+    if parsed.backend_state != "Running":
         raise LocalApiError(
-            f"Tailscale is not running (BackendState={state!r}). Run 'tailscale up' and sign in."
+            f"Tailscale is not running (BackendState={parsed.backend_state!r}). "
+            "Run 'tailscale up' and sign in."
         )
     return parsed
 
 
 def magicdns(api: LocalApi) -> str:
     """This node's MagicDNS name without the trailing dot."""
-    found = status(api)
-    if jsonio.as_dict(found.get("Self")) is None:
+    node = status(api).node
+    if node is None:
         raise LocalApiError("tailscaled's status has no 'Self' node object.")
-    name = jsonio.as_str(jsonio.child(found.get("Self"), "DNSName")) or ""
+    name = node.dns_name or ""
     if not name.strip(". "):
         raise LocalApiError(
             "This node has no MagicDNS name. Enable MagicDNS for the tailnet in the admin "
@@ -163,23 +193,47 @@ def magicdns(api: LocalApi) -> str:
 def self_login(api: LocalApi) -> str:
     """The login the ingress would assert for this node's own user, e.g. to pin it."""
     found = status(api)
-    user_id = jsonio.child(found.get("Self"), "UserID")
+    user_id = found.node.user_id if found.node is not None else None
     # Go marshals the map[UserID] keys as strings while Self.UserID stays a number.
-    user = jsonio.child(found.get("User"), str(user_id))
-    login = jsonio.as_str(jsonio.child(user, "LoginName")) or ""
+    user = found.users.get(str(user_id))
+    login = (user.login if user is not None else None) or ""
     if not login.strip():
         raise LocalApiError("tailscaled's status carries no LoginName for this node's user.")
     return login.strip()
 
 
-def has_content(value: object) -> bool:
+# The serve config is kept whole: pairing writes it back, so a section it does not know survives.
+type ServeConfig = dict[str, JsonValue]
+
+_SERVE_CONFIG: Final[TypeAdapter[dict[str, JsonValue] | None]] = TypeAdapter(
+    dict[str, JsonValue] | None
+)
+
+
+def serve_config(body: str) -> ServeConfig:
+    """tailscaled's serve config, empty when it has none; raises ``ValidationError`` otherwise."""
+    # An empty body is not "no config": tailscaled says that with `null`.
+    return _SERVE_CONFIG.validate_json(body.strip()) or {}
+
+
+def is_serving(config: ServeConfig) -> bool:
+    """Whether any section, known or not, carries anything at all."""
+    # An allow-list of keys once read a serve as none.
+    return any(_has_content(value) for value in config.values())
+
+
+def root_handler(config: ServeConfig, site: str) -> dict[str, JsonValue] | None:
+    """The handler serving ``/`` on *site* (``host:port``), or ``None``."""
+    handler: JsonValue = config
+    for key in ("Web", site, "Handlers", "/"):
+        handler = handler.get(key) if isinstance(handler, dict) else None
+    return handler if isinstance(handler, dict) else None
+
+
+def _has_content(value: JsonValue) -> bool:
     """Whether one serve-config section carries anything at all."""
     if value is None or value is False:
         return False
-    if isinstance(value, str):
+    if isinstance(value, str | dict | list):
         return bool(value)
-    mapping = jsonio.as_dict(value)
-    if mapping is not None:
-        return bool(mapping)
-    items = jsonio.as_list(value)
-    return True if items is None else bool(items)
+    return True

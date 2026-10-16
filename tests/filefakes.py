@@ -6,7 +6,8 @@ import subprocess
 from pathlib import Path
 from typing import Final
 
-from herdr_pwa.jsontypes import JsonObject
+from pydantic import JsonValue
+
 from tests.webfakes import WORKING_PANE, agents_of
 
 # A 1x1 PNG: the smallest image whose magic number and type agree.
@@ -160,7 +161,9 @@ def make_repo(repo: Path) -> Path:
     return repo.resolve()
 
 
-def stand_in(frame: JsonObject, repo: Path, pane: str = WORKING_PANE) -> JsonObject:
+def stand_in(
+    frame: dict[str, JsonValue], repo: Path, pane: str = WORKING_PANE
+) -> dict[str, JsonValue]:
     """The snapshot frame with the agent at ``pane`` working inside ``repo``."""
     for agent in agents_of(frame):
         if agent.get("pane_id") == pane:

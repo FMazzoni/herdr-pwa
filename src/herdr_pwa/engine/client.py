@@ -25,6 +25,7 @@ from herdr_pwa.engine.model import (
 from herdr_pwa.engine.transport import (
     EngineError,
     EventStream,
+    Frame,
     InvalidRequest,
     InvalidResponse,
     ProtocolMismatch,
@@ -32,13 +33,12 @@ from herdr_pwa.engine.transport import (
     TargetNotFound,
     Transport,
 )
-from herdr_pwa.jsontypes import JsonObject
 from herdr_pwa.protocol import WRITE_METHODS
 
 log = logging.getLogger(__name__)
 
 
-def discovery_subscriptions() -> list[JsonObject]:
+def discovery_subscriptions() -> list[Frame]:
     """The three pane events that take no `pane_id`, so no roster can stale them."""
     return [
         wire_request.PaneCreatedSubscription(type="pane.created").model_dump(),
@@ -47,7 +47,7 @@ def discovery_subscriptions() -> list[JsonObject]:
     ]
 
 
-def status_subscriptions(panes: Sequence[str | PaneId]) -> list[JsonObject]:
+def status_subscriptions(panes: Sequence[str | PaneId]) -> list[Frame]:
     """One status subscription per pane, because the runner offers no wildcard."""
     return [
         wire_request.PaneAgentStatusChangedSubscription(
@@ -182,7 +182,7 @@ class HerdrClient:
         *,
         timeout: float | None = None,
         guarded: bool = False,
-    ) -> JsonObject:
+    ) -> Frame:
         """Issue one request, with the write guard applied first."""
         method = method_of(request_type)
         writes = method in WRITE_METHODS
@@ -193,7 +193,7 @@ class HerdrClient:
         return self.transport.call(
             method,
             # A json-mode dump is JSON by construction, and the schema pins params to an object.
-            cast(JsonObject, dumped["params"]),
+            cast(Frame, dumped["params"]),
             timeout=self._resolve_timeout(timeout),
             idempotent=not writes,
         )
@@ -203,12 +203,12 @@ class HerdrClient:
 
     def _result(
         self,
-        payload: JsonObject,
+        payload: Frame,
         arm: type[_Arm],
         *,
         method: str,
         degrade: bool,
-    ) -> tuple[_Arm | None, JsonObject]:
+    ) -> tuple[_Arm | None, Frame]:
         """Validate a reply against herdr's schema; return its arm and its payload."""
         field = payload_field(arm)
         try:
@@ -235,7 +235,7 @@ class HerdrClient:
 
     def _arm(
         self,
-        payload: JsonObject,
+        payload: Frame,
         arm: type[_Arm],
         *,
         method: str,
@@ -255,7 +255,7 @@ class HerdrClient:
             )
         return root
 
-    def _written(self, payload: JsonObject, arm: type[_Arm], *, method: str) -> _Arm:
+    def _written(self, payload: Frame, arm: type[_Arm], *, method: str) -> _Arm:
         """A write's reply as its typed arm; a reply that will not parse came after the write ran."""
         try:
             return self._arm(payload, arm, method=method)
@@ -264,7 +264,7 @@ class HerdrClient:
             raise
 
     @staticmethod
-    def _sub_object(payload: JsonObject, key: str, *, method: str) -> JsonObject:
+    def _sub_object(payload: Frame, key: str, *, method: str) -> Frame:
         """The raw ``result.<key>`` object, for a frame that would not validate."""
         result = payload.get("result")
         raw = result.get(key) if isinstance(result, dict) else None
@@ -325,7 +325,7 @@ class HerdrClient:
 
     def _agent_result(
         self, target: PaneId, *, timeout: float | None, degrade: bool
-    ) -> tuple[wire.AgentInfoResponseResult | None, JsonObject]:
+    ) -> tuple[wire.AgentInfoResponseResult | None, Frame]:
         payload = self._call(
             wire_request.AgentGetRequest,
             wire_request.AgentTarget(target=target),
@@ -429,7 +429,7 @@ class HerdrClient:
                     return detected
         return self.read(target, lines=lines, colour=True, timeout=timeout)
 
-    def explain(self, target: PaneId, *, timeout: float | None = None) -> JsonObject:
+    def explain(self, target: PaneId, *, timeout: float | None = None) -> Frame:
         """Which detection rule decided this agent's state, on what evidence."""
         method = method_of(wire_request.AgentExplainRequest)
         payload = self._call(
@@ -439,7 +439,7 @@ class HerdrClient:
         )
         return self._sub_object(payload, _EXPLAIN_FIELD, method=method)
 
-    def agent_frame(self, target: PaneId, *, timeout: float | None = None) -> JsonObject:
+    def agent_frame(self, target: PaneId, *, timeout: float | None = None) -> Frame:
         """The whole `agent.get` reply as the runner sent it, normalized by nothing."""
         return self._call(
             wire_request.AgentGetRequest,
@@ -564,7 +564,7 @@ class HerdrClient:
         *,
         session: SessionId | None = None,
         timeout: float | None = None,
-    ) -> JsonObject:
+    ) -> Frame:
         """Submit a prompt to an agent."""
         target = as_pane_id(target)
         self._require_writable(timeout)
@@ -582,7 +582,7 @@ class HerdrClient:
         *keys: str,
         session: SessionId | None = None,
         timeout: float | None = None,
-    ) -> JsonObject:
+    ) -> Frame:
         """Send key presses to an agent (e.g. ``"1"``, ``"enter"``, ``"esc"``, ``"ctrl-c"``)."""
         if not keys:
             raise InvalidRequest("send_keys requires at least one key")
@@ -601,7 +601,7 @@ class HerdrClient:
             guarded=True,
         )
 
-    def focus(self, target: PaneId, *, timeout: float | None = None) -> JsonObject:
+    def focus(self, target: PaneId, *, timeout: float | None = None) -> Frame:
         """Focus an agent's pane in the running session."""
         return self._call(
             wire_request.AgentFocusRequest,
@@ -718,7 +718,7 @@ class HerdrClient:
         *,
         session: SessionId | None = None,
         timeout: float | None = None,
-    ) -> JsonObject:
+    ) -> Frame:
         """End an agent by closing the pane it runs in -- the app's one no-undo write."""
         target = as_pane_id(target)
         self._require_writable(timeout)
@@ -751,7 +751,7 @@ class HerdrClient:
 
     def rename_workspace(
         self, workspace_id: str, label: str, *, timeout: float | None = None
-    ) -> JsonObject:
+    ) -> Frame:
         """Relabel a workspace. Nothing in it is touched; only what it is called."""
         return self._call(
             wire_request.WorkspaceRenameRequest,
@@ -759,7 +759,7 @@ class HerdrClient:
             timeout=timeout,
         )
 
-    def close_workspace(self, workspace_id: str, *, timeout: float | None = None) -> JsonObject:
+    def close_workspace(self, workspace_id: str, *, timeout: float | None = None) -> Frame:
         """End every agent in a workspace at once -- the largest write this app makes."""
         return self._call(
             wire_request.WorkspaceCloseRequest,
@@ -787,7 +787,7 @@ class HerdrClient:
         request_type: type[BaseModel],
         params: "wire_request.AgentStartParams",
         timeout: float | None,
-    ) -> JsonObject:
+    ) -> Frame:
         """``agent.start``, retried on ``agent_pane_busy`` and on nothing else."""
         budget = _START_BUDGET if timeout is None else timeout
         last: EngineError | None = None

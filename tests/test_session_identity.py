@@ -10,10 +10,10 @@ import sqlite3
 from pathlib import Path
 
 import pytest
+from pydantic import JsonValue
 
 from herdr_pwa.decisions import identity_doubt
 from herdr_pwa.engine import Agent, as_pane_id, as_session_id, session_origin
-from herdr_pwa.jsontypes import JsonObject
 from herdr_pwa.writes.lifecycle import EndAsk, end_agent
 from herdr_pwa.writes.prompt import PromptAsk, PromptSent, send_prompt
 from herdr_pwa.writes.refusal import Refusal, Refused
@@ -43,7 +43,7 @@ def held(session: str, kind: str) -> Agent:
     return Agent(session=as_session_id(session), target=as_pane_id("w1:p1"), agent=kind)
 
 
-def _session_row(session: str, directory: str) -> JsonObject:
+def _session_row(session: str, directory: str) -> dict[str, JsonValue]:
     return {
         "id": session,
         "project_id": "p1",
@@ -56,9 +56,11 @@ def _session_row(session: str, directory: str) -> JsonObject:
     }
 
 
-def _turns(session: str, count: int) -> list[tuple[str, JsonObject, JsonObject]]:
+def _turns(
+    session: str, count: int
+) -> list[tuple[str, dict[str, JsonValue], dict[str, JsonValue]]]:
     """``count`` user messages of one text part each."""
-    found: list[tuple[str, JsonObject, JsonObject]] = []
+    found: list[tuple[str, dict[str, JsonValue], dict[str, JsonValue]]] = []
     for n in range(count):
         message = f"msg_{session[4:12]}{n:06d}"
         found.append(
@@ -228,7 +230,7 @@ def test_closing_a_doubted_pane_is_refused_too(tmp_path: Path) -> None:
 # The hijack, through the Chat tab
 
 
-def _frame(session: str) -> JsonObject:
+def _frame(session: str) -> dict[str, JsonValue]:
     frame = snapshot_frame()
     agent = next(a for a in agents_of(frame) if a.get("pane_id") == WORKING_PANE)
     agent.update(agent="opencode", cwd=REPO, foreground_cwd=REPO, agent_status="idle")

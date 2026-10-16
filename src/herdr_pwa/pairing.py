@@ -9,9 +9,11 @@ from dataclasses import dataclass, field, replace
 from http import HTTPStatus
 
 import segno
+from pydantic import JsonValue, ValidationError
 
-from herdr_pwa import jsonio, tailscale
-from herdr_pwa.tailscale import LocalApiError
+from herdr_pwa import tailscale
+from herdr_pwa.tailscale import ServeConfig
+from herdr_pwa.validation import is_not_json
 
 HTTPS_PORT = 443
 # Narrower than 'tailscale serve reset', which would take every other handler offline too.
@@ -23,6 +25,7 @@ TAILNET_IS_THE_BOUNDARY = (
 _FUNNEL = "funnel"
 
 
+# tailscaled's own failures stay tailscale.LocalApiError, worded where tailscaled is asked.
 class PairingError(RuntimeError):
     """A pairing precondition failed; the message says what to do about it."""
 
@@ -39,7 +42,7 @@ class ServeState:
     funnel: bool
     changed: bool
     etag: str
-    config: dict[str, object] = field(default_factory=dict[str, object])
+    config: ServeConfig = field(default_factory=dict[str, JsonValue])
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,10 +77,7 @@ def serve_state(
     api: tailscale.LocalApi, *, port: int, host: str, bind_host: str = "127.0.0.1"
 ) -> ServeState:
     """Read the live serve config and say whether this app's handler is already there."""
-    try:
-        reply = api.read(tailscale.SERVE_CONFIG_PATH)
-    except LocalApiError as exc:
-        raise PairingError(str(exc)) from exc
+    reply = api.read(tailscale.SERVE_CONFIG_PATH)
     config = _parse_config(reply.body)
     name = host.strip().rstrip(".")
     target = f"http://{bind_host}:{port}"
@@ -87,7 +87,7 @@ def serve_state(
         host=name,
         target=target,
         published=ours,
-        configured=any(tailscale.has_content(value) for value in config.values()),
+        configured=tailscale.is_serving(config),
         occupied_by="" if ours else existing,
         funnel=_funnel_enabled(config),
         changed=False,
@@ -118,10 +118,7 @@ def pair(
     api: tailscale.LocalApi, *, port: int, bind_host: str = "127.0.0.1", write: bool = True
 ) -> Pairing:
     """Discover the name, publish if asked, and only then hand back a URL to encode."""
-    try:
-        host = tailscale.magicdns(api)
-    except LocalApiError as exc:
-        raise PairingError(str(exc)) from exc
+    host = tailscale.magicdns(api)
     url = pair_url(host)
     state = serve_state(api, port=port, host=host, bind_host=bind_host)
     if state.published:
@@ -135,56 +132,43 @@ def pair(
     return Pairing(url, done, served=True, note=note)
 
 
-def _parse_config(raw: str) -> dict[str, object]:
-    stripped = raw.strip()
-    if not stripped:
-        raise PairingError("tailscaled sent an empty serve config, which is not an answer.")
+def _parse_config(raw: str) -> ServeConfig:
     try:
-        parsed = jsonio.loads(stripped)
-    except json.JSONDecodeError as exc:
-        raise PairingError(f"tailscaled's serve config was not JSON ({exc}).") from exc
-    if parsed is None:
-        return {}
-    mapping = jsonio.as_dict(parsed)
-    if mapping is None:
-        raise PairingError("tailscaled's serve config was not a JSON object.")
-    return mapping
+        return tailscale.serve_config(raw)
+    except ValidationError as exc:
+        shape = "JSON" if is_not_json(exc) else "a JSON object"
+        raise PairingError(f"tailscaled's serve config was not {shape}.") from exc
 
 
 def _site(host: str) -> str:
     return f"{host}:{HTTPS_PORT}"
 
 
-def _root_proxy(config: dict[str, object], host: str) -> str:
-    handlers = jsonio.child(jsonio.child(config.get("Web"), _site(host)), "Handlers")
-    root = jsonio.as_dict(jsonio.child(handlers, "/"))
+def _root_proxy(config: ServeConfig, host: str) -> str:
+    root = tailscale.root_handler(config, _site(host))
     if root is None:
         return ""
-    proxy = jsonio.as_str(root.get("Proxy"))
-    if proxy and proxy.strip():
+    proxy = root.get("Proxy")
+    if isinstance(proxy, str) and proxy.strip():
         return proxy.strip()
     return f"a non-proxy handler ({', '.join(sorted(root)) or 'empty'})"
 
 
-def _funnel_enabled(value: object) -> bool:
-    mapping = jsonio.as_dict(value)
-    if mapping is not None:
+def _funnel_enabled(value: JsonValue) -> bool:
+    if isinstance(value, dict):
         return any(
             (_FUNNEL in key.casefold() and _carries_truth(item)) or _funnel_enabled(item)
-            for key, item in mapping.items()
+            for key, item in value.items()
         )
-    items = jsonio.as_list(value)
-    return items is not None and any(_funnel_enabled(item) for item in items)
+    return isinstance(value, list) and any(_funnel_enabled(item) for item in value)
 
 
-def _carries_truth(value: object) -> bool:
+def _carries_truth(value: JsonValue) -> bool:
     # An AllowFunnel map of all-false is Funnel switched off again.
-    mapping = jsonio.as_dict(value)
-    if mapping is not None:
-        return any(_carries_truth(item) for item in mapping.values())
-    items = jsonio.as_list(value)
-    if items is not None:
-        return any(_carries_truth(item) for item in items)
+    if isinstance(value, dict):
+        return any(_carries_truth(item) for item in value.values())
+    if isinstance(value, list):
+        return any(_carries_truth(item) for item in value)
     return bool(value)
 
 
@@ -197,11 +181,11 @@ def _normalised(target: str) -> str:
     return text.replace("localhost:", "127.0.0.1:")
 
 
-def _copied(value: object) -> dict[str, object]:
-    return dict(jsonio.as_dict(value) or {})
+def _copied(value: JsonValue) -> dict[str, JsonValue]:
+    return dict(value) if isinstance(value, dict) else {}
 
 
-def _with_our_handler(state: ServeState) -> dict[str, object]:
+def _with_our_handler(state: ServeState) -> ServeConfig:
     # Copied at every level touched, so the state's own config is never mutated.
     merged = {key: value for key, value in state.config.items() if _FUNNEL not in key.casefold()}
     tcp = _copied(merged.get("TCP"))
@@ -217,21 +201,18 @@ def _with_our_handler(state: ServeState) -> dict[str, object]:
     return merged
 
 
-def _write_serve_config(api: tailscale.LocalApi, config: dict[str, object], *, etag: str) -> None:
+def _write_serve_config(api: tailscale.LocalApi, config: ServeConfig, *, etag: str) -> None:
     # The one write this package makes: serve only, never Funnel, method and path literal.
     body = json.dumps(config)
     if _FUNNEL in body.casefold():
         raise PairingError("Refusing to send a serve config that mentions Funnel.")
-    try:
-        reply = api.call(
-            "POST",
-            "/localapi/v0/serve-config",
-            body=body,
-            # Compare-and-swap: a config changed since it was read answers 412, unwritten.
-            headers={"If-Match": etag, "Content-Type": "application/json"},
-        )
-    except LocalApiError as exc:
-        raise PairingError(str(exc)) from exc
+    reply = api.call(
+        "POST",
+        "/localapi/v0/serve-config",
+        body=body,
+        # Compare-and-swap: a config changed since it was read answers 412, unwritten.
+        headers={"If-Match": etag, "Content-Type": "application/json"},
+    )
     if reply.status != HTTPStatus.OK:
         raise PairingError(_write_refusal(reply))
 

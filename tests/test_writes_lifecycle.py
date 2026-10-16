@@ -5,6 +5,7 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 
 import pytest
+from pydantic import JsonValue
 
 from herdr_pwa.engine import (
     EngineError,
@@ -17,7 +18,6 @@ from herdr_pwa.engine import (
     TargetNotFound,
     as_pane_id,
 )
-from herdr_pwa.jsontypes import JsonObject
 from herdr_pwa.writes.guard import MAX_PROMPT_CHARS
 from herdr_pwa.writes.lifecycle import (
     OPENCODE_ASK,
@@ -318,10 +318,10 @@ def listening_rig(tmp_path: Path, *, session: str = NEW) -> Rig:
     r = start_rig(tmp_path)
     r.herd.started_session = session
 
-    def listening(herd: FakeHerd, _params: JsonObject) -> None:
+    def listening(herd: FakeHerd, _params: dict[str, JsonValue]) -> None:
         herd.agents[NEW_PANE].update(interactive_ready=True, launch_pending=False)
 
-    def typed(herd: FakeHerd, params: JsonObject) -> None:
+    def typed(herd: FakeHerd, params: dict[str, JsonValue]) -> None:
         herd.screens[NEW_PANE] = [echoed(f"> {params['text']}")]
 
     r.herd.after["agent.start"] = listening
@@ -401,7 +401,7 @@ def during[T](r: Rig, method: str, second: Callable[[], T]) -> list[T]:
     """Run ``second`` once, inside the first write, right after it calls ``method``."""
     seen: list[T] = []
 
-    def other_tab(herd: FakeHerd, params: JsonObject) -> None:
+    def other_tab(herd: FakeHerd, params: dict[str, JsonValue]) -> None:
         del herd.after[method], params
         seen.append(second())
 

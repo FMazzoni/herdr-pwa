@@ -30,7 +30,6 @@ from herdr_pwa.engine import (
     TargetNotFound,
     Transport,
 )
-from herdr_pwa.jsontypes import JsonObject
 from tests._jsonpath import at
 from tests.engine_seam import (
     BACKOFF_CAP,
@@ -46,9 +45,9 @@ SRC = Path(__file__).resolve().parent.parent / "src" / "herdr_pwa"
 
 # Short enough that a timeout test is quick, long enough for a loaded CI box.
 FAST = 0.4
-REQUEST: TypeAdapter[JsonObject] = TypeAdapter(dict[str, JsonValue])
+REQUEST: TypeAdapter[dict[str, JsonValue]] = TypeAdapter(dict[str, JsonValue])
 
-Handler = Callable[[JsonObject, socket.socket], JsonObject | bytes | None]
+Handler = Callable[[dict[str, JsonValue], socket.socket], dict[str, JsonValue] | bytes | None]
 
 
 def open_fds() -> int:
@@ -56,7 +55,7 @@ def open_fds() -> int:
     return len(list(Path(f"/proc/{os.getpid()}/fd").iterdir()))
 
 
-def ok(request: JsonObject, _conn: socket.socket) -> JsonObject:
+def ok(request: dict[str, JsonValue], _conn: socket.socket) -> dict[str, JsonValue]:
     """The minimal well-formed reply: right id, an ``ok`` result arm."""
     return {"id": request["id"], "result": {"type": "ok", "echo": request["method"]}}
 
@@ -67,7 +66,7 @@ class FakeHerdr:
     def __init__(self, path: Path, handler: Handler = ok) -> None:
         self.path = path
         self.handler = handler
-        self.requests: list[JsonObject] = []
+        self.requests: list[dict[str, JsonValue]] = []
         self.connections = 0
         # Requests per accepted connection; anything but 1 is a request sent after the hang-up.
         self.per_connection: list[int] = []
@@ -113,7 +112,7 @@ class FakeHerdr:
                     if not self._answer(conn, request):
                         return
 
-    def _answer(self, conn: socket.socket, request: JsonObject) -> bool:
+    def _answer(self, conn: socket.socket, request: dict[str, JsonValue]) -> bool:
         """Answer once, then hang up. Returns False to end the session."""
         reply = self.handler(request, conn)
         if reply is None:
@@ -135,7 +134,7 @@ class FakeHerdr:
         return [r["method"] for r in self.requests]
 
 
-def _line(payload: JsonObject) -> bytes:
+def _line(payload: dict[str, JsonValue]) -> bytes:
     return json.dumps(payload).encode() + b"\n"
 
 
@@ -196,7 +195,7 @@ def test_the_request_is_one_newline_terminated_json_object(
 def test_params_are_passed_through_unmangled(server: FakeHerdr, sock_path: Path) -> None:
     """Named params, so no argv escaping question: dashes, newlines, unicode."""
     wire = transport(sock_path)
-    params: JsonObject = {"target": "w1:p3", "text": "--not-a-flag\nsecond line ✳"}
+    params: dict[str, JsonValue] = {"target": "w1:p3", "text": "--not-a-flag\nsecond line ✳"}
     wire.call("agent.prompt", params, idempotent=False)
     assert server.requests[0]["params"] == params
     wire.close()
@@ -218,7 +217,7 @@ def test_a_reply_is_matched_to_the_id_that_asked_for_it(
     """Deleting the id check must break this, and it did not used to."""
     first: list[JsonValue] = []
 
-    def handler(req: JsonObject, _conn: socket.socket) -> JsonObject:
+    def handler(req: dict[str, JsonValue], _conn: socket.socket) -> dict[str, JsonValue]:
         if not first:
             first.append(req["id"])
         return {"id": first[0], "result": {"type": "ok", "echo": req["method"]}}
@@ -302,7 +301,7 @@ def test_an_error_frame_maps_onto_the_taxonomy(
 ) -> None:
     """Pinned to the envelope herdr 0.8.0 actually sends."""
 
-    def handler(req: JsonObject, _c: socket.socket) -> JsonObject:
+    def handler(req: dict[str, JsonValue], _c: socket.socket) -> dict[str, JsonValue]:
         return {
             "id": req["id"],
             "error": {
@@ -323,7 +322,7 @@ def test_an_error_frame_maps_onto_the_taxonomy(
 def test_a_server_side_unavailable_code_is_not_a_transport_failure(
     sock_path: Path, request: pytest.FixtureRequest
 ) -> None:
-    def handler(req: JsonObject, _c: socket.socket) -> JsonObject:
+    def handler(req: dict[str, JsonValue], _c: socket.socket) -> dict[str, JsonValue]:
         return {
             "id": req["id"],
             "error": {"code": "server_not_running", "message": "no server"},
@@ -339,7 +338,7 @@ def test_a_server_side_unavailable_code_is_not_a_transport_failure(
 def test_an_unknown_error_code_stays_a_plain_engine_error(
     sock_path: Path, request: pytest.FixtureRequest
 ) -> None:
-    def handler(req: JsonObject, _c: socket.socket) -> JsonObject:
+    def handler(req: dict[str, JsonValue], _c: socket.socket) -> dict[str, JsonValue]:
         return {"id": req["id"], "error": {"code": "weird_new_code", "message": "hm"}}
 
     serve(sock_path, handler, request)
@@ -357,7 +356,7 @@ def test_an_error_frame_is_a_conversation_not_a_failure(
     """A refused request must not poison the next one."""
     state = {"n": 0}
 
-    def handler(req: JsonObject, _c: socket.socket) -> JsonObject:
+    def handler(req: dict[str, JsonValue], _c: socket.socket) -> dict[str, JsonValue]:
         state["n"] += 1
         if state["n"] == 1:
             return {
@@ -418,7 +417,7 @@ def test_a_path_that_is_not_a_socket_is_unavailable_not_an_oserror(
 def test_the_runner_hanging_up_mid_answer_is_unavailable(
     sock_path: Path, request: pytest.FixtureRequest
 ) -> None:
-    def handler(_req: JsonObject, conn: socket.socket) -> None:
+    def handler(_req: dict[str, JsonValue], conn: socket.socket) -> None:
         conn.close()
 
     serve(sock_path, handler, request)
@@ -451,7 +450,7 @@ def test_a_dribbling_peer_cannot_outlast_the_deadline(
 ) -> None:
     """The bound is on the whole read, not on each ``recv``."""
 
-    def handler(_req: JsonObject, conn: socket.socket) -> None:
+    def handler(_req: dict[str, JsonValue], conn: socket.socket) -> None:
         for _ in range(200):
             try:
                 conn.sendall(b" ")
@@ -473,7 +472,7 @@ def test_a_timeout_destroys_the_connection(sock_path: Path, request: pytest.Fixt
     # The reply is held until the call has given up, however long that takes under load.
     release = threading.Event()
 
-    def handler(req: JsonObject, conn: socket.socket) -> None:
+    def handler(req: dict[str, JsonValue], conn: socket.socket) -> None:
         release.wait(10)
         with contextlib.suppress(OSError):
             conn.sendall(_line(ok(req, conn)))
@@ -515,7 +514,7 @@ def test_every_wait_in_a_call_is_armed_from_its_one_deadline(
     """
     answered: list[int] = []
 
-    def handler(req: JsonObject, conn: socket.socket) -> JsonObject | None:
+    def handler(req: dict[str, JsonValue], conn: socket.socket) -> dict[str, JsonValue] | None:
         answered.append(1)
         return ok(req, conn) if len(answered) == 1 else None
 
@@ -615,7 +614,7 @@ def test_undecodable_pane_bytes_come_back_replaced_rather_than_raising(
 ) -> None:
     """``UnicodeDecodeError`` is a ``ValueError``, not an ``OSError``."""
 
-    def handler(req: JsonObject, _c: socket.socket) -> bytes:
+    def handler(req: dict[str, JsonValue], _c: socket.socket) -> bytes:
         head = json.dumps({"id": req["id"], "result": {"type": "ok", "text": ""}})
         return head[:-3].encode() + b"\xff\xfe" + head[-3:].encode() + b"\n"
 
@@ -641,7 +640,7 @@ def test_a_frame_with_no_terminator_is_cut_off_rather_than_buffered_forever(
 ) -> None:
     """A broken or hostile peer must not be able to grow the process heap."""
 
-    def handler(_req: JsonObject, conn: socket.socket) -> None:
+    def handler(_req: dict[str, JsonValue], conn: socket.socket) -> None:
         for _ in range(64):
             try:
                 conn.sendall(b"x" * 4096)
@@ -721,8 +720,8 @@ def test_a_reply_for_an_id_nobody_awaits_is_skipped_with_a_warning(
 ) -> None:
     """An unsolicited frame is stepped over, not mistaken for the answer."""
 
-    def handler(req: JsonObject, conn: socket.socket) -> bytes:
-        stray: JsonObject = {"id": "somebody-else", "result": {"type": "ok"}}
+    def handler(req: dict[str, JsonValue], conn: socket.socket) -> bytes:
+        stray: dict[str, JsonValue] = {"id": "somebody-else", "result": {"type": "ok"}}
         return _line(stray) + _line(ok(req, conn))
 
     serve(sock_path, handler, request)
@@ -737,7 +736,7 @@ def test_a_reply_for_an_id_nobody_awaits_is_skipped_with_a_warning(
 def test_a_stream_that_only_answers_other_ids_is_declared_out_of_step(
     sock_path: Path, request: pytest.FixtureRequest
 ) -> None:
-    def handler(_req: JsonObject, _conn: socket.socket) -> bytes:
+    def handler(_req: dict[str, JsonValue], _conn: socket.socket) -> bytes:
         return _line({"id": "wrong", "result": {"type": "ok"}}) * (MAX_STRAY_FRAMES + 2)
 
     serve(sock_path, handler, request)
@@ -754,7 +753,7 @@ def test_a_late_reply_left_in_the_pipe_is_never_returned_to_the_next_caller(
 ) -> None:
     """The nightmare case, staged: two frames, the first one stale."""
 
-    def handler(req: JsonObject, conn: socket.socket) -> bytes:
+    def handler(req: dict[str, JsonValue], conn: socket.socket) -> bytes:
         if req["method"] == "session.snapshot":
             return _line(ok(req, conn)) + _line(
                 {"id": "stale", "result": {"type": "ok", "echo": "stale"}}
@@ -778,7 +777,7 @@ def test_a_dead_reused_connection_is_transparently_redialled(
 ) -> None:
     """herdr restarting between two polls must not surface as an error."""
 
-    def handler(req: JsonObject, conn: socket.socket) -> bytes | None:
+    def handler(req: dict[str, JsonValue], conn: socket.socket) -> bytes | None:
         if len(fake.requests) == 1:
             conn.sendall(_line(ok(req, conn)))
             conn.close()
@@ -796,7 +795,7 @@ def test_a_dead_reused_connection_is_transparently_redialled(
 def test_a_write_is_never_resent(sock_path: Path, request: pytest.FixtureRequest) -> None:
     """``sendall`` can fail after the bytes have landed."""
 
-    def handler(_req: JsonObject, conn: socket.socket) -> bytes | None:
+    def handler(_req: dict[str, JsonValue], conn: socket.socket) -> bytes | None:
         conn.close()  # accepted, then gone: delivery is genuinely unknown
         return None
 
@@ -813,7 +812,7 @@ def test_a_fresh_connection_that_fails_is_not_retried(
 ) -> None:
     """Retrying what just failed on a brand new socket buys nothing."""
 
-    def handler(_req: JsonObject, conn: socket.socket) -> None:
+    def handler(_req: dict[str, JsonValue], conn: socket.socket) -> None:
         conn.close()
 
     fake = serve(sock_path, handler, request)
@@ -1001,7 +1000,11 @@ def test_live_the_runner_hangs_up_exactly_like_the_fake(sock_path: Path) -> None
 
 def _line_of(path: Path, size: int, timeout: float = 15.0) -> str:
     """Send one padded ``session.snapshot`` of exactly `size` bytes; say what came back."""
-    frame: JsonObject = {"id": f"probe-{size}", "method": "session.snapshot", "params": {}}
+    frame: dict[str, JsonValue] = {
+        "id": f"probe-{size}",
+        "method": "session.snapshot",
+        "params": {},
+    }
     bare = json.dumps({**frame, "_pad": ""}, separators=(",", ":"))
     frame["_pad"] = "x" * (size - len(bare))
     line = json.dumps(frame, separators=(",", ":"))
@@ -1123,10 +1126,10 @@ def test_running_out_of_descriptors_is_unavailable_and_backs_off(
 # --------------------------------------------------------------------------
 
 
-def streaming(*events: JsonObject, then_hang_up: bool = False) -> Handler:
+def streaming(*events: dict[str, JsonValue], then_hang_up: bool = False) -> Handler:
     """A runner that confirms the subscription and then pushes, keeping the connection."""
 
-    def handler(request: JsonObject, conn: socket.socket) -> None:
+    def handler(request: dict[str, JsonValue], conn: socket.socket) -> None:
         conn.sendall(_line({"id": request["id"], "result": {"type": "subscription_started"}}))
         for event in events:
             conn.sendall(_line(event))
@@ -1137,7 +1140,7 @@ def streaming(*events: JsonObject, then_hang_up: bool = False) -> Handler:
     return handler
 
 
-def status(pane: str, state: str) -> JsonObject:
+def status(pane: str, state: str) -> dict[str, JsonValue]:
     """One frame in the shape the live runner was measured sending."""
     return {
         "event": "pane.agent_status_changed",
@@ -1183,7 +1186,7 @@ def test_events_arrive_in_order_and_carry_no_id(
         streaming(status("w1:p1", "working"), status("w1:p1", "done")),
         request,
     )
-    got: list[JsonObject] = []
+    got: list[dict[str, JsonValue]] = []
     with contextlib.closing(stream(sock_path)) as live:
         for event in live:
             got.append(event)
@@ -1232,7 +1235,7 @@ def test_an_error_frame_on_the_stream_maps_onto_the_taxonomy(
 ) -> None:
     """The runner refuses a bad subscription by frame, and it must not read as a hang-up."""
 
-    def handler(req: JsonObject, _conn: socket.socket) -> JsonObject:
+    def handler(req: dict[str, JsonValue], _conn: socket.socket) -> dict[str, JsonValue]:
         return {
             "id": req["id"],
             "error": {"code": "pane_not_found", "message": "no such pane"},
@@ -1301,7 +1304,7 @@ def test_a_refused_subscription_gives_the_descriptor_back(
 ) -> None:
     """A refusal is a frame, not a hang-up, so nothing else closes the connection."""
 
-    def handler(req: JsonObject, _c: socket.socket) -> JsonObject:
+    def handler(req: dict[str, JsonValue], _c: socket.socket) -> dict[str, JsonValue]:
         return {"id": req["id"], "error": {"code": "pane_not_found", "message": "gone"}}
 
     serve(sock_path, handler, request)
@@ -1319,15 +1322,15 @@ def test_a_refused_subscription_gives_the_descriptor_back(
 # --------------------------------------------------------------------------
 
 
-def _hang_up(_req: JsonObject, conn: socket.socket) -> None:
+def _hang_up(_req: dict[str, JsonValue], conn: socket.socket) -> None:
     conn.close()
 
 
-def _garbled(_req: JsonObject, _conn: socket.socket) -> bytes:
+def _garbled(_req: dict[str, JsonValue], _conn: socket.socket) -> bytes:
     return b"this is not json\n"
 
 
-def _silent(_req: JsonObject, _conn: socket.socket) -> None:
+def _silent(_req: dict[str, JsonValue], _conn: socket.socket) -> None:
     return None
 
 
@@ -1388,7 +1391,7 @@ def test_a_write_the_runner_answered_with_an_error_is_not_marked(
 ) -> None:
     """An error frame is the runner saying what it did not do, not a lost answer."""
 
-    def handler(req: JsonObject, _conn: socket.socket) -> JsonObject:
+    def handler(req: dict[str, JsonValue], _conn: socket.socket) -> dict[str, JsonValue]:
         return {"id": req["id"], "error": {"code": "agent_not_found", "message": "gone"}}
 
     serve(sock_path, handler, request)

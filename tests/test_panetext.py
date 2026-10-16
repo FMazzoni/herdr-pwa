@@ -5,10 +5,10 @@ import time
 from pathlib import Path
 
 import pytest
+from pydantic import JsonValue, TypeAdapter
 
-from herdr_pwa import jsontypes, panetext
+from herdr_pwa import panetext
 from herdr_pwa.engine import BlockedPrompt, EngineSettings, HerdrClient, as_pane_id
-from herdr_pwa.jsontypes import JsonObject
 from herdr_pwa.panetext import (
     MAX_RUNS_PER_LINE,
     cells,
@@ -21,6 +21,8 @@ from herdr_pwa.panetext import (
 
 ANSI_DIR = Path(__file__).parent / "fixtures" / "ansi"
 SNAPSHOT_FIXTURE = Path(__file__).parent / "fixtures" / "snapshot.example.json"
+# A wire frame as herdr sends it, which the fake hands back unread.
+_FRAME = TypeAdapter(dict[str, JsonValue])
 
 P3 = as_pane_id("w1:p3")
 CAPTURES = sorted(ANSI_DIR.glob("*.ansi"))
@@ -264,26 +266,22 @@ class _Recorder:
 
     def __init__(self, answers: list[str]) -> None:
         self.answers = answers
-        self.calls: list[tuple[str, JsonObject]] = []
+        self.calls: list[tuple[str, dict[str, JsonValue]]] = []
 
     def call(
         self,
         method: str,
-        params: JsonObject,
+        params: dict[str, JsonValue],
         *,
         timeout: float | None = None,
         idempotent: bool = True,
-    ) -> JsonObject:
+    ) -> dict[str, JsonValue]:
         del timeout, idempotent
         self.calls.append((method, dict(params)))
         if method.endswith("snapshot"):
-            snapshot = jsontypes.as_object(
-                jsontypes.loads(SNAPSHOT_FIXTURE.read_text(encoding="utf-8"))
-            )
-            assert snapshot is not None
-            return snapshot
+            return _FRAME.validate_json(SNAPSHOT_FIXTURE.read_text(encoding="utf-8"))
         text = self.answers.pop(0) if self.answers else ""
-        read: JsonObject = {
+        read: dict[str, JsonValue] = {
             "format": params.get("format", "text"),
             "pane_id": "w1:p3",
             "revision": 7,
@@ -299,7 +297,7 @@ class _Recorder:
         return None
 
     @property
-    def reads(self) -> list[JsonObject]:
+    def reads(self) -> list[dict[str, JsonValue]]:
         return [params for method, params in self.calls if method.endswith("read")]
 
 

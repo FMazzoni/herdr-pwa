@@ -4,6 +4,7 @@ import threading
 from pathlib import Path
 
 import pytest
+from pydantic import JsonValue, TypeAdapter
 
 from herdr_pwa.engine import (
     CachedSnapshot,
@@ -13,12 +14,11 @@ from herdr_pwa.engine import (
     Snapshot,
     SnapshotCache,
 )
-from herdr_pwa.jsontypes import get_object, loads
 from tests._cache_support import FollowerGate, TestClock
+from tests._jsonpath import obj
 
 FIXTURE = Path(__file__).parent / "fixtures" / "snapshot.example.json"
-_RAW = get_object(get_object(loads(FIXTURE.read_text()), "result"), "snapshot")
-assert _RAW is not None
+_RAW = obj(TypeAdapter(JsonValue).validate_json(FIXTURE.read_text()), "result", "snapshot")
 SNAPSHOT = Snapshot.from_raw(_RAW)
 
 # The default snapshot TTL the app ships with.

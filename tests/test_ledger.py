@@ -7,6 +7,7 @@ from collections.abc import Iterable, Mapping
 from pathlib import Path
 
 import pytest
+from pydantic import JsonValue, TypeAdapter
 
 from herdr_pwa.decisions import (
     CURSOR_KEYS,
@@ -24,14 +25,6 @@ from herdr_pwa.decisions import (
     decide_screen,
 )
 from herdr_pwa.engine import BlockedPrompt, Snapshot, rank
-from herdr_pwa.jsontypes import (
-    JsonObject,
-    JsonValue,
-    as_array,
-    as_object,
-    loads,
-    objects,
-)
 from tests import _foreign
 
 REPO = _foreign.REPO
@@ -90,13 +83,19 @@ DIVERGENCES: dict[str, str] = {
 _ANSI = re.compile(r"\x1b(?:\[[0-9;?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[@-Z\\-_])")
 
 
-def _obj(value: object) -> JsonObject:
-    found = as_object(value)
-    assert found is not None
-    return found
+def _obj(value: JsonValue) -> dict[str, JsonValue]:
+    assert isinstance(value, dict)
+    return value
 
 
-LEDGER = _obj(loads(LEDGER_PATH.read_bytes()))
+def _objects(value: JsonValue) -> list[dict[str, JsonValue]]:
+    return [item for item in value if isinstance(item, dict)] if isinstance(value, list) else []
+
+
+# The golden file and the captures it names, read whole: this test owns their shape.
+_DOCUMENT = TypeAdapter(dict[str, JsonValue])
+
+LEDGER = _DOCUMENT.validate_json(LEDGER_PATH.read_bytes())
 META = _obj(LEDGER["meta"])
 SCREENS = _obj(LEDGER["screens"])
 HERDS = _obj(LEDGER["herd"])
@@ -111,7 +110,7 @@ def _now() -> float:
 NOW = _now()
 
 
-def _cases(entries: JsonObject) -> list[object]:
+def _cases(entries: dict[str, JsonValue]) -> list[object]:
     return [
         pytest.param(
             key,
@@ -173,7 +172,7 @@ def _array(items: Iterable[JsonValue]) -> list[JsonValue]:
     return list(items)
 
 
-def _screen_json(decision: ScreenDecision) -> JsonObject:
+def _screen_json(decision: ScreenDecision) -> dict[str, JsonValue]:
     steps = decision.steps
     return {
         "verdict": {
@@ -198,7 +197,7 @@ def _screen_json(decision: ScreenDecision) -> JsonObject:
     }
 
 
-def _freshness_json(fresh: Freshness) -> JsonObject:
+def _freshness_json(fresh: Freshness) -> dict[str, JsonValue]:
     return {
         "age": fresh.age,
         "age_label": fresh.age_label,
@@ -210,8 +209,8 @@ def _freshness_json(fresh: Freshness) -> JsonObject:
     }
 
 
-def _row_json(row: AgentRow, prompt: JsonValue) -> JsonObject:
-    found: JsonObject = {
+def _row_json(row: AgentRow, prompt: JsonValue) -> dict[str, JsonValue]:
+    found: dict[str, JsonValue] = {
         "target": row.target,
         "status": str(row.status),
         "effective_status": str(row.effective_status),
@@ -226,8 +225,8 @@ def _row_json(row: AgentRow, prompt: JsonValue) -> JsonObject:
 
 
 def _herd_json(
-    herd: HerdDecision, prompt_ids: JsonObject, freshness: list[JsonValue]
-) -> JsonObject:
+    herd: HerdDecision, prompt_ids: dict[str, JsonValue], freshness: list[JsonValue]
+) -> dict[str, JsonValue]:
     return {
         "order": [row.session for row in herd.rows],
         "sections": [
@@ -246,24 +245,23 @@ def _herd_json(
     }
 
 
-def _snapshot(entry: JsonObject) -> Snapshot:
-    raw = _obj(_obj(loads((REPO / _str(entry["snapshot"])).read_bytes()))["result"])
+def _snapshot(entry: dict[str, JsonValue]) -> Snapshot:
+    raw = _obj(_DOCUMENT.validate_json((REPO / _str(entry["snapshot"])).read_bytes())["result"])
     snapshot = _obj(raw["snapshot"])
     overrides = _obj(entry["status_overrides"])
-    for agent in objects(snapshot.get("agents")):
+    for agent in _objects(snapshot.get("agents")):
         agent["agent_status"] = overrides.get(_str(agent["pane_id"]), agent["agent_status"])
     return Snapshot.from_raw(snapshot)
 
 
 def _unread(value: JsonValue) -> Mapping[str, bool] | None:
-    found = as_object(value)
-    if found is None:
+    if not isinstance(value, dict):
         return None
-    return {key: flag for key, flag in found.items() if isinstance(flag, bool)}
+    return {key: flag for key, flag in value.items() if isinstance(flag, bool)}
 
 
 def _prompts(
-    snapshot: Snapshot, prompt_ids: JsonObject, foreign_root: Path
+    snapshot: Snapshot, prompt_ids: dict[str, JsonValue], foreign_root: Path
 ) -> dict[str, BlockedPrompt]:
     return {
         agent.session: BlockedPrompt.parse(
@@ -297,8 +295,9 @@ def test_constants_match_the_ledger() -> None:
 
 
 def test_foreign_corpus_index_agrees_with_the_ledger() -> None:
-    corpus = _obj(_obj(loads(FOREIGN_CORPUS.read_bytes()))["captures"])
-    fields = [_str(f) for f in as_array(META["verdict_fields"])]
+    corpus = _obj(_DOCUMENT.validate_json(FOREIGN_CORPUS.read_bytes())["captures"])
+    listed = META["verdict_fields"]
+    fields = [_str(f) for f in (listed if isinstance(listed, list) else [])]
     foreign = {
         key.removeprefix(FOREIGN_PREFIX): _obj(_obj(entry)["verdict"])
         for key, entry in SCREENS.items()
@@ -326,7 +325,7 @@ def test_herd_matches_the_ledger(herd_id: str, foreign_root: Path) -> None:
     prompts = _prompts(snapshot, prompt_ids, foreign_root)
     unread = _unread(given["unread"])
     freshness: list[JsonValue] = []
-    for case in objects(entry["freshness"]):
+    for case in _objects(entry["freshness"]):
         taken_at, error = case["taken_at"], case["error"]
         assert taken_at is None or isinstance(taken_at, float)
         assert error is None or isinstance(error, str)

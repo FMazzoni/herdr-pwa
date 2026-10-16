@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from herdr_pwa import jsonio, pairing
+from herdr_pwa import pairing, tailscale
 from herdr_pwa.pairing import (
     TEARDOWN_COMMAND,
     PairingError,
@@ -14,7 +14,7 @@ from herdr_pwa.pairing import (
     qr_text,
     serve_state,
 )
-from herdr_pwa.tailscale import SERVE_CONFIG_PATH, LocalApi
+from herdr_pwa.tailscale import SERVE_CONFIG_PATH, LocalApi, LocalApiError
 from tests.fakes import NODE, Canned, FakeTailscaled, status_route, tailscaled
 
 PORT = 8772
@@ -87,7 +87,8 @@ def test_publish_keeps_what_somebody_else_serves_and_does_not_mutate_its_input(
         before = json.dumps(state.config, sort_keys=True)
         _ = publish(fake.api, state)
         assert json.dumps(state.config, sort_keys=True) == before
-        sites = jsonio.as_dict(jsonio.child(jsonio.loads(posts(fake)[0]), "Web")) or {}
+        sites = tailscale.serve_config(posts(fake)[0])["Web"]
+        assert isinstance(sites, dict)
         assert "other.ts.net:443" in sites
         assert f"{NODE}:443" in sites
 
@@ -184,5 +185,5 @@ def test_pair_without_write_changes_nothing(tmp_path: Path) -> None:
 
 
 def test_no_url_means_no_qr(tmp_path: Path) -> None:
-    with pytest.raises(PairingError, match="Install Tailscale"):
+    with pytest.raises(LocalApiError, match="Install Tailscale"):
         _ = pair(LocalApi(tmp_path / "missing.sock"), port=PORT)

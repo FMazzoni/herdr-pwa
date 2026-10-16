@@ -1,13 +1,13 @@
 """Model tests, driven entirely by the captured fixture — no socket, no subprocess."""
 
+import copy
 import itertools
-import json
 import re
 from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
-from pydantic import ValidationError
+from pydantic import JsonValue, TypeAdapter, ValidationError
 
 from herdr_pwa.engine import (
     Agent,
@@ -22,39 +22,41 @@ from herdr_pwa.engine import (
     as_session_id,
     rank,
 )
-from herdr_pwa.jsontypes import JsonObject, JsonValue, as_object, loads, objects
 from herdr_pwa.protocol import EXPECTED_PROTOCOL
 from tests.engine_seam import is_key_hint
 
 FIXTURE = Path(__file__).parent / "fixtures" / "snapshot.example.json"
 
 
-def _obj(value: object) -> JsonObject:
-    found = as_object(value)
-    assert found is not None
-    return found
+def _obj(value: JsonValue) -> dict[str, JsonValue]:
+    assert isinstance(value, dict)
+    return value
 
 
-def _agents(raw: JsonObject) -> list[JsonObject]:
-    return objects(raw["agents"])
+def _objects(value: JsonValue) -> list[dict[str, JsonValue]]:
+    return [item for item in value if isinstance(item, dict)] if isinstance(value, list) else []
 
 
-def _workspaces(raw: JsonObject) -> list[JsonObject]:
-    return objects(raw["workspaces"])
+def _agents(raw: dict[str, JsonValue]) -> list[dict[str, JsonValue]]:
+    return _objects(raw["agents"])
 
 
-def _with(raw: JsonObject, key: str, items: Sequence[JsonValue]) -> JsonObject:
+def _workspaces(raw: dict[str, JsonValue]) -> list[dict[str, JsonValue]]:
+    return _objects(raw["workspaces"])
+
+
+def _with(raw: dict[str, JsonValue], key: str, items: Sequence[JsonValue]) -> dict[str, JsonValue]:
     return {**raw, key: list(items)}
 
 
 @pytest.fixture(scope="module")
-def raw_snapshot() -> JsonObject:
-    payload = _obj(loads(FIXTURE.read_text()))
+def raw_snapshot() -> dict[str, JsonValue]:
+    payload = _obj(TypeAdapter(JsonValue).validate_json(FIXTURE.read_text()))
     return _obj(_obj(payload["result"])["snapshot"])
 
 
 @pytest.fixture(scope="module")
-def snap(raw_snapshot: JsonObject) -> Snapshot:
+def snap(raw_snapshot: dict[str, JsonValue]) -> Snapshot:
     return Snapshot.from_raw(raw_snapshot)
 
 
@@ -84,7 +86,7 @@ def test_status_coercion_is_case_insensitive() -> None:
 
 
 # Agent normalization
-def test_agent_normalizes_the_fixture_fields(raw_snapshot: JsonObject) -> None:
+def test_agent_normalizes_the_fixture_fields(raw_snapshot: dict[str, JsonValue]) -> None:
     raw = _agents(raw_snapshot)[0]
     workspaces = {w.workspace_id: w for w in Snapshot.from_raw(raw_snapshot).workspaces}
     a = Agent.from_raw(raw, workspaces)
@@ -101,7 +103,9 @@ def test_agent_normalizes_the_fixture_fields(raw_snapshot: JsonObject) -> None:
     assert a.project == "herdr-pwa"
 
 
-def test_title_uses_the_stripped_variant(raw_snapshot: JsonObject, snap: Snapshot) -> None:
+def test_title_uses_the_stripped_variant(
+    raw_snapshot: dict[str, JsonValue], snap: Snapshot
+) -> None:
     # terminal_title carries a spinner/status glyph; the stripped one is the label.
     for agent in snap.agents:
         assert not agent.title.startswith("✳")
@@ -207,7 +211,7 @@ def test_the_title_channel_is_read_from_either_array() -> None:
 
 
 def test_identity_is_the_session_uuid_not_the_pane(
-    raw_snapshot: JsonObject, snap: Snapshot
+    raw_snapshot: dict[str, JsonValue], snap: Snapshot
 ) -> None:
     sessions = [a.session for a in snap.agents]
     assert all(len(s) == 36 for s in sessions)
@@ -219,7 +223,7 @@ def test_identity_is_the_session_uuid_not_the_pane(
     assert not any(a.session == a.target for a in snap.agents)
 
 
-def test_workspace_join_is_by_id_not_position(raw_snapshot: JsonObject) -> None:
+def test_workspace_join_is_by_id_not_position(raw_snapshot: dict[str, JsonValue]) -> None:
     shuffled = _with(raw_snapshot, "workspaces", list(reversed(_workspaces(raw_snapshot))))
     a = Snapshot.from_raw(shuffled).by_target(PaneId("w1:p3"))
     assert a is not None
@@ -257,16 +261,16 @@ def test_agents_come_out_ranked_most_urgent_first(snap: Snapshot) -> None:
     assert snap.agents[-1].status is AgentStatus.IDLE
 
 
-def test_a_done_agent_sorts_above_the_idle_ones(raw_snapshot: JsonObject) -> None:
-    mutated = _obj(loads(json.dumps(raw_snapshot)))
+def test_a_done_agent_sorts_above_the_idle_ones(raw_snapshot: dict[str, JsonValue]) -> None:
+    mutated = copy.deepcopy(raw_snapshot)
     _agents(mutated)[3]["agent_status"] = "done"
     done_target = _agents(mutated)[3]["pane_id"]
     s = Snapshot.from_raw(mutated)
     assert s.agents[0].target == done_target
 
 
-def test_a_blocked_agent_sorts_above_a_working_one(raw_snapshot: JsonObject) -> None:
-    mutated = _obj(loads(json.dumps(raw_snapshot)))
+def test_a_blocked_agent_sorts_above_a_working_one(raw_snapshot: dict[str, JsonValue]) -> None:
+    mutated = copy.deepcopy(raw_snapshot)
     _agents(mutated)[-1]["agent_status"] = "blocked"
     blocked_target = _agents(mutated)[-1]["pane_id"]
     s = Snapshot.from_raw(mutated)
@@ -274,7 +278,9 @@ def test_a_blocked_agent_sorts_above_a_working_one(raw_snapshot: JsonObject) -> 
     assert [a.target for a in s.blocked] == [blocked_target]
 
 
-def test_sort_is_deterministic_regardless_of_input_order(raw_snapshot: JsonObject) -> None:
+def test_sort_is_deterministic_regardless_of_input_order(
+    raw_snapshot: dict[str, JsonValue],
+) -> None:
     reversed_raw = _with(raw_snapshot, "agents", list(reversed(_agents(raw_snapshot))))
     assert [a.target for a in Snapshot.from_raw(reversed_raw).agents] == [
         a.target for a in Snapshot.from_raw(raw_snapshot).agents
@@ -686,7 +692,7 @@ def test_whitespace_only_session_normalizes_to_empty() -> None:
 
 # normalization: every field, not just the ones that were easy
 def test_every_agent_in_the_fixture_is_fully_populated(
-    raw_snapshot: JsonObject, snap: Snapshot
+    raw_snapshot: dict[str, JsonValue], snap: Snapshot
 ) -> None:
     """The count is right and no card would render a hole."""
     assert len(snap.agents) == len(_agents(raw_snapshot)) == 6
@@ -713,7 +719,7 @@ def test_foreground_cwd_falls_back_to_cwd() -> None:
     assert a.project == "herdr-pwa"
 
 
-def test_the_whole_workspace_join_is_by_id_not_position(raw_snapshot: JsonObject) -> None:
+def test_the_whole_workspace_join_is_by_id_not_position(raw_snapshot: dict[str, JsonValue]) -> None:
     """Every agent's label *and* number come from its own workspace entry."""
     by_id = {str(w["workspace_id"]): w for w in _workspaces(raw_snapshot)}
     expected = {
@@ -733,7 +739,7 @@ def test_the_whole_workspace_join_is_by_id_not_position(raw_snapshot: JsonObject
         assert {a.target: (a.workspace, a.workspace_number) for a in s.agents} == expected
 
 
-def test_an_agent_in_an_unknown_workspace_still_renders(raw_snapshot: JsonObject) -> None:
+def test_an_agent_in_an_unknown_workspace_still_renders(raw_snapshot: dict[str, JsonValue]) -> None:
     # A workspace closed mid-snapshot: the join misses and must degrade to a blank label.
     s = Snapshot.from_raw(_with(raw_snapshot, "workspaces", []))
     assert len(s.agents) == 6
@@ -874,7 +880,7 @@ def test_the_urgency_is_the_only_term_a_caller_may_replace() -> None:
     assert demoted[1:] == one.sort_key[1:]
 
 
-def test_sort_is_stable_across_every_input_permutation(raw_snapshot: JsonObject) -> None:
+def test_sort_is_stable_across_every_input_permutation(raw_snapshot: dict[str, JsonValue]) -> None:
     """Determinism means one canonical order, not just "reversal is a no-op"."""
     expected = [a.target for a in Snapshot.from_raw(raw_snapshot).agents]
     for permutation in itertools.permutations(_agents(raw_snapshot)):
@@ -1272,14 +1278,14 @@ def test_the_fallback_still_rescues_the_screens_it_was_written_for() -> None:
 def test_a_snapshot_judges_itself_against_the_protocol_it_was_handed() -> None:
     """``protocol_ok`` used to compare against the module constant, always."""
     handed = EXPECTED_PROTOCOL + 1
-    raw: JsonObject = {"protocol": handed, "agents": [], "workspaces": []}
+    raw: dict[str, JsonValue] = {"protocol": handed, "agents": [], "workspaces": []}
     assert Snapshot.from_raw(raw).protocol_ok is False  # the build's number
     assert Snapshot.from_raw(raw, expected_protocol=handed).protocol_ok is True
     assert Snapshot.from_raw(raw, expected_protocol=handed).expected_protocol == handed
 
 
 def test_an_omitted_expectation_still_means_the_build_it_was_compiled_for() -> None:
-    raw: JsonObject = {"protocol": EXPECTED_PROTOCOL, "agents": [], "workspaces": []}
+    raw: dict[str, JsonValue] = {"protocol": EXPECTED_PROTOCOL, "agents": [], "workspaces": []}
     assert Snapshot.from_raw(raw).expected_protocol == EXPECTED_PROTOCOL
     assert Snapshot.from_raw(raw).protocol_ok is True
 

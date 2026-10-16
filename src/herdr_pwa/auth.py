@@ -5,7 +5,6 @@ proxies from loopback; this module trusts every local process and says so.
 """
 
 import hmac
-import json
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from http import HTTPStatus
@@ -13,7 +12,10 @@ from http.client import HTTPException
 from typing import ClassVar
 from urllib.parse import SplitResult, urlsplit
 
-from herdr_pwa import jsonio, tailscale
+from pydantic import ValidationError
+
+from herdr_pwa import tailscale
+from herdr_pwa.validation import is_not_json
 
 IDENTITY_HEADER = "tailscale-user-login"
 NAME_HEADER = "tailscale-user-name"
@@ -227,26 +229,17 @@ def _serve_config_body(api: tailscale.LocalApi) -> str:
 def serve_is_active(api: tailscale.LocalApi) -> bool:
     """True when anything is served; False only when no tailscaled could be serving."""
     try:
-        body = _serve_config_body(api).strip()
+        body = _serve_config_body(api)
     except (FileNotFoundError, ConnectionRefusedError):
         return False
-    if not body:
-        raise AssumedLoginUnsafeError(
-            "Refusing an assumed login: tailscaled sent an empty serve config."
-        )
     try:
-        config = jsonio.loads(body)
-    except json.JSONDecodeError as exc:
+        config = tailscale.serve_config(body)
+    except ValidationError as exc:
+        shape = "JSON" if is_not_json(exc) else "an object"
         raise AssumedLoginUnsafeError(
-            "Refusing an assumed login: serve config was not JSON."
+            f"Refusing an assumed login: tailscaled's serve config was not {shape}."
         ) from exc
-    if config is None:
-        return False
-    mapping = jsonio.as_dict(config)
-    if mapping is None:
-        raise AssumedLoginUnsafeError("Refusing an assumed login: serve config was not an object.")
-    # Every section counts, known or not: an allow-list of keys once read a serve as none.
-    return any(tailscale.has_content(value) for value in mapping.values())
+    return tailscale.is_serving(config)
 
 
 def assert_assumed_login_safe(
