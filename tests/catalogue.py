@@ -1271,7 +1271,8 @@ def _in_repo(rig: Rig) -> None:
     """The working agent stands in a fixture repository with a change in flight."""
     repo = make_repo(rig.settings.state_dir.parent / "demo-service")
     frame = rig.wire.replies[SNAPSHOT]
-    assert not callable(frame) and not isinstance(frame, Exception)
+    assert not callable(frame)
+    assert not isinstance(frame, Exception)
     stand_in(frame, repo)
 
 
