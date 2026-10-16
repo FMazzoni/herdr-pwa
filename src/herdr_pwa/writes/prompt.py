@@ -268,15 +268,22 @@ def _send_first_prompt(
 
 def send_opening_prompt(writer: Writer, pane: PaneId, text: str) -> PromptSent | Refused:
     """Type the new-agent form's prompt at the agent this request started, once it listens."""
-    # The form held a destructive prompt for its confirm before anything was created.
-    refused = _text_refusal(text) or _settled(writer.client, pane, writer.pacing, by_address=False)
-    if refused is not None:
-        return refused
-    snap = snapshot_now(writer.client, verb=_VERB)
-    if isinstance(snap, Refused):
-        return snap
-    agent = snap.by_target(pane)
-    if agent is None:
-        return Refused(Refusal.GONE, _VERB)
-    # Keyed on whatever identity it has by now; the wire checks that it still holds the pane.
-    return _type(writer, _Send(pane, agent.session, text, "", confirmed=True, issue=True))
+
+    def opening() -> PromptSent | Refused:
+        # The form held a destructive prompt for its confirm before anything was created.
+        refused = _text_refusal(text) or _settled(
+            writer.client, pane, writer.pacing, by_address=False
+        )
+        if refused is not None:
+            return refused
+        snap = snapshot_now(writer.client, verb=_VERB)
+        if isinstance(snap, Refused):
+            return snap
+        agent = snap.by_target(pane)
+        if agent is None:
+            return Refused(Refusal.GONE, _VERB)
+        # Keyed on whatever identity it has by now; the wire checks that it still holds the pane.
+        return _type(writer, _Send(pane, agent.session, text, "", confirmed=True, issue=True))
+
+    # The pane's key, as a first prompt by address from another tab would take it.
+    return one_at_a_time(f"pane:{pane}", _VERB, opening)

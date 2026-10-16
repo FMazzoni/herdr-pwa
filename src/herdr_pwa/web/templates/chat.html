@@ -1,4 +1,5 @@
 {% from "md.html" import md %}
+{% import "_ui.html" as ui %}
 {% set speakers = {"human": "You", "agent": "Agent", "system": "Note", "peer": "Agent message"} %}
 {% set base = "/agent/" ~ (agent.session|urlencode) ~ "/chat" %}
 {% set in_log = ("&log=" ~ (chat.log|urlencode)) if chat.log else "" %}
@@ -30,7 +31,8 @@
 <section id="agent-view" class="chat" data-hp-poll="{{ url }}" hx-get="{{ url }}" hx-target="this" hx-swap="outerHTML" data-hp-topic="chat:{{ agent.session }}" hx-trigger="hp:stale, hp:poke from:body">
   <h2 class="sr-only">Chat</h2>
   {% if chat.more %}
-  <p class="chat__earlier"><button type="button" class="button chat__earlier-button" data-hp-earlier hx-get="{{ base }}?before={{ chat.start }}{{ in_log }}" hx-target="#agent-view" hx-swap="outerHTML">Load earlier messages</button></p>
+  {% set earlier %}data-hp-earlier hx-get="{{ base }}?before={{ chat.start }}{{ in_log }}" hx-target="#agent-view" hx-swap="outerHTML"{% endset %}
+  <p class="chat__earlier">{{ ui.button("Load earlier messages", extra="chat__earlier-button", type="button", attrs=earlier) }}</p>
   {% endif %}
   {% if chat.note %}<p class="empty">{{ chat.note }}</p>{% endif %}
   {% for item in chat.items %}

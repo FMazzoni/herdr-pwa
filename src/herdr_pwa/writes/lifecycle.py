@@ -23,7 +23,14 @@ from herdr_pwa.writes.guard import destructive_reason, unsendable
 from herdr_pwa.writes.outcome import Pacing
 from herdr_pwa.writes.prompt import PromptSent, send_opening_prompt
 from herdr_pwa.writes.refusal import Refusal, Refused, failed_result, refusal_for
-from herdr_pwa.writes.resolve import Writer, agent_now, attempt, snapshot_now
+from herdr_pwa.writes.resolve import (
+    Writer,
+    agent_now,
+    attempt,
+    one_at_a_time,
+    snapshot_now,
+    workspace_key,
+)
 
 log = logging.getLogger(__name__)
 
@@ -206,6 +213,14 @@ def start_agent(
     held = Refused(refusal, "created") if refusal is not None else _prompt_refusal(request)
     if held is not None:
         return held
+    # Keyed on the workspace: the new pane does not exist yet, and a close of this workspace
+    # mid-start would end the agent it is starting.
+    return one_at_a_time(
+        workspace_key(request.workspace_id), "created", lambda: _start_agent(writer, request)
+    )
+
+
+def _start_agent(writer: Writer, request: StartRequest) -> AgentStarted | Refused:
     snap = snapshot_now(writer.client, verb="created")
     if isinstance(snap, Refused):
         return snap
@@ -259,6 +274,11 @@ class EndAsk:
 
 def end_agent(writer: Writer, ask: EndAsk) -> AgentEnded | Refused:
     """Close the pane of the agent holding the session now, after both confirms it needs."""
+    # The prompt and key writes' key, so nothing is typed at an agent while it is being ended.
+    return one_at_a_time(f"session:{ask.session}", "closed", lambda: _end_agent(writer, ask))
+
+
+def _end_agent(writer: Writer, ask: EndAsk) -> AgentEnded | Refused:
     agent = agent_now(
         writer.client, ask.session, expected_target=ask.expected_target, verb="closed"
     )
