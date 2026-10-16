@@ -8,7 +8,14 @@ from pathlib import Path
 import pytest
 from pydantic import JsonValue, TypeAdapter
 
-from herdr_pwa.engine import HistoryState, ModelRef, SessionUsage, Source, UsageCache
+from herdr_pwa.engine import (
+    HistoryState,
+    ModelRef,
+    ModelSpend,
+    SessionUsage,
+    Source,
+    UsageCache,
+)
 from herdr_pwa.web.stats import (
     Reading,
     Stats,
@@ -19,7 +26,7 @@ from herdr_pwa.web.stats import (
     tokens,
     window_of,
 )
-from tests import test_hermes
+from tests import test_hermes, test_opencode
 from tests.engine_seam import HERMES_DB, usage
 from tests.webfakes import (
     READ,
@@ -386,3 +393,110 @@ def test_spans_at_a_glance_and_aloud() -> None:
     assert duration_said(240) == "4 minutes"
     assert duration_said(3_660) == "1 hour 1 minute"
     assert duration_said(180_000) == "2 days 2 hours"
+
+
+# ---- spend per model ----------------------------------------------------------------------------
+
+MIXED = "ses_0dfb24cf5ffemJcBmqyE29sVBi"
+
+
+def mixed_store(tmp_path: Path, keep: tuple[str, ...] = ()) -> SessionUsage:
+    """The real mixed-model rows read through the adapter; *keep* narrows them to those models."""
+    rows = test_opencode.MIXED_ROWS
+    if keep:
+        rows = {
+            **rows,
+            "message": [
+                row
+                for row in rows["message"]
+                if '"role":"user"' in str(row["data"])
+                or any(f'"modelID":"{model}"' in str(row["data"]) for model in keep)
+            ],
+        }
+    test_opencode.build(tmp_path / "opencode.db", rows)
+    return usage(Source.of(MIXED, agent_kind="opencode", root=tmp_path))
+
+
+def models(stats: Stats) -> dict[str, str]:
+    return {row.label: row.value for row in stats.models}
+
+
+def test_each_model_shows_its_tokens_cache_apart_and_its_own_money(tmp_path: Path) -> None:
+    stats = stats_for(Reading("opencode", "idle", mixed_store(tmp_path), NOW))
+    rows = models(stats)
+    assert list(rows) == [
+        "GLM-5.2 via togetherai",
+        "MiniMax-M3 via togetherai",
+        "GLM-5.3-Flash via togetherai",
+        "hy3-free via opencode",
+    ]
+    assert rows["GLM-5.2 via togetherai"] == (
+        "4 answers: 14k in, 1.5k out, 2.8k thinking, 40k cache read; $0.05"
+    )
+    assert rows["MiniMax-M3 via togetherai"] == (
+        "3 answers: 150k in, 1.1k out, 151k cache read; $0.06"
+    )
+
+
+def test_a_model_whose_provider_records_nothing_reads_not_recorded(tmp_path: Path) -> None:
+    """Zeros from a provider that writes none are neither free nor nothing used."""
+    stats = stats_for(Reading("opencode", "idle", mixed_store(tmp_path), NOW))
+    flash = models(stats)["GLM-5.3-Flash via togetherai"]
+    assert flash == "2 answers; no tokens or cost recorded"
+    assert "0" not in flash.replace("2 answers", "")
+    assert "$" not in flash
+
+
+def test_a_model_with_tokens_and_no_money_says_no_cost_not_zero(tmp_path: Path) -> None:
+    stats = stats_for(Reading("opencode", "idle", mixed_store(tmp_path), NOW))
+    assert models(stats)["hy3-free via opencode"] == (
+        "1 answer: 254 in, 3 out, 11 thinking, 8.4k cache read; no cost recorded"
+    )
+
+
+def test_the_totals_say_which_models_they_leave_out(tmp_path: Path) -> None:
+    stats = stats_for(Reading("opencode", "idle", mixed_store(tmp_path), NOW))
+    rows = labels(stats)
+    assert rows["Not recorded"] == "GLM-5.3-Flash via togetherai, so the totals leave it out"
+    assert rows["Cost"] == "$0.10"
+
+
+def test_one_model_needs_no_split(tmp_path: Path) -> None:
+    stats = stats_for(Reading("opencode", "idle", mixed_store(tmp_path, ("zai-org/GLM-5.2",)), NOW))
+    assert stats.models == ()
+    assert "Not recorded" not in labels(stats)
+
+
+def test_a_session_whose_only_provider_records_nothing_shows_no_zero(tmp_path: Path) -> None:
+    """The strip and the sheet say "not recorded", never 0 tokens and never $0."""
+    found = mixed_store(tmp_path, ("zai-org/GLM-5.3-Flash",))
+    stats = stats_for(Reading("opencode", "idle", found, NOW))
+    assert stats.model == "GLM-5.3-Flash"
+    assert stats.spend == ""
+    rows = labels(stats)
+    assert rows["Tokens"] == "not recorded by togetherai"
+    assert "Input" not in rows
+    assert "Output" not in rows
+    assert "Cost" not in rows
+    assert stats.models == ()
+
+
+def test_money_under_a_cent_is_not_rounded_to_nothing() -> None:
+    stats = stats_for(Reading("opencode", "idle", tally("x/Kimi-K2.5", cost=0.004), NOW))
+    assert stats.spend == "under $0.01"
+    assert labels(stats)["Cost"] == "under $0.01"
+
+
+def test_a_harness_that_does_not_price_itself_shows_no_money_per_model() -> None:
+    split = tally(
+        cost=1.5,
+        by_model=[
+            ModelSpend(ref=ModelRef("claude-haiku-4-5"), messages=2, output_tokens=9, cost=1.0),
+            ModelSpend(ref=ModelRef("claude-opus-4-5"), messages=1, output_tokens=3, cost=0.5),
+        ],
+    )
+    rows = models(stats_for(Reading("claude", "idle", split, NOW)))
+    assert rows == {
+        "Haiku 4.5": "2 answers: 0 in, 9 out; no cost recorded",
+        "Opus 4.5": "1 answer: 0 in, 3 out; no cost recorded",
+    }

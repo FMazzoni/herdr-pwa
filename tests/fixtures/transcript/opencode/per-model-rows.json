@@ -1,0 +1,107 @@
+{
+ "message": [
+  {
+   "data": "{\"role\":\"user\",\"time\":{\"created\":1792551702372},\"agent\":\"build\",\"model\":{\"providerID\":\"togetherai\",\"modelID\":\"zai-org/GLM-5.2\"},\"summary\":{\"diffs\":[]}}",
+   "id": "msg_15c684f64001R3hi2n3UVCpMdV",
+   "session_id": "ses_ea397b0caffeA2IKEmeHbtj4hG",
+   "time_created": 1792551702372,
+   "time_updated": 1792551721358
+  },
+  {
+   "data": "{\"parentID\":\"msg_15c684f64001R3hi2n3UVCpMdV\",\"role\":\"assistant\",\"mode\":\"build\",\"agent\":\"build\",\"path\":{\"cwd\":\"/home/user/scratch/mixed-models\",\"root\":\"/\"},\"cost\":0.0162774,\"tokens\":{\"total\":11496,\"input\":11435,\"output\":35,\"reasoning\":26,\"cache\":{\"write\":0,\"read\":0}},\"modelID\":\"zai-org/GLM-5.2\",\"providerID\":\"togetherai\",\"time\":{\"created\":1792551702940,\"completed\":1792551721340},\"finish\":\"tool-calls\"}",
+   "id": "msg_15c68519c001wWexdLl5oDz25f",
+   "session_id": "ses_ea397b0caffeA2IKEmeHbtj4hG",
+   "time_created": 1792551702940,
+   "time_updated": 1792551721341
+  },
+  {
+   "data": "{\"parentID\":\"msg_15c684f64001R3hi2n3UVCpMdV\",\"role\":\"assistant\",\"mode\":\"build\",\"agent\":\"build\",\"path\":{\"cwd\":\"/home/user/scratch/mixed-models\",\"root\":\"/\"},\"cost\":0.00337096,\"tokens\":{\"total\":11642,\"input\":142,\"output\":34,\"reasoning\":10,\"cache\":{\"write\":0,\"read\":11456}},\"modelID\":\"zai-org/GLM-5.2\",\"providerID\":\"togetherai\",\"time\":{\"created\":1792551721344,\"completed\":1792551733066},\"finish\":\"stop\"}",
+   "id": "msg_15c689980001NKoCY8k51Z2o45",
+   "session_id": "ses_ea397b0caffeA2IKEmeHbtj4hG",
+   "time_created": 1792551721344,
+   "time_updated": 1792551733067
+  },
+  {
+   "data": "{\"role\":\"user\",\"time\":{\"created\":1792551780018},\"agent\":\"build\",\"model\":{\"providerID\":\"togetherai\",\"modelID\":\"MiniMaxAI/MiniMax-M3\"},\"summary\":{\"diffs\":[]}}",
+   "id": "msg_15c697eb2001khZvlYFWPER9mK",
+   "session_id": "ses_ea397b0caffeA2IKEmeHbtj4hG",
+   "time_created": 1792551780018,
+   "time_updated": 1792551782208
+  },
+  {
+   "data": "{\"parentID\":\"msg_15c697eb2001khZvlYFWPER9mK\",\"role\":\"assistant\",\"mode\":\"build\",\"agent\":\"build\",\"path\":{\"cwd\":\"/home/user/scratch/mixed-models\",\"root\":\"/\"},\"cost\":0.003147,\"tokens\":{\"total\":11909,\"input\":9950,\"output\":39,\"reasoning\":0,\"cache\":{\"write\":0,\"read\":1920}},\"modelID\":\"MiniMaxAI/MiniMax-M3\",\"providerID\":\"togetherai\",\"time\":{\"created\":1792551780719,\"completed\":1792551782184},\"finish\":\"tool-calls\"}",
+   "id": "msg_15c69816f001adEScH1Q56WO5x",
+   "session_id": "ses_ea397b0caffeA2IKEmeHbtj4hG",
+   "time_created": 1792551780719,
+   "time_updated": 1792551782185
+  },
+  {
+   "data": "{\"parentID\":\"msg_15c697eb2001khZvlYFWPER9mK\",\"role\":\"assistant\",\"mode\":\"build\",\"agent\":\"build\",\"path\":{\"cwd\":\"/home/user/scratch/mixed-models\",\"root\":\"/\"},\"cost\":0.00072984,\"tokens\":{\"total\":11941,\"input\":32,\"output\":5,\"reasoning\":0,\"cache\":{\"write\":0,\"read\":11904}},\"modelID\":\"MiniMaxAI/MiniMax-M3\",\"providerID\":\"togetherai\",\"time\":{\"created\":1792551782187,\"completed\":1792551782614},\"finish\":\"stop\"}",
+   "id": "msg_15c69872b001wsjkU0D5SatdNh",
+   "session_id": "ses_ea397b0caffeA2IKEmeHbtj4hG",
+   "time_created": 1792551782187,
+   "time_updated": 1792551782615
+  },
+  {
+   "data": "{\"role\":\"user\",\"time\":{\"created\":1792551826339},\"agent\":\"build\",\"model\":{\"providerID\":\"togetherai\",\"modelID\":\"zai-org/GLM-5.3-Flash\"},\"summary\":{\"diffs\":[]}}",
+   "id": "msg_15c6a33a3001CF1KXDtIfjd8HS",
+   "session_id": "ses_ea397b0caffeA2IKEmeHbtj4hG",
+   "time_created": 1792551826339,
+   "time_updated": 1792551827096
+  },
+  {
+   "data": "{\"parentID\":\"msg_15c6a33a3001CF1KXDtIfjd8HS\",\"role\":\"assistant\",\"mode\":\"build\",\"agent\":\"build\",\"path\":{\"cwd\":\"/home/user/scratch/mixed-models\",\"root\":\"/\"},\"cost\":0,\"tokens\":{\"input\":0,\"output\":0,\"reasoning\":0,\"cache\":{\"write\":0,\"read\":0}},\"modelID\":\"zai-org/GLM-5.3-Flash\",\"providerID\":\"togetherai\",\"time\":{\"created\":1792551827047,\"completed\":1792551841559},\"finish\":\"stop\"}",
+   "id": "msg_15c6a36670013UtLWgNqdCrLi7",
+   "session_id": "ses_ea397b0caffeA2IKEmeHbtj4hG",
+   "time_created": 1792551827047,
+   "time_updated": 1792551841560
+  },
+  {
+   "data": "{\"role\":\"user\",\"time\":{\"created\":1792551862506},\"agent\":\"build\",\"model\":{\"providerID\":\"opencode\",\"modelID\":\"deepseek-v4.1-flash-free\"},\"summary\":{\"diffs\":[]}}",
+   "id": "msg_15c6ac0ea001zchjBQw1Vss4og",
+   "session_id": "ses_ea397b0caffeA2IKEmeHbtj4hG",
+   "time_created": 1792551862506,
+   "time_updated": 1792551863226
+  },
+  {
+   "data": "{\"parentID\":\"msg_15c6ac0ea001zchjBQw1Vss4og\",\"role\":\"assistant\",\"mode\":\"build\",\"agent\":\"build\",\"path\":{\"cwd\":\"/home/user/scratch/mixed-models\",\"root\":\"/\"},\"cost\":0,\"tokens\":{\"total\":12591,\"input\":10919,\"output\":2,\"reasoning\":6,\"cache\":{\"write\":0,\"read\":1664}},\"modelID\":\"deepseek-v4.1-flash-free\",\"providerID\":\"opencode\",\"time\":{\"created\":1792551863190,\"completed\":1792551868589},\"finish\":\"stop\"}",
+   "id": "msg_15c6ac396001OGroHZzV2Xya46",
+   "session_id": "ses_ea397b0caffeA2IKEmeHbtj4hG",
+   "time_created": 1792551863190,
+   "time_updated": 1792551868590
+  }
+ ],
+ "session": [
+  {
+   "agent": "build",
+   "cost": 0.0235252,
+   "directory": "/home/user/scratch/mixed-models",
+   "id": "ses_ea397b0caffeA2IKEmeHbtj4hG",
+   "metadata": null,
+   "model": "{\"id\":\"deepseek-v4.1-flash-free\",\"providerID\":\"opencode\",\"variant\":\"default\"}",
+   "parent_id": null,
+   "path": "home/user/scratch/mixed-models",
+   "permission": "[{\"permission\":\"question\",\"pattern\":\"*\",\"action\":\"deny\"},{\"permission\":\"plan_enter\",\"pattern\":\"*\",\"action\":\"deny\"},{\"permission\":\"plan_exit\",\"pattern\":\"*\",\"action\":\"deny\"}]",
+   "project_id": "global",
+   "revert": null,
+   "share_url": null,
+   "slug": "quick-forest",
+   "summary_additions": 0,
+   "summary_deletions": 0,
+   "summary_diffs": null,
+   "summary_files": 0,
+   "time_archived": null,
+   "time_compacting": null,
+   "time_created": 1792551702325,
+   "time_updated": 1792551868607,
+   "title": "fruit.txt and notes.txt contents summary",
+   "tokens_cache_read": 26944,
+   "tokens_cache_write": 0,
+   "tokens_input": 32478,
+   "tokens_output": 115,
+   "tokens_reasoning": 42,
+   "version": "1.19.3",
+   "workspace_id": null
+  }
+ ]
+}

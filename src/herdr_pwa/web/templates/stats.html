@@ -13,6 +13,8 @@
     {% if stats.rows %}
     <dl class="stats__rows">
       {%- for row in stats.rows %}<div class="stats__row"><dt>{{ row.label }}</dt><dd>{{ row.value }}</dd></div>{% endfor -%}
+      {#- A model's name can outrun the label column at phone width, so each takes the sheet's width. #}
+      {%- for row in stats.models %}<div class="stats__row stats__row--model"><dt>{{ row.label }}</dt><dd>{{ row.value }}</dd></div>{% endfor -%}
     </dl>
     {% else %}
     <p class="stats__empty">This harness has recorded nothing to count yet.</p>

@@ -14,6 +14,7 @@ from herdr_pwa.engine import (
     Harness,
     HistoryState,
     ModelRef,
+    ModelSpend,
     SessionUsage,
     harness_of,
 )
@@ -39,6 +40,10 @@ _THOUSAND: Final = 1_000
 _MILLION: Final = 1_000_000
 # Past this a scaled count drops its decimal: 9.9k, then 10k.
 _ONE_PLACE: Final = 9.95
+# One model is the session itself; the split is drawn from two.
+_SPLIT: Final = 2
+# Below this, two places would round a real charge down to $0.00.
+_HALF_CENT: Final = 0.005
 _MINUTE: Final = 60
 _HOUR: Final = 3600
 _DAY: Final = 86400
@@ -63,6 +68,8 @@ class Stats:
     turn: str = ""
     spend: str = ""
     rows: tuple[Row, ...] = ()
+    # One line per model, only when more than one answered; drawn across the sheet's width.
+    models: tuple[Row, ...] = ()
     sentence: str = ""
     note: str = ""
 
@@ -94,6 +101,11 @@ def tokens(count: int) -> str:
             scaled = count / step
             return f"{scaled:.1f}{suffix}" if scaled < _ONE_PLACE else f"{scaled:.0f}{suffix}"
     return str(count)
+
+
+def money(cost: float) -> str:
+    """Dollars at a glance, where a charge too small for cents is still not $0.00."""
+    return "under $0.01" if cost < _HALF_CENT else f"${cost:.2f}"
 
 
 def tokens_said(count: int) -> str:
@@ -200,6 +212,10 @@ class _Found:
     idle: float | None
 
 
+def _priced(harness: Harness | None) -> bool:
+    return harness is None or harness.prices_itself
+
+
 def _found(reading: Reading) -> _Found:
     harness, usage, now = harness_of(reading.agent_kind), reading.usage, reading.now
     return _Found(
@@ -207,7 +223,7 @@ def _found(reading: Reading) -> _Found:
         context=_context(harness, usage),
         turn=_turn(reading),
         # Zero is the tally's word for "the harness recorded no money".
-        cost=usage.cost if harness is None or harness.prices_itself else 0.0,
+        cost=usage.cost if _priced(harness) else 0.0,
         usage=usage,
         idle=_seconds_since(usage.last_at, now) if usage.last_at else None,
     )
@@ -229,13 +245,20 @@ def _context_row(context: _Context) -> Row:
 
 def _spend(found: _Found) -> str:
     if found.cost > 0:
-        return f"${found.cost:.2f}"
+        return money(found.cost)
     if found.usage.output_tokens:
         return f"{tokens(found.usage.output_tokens)} out"
     return ""
 
 
+def _providers(usage: SessionUsage) -> str:
+    named = dict.fromkeys(row.ref.provider for row in usage.by_model if row.ref.provider)
+    return " and ".join(named) or "the provider"
+
+
 def _token_rows(usage: SessionUsage) -> list[Row]:
+    if not usage.recorded:
+        return [Row("Tokens", f"not recorded by {_providers(usage)}")]
     named = (
         ("Input", usage.input_tokens),
         ("Output", usage.output_tokens),
@@ -259,14 +282,59 @@ def _rows(found: _Found) -> tuple[Row, ...]:
     if found.usage.messages:
         rows.extend(_token_rows(found.usage))
     if found.cost > 0:
-        rows.append(Row("Cost", f"${found.cost:.2f}"))
+        rows.append(Row("Cost", money(found.cost)))
     if found.idle is not None:
         rows.append(Row("Last activity", f"{duration(found.idle)} ago"))
     if found.usage.prompts:
         rows.append(Row("Turns", str(found.usage.prompts)))
     if found.usage.partial:
         rows.append(Row("Counted", "the newest 64 MB only, so these are at least the totals"))
+    rows.extend(_left_out(found.usage))
     return tuple(rows)
+
+
+def _named(ref: ModelRef) -> str:
+    return (
+        f"{model_label(ref.model)} via {ref.provider}" if ref.provider else model_label(ref.model)
+    )
+
+
+def _left_out(usage: SessionUsage) -> list[Row]:
+    # Only beside a model that did record: alone, the token row already says it.
+    silent = [_named(row.ref) for row in usage.by_model if not row.recorded]
+    if not silent or not usage.recorded:
+        return []
+    them = "them" if len(silent) > 1 else "it"
+    return [Row("Not recorded", f"{', '.join(silent)}, so the totals leave {them} out")]
+
+
+def _figures(spend: ModelSpend) -> str:
+    named = (
+        ("in", spend.input_tokens),
+        ("out", spend.output_tokens),
+        ("thinking", spend.thinking_tokens),
+        ("cache read", spend.cache_read_tokens),
+        ("cache written", spend.cache_creation_tokens),
+    )
+    return ", ".join(
+        f"{tokens(count)} {label}" for label, count in named if count or label in ("in", "out")
+    )
+
+
+def _model_line(spend: ModelSpend, *, priced: bool) -> Row:
+    answers = _counted(spend.messages, "answer")
+    if not spend.recorded:
+        return Row(_named(spend.ref), f"{answers}; no tokens or cost recorded")
+    cost = money(spend.cost) if priced and spend.cost > 0 else "no cost recorded"
+    return Row(_named(spend.ref), f"{answers}: {_figures(spend)}; {cost}")
+
+
+def _models(reading: Reading) -> tuple[Row, ...]:
+    split = reading.usage.by_model
+    if len(split) < _SPLIT:
+        return ()
+    priced = _priced(harness_of(reading.agent_kind))
+    return tuple(_model_line(spend, priced=priced) for spend in split)
 
 
 def _sentence(found: _Found) -> str:
@@ -284,7 +352,7 @@ def _sentence(found: _Found) -> str:
     if found.turn is not None:
         said.append(f"turn running {duration_said(found.turn)}")
     if found.cost > 0:
-        said.append(f"spent ${found.cost:.2f}")
+        said.append(f"spent {money(found.cost)}")
     elif found.usage.output_tokens:
         said.append(f"{tokens_said(found.usage.output_tokens)} output tokens")
     return ", ".join(said)
@@ -302,7 +370,12 @@ def stats_for(reading: Reading) -> Stats:
     sentence = _sentence(found)
     if not sentence:
         note = _QUIET.get(reading.usage.state, "No usage recorded yet")
-        return Stats(rows=_rows(found), sentence=f"Stats: {note.lower()}", note=note)
+        return Stats(
+            rows=_rows(found),
+            models=_models(reading),
+            sentence=f"Stats: {note.lower()}",
+            note=note,
+        )
     context = found.context
     percent = context.percent if context is not None else None
     return Stats(
@@ -314,5 +387,6 @@ def stats_for(reading: Reading) -> Stats:
         turn=duration(found.turn) if found.turn is not None else "",
         spend=_spend(found),
         rows=_rows(found),
+        models=_models(reading),
         sentence=sentence,
     )
