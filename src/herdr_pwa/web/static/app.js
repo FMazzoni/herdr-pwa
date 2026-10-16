@@ -633,10 +633,11 @@
   /* ---- The composer dock ----
    * The composer is fixed to the bottom. The page reserves the dock's real height, and
    * while the iOS keyboard is open the dock rides on top of it: the layout viewport keeps
-   * its height there, so the gap under the visual viewport is the keyboard. */
+   * its height there and the visible band pans inside it as the reader scrolls, so the dock
+   * is lifted by the gap between the band's bottom and the layout viewport's. */
   var root = document.documentElement;
   var docking = false;
-  var dockedKb = -1;
+  var dockedBand = -1;
   var dockedH = -1;
   var watched = null;
   // The dock grows with iPhone Text Size and with any banner in it; nothing else says so.
@@ -656,19 +657,35 @@
       watched = bar;
     }
     var view = window.visualViewport;
-    var covered = view ? Math.max(0, Math.round(window.innerHeight - view.height - view.offsetTop)) : 0;
+    // Against the layout viewport the dock is fixed to: WebKit reports innerHeight as the band.
+    var layout = root.clientHeight;
+    var keyboard = !!view && typing() && Math.round(layout - view.height * view.scale) > 0;
+    var covered = keyboard ? Math.max(0, Math.round(layout - view.height - view.offsetTop)) : 0;
     var height = bar.offsetHeight;
-    var moved = covered !== dockedKb || height !== dockedH;
-    // A pinned reader stays at the end as the keyboard opens or the dock grows.
-    var wasEnd = moved && pin.pinned;
-    dockedKb = covered;
+    var band = keyboard ? Math.round(view.height) : 0;
+    // A pinned reader stays at the end as the keyboard opens or the dock grows; a pan of the band
+    // is the reader's own scroll (or nothing), so it never moves the page.
+    var wasEnd = (band !== dockedBand || height !== dockedH) && pin.pinned;
+    dockedBand = band;
     dockedH = height;
     root.style.setProperty("--kb", covered + "px");
-    root.classList.toggle("is-keyboard", covered > 0);
+    // Open for as long as the band is short, not only while it sits above the layout's bottom.
+    root.classList.toggle("is-keyboard", keyboard);
     root.style.setProperty("--dock-h", height + "px");
     if (wasEnd) {
       toEnd();
     }
+  }
+
+  // Only a field that takes text raises the keyboard; a short band without one is the browser's bars.
+  var NO_KEYS = /^(button|checkbox|radio|submit|reset|file|range|color|hidden|image)$/;
+  function typing() {
+    var field = document.activeElement;
+    if (!field) {
+      return false;
+    }
+    return field.tagName === "TEXTAREA" || field.isContentEditable
+      || (field.tagName === "INPUT" && !NO_KEYS.test(field.type));
   }
 
   function redock() {

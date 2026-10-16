@@ -1098,6 +1098,119 @@ def scrolling_up(
     return walk
 
 
+# The keyboard as an iPhone reports it in a device report with the keyboard up: innerHeight
+# and scrollY are the visible band's, which sits inside a taller layout viewport whose bottom the
+# composer is fixed to. Here the window is the band, so innerHeight and scrollY are real; only
+# the layout viewport's height and the band's offset in it are told. Not an iPhone: it checks
+# that the dock is measured against the numbers WebKit gives, not how iOS moves anything.
+KEYBOARD_PX = 413
+KEYBOARD_STEPS = 40
+KEYBOARD = r"""
+const [layout] = arguments;
+const root = document.documentElement;
+const view = window.visualViewport;
+const band = window.innerHeight;
+const kb = { top: layout - band, wrong: [], shut: [], pans: 0 };
+window.__hpKb = kb;
+document.querySelector("#composer textarea").focus({ preventScroll: true });
+Object.defineProperty(root, "clientHeight", { configurable: true, get: () => layout });
+Object.defineProperty(view, "offsetTop", { configurable: true, get: () => kb.top });
+// The band pans inside the layout viewport, which moves only once the band reaches its edge.
+let layoutTop = Math.max(0, root.scrollHeight - layout);
+const pan = () => {
+  layoutTop = Math.min(Math.max(layoutTop, scrollY + band - layout), scrollY);
+  layoutTop = Math.min(Math.max(layoutTop, 0), Math.max(0, root.scrollHeight - layout));
+  kb.top = scrollY - layoutTop;
+  view.dispatchEvent(new Event("scroll"));
+  const at = kb.top;
+  kb.pans += 1;
+  frames(2, () => look(at, 0));
+};
+const frames = (n, then) => (n ? requestAnimationFrame(() => frames(n - 1, then)) : then());
+// Judged once the dock has had its frame, and again later: a newer pan, or a busy machine's late
+// frame, is not a wrong lift, but one still wrong ten frames on is.
+const look = (at, tries) => {
+  if (kb.top !== at) return;
+  const lift = parseFloat(root.style.getPropertyValue("--kb")) || 0;
+  const want = layout - band - at;
+  const open = root.classList.contains("is-keyboard");
+  if (Math.abs(lift - want) <= 1 && open) return;
+  if (!tries) {
+    frames(10, () => look(at, 1));
+  } else {
+    if (Math.abs(lift - want) > 1) kb.wrong.push([Math.round(at), lift, Math.round(want)]);
+    if (!open) kb.shut.push(Math.round(at));
+  }
+};
+addEventListener("scroll", pan, { passive: true });
+view.dispatchEvent(new Event("resize"));
+pan();
+return true;
+"""
+READ_KEYBOARD = "return window.__hpKb || {};"
+# A pan of the band alone, its height and the page's scroll unchanged, as a browser whose scrollY
+# is the layout viewport's reports one: the keyboard did not move, so no script may move the page.
+PAN_PINNED = r"""
+const [tops] = arguments;
+const done = arguments[arguments.length - 1];
+const kb = window.__hpKb;
+const rest = kb.top;
+let moves = 0;
+const count = (real) => function () { moves += 1; return real.apply(window, arguments); };
+const realTo = window.scrollTo;
+const realBy = window.scrollBy;
+window.scrollTo = count(realTo);
+window.scrollBy = count(realBy);
+const frames = (n, then) => (n ? requestAnimationFrame(() => frames(n - 1, then)) : then());
+const step = (i) => {
+  if (i === tops.length) {
+    kb.top = rest;
+    window.scrollTo = realTo;
+    window.scrollBy = realBy;
+    done(moves);
+    return;
+  }
+  kb.top = tops[i];
+  window.visualViewport.dispatchEvent(new Event("scroll"));
+  frames(2, () => step(i + 1));
+};
+step(0);
+"""
+PAN_TOPS = [400, 300, 200, 100, 0]
+
+
+def keyboard_up(driver: Marionette, base: str, tab: Tab, rig: Rig, home: Path) -> list[str]:
+    """With the keyboard up, scroll up through the chat while it is redrawn: the composer rides
+    the band's bottom edge at every step, the keyboard reads as open throughout, and the reader
+    is neither pulled back nor moved."""
+    driver.send("WebDriver:Navigate", {"url": base + tab.state.path})
+    seen = _wait_for(driver, tab.newest)
+    if not seen or not seen.get("scrollable"):
+        return [f"{tab.name}: never drew a page taller than the band"]
+    driver.script(KEYBOARD, HEIGHT)
+    settle(driver)
+    moves = driver.script_async(PAN_PINNED, PAN_TOPS)
+    pans = [f"{tab.name}: a pan of the band moved the pinned page {moves}x"] if moves else []
+    driver.script(SCROLL_UP, STEP, 50, KEYBOARD_STEPS)
+    n = _redraw_while(driver, tab, rig, home)
+    newest = tab.grow(rig, home, n)
+    if not _until(lambda: _poked(driver, newest)) or not _wait_for(driver, newest):
+        return [f"{tab.name}: the redraw after the reader stopped never landed"]
+    found = driver.script(READ_KEYBOARD)
+    kb = found if isinstance(found, dict) else {}
+    problems = pans + _walk_problems(tab.name, _walked(driver), STEP * KEYBOARD_STEPS)
+    if _num(kb, "pans") <= 1:
+        problems.append(f"{tab.name}: the band never moved")
+    if kb.get("wrong"):
+        problems.append(
+            f"{tab.name}: the composer was not lifted to the band's bottom edge "
+            f"([band offset, lift, wanted]): {kb['wrong'][:4]}"
+        )
+    if kb.get("shut"):
+        problems.append(f"{tab.name}: the keyboard read as closed at band offsets {kb['shut'][:4]}")
+    return problems
+
+
 def _scroll_pane(rig: Rig, _home: Path, n: int) -> str:
     """The terminal scrolls: its oldest line goes and a newer one arrives; return that one."""
     text = "".join(
@@ -1225,6 +1338,10 @@ def _tabs() -> tuple[tuple[Tab, Callable[[Marionette, str, Tab, Rig, Path], list
         (Tab("pane scrolled up", pane, last_line, _scroll_pane), scrolling_up(0.05, 40)),
         (Tab("chat nudged up", chat, last_reply, _reply), scrolling_up(0.4, 10)),
         (Tab("chat scrolled up", chat, last_reply, _reply), scrolling_up(0.05, 40)),
+        (
+            Tab("chat keyboard up", chat, last_reply, _reply, height=HEIGHT - KEYBOARD_PX),
+            keyboard_up,
+        ),
         (Tab("chat question", asking_chat, last_reply, _say), asked),
         (Tab("pane question", asking_pane, "", _print), asked),
         (Tab("chat question waiting", asking_chat, last_reply, _say), waiting_pill),
