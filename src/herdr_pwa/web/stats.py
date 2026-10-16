@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Final
 
+from herdr_pwa.clock import ago, brief, duration, duration_said
 from herdr_pwa.engine import (
     Harness,
     HistoryState,
@@ -44,9 +45,6 @@ _ONE_PLACE: Final = 9.95
 _SPLIT: Final = 2
 # Below this, two places would round a real charge down to $0.00.
 _HALF_CENT: Final = 0.005
-_MINUTE: Final = 60
-_HOUR: Final = 3600
-_DAY: Final = 86400
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,34 +113,6 @@ def tokens_said(count: int) -> str:
     if count >= _THOUSAND:
         return f"{round(count / _THOUSAND)} thousand"
     return str(count)
-
-
-def duration(seconds: float) -> str:
-    """A span at a glance: 40s, 4m, 1h 12m."""
-    whole = int(seconds)
-    if whole < _MINUTE:
-        return f"{whole}s"
-    if whole < _HOUR:
-        return f"{whole // _MINUTE}m"
-    if whole < _DAY:
-        return f"{whole // _HOUR}h {whole % _HOUR // _MINUTE}m"
-    return f"{whole // _DAY}d {whole % _DAY // _HOUR}h"
-
-
-def _counted(count: int, unit: str) -> str:
-    return f"{count} {unit}{'' if count == 1 else 's'}"
-
-
-def duration_said(seconds: float) -> str:
-    """A span as VoiceOver should say it."""
-    whole = int(seconds)
-    if whole < _MINUTE:
-        return "under a minute"
-    if whole < _HOUR:
-        return _counted(whole // _MINUTE, "minute")
-    if whole < _DAY:
-        return f"{_counted(whole // _HOUR, 'hour')} {_counted(whole % _HOUR // _MINUTE, 'minute')}"
-    return f"{_counted(whole // _DAY, 'day')} {_counted(whole % _DAY // _HOUR, 'hour')}"
 
 
 def _seconds_since(stamp: str, now: float) -> float | None:
@@ -283,8 +253,10 @@ def _rows(found: _Found) -> tuple[Row, ...]:
         rows.extend(_token_rows(found.usage))
     if found.cost > 0:
         rows.append(Row("Cost", money(found.cost)))
+    if found.turn is not None:
+        rows.append(Row("Turn", duration(found.turn)))
     if found.idle is not None:
-        rows.append(Row("Last activity", f"{duration(found.idle)} ago"))
+        rows.append(Row("Last activity", ago(found.idle)))
     if found.usage.prompts:
         rows.append(Row("Turns", str(found.usage.prompts)))
     if found.usage.partial:
@@ -319,6 +291,10 @@ def _figures(spend: ModelSpend) -> str:
     return ", ".join(
         f"{tokens(count)} {label}" for label, count in named if count or label in ("in", "out")
     )
+
+
+def _counted(count: int, unit: str) -> str:
+    return f"{count} {unit}{'' if count == 1 else 's'}"
 
 
 def _model_line(spend: ModelSpend, *, priced: bool) -> Row:
@@ -384,7 +360,7 @@ def stats_for(reading: Reading) -> Stats:
         # Half up, so a quarter full draws three tenths, never banker's two.
         meter=(percent * METER_STEPS + 50) // 100 if percent is not None else 0,
         context=_context_text(context) if context is not None else "",
-        turn=duration(found.turn) if found.turn is not None else "",
+        turn=brief(found.turn) if found.turn is not None else "",
         spend=_spend(found),
         rows=_rows(found),
         models=_models(reading),

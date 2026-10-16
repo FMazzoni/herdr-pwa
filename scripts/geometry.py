@@ -327,8 +327,12 @@ if (nav) {
       top: box(line).top, under: box(nav).bottom } : null,
     meter: meter ? { width: box(meter).width, wants: parseFloat(getComputedStyle(meter).width),
       right: box(meter).right, edge: box(line).right } : null,
+    // Cut: clipped with no ellipsis to say so, past the screen, or half under the one line.
     cut: line ? [...line.querySelectorAll(".stats__fact")]
-      .filter((f) => f.scrollWidth > f.clientWidth + 0.5 || box(f).right > vw + 0.5)
+      .filter((f) => (f.scrollWidth > f.clientWidth + 0.5
+        && getComputedStyle(f).textOverflow !== "ellipsis") || box(f).right > vw + 0.5
+        || (box(f).top < box(f.parentElement).bottom - 0.5
+          && box(f).bottom > box(f.parentElement).bottom + 0.5))
       .map((f) => f.textContent) : [],
   };
 }
@@ -598,7 +602,9 @@ def _judge_strip(bar: dict[str, object], where: str, size: "Size", tally: Tally)
         tally.problems.append(f"{where}: the context meter is squeezed or cut: {meter}")
     cut = bar["cut"]
     if isinstance(cut, list) and cut:
-        tally.problems.append(f"{where}: the strip cuts {cut}; it must wrap instead")
+        tally.problems.append(
+            f"{where}: the strip cuts {cut}; a fact leaves the line whole or ends in an ellipsis"
+        )
 
 
 def judge_bar(found: dict[str, object], where: str, size: "Size", tally: Tally) -> None:

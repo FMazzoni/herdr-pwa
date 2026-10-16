@@ -79,7 +79,22 @@ DIVERGENCES: dict[str, str] = {
         "the Enter submit pair lifts and a screen with hints but no live run reads "
         "unknown where the ledger said none, naming Enter as a hint."
     ),
+    **dict.fromkeys(
+        (
+            "snapshot.example",
+            "snapshot.example+blocked",
+            "snapshot.example+blocked+read",
+            "snapshot.example+blocked+unread",
+        ),
+        "The feed's age is now worded by the one span formatter the sheet and doctor use, "
+        "which counts whole units: 59.5s reads '59s ago' where the old feed rounded it up to "
+        "'60s ago', a minute it had not yet reached. "
+        "test_herd_matches_the_ledger_but_for_its_age_wording holds the rest of each entry.",
+    ),
 }
+
+# The divergence above, label by label: what the ledger said for an age, and what the app says.
+REWORDED: dict[str, str] = {"60s ago": "59s ago"}
 
 # CSI, OSC and two-byte escapes, exactly as the ledger's decoder stripped them.
 _ANSI = re.compile(r"\x1b(?:\[[0-9;?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[@-Z\\-_])")
@@ -318,8 +333,9 @@ def test_screen_matches_the_ledger(capture_id: str, foreign_root: Path) -> None:
     assert _screen_json(decision) == expected
 
 
-@pytest.mark.parametrize("herd_id", _cases(HERDS))
-def test_herd_matches_the_ledger(herd_id: str, foreign_root: Path) -> None:
+def _herd_found(
+    herd_id: str, foreign_root: Path
+) -> tuple[dict[str, JsonValue], dict[str, JsonValue]]:
     entry = _obj(HERDS[herd_id])
     given = _obj(entry["input"])
     snapshot = _snapshot(given)
@@ -349,4 +365,25 @@ def test_herd_matches_the_ledger(herd_id: str, foreign_root: Path) -> None:
         snapshot.agents, prompts=prompts, overlay=Overlay(unread), fetched=Fetched(NOW)
     )
     expected = {k: v for k, v in entry.items() if k != "input"}
-    assert _herd_json(herd, prompt_ids, freshness) == expected
+    return _herd_json(herd, prompt_ids, freshness), expected
+
+
+@pytest.mark.parametrize("herd_id", _cases(HERDS))
+def test_herd_matches_the_ledger(herd_id: str, foreign_root: Path) -> None:
+    found, expected = _herd_found(herd_id, foreign_root)
+    assert found == expected
+
+
+def _reworded(value: JsonValue) -> JsonValue:
+    if isinstance(value, dict):
+        return {key: _reworded(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_reworded(item) for item in value]
+    return REWORDED.get(value, value) if isinstance(value, str) else value
+
+
+@pytest.mark.parametrize("herd_id", sorted(set(HERDS) & set(DIVERGENCES)))
+def test_herd_matches_the_ledger_but_for_its_age_wording(herd_id: str, foreign_root: Path) -> None:
+    found, expected = _herd_found(herd_id, foreign_root)
+    assert found != expected
+    assert found == _reworded(expected)

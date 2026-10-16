@@ -19,8 +19,6 @@ from herdr_pwa.engine import (
 from herdr_pwa.web.stats import (
     Reading,
     Stats,
-    duration,
-    duration_said,
     model_label,
     stats_for,
     tokens,
@@ -136,6 +134,14 @@ def test_a_running_turn_is_timed_from_the_newest_prompt() -> None:
     assert stats.sentence == (
         "Haiku 4.5, context 25 percent used, turn running 4 minutes, 38 thousand output tokens"
     )
+
+
+def test_a_day_long_turn_is_one_short_unit_on_the_strip_and_whole_in_the_sheet() -> None:
+    usage = tally(turn_started="2026-10-09T09:00:00Z")
+    stats = stats_for(Reading("claude", "working", usage, NOW))
+    assert stats.turn == "2d"
+    assert labels(stats)["Turn"] == "2d 3h"
+    assert "turn running 2 days 3 hours" in stats.sentence
 
 
 def test_a_turn_is_timed_only_while_one_is_running() -> None:
@@ -386,13 +392,6 @@ def test_the_files_tab_is_a_redirect_into_the_agents_files(tmp_path: Path) -> No
     found = rig.http.get(f"/agent/{WORKING_SESSION}?tab=files", follow_redirects=False)
     assert found.status_code == 303
     assert found.headers["location"] == f"/agent/{WORKING_SESSION}/files"
-
-
-def test_spans_at_a_glance_and_aloud() -> None:
-    assert [duration(s) for s in (40, 240, 4_320, 200_000)] == ["40s", "4m", "1h 12m", "2d 7h"]
-    assert duration_said(240) == "4 minutes"
-    assert duration_said(3_660) == "1 hour 1 minute"
-    assert duration_said(180_000) == "2 days 2 hours"
 
 
 # ---- spend per model ----------------------------------------------------------------------------

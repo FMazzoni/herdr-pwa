@@ -127,6 +127,9 @@
   --working-gap: 0.22em;
   --working-beat: 1.6s;
   --working-ebb: 0.25;
+  /* The strip's facts keep to one line of their own text; a fact that would start a second
+     line is not drawn, and the sheet under the tap still names it. */
+  --stats-facts-max: 1lh;
 
   /* Code in chat prose: one colour per kind of token, drawn from the terminal palette. */
   --code-keyword: var(--ansi-magenta);
@@ -771,7 +774,8 @@ textarea { resize: vertical; min-height: 4.5em; }
 
 /* ---- The stats strip ----
    One quiet line under the bar on Chat, Pane and Files, inside the sticky header so it never
-   scrolls away; a tap opens what it sums. It wraps rather than cutting the meter. */
+   scrolls away; a tap opens what it sums. It keeps to one line at every Text Size: the facts
+   run most important first, and the last that do not fit wait in the sheet, never cut. */
 .topbar:has(.stats) { flex-wrap: wrap; row-gap: 0; }
 .stats { flex: 1 0 100%; min-width: 0; margin: 0 calc(-1 * var(--gutter-right)) 0 calc(-1 * var(--gutter-left)); padding: 0 var(--gutter-right) 0 var(--gutter-left); border-top: var(--line-1) solid var(--rule); font-size: var(--text-small); color: var(--ink-2); }
 /* The tap box reaches down past the drawn line, never up into the tabs' 44px. Text stays at the
@@ -780,9 +784,12 @@ textarea { resize: vertical; min-height: 4.5em; }
 .stats__line::-webkit-details-marker { display: none; }
 .stats__line::after { content: var(--chevron); flex: none; margin-left: auto; color: var(--ink-3); transform: rotate(90deg); }
 .stats__sheet[open] > .stats__line::after { transform: rotate(-90deg); }
-/* Spaced by a gap, not a separator glyph, so a wrapped line never starts with a dot. */
-.stats__facts { display: flex; flex-wrap: wrap; align-items: center; min-width: 0; gap: var(--space-1) var(--space-6); }
-.stats__model { color: var(--ink); }
+/* Spaced by a gap, not a separator glyph. Wrapping is how a fact that does not fit leaves the
+   line: it moves whole onto a second line, which the height cap does not draw. */
+.stats__facts { display: flex; flex-wrap: wrap; align-items: center; min-width: 0; max-height: var(--stats-facts-max); overflow: hidden; gap: 0 var(--space-6); }
+/* A model id longer than the line (a provider's raw id) ends in an ellipsis, so the strip
+   still says which model even when it is the only fact that fits. */
+.stats__model { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
 .stats__note { color: var(--ink-3); }
 .stats__context { display: inline-flex; align-items: center; white-space: nowrap; }
 .meter { flex: none; width: var(--meter-w); height: var(--meter-h); margin-right: var(--space-2); overflow: hidden; background: var(--surface-2); border: var(--line-1) solid var(--rule); border-radius: var(--radius-pill); }
