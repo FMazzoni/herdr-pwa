@@ -9,10 +9,16 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from herdr_pwa import auth
 from herdr_pwa.decisions import decide_screen
-from herdr_pwa.engine.client import INTERRUPT_KEY
-from herdr_pwa.engine.dialog import BlockedPrompt
-from herdr_pwa.engine.model import Agent, AgentStatus, PaneId, SessionId, screen_digest
-from herdr_pwa.engine.transport import EngineError
+from herdr_pwa.engine import (
+    INTERRUPT_KEY,
+    Agent,
+    AgentStatus,
+    BlockedPrompt,
+    EngineError,
+    PaneId,
+    SessionId,
+    screen_digest,
+)
 from herdr_pwa.web.deps import WebState, viewer_guard
 from herdr_pwa.web.failures import AgentGone, refused
 from herdr_pwa.web.herd import find_agent

@@ -5,15 +5,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from herdr_pwa.engine.tail import Ask, TailCache, chat_window
-from herdr_pwa.engine.transcript import (
-    HistoryState,
-    Speaker,
-    TranscriptTurn,
-    is_message,
-    read_page,
-)
+from herdr_pwa.engine import Ask, HistoryState, Speaker, TailCache, TranscriptTurn, chat_window
 from herdr_pwa.jsontypes import JsonObject
+from tests.engine_seam import is_message, read_page
 from tests.webfakes import build_rig
 
 SESSION = "6ae1e031-ddb4-4684-ab07-68073f7fec47"

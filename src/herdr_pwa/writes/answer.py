@@ -5,10 +5,16 @@ from dataclasses import dataclass
 from typing import Final
 
 from herdr_pwa.audit import KEYS, Write
-from herdr_pwa.engine.client import INTERRUPT_KEY, HerdrClient
-from herdr_pwa.engine.dialog import BlockedPrompt
-from herdr_pwa.engine.model import Agent, AgentStatus, PaneId, SessionId
-from herdr_pwa.engine.transport import EngineError
+from herdr_pwa.engine import (
+    INTERRUPT_KEY,
+    Agent,
+    AgentStatus,
+    BlockedPrompt,
+    EngineError,
+    HerdrClient,
+    PaneId,
+    SessionId,
+)
 from herdr_pwa.writes.keys import PAD_KEYS, allowed_keys, control_token, key_ends_question
 from herdr_pwa.writes.outcome import (
     UNREADABLE,

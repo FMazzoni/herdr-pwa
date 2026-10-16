@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from herdr_pwa.engine.dialog import BlockedPrompt
+from herdr_pwa.engine import BlockedPrompt
 
 RULE = "\u2500" * 60
 

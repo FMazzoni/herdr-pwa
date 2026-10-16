@@ -6,8 +6,7 @@ from pathlib import Path
 import pytest
 
 from herdr_pwa.audit import AuditUnavailableError, Entry, Write
-from herdr_pwa.engine.model import as_session_id, screen_digest
-from herdr_pwa.engine.transport import EngineUnavailable
+from herdr_pwa.engine import EngineUnavailable, as_session_id, screen_digest
 from herdr_pwa.jsontypes import JsonObject
 from herdr_pwa.writes.guard import (
     MAX_PROMPT_CHARS,

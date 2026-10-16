@@ -8,12 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from herdr_pwa.engine.transcript import (
-    _copied_from,  # pyright: ignore[reportPrivateUsage]
-    _head_records,  # pyright: ignore[reportPrivateUsage]
-    _head_window,  # pyright: ignore[reportPrivateUsage]
-)
 from herdr_pwa.jsontypes import JsonObject, get_object
+from tests.engine_seam import copied_from, head_records, head_window
 
 # Opt-in, so the gate stays hermetic: point it at ~/.claude/projects to read the real box.
 CORPUS = os.environ.get("HERDR_PWA_CORPUS", "")
@@ -46,9 +42,9 @@ def _transcripts() -> list[Path]:
 def _heads() -> list[tuple[Path, list[JsonObject]]]:
     found: list[tuple[Path, list[JsonObject]]] = []
     for path in _transcripts():
-        window = _head_window(path)
+        window = head_window(path)
         if window:
-            found.append((path, list(_head_records(window))))
+            found.append((path, list(head_records(window))))
     return found
 
 
@@ -79,7 +75,7 @@ def test_every_declared_parent_resolves_to_a_file_that_exists() -> None:
     dangling: list[str] = []
     followed = 0
     for path, _ in HEADS:
-        parent = _copied_from(path)
+        parent = copied_from(path)
         if not parent:
             continue
         followed += 1
@@ -142,5 +138,5 @@ def test_a_foreign_provenance_stamp_never_disagrees_with_a_declared_fork() -> No
 def test_the_reader_survives_every_real_head_on_this_box() -> None:
     """No crash, no exception, whatever anybody's log actually contains."""
     for path, _ in HEADS:
-        assert isinstance(_copied_from(path), str), path.name
+        assert isinstance(copied_from(path), str), path.name
     assert json.dumps(sorted(SEEN)), WHAT_IT_SAW

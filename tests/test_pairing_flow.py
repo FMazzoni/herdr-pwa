@@ -9,8 +9,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from herdr_pwa import jsonio
-from herdr_pwa.engine.client import HerdrClient
-from herdr_pwa.engine.config import EngineSettings
+from herdr_pwa.engine import EngineSettings, HerdrClient
 from herdr_pwa.jsontypes import JsonObject
 from herdr_pwa.pairing import pair, qr_text
 from herdr_pwa.push import Subscription, SubscriptionStore

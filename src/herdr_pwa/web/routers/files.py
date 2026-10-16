@@ -8,8 +8,7 @@ from urllib.parse import urlencode
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
-from herdr_pwa.engine.model import Agent, as_session_id
-from herdr_pwa.engine.transport import InvalidRequest
+from herdr_pwa.engine import Agent, InvalidRequest, as_session_id
 from herdr_pwa.files import diffs, fuzzy
 from herdr_pwa.files.git import Git, Status
 from herdr_pwa.files.reader import LocalReader, NotReadable, OutsideRoot, inside

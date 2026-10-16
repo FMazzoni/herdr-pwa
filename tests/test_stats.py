@@ -7,9 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from herdr_pwa.engine.hermes import HERMES_DB
-from herdr_pwa.engine.transcript import HistoryState, ModelRef, SessionUsage, usage
-from herdr_pwa.engine.usage import UsageCache
+from herdr_pwa.engine import HistoryState, ModelRef, SessionUsage, UsageCache
 from herdr_pwa.jsontypes import JsonObject, as_object, loads
 from herdr_pwa.web.stats import (
     Stats,
@@ -21,6 +19,7 @@ from herdr_pwa.web.stats import (
     window_of,
 )
 from tests import test_hermes
+from tests.engine_seam import HERMES_DB, usage
 from tests.webfakes import (
     READ,
     SNAPSHOT,

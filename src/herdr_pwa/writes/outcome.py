@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from enum import Enum, StrEnum
 from typing import Final
 
-from herdr_pwa.engine.dialog import BlockedPrompt
+from herdr_pwa.engine import BlockedPrompt
 
 
 class Outcome(StrEnum):

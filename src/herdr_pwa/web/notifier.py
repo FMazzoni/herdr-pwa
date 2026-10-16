@@ -10,10 +10,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Final, Protocol, Self
 
-from herdr_pwa.engine.cache import SnapshotCache
-from herdr_pwa.engine.dialog import BlockedPrompt
-from herdr_pwa.engine.model import PaneId, SessionId, Snapshot, as_pane_id, as_session_id
-from herdr_pwa.engine.transport import EngineError
+from herdr_pwa.engine import (
+    BlockedPrompt,
+    EngineError,
+    PaneId,
+    SessionId,
+    Snapshot,
+    SnapshotCache,
+    as_pane_id,
+    as_session_id,
+)
 from herdr_pwa.managed import ManagedHerd
 from herdr_pwa.notify import AgentView, Hooks, NotifyConfig, Planner, Slot, Step, notice_for
 from herdr_pwa.notify_state import InterruptStore, SeenLedger, StatusLedger

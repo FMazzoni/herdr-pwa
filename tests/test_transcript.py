@@ -7,20 +7,17 @@ from pathlib import Path
 
 import pytest
 
-from herdr_pwa.engine.transcript import (
+from herdr_pwa.engine import HistoryState, Speaker, TranscriptPage, locate
+from herdr_pwa.jsontypes import get_object, get_str, loads, objects
+from tests.engine_seam import (
     AGENT_KINDS,
     MAX_NOTE_CHARS,
     MAX_PROSE_CHARS,
     MAX_RESULT_CHARS,
-    HistoryState,
-    Speaker,
-    TranscriptPage,
     adapter_for,
     history,
-    locate,
     read_page,
 )
-from herdr_pwa.jsontypes import get_object, get_str, loads, objects
 
 FIXTURES = Path(__file__).parent / "fixtures" / "transcript"
 SESSION = "00000000-0000-4000-8000-000000000153"

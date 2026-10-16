@@ -3,7 +3,7 @@
 import re
 from typing import Final
 
-from herdr_pwa.engine.dialog import BlockedPrompt, MenuShape
+from herdr_pwa.engine import BlockedPrompt, MenuShape
 from herdr_pwa.panetext import pane_lines, plain_text
 
 MAX_PROMPT_CHARS: Final = 4000

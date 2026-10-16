@@ -10,8 +10,7 @@ from typing import Final
 import uvicorn
 
 from herdr_pwa import auth, devreport, pairing, tailscale
-from herdr_pwa.engine.client import HerdrClient
-from herdr_pwa.engine.transport import EngineError
+from herdr_pwa.engine import EngineError, HerdrClient
 from herdr_pwa.protocol import EXPECTED_PROTOCOL
 from herdr_pwa.settings import Settings
 from herdr_pwa.web.app import create_app

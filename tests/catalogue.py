@@ -9,7 +9,7 @@ from typing import Final
 
 from pydantic import JsonValue
 
-from herdr_pwa.engine.transport import EngineUnavailable
+from herdr_pwa.engine import EngineUnavailable
 from herdr_pwa.jsontypes import JsonObject, as_object, loads
 from tests.filefakes import make_repo, stand_in
 from tests.webfakes import (

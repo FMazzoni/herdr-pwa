@@ -3,8 +3,7 @@
 import logging
 import threading
 
-from herdr_pwa.engine.tail import MAX_FILES
-from herdr_pwa.engine.transport import EngineError
+from herdr_pwa.engine import MAX_TAIL_FILES, EngineError
 from herdr_pwa.web.deps import WebState
 from herdr_pwa.web.routers.agent import read_chat, read_stats
 
@@ -25,7 +24,7 @@ def warm(web: WebState) -> int:
     # only push out another.
     claude = [a for a in agents if a.session and (a.agent or "").strip().lower() == "claude"]
     warmed = 0
-    for agent in claude[:MAX_FILES]:
+    for agent in claude[:MAX_TAIL_FILES]:
         try:
             read_stats(web, agent)
             chat = read_chat(web, agent)

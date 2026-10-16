@@ -23,8 +23,7 @@ from herdr_pwa.decisions import (
     decide_herd,
     decide_screen,
 )
-from herdr_pwa.engine.dialog import BlockedPrompt
-from herdr_pwa.engine.model import Snapshot, rank
+from herdr_pwa.engine import BlockedPrompt, Snapshot, rank
 from herdr_pwa.jsontypes import (
     JsonObject,
     JsonValue,

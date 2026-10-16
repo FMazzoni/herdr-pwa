@@ -4,8 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from herdr_pwa.engine.dialog import BlockedPrompt
-from herdr_pwa.engine.transport import EngineUnavailable
+from herdr_pwa.engine import BlockedPrompt, EngineUnavailable
 from herdr_pwa.jsontypes import JsonObject
 from herdr_pwa.writes.answer import KeyAsk, KeySent, send_key, send_starting_key
 from herdr_pwa.writes.keys import allowed_keys, answer_digits, control_token, key_ends_question

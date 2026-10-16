@@ -14,26 +14,39 @@ import pytest
 from pydantic import BaseModel, JsonValue
 
 from herdr_pwa import protocol
-from herdr_pwa.engine import client
-from herdr_pwa.engine.client import HerdrClient
-from herdr_pwa.engine.config import EngineSettings
-from herdr_pwa.engine.dialog import BlockedPrompt
-from herdr_pwa.engine.generated import request as wire_request
-from herdr_pwa.engine.generated import success_response as wire
-from herdr_pwa.engine.model import AgentStatus, PaneId, SessionId, as_pane_id, as_session_id
-from herdr_pwa.engine.transport import (
+from herdr_pwa.engine import (
+    INTERRUPT_KEY,
+    NOT_READY_CODE,
+    PANE_BUSY_CODE,
+    SESSION_MOVED_CODE,
+    AgentStatus,
+    BlockedPrompt,
     EngineError,
+    EngineSettings,
     EngineTimeout,
+    HerdrClient,
     InvalidRequest,
     InvalidResponse,
+    PaneId,
     ProtocolMismatch,
-    SocketTransport,
+    SessionId,
     TargetNotFound,
-    raise_for_error_frame,
+    as_pane_id,
+    as_session_id,
 )
 from herdr_pwa.jsontypes import JsonObject, loads
 from tests._jsonpath import at, obj
 from tests._wire_support import FakeTransport, Reply, TickingClock, no_sleep
+from tests.engine_seam import (
+    SocketTransport,
+    client_module,
+    discovery_subscriptions,
+    method_of,
+    payload_field,
+    raise_for_error_frame,
+    wire_request,
+)
+from tests.engine_seam import wire_response as wire
 
 FIXTURE = Path(__file__).parent / "fixtures" / "snapshot.example.json"
 SNAPSHOT_JSON = FIXTURE.read_text()
@@ -44,18 +57,18 @@ P5 = as_pane_id("w1:p5")
 SESS = as_session_id("5b609dba-d756-493a-a3fc-b4e09bf0a183")
 
 # Read off the generated request types, never spelled, so an upstream rename moves both.
-SNAPSHOT = client.method_of(wire_request.SessionSnapshotRequest)
-GET = client.method_of(wire_request.AgentGetRequest)
-READ = client.method_of(wire_request.AgentReadRequest)
-PROMPT = client.method_of(wire_request.AgentPromptRequest)
-SEND_KEYS = client.method_of(wire_request.AgentSendKeysRequest)
-FOCUS = client.method_of(wire_request.AgentFocusRequest)
-START = client.method_of(wire_request.AgentStartRequest)
-TAB_CREATE = client.method_of(wire_request.TabCreateRequest)
-PANE_CLOSE = client.method_of(wire_request.PaneCloseRequest)
-WS_CREATE = client.method_of(wire_request.WorkspaceCreateRequest)
-WS_RENAME = client.method_of(wire_request.WorkspaceRenameRequest)
-WS_CLOSE = client.method_of(wire_request.WorkspaceCloseRequest)
+SNAPSHOT = method_of(wire_request.SessionSnapshotRequest)
+GET = method_of(wire_request.AgentGetRequest)
+READ = method_of(wire_request.AgentReadRequest)
+PROMPT = method_of(wire_request.AgentPromptRequest)
+SEND_KEYS = method_of(wire_request.AgentSendKeysRequest)
+FOCUS = method_of(wire_request.AgentFocusRequest)
+START = method_of(wire_request.AgentStartRequest)
+TAB_CREATE = method_of(wire_request.TabCreateRequest)
+PANE_CLOSE = method_of(wire_request.PaneCloseRequest)
+WS_CREATE = method_of(wire_request.WorkspaceCreateRequest)
+WS_RENAME = method_of(wire_request.WorkspaceRenameRequest)
+WS_CLOSE = method_of(wire_request.WorkspaceCloseRequest)
 
 
 # A socket nobody listens on, so a slip is a connection error rather than traffic.
@@ -393,7 +406,7 @@ def test_keys_are_refused_to_an_agent_that_is_still_launching() -> None:
     eng, wire = build({GET: agent_frame(launch_pending=True)})
     with pytest.raises(EngineError) as exc:
         eng.send_keys(P3, "1")
-    assert exc.value.code == client.NOT_READY_CODE
+    assert exc.value.code == NOT_READY_CODE
     assert SEND_KEYS not in wire.methods  # nothing was typed
 
 
@@ -401,7 +414,7 @@ def test_a_prompt_is_refused_when_the_agent_is_not_interactive() -> None:
     eng, wire = build({GET: agent_frame(interactive_ready=False)})
     with pytest.raises(EngineError) as exc:
         eng.prompt(P3, "hi")
-    assert exc.value.code == client.NOT_READY_CODE
+    assert exc.value.code == NOT_READY_CODE
     assert PROMPT not in wire.methods
 
 
@@ -436,7 +449,7 @@ def test_the_readiness_check_is_fail_closed_on_a_frame_it_cannot_read() -> None:
 def test_the_interrupt_is_sent_to_an_agent_that_is_not_accepting_input() -> None:
     """Ctrl-c is the way out of busy, so a busy agent cannot refuse it."""
     eng, wire = build({GET: agent_frame(interactive_ready=False)})
-    eng.send_keys(P3, client.INTERRUPT_KEY)
+    eng.send_keys(P3, INTERRUPT_KEY)
     assert SEND_KEYS in wire.methods
 
 
@@ -445,7 +458,7 @@ def test_every_other_key_is_still_refused_to_an_agent_that_is_not_accepting() ->
     eng, wire = build({GET: agent_frame(interactive_ready=False)})
     with pytest.raises(EngineError) as exc:
         eng.send_keys(P3, "enter")
-    assert exc.value.code == client.NOT_READY_CODE
+    assert exc.value.code == NOT_READY_CODE
     assert SEND_KEYS not in wire.methods
 
 
@@ -453,8 +466,8 @@ def test_the_interrupt_bundled_with_another_key_is_not_exempt() -> None:
     """``ctrl-c`` then ``enter`` is not an interrupt; the second key is input."""
     eng, wire = build({GET: agent_frame(interactive_ready=False)})
     with pytest.raises(EngineError) as exc:
-        eng.send_keys(P3, client.INTERRUPT_KEY, "enter")
-    assert exc.value.code == client.NOT_READY_CODE
+        eng.send_keys(P3, INTERRUPT_KEY, "enter")
+    assert exc.value.code == NOT_READY_CODE
     assert SEND_KEYS not in wire.methods
 
 
@@ -462,8 +475,8 @@ def test_the_interrupt_is_still_refused_while_the_agent_is_launching() -> None:
     """The other half of the guard stands: launching is not busy."""
     eng, wire = build({GET: agent_frame(launch_pending=True, interactive_ready=False)})
     with pytest.raises(EngineError) as exc:
-        eng.send_keys(P3, client.INTERRUPT_KEY)
-    assert exc.value.code == client.NOT_READY_CODE
+        eng.send_keys(P3, INTERRUPT_KEY)
+    assert exc.value.code == NOT_READY_CODE
     assert SEND_KEYS not in wire.methods
 
 
@@ -480,7 +493,7 @@ def test_a_launching_agent_that_is_not_blocked_still_refuses_the_key() -> None:
         eng, wire = build({GET: agent_frame(launch_pending=True, agent_status=status)})
         with pytest.raises(EngineError) as exc:
             eng.send_keys(P3, "enter")
-        assert exc.value.code == client.NOT_READY_CODE
+        assert exc.value.code == NOT_READY_CODE
         assert SEND_KEYS not in wire.methods
 
 
@@ -496,7 +509,7 @@ def test_the_interrupt_is_still_refused_at_a_pane_somebody_else_holds() -> None:
     """Pane ids are recycled: an exempt key must not go to the wrong agent."""
     eng, wire = build({GET: agent_frame(interactive_ready=False)})
     with pytest.raises(TargetNotFound):
-        eng.send_keys(P3, client.INTERRUPT_KEY, session=as_session_id("not-the-holder"))
+        eng.send_keys(P3, INTERRUPT_KEY, session=as_session_id("not-the-holder"))
     assert SEND_KEYS not in wire.methods
 
 
@@ -563,7 +576,7 @@ def test_the_write_guard_cannot_recurse_through_its_own_snapshot(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """``WRITE_METHODS`` is three hand-written strings, and sets grow."""
-    monkeypatch.setattr(client, "WRITE_METHODS", frozenset({SNAPSHOT, PROMPT}))
+    monkeypatch.setattr(client_module, "WRITE_METHODS", frozenset({SNAPSHOT, PROMPT}))
     eng, _ = build()
     with pytest.raises(EngineError) as caught:
         eng.snapshot()
@@ -668,12 +681,12 @@ def _requests_issued_by(verb: ast.FunctionDef) -> set[str]:
         if isinstance(node, ast.Attribute) and node.attr.endswith("Request")
     }
     # The AST names the attribute; the generated module is what it names.
-    return {client.method_of(cast(type[BaseModel], getattr(wire_request, name))) for name in types}
+    return {method_of(cast(type[BaseModel], getattr(wire_request, name))) for name in types}
 
 
 def test_every_write_verb_is_registered_as_a_write() -> None:
     """Derived, not enumerated -- because the enumeration could not fail."""
-    body = ast.parse(inspect.getsource(client))
+    body = ast.parse(inspect.getsource(client_module))
     cls = next(
         node
         for node in ast.walk(body)
@@ -720,9 +733,9 @@ def test_the_socket_vocabulary_is_not_the_cli_vocabulary() -> None:
 
 def test_a_method_name_is_read_off_the_generated_literal() -> None:
     """The mechanism the whole no-second-copy claim rests on."""
-    assert client.method_of(wire_request.AgentPromptRequest) == "agent.prompt"
-    assert client.payload_field(wire.SessionSnapshotResponseResult) == "snapshot"
-    assert client.payload_field(wire.AgentInfoResponseResult) == "agent"
+    assert method_of(wire_request.AgentPromptRequest) == "agent.prompt"
+    assert payload_field(wire.SessionSnapshotResponseResult) == "snapshot"
+    assert payload_field(wire.AgentInfoResponseResult) == "agent"
 
 
 def test_a_request_type_that_pins_no_single_method_is_refused() -> None:
@@ -734,7 +747,7 @@ def test_a_request_type_that_pins_no_single_method_is_refused() -> None:
         params: JsonObject
 
     with pytest.raises(InvalidResponse):
-        client.method_of(Bogus)
+        method_of(Bogus)
 
 
 def test_the_request_that_goes_on_the_wire_is_what_the_schema_dumps() -> None:
@@ -824,7 +837,7 @@ def test_a_client_built_with_nothing_opens_nothing() -> None:
 
 def test_there_is_no_module_level_protocol_state_left() -> None:
     """The literal defect: three globals mutated through a ``global`` statement."""
-    tree = ast.parse(Path(client.__file__).read_text(encoding="utf-8"))
+    tree = ast.parse(Path(client_module.__file__).read_text(encoding="utf-8"))
     declared = [
         name for node in ast.walk(tree) if isinstance(node, ast.Global) for name in node.names
     ]
@@ -840,7 +853,7 @@ def test_there_is_no_module_level_protocol_state_left() -> None:
         f"globals() reaches module state without the keyword: {assigned_via_globals}"
     )
     for name in ("_last_protocol", "_last_protocol_at", "_warned_protocol"):
-        assert not hasattr(client, name)
+        assert not hasattr(client_module, name)
 
 
 # --------------------------------------------------------------------------
@@ -849,8 +862,8 @@ def test_there_is_no_module_level_protocol_state_left() -> None:
 
 # Every line of this type-checked clean while the write verbs took a plain str.
 PROBE = """
-from herdr_pwa.engine.client import HerdrClient
-from herdr_pwa.engine.model import Snapshot
+from herdr_pwa.engine import HerdrClient
+from herdr_pwa.engine import Snapshot
 
 def probe(c: HerdrClient) -> None:
     s = Snapshot()
@@ -952,7 +965,7 @@ def test_a_recycled_pane_id_refuses_the_keystroke() -> None:
     someone_else = as_session_id("11111111-1111-4111-8111-111111111111")
     with pytest.raises(TargetNotFound) as exc:
         eng.send_keys(P3, "1", session=someone_else)
-    assert exc.value.code == client.SESSION_MOVED_CODE
+    assert exc.value.code == SESSION_MOVED_CODE
     assert SEND_KEYS not in wire.methods  # nothing was typed
     with pytest.raises(TargetNotFound):
         eng.prompt(P3, "hi", session=someone_else)
@@ -976,7 +989,7 @@ def test_the_identity_re_check_is_opt_in() -> None:
 # The lifecycle verbs
 # --------------------------------------------------------------------------
 
-PROCESS_INFO = client.method_of(wire_request.PaneProcessInfoRequest)
+PROCESS_INFO = method_of(wire_request.PaneProcessInfoRequest)
 
 
 def process_info_frame(*, settled: bool = True) -> JsonObject:
@@ -1070,18 +1083,18 @@ def test_a_start_waits_for_the_shell_before_it_asks() -> None:
 def test_a_pane_that_never_settles_refuses_the_start_rather_than_hanging(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(client, "_SHELL_POLLS", 3)
+    monkeypatch.setattr(client_module, "_SHELL_POLLS", 3)
     eng, wire = build({PROCESS_INFO: process_info_frame(settled=False)})
     with pytest.raises(EngineError) as caught:
         eng.start_agent(name="n", kind="claude", pane_id="w1:p9")
-    assert caught.value.code == client.PANE_BUSY_CODE
+    assert caught.value.code == PANE_BUSY_CODE
     assert START not in wire.methods
 
 
 def test_a_busy_pane_is_the_one_write_this_client_retries() -> None:
     """And it is not a violation of the never-retry rule."""
     attempts: list[JsonObject | Exception] = [
-        EngineError("busy", code=client.PANE_BUSY_CODE),
+        EngineError("busy", code=PANE_BUSY_CODE),
         started_frame("s-1"),
     ]
 
@@ -1125,7 +1138,7 @@ def test_a_close_re_checks_the_pane_is_still_held_by_that_session() -> None:
     someone_else = as_session_id("11111111-1111-4111-8111-111111111111")
     with pytest.raises(TargetNotFound) as caught:
         eng.close_pane(P3, session=someone_else)
-    assert caught.value.code == client.SESSION_MOVED_CODE
+    assert caught.value.code == SESSION_MOVED_CODE
     assert PANE_CLOSE not in wire.methods, "somebody else's pane was closed"
 
     eng.close_pane(P3, session=SESS)
@@ -1168,7 +1181,7 @@ def test_an_injected_settings_object_is_never_second_guessed(
 
 def test_the_engine_declares_the_eight_fields_it_reads_and_no_more() -> None:
     """``EngineSettings`` is the engine's whole configuration seam, and the honest dependency."""
-    engine_reads = {name for name in dir(client.EngineSettings) if not name.startswith("_")}
+    engine_reads = {name for name in dir(EngineSettings) if not name.startswith("_")}
     assert engine_reads == {
         "socket_path",
         "command_timeout",
@@ -1189,7 +1202,7 @@ def test_the_engine_declares_the_eight_fields_it_reads_and_no_more() -> None:
 
 def test_the_discovery_subscriptions_carry_no_pane_id() -> None:
     """That is the whole point of them: a subscription no roster can stale."""
-    subs = client.discovery_subscriptions()
+    subs = discovery_subscriptions()
     assert [one["type"] for one in subs] == [
         "pane.created",
         "pane.agent_detected",
@@ -1214,4 +1227,4 @@ def test_one_connection_carries_both_the_roster_and_the_discovery_events() -> No
 def test_an_empty_roster_still_leaves_a_stream_worth_opening() -> None:
     """A cold herd has no panes to follow and is exactly when discovery matters."""
     eng, _ = build()
-    assert eng.watch_statuses([]).subscriptions == client.discovery_subscriptions()
+    assert eng.watch_statuses([]).subscriptions == discovery_subscriptions()

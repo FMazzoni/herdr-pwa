@@ -4,9 +4,11 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Final, NamedTuple
 
-from herdr_pwa.engine.client import NOT_READY_CODE, PANE_BUSY_CODE, SESSION_MOVED_CODE
-from herdr_pwa.engine.dialog import BlockedPrompt
-from herdr_pwa.engine.transport import (
+from herdr_pwa.engine import (
+    NOT_READY_CODE,
+    PANE_BUSY_CODE,
+    SESSION_MOVED_CODE,
+    BlockedPrompt,
     EngineError,
     EngineMisconfigured,
     EngineTimeout,

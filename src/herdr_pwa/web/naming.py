@@ -5,7 +5,7 @@ import unicodedata
 from typing import Final
 
 from herdr_pwa.decisions import AgentRow, ScreenDecision
-from herdr_pwa.engine.dialog import MenuShape
+from herdr_pwa.engine import MenuShape
 from herdr_pwa.panetext import plain
 
 # Spinner and status glyphs a harness prefixes its terminal title with.

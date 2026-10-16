@@ -7,10 +7,7 @@ from pathlib import Path
 import pytest
 
 from herdr_pwa import jsontypes, panetext
-from herdr_pwa.engine.client import HerdrClient
-from herdr_pwa.engine.config import EngineSettings
-from herdr_pwa.engine.dialog import BlockedPrompt
-from herdr_pwa.engine.model import as_pane_id
+from herdr_pwa.engine import BlockedPrompt, EngineSettings, HerdrClient, as_pane_id
 from herdr_pwa.jsontypes import JsonObject
 from herdr_pwa.panetext import (
     MAX_RUNS_PER_LINE,

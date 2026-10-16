@@ -11,9 +11,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from markupsafe import Markup
 
 from herdr_pwa import panetext
-from herdr_pwa.engine.model import Agent
-from herdr_pwa.engine.tail import Ask, chat_window
-from herdr_pwa.engine.transport import EngineError
+from herdr_pwa.engine import Agent, Ask, EngineError, chat_window
 from herdr_pwa.web.chat import ChatView, chat_view
 from herdr_pwa.web.deps import WebState, hidden_tick, viewer_guard
 from herdr_pwa.web.herd import find_agent

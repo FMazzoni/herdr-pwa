@@ -9,7 +9,7 @@ from typing import cast
 import pytest
 from fastapi import FastAPI
 
-from herdr_pwa.engine.model import Snapshot
+from herdr_pwa.engine import Snapshot
 from herdr_pwa.web.events import Hub, Listener, changed, herd_marks, topics_of
 from tests.catalogue import long_chat
 from tests.waiting import until_async

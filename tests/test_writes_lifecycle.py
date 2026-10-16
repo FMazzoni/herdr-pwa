@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from herdr_pwa.engine.transport import (
+from herdr_pwa.engine import (
     EngineError,
     EngineMisconfigured,
     EngineTimeout,

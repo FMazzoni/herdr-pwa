@@ -19,12 +19,7 @@ from typing import Final
 import pytest
 from pydantic import JsonValue
 
-from herdr_pwa.engine.transport import (
-    BACKOFF_CAP,
-    EVENT_SUBSCRIBE,
-    MAX_FRAME_BYTES,
-    MAX_REQUEST_BYTES,
-    MAX_STRAY_FRAMES,
+from herdr_pwa.engine import (
     EngineError,
     EngineTimeout,
     EngineUnavailable,
@@ -32,12 +27,19 @@ from herdr_pwa.engine.transport import (
     InvalidRequest,
     InvalidResponse,
     RequestTooLarge,
-    SocketTransport,
     TargetNotFound,
     Transport,
 )
 from herdr_pwa.jsontypes import JsonObject, as_object, loads
 from tests._jsonpath import at
+from tests.engine_seam import (
+    BACKOFF_CAP,
+    EVENT_SUBSCRIBE,
+    MAX_FRAME_BYTES,
+    MAX_REQUEST_BYTES,
+    MAX_STRAY_FRAMES,
+    SocketTransport,
+)
 from tests.waiting import eventually
 
 SRC = Path(__file__).resolve().parent.parent / "src" / "herdr_pwa"
@@ -1068,7 +1070,8 @@ def test_nothing_in_the_package_spawns_a_process() -> None:
 # A child, so the descriptor exhaustion is genuine, disposable and never reaches a runner.
 EXHAUST = """
 import os, resource, sys
-from herdr_pwa.engine.transport import EngineError, SocketTransport
+from herdr_pwa.engine import EngineError
+from tests.engine_seam import SocketTransport
 
 wire = SocketTransport(sys.argv[1], timeout=0.5)
 soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
@@ -1100,6 +1103,7 @@ def test_running_out_of_descriptors_is_unavailable_and_backs_off(
     """``socket.socket()`` sat outside the try block, so ``EMFILE`` escaped."""
     done = subprocess.run(  # noqa: S603 - our own interpreter on a script in this file
         [sys.executable, "-c", textwrap.dedent(EXHAUST), str(tmp_path / "herdr.sock")],
+        cwd=Path(__file__).resolve().parent.parent,
         capture_output=True,
         text=True,
         timeout=60,

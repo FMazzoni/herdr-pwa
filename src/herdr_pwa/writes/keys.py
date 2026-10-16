@@ -2,8 +2,7 @@
 
 from typing import Final
 
-from herdr_pwa.engine.client import INTERRUPT_KEY
-from herdr_pwa.engine.dialog import BlockedPrompt, MenuShape
+from herdr_pwa.engine import INTERRUPT_KEY, BlockedPrompt, MenuShape
 from herdr_pwa.panetext import printed_whole
 
 # The generic pad, with no digits: digits are earned per screen.

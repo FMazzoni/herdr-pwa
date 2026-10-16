@@ -6,18 +6,14 @@ from pathlib import Path
 
 import pytest
 
-from herdr_pwa.engine.hermes import (
+from herdr_pwa.engine import HistoryState, Speaker, TranscriptTurn
+from tests.engine_seam import (
+    AGENT_KINDS,
     HERMES_DB,
     HermesAdapter,
-    _readonly,  # pyright: ignore[reportPrivateUsage]
-)
-from herdr_pwa.engine.transcript import (
-    AGENT_KINDS,
-    HistoryState,
-    Speaker,
-    TranscriptTurn,
     adapter_for,
     fold_tool_results,
+    hermes_readonly_uri,
 )
 
 STORE = Path(__file__).parent / "fixtures" / "transcript" / "hermes"
@@ -230,7 +226,7 @@ def test_a_file_that_is_not_hermes_is_refused_rather_than_read(
 
 def test_the_store_is_opened_read_only(roots: list[Path]) -> None:
     """A live Hermes is writing to this file; the URI's ``mode=ro`` makes a write raise."""
-    uri = _readonly(roots[0] / HERMES_DB)
+    uri = hermes_readonly_uri(roots[0] / HERMES_DB)
     assert "mode=ro" in uri
     with sqlite3.connect(uri, uri=True) as db, pytest.raises(sqlite3.OperationalError):
         db.execute(

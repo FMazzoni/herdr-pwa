@@ -9,11 +9,11 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from herdr_pwa.engine.dialog import BlockedPrompt, MenuShape, is_key_hint
-from herdr_pwa.engine.model import (
-    EXPECTED_PROTOCOL,
+from herdr_pwa.engine import (
     Agent,
     AgentStatus,
+    BlockedPrompt,
+    MenuShape,
     PaneId,
     Presence,
     SessionId,
@@ -23,6 +23,8 @@ from herdr_pwa.engine.model import (
     rank,
 )
 from herdr_pwa.jsontypes import JsonObject, JsonValue, as_object, loads, objects
+from herdr_pwa.protocol import EXPECTED_PROTOCOL
+from tests.engine_seam import is_key_hint
 
 FIXTURE = Path(__file__).parent / "fixtures" / "snapshot.example.json"
 

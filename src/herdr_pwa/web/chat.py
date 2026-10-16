@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from typing import Final
 
-from herdr_pwa.engine.transcript import HistoryState, Speaker, TranscriptPage, TranscriptTurn
+from herdr_pwa.engine import HistoryState, Speaker, TranscriptPage, TranscriptTurn
 from herdr_pwa.web.markdown import MdNode, render_tree
 from herdr_pwa.web.stats import duration
 

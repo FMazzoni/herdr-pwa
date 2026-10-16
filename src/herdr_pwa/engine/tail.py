@@ -22,7 +22,7 @@ from herdr_pwa.engine.transcript import (
 )
 
 # Few phones watch few agents; past this the least recently viewed file is forgotten.
-MAX_FILES: Final = 6
+MAX_TAIL_FILES: Final = 6
 # Turns held per file, newest kept; a reader who pages further back is read from disk again.
 MAX_HELD_TURNS: Final = 1500
 
@@ -78,7 +78,7 @@ def _start_of_last(turns: list[TranscriptTurn], messages: int, floor: int) -> tu
 class TailCache:
     """Per transcript file, the turns a page is showing, read once and then only appended to."""
 
-    def __init__(self, *, files: int = MAX_FILES, held: int = MAX_HELD_TURNS) -> None:
+    def __init__(self, *, files: int = MAX_TAIL_FILES, held: int = MAX_HELD_TURNS) -> None:
         self._files: OrderedDict[str, Held] = OrderedDict()
         self._max_files = files
         self._max_held = held

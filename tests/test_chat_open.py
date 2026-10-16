@@ -11,7 +11,7 @@ from typing import cast
 
 from fastapi import FastAPI
 
-from herdr_pwa.engine.transport import EngineUnavailable
+from herdr_pwa.engine import EngineUnavailable
 from herdr_pwa.web.deps import WebState
 from herdr_pwa.web.warm import warm
 from tests.catalogue import tool_heavy_chat

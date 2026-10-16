@@ -13,8 +13,7 @@ from urllib.parse import quote
 from firefox import BrowserError, Marionette
 from starlette.types import ASGIApp
 
-from herdr_pwa.engine.client import HerdrClient
-from herdr_pwa.engine.config import EngineSettings
+from herdr_pwa.engine import EngineSettings, HerdrClient
 from herdr_pwa.files.roots import root_id
 from herdr_pwa.settings import Settings
 from herdr_pwa.web.app import create_app
