@@ -191,17 +191,10 @@ DIALOG_OR_NOT = [
         SIGNED_OFF,
         NO_DIALOG,
     ),
-    pytest.param(
+    (
         "an idle pane whose status line under the composer carries a '?'",
         DIRTY_STATUS,
         NO_DIALOG,
-        marks=pytest.mark.xfail(
-            strict=True,
-            reason=(
-                "the status line is the only paragraph after the composer's rule, so the "
-                "'?' in a git segment reads as the box asking, and the idle pane gets an identity"
-            ),
-        ),
     ),
 ]
 

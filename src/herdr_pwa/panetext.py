@@ -200,6 +200,12 @@ def _split_chrome(
     return lines[: prompt - 1], lines[bottom + 1 : end], lines[prompt:bottom]
 
 
+def composer_top(rows: list[str]) -> int:
+    """The row the agent's own input box starts on, or ``len(rows)`` when none is drawn."""
+    split = _split_chrome([[Run(row)] for row in rows])
+    return len(rows) if split is None else len(split[0])
+
+
 def _dedent(row: list[Run], gutter: int) -> list[Run]:
     """Drop up to ``gutter`` leading whitespace characters, and never more."""
     text = plain_text(row)

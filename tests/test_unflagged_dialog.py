@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 from pydantic import JsonValue
 
-from herdr_pwa.decisions import Overlay, read_status, screen_asks
+from herdr_pwa.decisions import Overlay, asks_now, read_status, screen_asks
 from herdr_pwa.engine import AgentStatus, BlockedPrompt, MenuShape
 from herdr_pwa.writes.answer import KeyAsk, KeySent, send_key
 from herdr_pwa.writes.keys import answer_digits, control_token
@@ -57,6 +57,24 @@ def test_the_approval_herdr_missed_is_read_as_asking() -> None:
 def test_a_stopped_screen_with_no_dialog_does_not_ask(screen: str) -> None:
     # A numbered list at the end of a finished turn has no keys under it to answer with.
     assert not screen_asks(BlockedPrompt.parse(screen))
+
+
+# The idle capture with a git segment in its status line: '?' marks untracked files.
+DIRTY_STATUS = capture("capture-idle-claude-prompt").replace(
+    "herdr-pwa [main]", "herdr-pwa on main [!?]"
+)
+
+
+@pytest.mark.parametrize("status", [AgentStatus.DONE, AgentStatus.IDLE])
+def test_a_question_mark_in_an_idle_status_line_is_not_a_dialog_asking(
+    status: AgentStatus,
+) -> None:
+    prompt = BlockedPrompt.parse(DIRTY_STATUS)
+    assert "[!?]" in prompt.raw, "the premise: the status line carries the mark"
+    assert not prompt.asked
+    assert not prompt.identity
+    assert not screen_asks(prompt)
+    assert not asks_now(status, prompt)
 
 
 @pytest.mark.parametrize("status", [AgentStatus.DONE, AgentStatus.IDLE])
