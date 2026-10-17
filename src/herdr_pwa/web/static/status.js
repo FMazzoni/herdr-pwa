@@ -14,8 +14,8 @@
     }
   });
 
-  // After the page has its place, as it always has: reopening it first would move the hold.
-  hp.bus.on("swapped:settle", function () {
+  // Before the page is given its place: the sheet is in the sticky bar, so its height is the page's.
+  hp.bus.on("swapped:restore", function () {
     var sheet = statsOpen ? document.querySelector("#agent-stats details") : null;
     statsOpen = false;
     if (sheet) {

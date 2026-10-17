@@ -264,15 +264,14 @@
    *   swap:admit     a failure htmx would drop is let through (before anything may veto it)
    *   swap:veto      a swap is held back (shouldSwap = false)
    *   swap:capture   what the swap will destroy is noted: the reader's place, folds, focus
-   *   swapped:restore   what the new drawing lost is put back: drafts, folds
+   *   swapped:restore   what the new drawing lost is put back: drafts, folds, the stats sheet
    *   swapped:scroll    the page is moved where it belongs, and the pin told
-   *   swapped:settle    what is put back after the page has its place: the stats sheet
    *   swapped:announce  what is said aloud, and what runs on what was drawn
    * The page's first drawing runs ready:restore, ready:scroll and ready:announce on
    * DOMContentLoaded. Handlers that share a phase must not depend on each other's order. */
   var PHASES = {
     swap: ["admit", "veto", "capture"],
-    swapped: ["restore", "scroll", "settle", "announce"],
+    swapped: ["restore", "scroll", "announce"],
     ready: ["restore", "scroll", "announce"],
   };
   var handlers = {};
