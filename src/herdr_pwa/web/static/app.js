@@ -1,14 +1,10 @@
-/* herdr-pwa: what of the page's script has not moved to a section file of its own. It never
- * builds markup from strings and never evals. Regions are redrawn when the event stream says they
- * went stale; htmx trigger filters would need eval, so the server stops a hidden page's polls
- * (HTTP 286) and this script re-arms them. */
+/* herdr-pwa: the page's shell, last of its scripts: a failure fragment swapped in, the service
+ * worker and its "new build" offer, Web Push, copying a code block, Keep the columns, and a file
+ * opened on its line. Each other concern has a script of its own (assets.SCRIPTS). */
 (function (hp) {
   "use strict";
 
-  var logic = hp.logic;
   var bus = hp.bus;
-  var refetch = hp.refetch;
-  var isRead = hp.isRead;
 
   /* htmx 2 refuses to swap a non-2xx; a fragment the server marked is the honest
    * failure screen, and it carries the poll that heals the page. */
