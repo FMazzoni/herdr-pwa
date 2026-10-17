@@ -14,3 +14,8 @@
     {%- endfor %}
   </nav>
 {%- endmacro %}
+
+{# The way to the Pane tab wherever this app cannot show the rows: a link, never a direction. #}
+{% macro pane_door(agent, label, cls) -%}
+<a class="{{ cls }}" href="/agent/{{ agent.session|urlencode }}?tab=pane#agent-view" {{ replace() }}>{{ label }}</a>
+{%- endmacro %}

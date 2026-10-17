@@ -415,6 +415,20 @@ def test_a_checklist_says_why_its_rows_are_not_buttons_and_links_the_pane(
     assert 'name="key" value="1"' not in text
 
 
+def test_a_multi_select_names_the_pane_as_the_same_door_every_other_state_uses(
+    tmp_path: Path,
+) -> None:
+    door = f'href="/agent/{S1}?tab=pane#agent-view" data-hp-replace>'
+    unread = _blocked_on(tmp_path / "unread", "").http.get(f"/agent/{S1}/answer").text
+    nothing_ticked = capture("capture-blocked-multiselect-checklist").replace("[✔]", "[ ]")
+    text = _blocked_on(tmp_path / "multi", nothing_ticked).http.get(f"/agent/{S1}/answer").text
+    note = re.search(r'<p class="answer__note answer__note--line">Rows.*?</p>', text, re.S)
+    assert note is not None, "a multi-select says why its rows are not buttons"
+    assert "Submit is the last row" in note[0]
+    assert f'<a class="answer__go" {door}Pane</a>' in note[0], "a link, not a direction"
+    assert f'<a class="banner__go" {door}Look at the Pane</a>' in unread, "the door it matches"
+
+
 def test_a_question_that_cannot_be_read_says_so_with_a_way_to_the_pane(tmp_path: Path) -> None:
     w = _blocked_on(tmp_path, "")
     text = w.http.get(f"/agent/{S1}/answer").text
