@@ -49,7 +49,9 @@ harnesses the service can start and whether the running service is stale; it exi
 non-zero when something is wrong.
 
 Settings are `HP_*` environment variables (`src/herdr_pwa/settings.py`); state lives in
-`~/.config/herdr-pwa-v2` unless `HP_STATE_DIR` says otherwise.
+`~/.config/herdr-pwa-v2` unless `HP_STATE_DIR` says otherwise. The `-v2` in that name, and in
+`~/.cache/herdr-pwa-v2`, is from this being the app's second implementation; the
+name is kept so an existing install keeps its state.
 
 ## Development
 
