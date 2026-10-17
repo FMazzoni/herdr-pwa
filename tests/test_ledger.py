@@ -31,11 +31,11 @@ from herdr_pwa.engine import BlockedPrompt, Snapshot, rank
 REPO = Path(__file__).resolve().parents[1]
 FIXTURES = REPO / "tests" / "fixtures"
 LEDGER_PATH = FIXTURES / "ledger.json"
-# Pinned so the golden file can only change by a reviewed edit to this line.
-LEDGER_SHA256 = "3889d0b4fbb8ce31e0ac73bf714d1a21ee59651c929299e7a4cede78296b2211"
+# Pinned so the golden file can only change by a reviewed edit to this line. Verdicts never
+# change; input hashes are re-pinned when a capture is scrubbed or replaced (see meta.rehashed).
+LEDGER_SHA256 = "48852a8ce658e822727775fde08fa74c1c70934ba5d6258f69a606992f1bf9d3"
 FOREIGN_PREFIX = "foreign/"
-# collie's claude screens ship under tests/fixtures/foreign (MIT); the rest of the outside corpus
-# was removed by the user, and its rows stay in the frozen ledger untested.
+# collie's claude screens, vendored under tests/fixtures/foreign with collie's MIT notice.
 VENDORED_PREFIX = "foreign/collie/claude--"
 
 # Screens whose footer names a key that opens an editor in the pane: still read, never offered.
@@ -130,11 +130,7 @@ _DOCUMENT = TypeAdapter(dict[str, JsonValue])
 
 LEDGER = _DOCUMENT.validate_json(LEDGER_PATH.read_bytes())
 META = _obj(LEDGER["meta"])
-SCREENS = {
-    key: entry
-    for key, entry in _obj(LEDGER["screens"]).items()
-    if not key.startswith(FOREIGN_PREFIX) or key.startswith(VENDORED_PREFIX)
-}
+SCREENS = _obj(LEDGER["screens"])
 HERDS = _obj(LEDGER["herd"])
 
 
@@ -173,8 +169,7 @@ def _str(value: object) -> str:
 def _decoded(capture_id: str) -> str:
     entry = _obj(SCREENS[capture_id])
     found = _obj(entry["input"])
-    vendored = capture_id.startswith(FOREIGN_PREFIX)
-    path = FIXTURES / capture_id if vendored else REPO / capture_id
+    path = _input_path(capture_id)
     text = _plain_text(path) if found["decode"] == "plain_text" else path.read_text("utf-8")
     # Only a byte-identical input makes a differing verdict a decision rather than a fixture.
     assert hashlib.sha256(text.encode("utf-8")).hexdigest() == found["sha256"]
@@ -287,6 +282,15 @@ def _prompts(snapshot: Snapshot, prompt_ids: dict[str, JsonValue]) -> dict[str, 
 
 def test_the_golden_file_is_the_one_frozen() -> None:
     assert hashlib.sha256(LEDGER_PATH.read_bytes()).hexdigest() == LEDGER_SHA256
+
+
+def _input_path(capture_id: str) -> Path:
+    return FIXTURES / capture_id if capture_id.startswith(FOREIGN_PREFIX) else REPO / capture_id
+
+
+def test_every_row_reads_a_file_in_the_repo() -> None:
+    # A row whose input is not shipped can never be recomputed, so it is pruned, not kept untested.
+    assert [key for key in SCREENS if not _input_path(key).is_file()] == []
 
 
 def test_divergences_name_real_entries() -> None:

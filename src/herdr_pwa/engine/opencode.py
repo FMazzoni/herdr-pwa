@@ -7,9 +7,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, ClassVar, Final, NamedTuple, Protocol, Self, override
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, ValidationError
 
-from herdr_pwa.diff import EditArgs, tool_diff
 from herdr_pwa.engine.notices import INTERRUPTED_CODE, ApiError, api_error, status_code
 from herdr_pwa.engine.store import SessionStore, consult
 from herdr_pwa.engine.transcript import (
@@ -38,6 +37,7 @@ from herdr_pwa.engine.transcript import (
     one_line,
     remember,
     spend_of,
+    token_count,
 )
 from herdr_pwa.validation import OR_NONE, Count, Flag, Number, Text
 
@@ -75,9 +75,14 @@ def _named(path: Path) -> bool:
 # What opencode's records hold, as far as this reader looks: each model ignores the rest.
 
 
-class _ToolInput(EditArgs):
-    """A tool part's input: the one argument that names the call, and any file it changes."""
+class _ToolInput(BaseModel):
+    """A tool part's input, as far as naming the call goes."""
 
+    model_config = ConfigDict(extra="ignore")
+
+    file_path: Text = Field(default=None, validation_alias=AliasChoices("file_path", "filePath"))
+    path: Text = None
+    content: Text = None
     command: Text = None
     pattern: Text = None
     query: Text = None
@@ -554,7 +559,6 @@ def _tool_turn(part: _Part, stamp: TurnStamp) -> TranscriptTurn:
         result=result,
         failed=failed,
         result_truncated=result_cut,
-        diff=tool_diff(args),
     )
 
 
@@ -701,11 +705,6 @@ def _since(store: _Store, window: Window) -> TranscriptPage:
     )
 
 
-def _count(value: int | None) -> int:
-    """One token field as a non-negative int, whatever the provider wrote."""
-    return value if value is not None and value > 0 else 0
-
-
 def _cache(tokens: _Tokens) -> _Cache:
     """``tokens.cache``, empty when the provider wrote none."""
     return tokens.cache or _Cache()
@@ -714,11 +713,11 @@ def _cache(tokens: _Tokens) -> _Cache:
 def _add(spend: Spend, tokens: _Tokens, cost: float) -> None:
     """Fold one assistant message's tokens and money into *spend*, in place."""
     spend.messages += 1
-    spend.input_tokens += _count(tokens.input)
-    spend.output_tokens += _count(tokens.output)
-    spend.thinking_tokens += _count(tokens.reasoning)
-    spend.cache_creation_tokens += _count(_cache(tokens).write)
-    spend.cache_read_tokens += _count(_cache(tokens).read)
+    spend.input_tokens += token_count(tokens.input)
+    spend.output_tokens += token_count(tokens.output)
+    spend.thinking_tokens += token_count(tokens.reasoning)
+    spend.cache_creation_tokens += token_count(_cache(tokens).write)
+    spend.cache_read_tokens += token_count(_cache(tokens).read)
     spend.cost += cost
 
 
@@ -731,7 +730,7 @@ def _spent(record: _MessageRecord) -> float:
 def _prompt_size(tokens: _Tokens) -> int:
     """Everything that went UP with one message: fresh, cache-written, cache-read."""
     cache = _cache(tokens)
-    return _count(tokens.input) + _count(cache.write) + _count(cache.read)
+    return token_count(tokens.input) + token_count(cache.write) + token_count(cache.read)
 
 
 def _clock(tally: SessionUsage, record: _MessageRecord) -> None:
@@ -776,7 +775,6 @@ def _tally(store: _Store, *, max_bytes: int) -> SessionUsage:
         if budget < 0:
             tally.partial = True
             break
-        tally.logs += 1
         if record is not None:
             _take(tally, record)
     if not tally.models:

@@ -10,9 +10,16 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, BinaryIO, ClassVar, Final, NamedTuple, Protocol, override
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter, ValidationError
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    ConfigDict,
+    Field,
+    JsonValue,
+    TypeAdapter,
+    ValidationError,
+)
 
-from herdr_pwa.diff import EditArgs, FileDiff, tool_diff
 from herdr_pwa.engine.generated.request import IntegrationTarget
 from herdr_pwa.engine.model import Agent, SessionId
 from herdr_pwa.engine.notices import (
@@ -125,8 +132,6 @@ class TranscriptTurn(BaseModel):
     result: str = ""
     failed: bool = False
     result_truncated: bool = False
-    # Kept out of `text`, which stays the one-line gist (the path), as Collie's summarizeToolInput does.
-    diff: FileDiff | None = None
     # The frontier just before this turn: `before=at` leaves it out, `after=at` starts with it.
     at: int = -1
     # How a task notice says its task ended ("finished", "exit 0") and how long it ran; its
@@ -267,9 +272,14 @@ class TranscriptPage(BaseModel):
 # What a Claude Code record holds, as far as this reader looks
 
 
-class ToolInput(EditArgs):
-    """A tool call's arguments: the one that names the call, and any file it changes."""
+class ToolInput(BaseModel):
+    """A tool call's arguments, as far as naming the call goes, however a harness spells them."""
 
+    model_config = ConfigDict(extra="ignore")
+
+    file_path: Text = Field(default=None, validation_alias=AliasChoices("file_path", "filePath"))
+    notebook_path: Text = None
+    path: Text = None
     command: Text = None
     pattern: Text = None
     query: Text = None
@@ -1250,7 +1260,6 @@ def _assistant_record(record: ClaudeRecord, stamp: TurnStamp) -> TranscriptTurn 
                 tool=block.called,
                 truncated=cut,
                 call=block.id or "",
-                diff=tool_diff(block.input),
             )
         if btype == "thinking":
             # Measured: an empty `thinking` string and a signature blob, so nothing to render.
@@ -1760,7 +1769,6 @@ class SessionUsage(Spend):
     models: list[ModelRef] = Field(default_factory=list)
     # Only where the store says which model each answer came from; empty means not split.
     by_model: list[ModelSpend] = Field(default_factory=list)
-    logs: int = 0
     # A byte budget stopped the read, so the sums are floors.
     partial: bool = False
     state: HistoryState = HistoryState.absent
@@ -1788,7 +1796,7 @@ def _usage_of(record: ClaudeRecord) -> tuple[str, _Usage, str] | None:
     return message.id, message.usage, model
 
 
-def _count(value: int | None) -> int:
+def token_count(value: int | None) -> int:
     """One usage field as a non-negative int, whatever the provider actually wrote."""
     return value if value is not None and value > 0 else 0
 
@@ -1797,12 +1805,12 @@ def _add_usage(tally: SessionUsage, usage: _Usage, model: str) -> None:
     """Fold one message's usage into *tally*, in place."""
     details = usage.output_tokens_details
     tally.messages += 1
-    tally.input_tokens += _count(usage.input_tokens)
-    tally.output_tokens += _count(usage.output_tokens)
-    tally.cache_creation_tokens += _count(usage.cache_creation_input_tokens)
-    tally.cache_read_tokens += _count(usage.cache_read_input_tokens)
+    tally.input_tokens += token_count(usage.input_tokens)
+    tally.output_tokens += token_count(usage.output_tokens)
+    tally.cache_creation_tokens += token_count(usage.cache_creation_input_tokens)
+    tally.cache_read_tokens += token_count(usage.cache_read_input_tokens)
     if details is not None:
-        tally.thinking_tokens += _count(details.thinking_tokens)
+        tally.thinking_tokens += token_count(details.thinking_tokens)
     if model:
         # Claude Code answers from one provider, so the reference carries none.
         remember(tally, ModelRef(model))
@@ -1829,9 +1837,9 @@ def spend_of(tally: SessionUsage, ref: ModelRef) -> ModelSpend | None:
 def _prompt_size(usage: _Usage) -> int:
     """Everything that went UP with one message: fresh, cache-written, cache-read."""
     return (
-        _count(usage.input_tokens)
-        + _count(usage.cache_creation_input_tokens)
-        + _count(usage.cache_read_input_tokens)
+        token_count(usage.input_tokens)
+        + token_count(usage.cache_creation_input_tokens)
+        + token_count(usage.cache_read_input_tokens)
     )
 
 
@@ -1988,7 +1996,6 @@ def tally_claude(path: Path, *, max_bytes: int = MAX_USAGE_BYTES) -> LiveTally:
     """Sum *path* and every log its thread was copied out of, ready to grow."""
     live = LiveTally(tally=SessionUsage(), budget=max_bytes)
     for index, log in enumerate([path, *_ancestors(path)]):
-        live.tally.logs += 1
         end = _tally_log(log, live, newest=index == 0)
         if index == 0:
             live.end = end

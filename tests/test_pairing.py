@@ -59,21 +59,20 @@ def test_an_existing_matching_config_is_found_and_not_rewritten(tmp_path: Path) 
 def test_nothing_served_is_not_an_error(tmp_path: Path, config: object) -> None:
     with tailscaled(tmp_path, serve_config=config) as fake:
         state = state_of(fake)
-        assert (state.published, state.configured, state.occupied_by) == (False, False, "")
+        assert (state.published, state.occupied_by) == (False, "")
 
 
 def test_publish_sends_the_etag_and_a_second_run_writes_nothing(tmp_path: Path) -> None:
     with tailscaled(tmp_path, serve_config={}) as fake:
         etag = fake.etag()
         done = publish(fake.api, state_of(fake))
-        assert done.changed
         assert done.published
         post = next(r for r in fake.requests if r.method == "POST")
         assert post.headers["if-match"] == etag
         assert fake.serve_config == LIVE
         again = state_of(fake)
         assert again.published
-        assert not publish(fake.api, again).changed
+        assert publish(fake.api, again) is again
         assert len(posts(fake)) == 1
 
 
@@ -171,8 +170,9 @@ def test_pair_publishes_once_and_then_finds_itself(tmp_path: Path) -> None:
     with tailscaled(tmp_path, canned=status_route(), serve_config={}) as fake:
         first = pair(fake.api, port=PORT)
         second = pair(fake.api, port=PORT)
+        assert len(posts(fake)) == 1
     assert first.url == second.url == f"https://{NODE}/"
-    assert (first.served, first.state.changed, second.state.changed) == (True, True, False)
+    assert (first.served, second.served) == (True, True)
     assert TEARDOWN_COMMAND in first.note
 
 

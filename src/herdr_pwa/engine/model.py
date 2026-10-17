@@ -211,7 +211,6 @@ class Agent(BaseModel):
     workspace: str = ""
     workspace_id: str = ""
     workspace_number: int | None = None
-    tab_id: str = ""
     # Front pane of its tab, so several agents carry it; the global one is Snapshot.focused_pane_id.
     focused: bool = False
     revision: int = 0
@@ -270,7 +269,6 @@ class Agent(BaseModel):
             workspace=ws.label if ws else "",
             workspace_id=workspace_id,
             workspace_number=ws.number if ws else None,
-            tab_id=str(raw.get("tab_id") or ""),
             focused=bool(raw.get("focused", False)),
             revision=_to_int(raw.get("revision") or 0),
             state_change_seq=_to_int(raw.get("state_change_seq") or 0),
@@ -331,8 +329,6 @@ class Snapshot(BaseModel):
     agents: tuple[Agent, ...] = ()
     workspaces: tuple[Workspace, ...] = ()
     focused_pane_id: str | None = None
-    focused_tab_id: str | None = None
-    focused_workspace_id: str | None = None
 
     @classmethod
     def from_raw(cls, raw: _Raw, *, expected_protocol: int | None = None) -> Self:
@@ -355,8 +351,6 @@ class Snapshot(BaseModel):
                 "agents": tuple(agents),
                 "workspaces": workspaces,
                 "focused_pane_id": raw.get("focused_pane_id"),
-                "focused_tab_id": raw.get("focused_tab_id"),
-                "focused_workspace_id": raw.get("focused_workspace_id"),
             }
         )
 

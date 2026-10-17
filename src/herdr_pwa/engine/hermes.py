@@ -7,7 +7,6 @@ from typing import Annotated, ClassVar, Final, override
 
 from pydantic import BaseModel, ConfigDict, Json, TypeAdapter, ValidationError
 
-from herdr_pwa.diff import tool_diff
 from herdr_pwa.engine.store import Row, SessionStore, consult
 from herdr_pwa.engine.transcript import (
     MAX_PROSE_CHARS,
@@ -195,7 +194,6 @@ def _call_turn(
         tool=str(function.name or tool_name or ""),
         truncated=cut,
         call=first.id or first.call_id or "",
-        diff=tool_diff(function.arguments),
     )
 
 
@@ -276,7 +274,7 @@ def _row_turn(row: Row | None) -> TranscriptTurn | None:
 
 def _tally(db: SessionStore) -> SessionUsage:
     """What *session* has spent, off the per-model rollup Hermes already keeps."""
-    tally = SessionUsage(state=HistoryState.ok, logs=1)
+    tally = SessionUsage(state=HistoryState.ok)
     for row in db.rows(_USAGE_SQL, db.session):
         model, provider, calls, prompt, produced, cached, written, thought = row[:8]
         remember(tally, ModelRef(str(model or ""), str(provider or "")))

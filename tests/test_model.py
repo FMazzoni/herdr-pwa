@@ -718,7 +718,6 @@ def test_every_agent_in_the_fixture_is_fully_populated(
         assert a.workspace, "the workspace label must be joined, not blank"
         assert a.workspace_id
         assert a.workspace_number is not None
-        assert a.tab_id
         assert a.project
         assert a.status in set(AgentStatus)
         assert a.revision >= 1
@@ -1118,7 +1117,7 @@ TRUST_DIALOG = (
     "──────────────────────────────────────────\n"
     " Accessing workspace:\n"
     "\n"
-    " /home/owner/probe\n"
+    " /home/user/probe\n"
     "\n"
     " Quick safety check: Is this a project you created or one you trust?\n"
     "\n"

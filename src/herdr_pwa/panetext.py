@@ -3,7 +3,7 @@
 import re
 import unicodedata
 from collections.abc import Iterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Final
 
 
@@ -25,11 +25,9 @@ class Line:
 
 @dataclass(frozen=True, slots=True)
 class PaneView:
-    """One pane read: the viewport, and any draft stranded in the agent's input box."""
+    """One pane read: the viewport, with the agent's input box and statusline split off."""
 
     lines: list[Line]
-    draft: list[list[Run]] = field(default_factory=list)
-    takeover: bool = False
 
 
 MAX_RUNS_PER_LINE: Final = 96
@@ -146,13 +144,6 @@ def _is_wide_rule(text: str) -> bool:
 
 _STATUS_MAX_ROWS: Final = 8
 _INPUT_MAX_ROWS: Final = 12
-_INPUT_PLACEHOLDERS: Final = frozenset(
-    {
-        "Press up to edit queued messages",
-        'Try "how does this work?"',
-    }
-)
-_PASTED_TOKEN: re.Pattern[str] = re.compile(r"\[Pasted text #\d{1,9} \+\d{1,9} lines?\]")
 
 
 def _prompt_body(text: str) -> str | None:
@@ -204,30 +195,6 @@ def composer_top(rows: list[str]) -> int:
     """The row the agent's own input box starts on, or ``len(rows)`` when none is drawn."""
     split = _split_chrome([[Run(row)] for row in rows])
     return len(rows) if split is None else len(split[0])
-
-
-def _dedent(row: list[Run], gutter: int) -> list[Run]:
-    """Drop up to ``gutter`` leading whitespace characters, and never more."""
-    text = plain_text(row)
-    start = min(gutter, len(text) - len(text.lstrip(_WS)))
-    return _slice_runs(row, start, len(text))
-
-
-def _draft(rows: list[list[Run]]) -> tuple[list[list[Run]], bool]:
-    """The stranded draft, and whether Take over is offered."""
-    if not rows:
-        return [], False
-    head = plain_text(rows[0])
-    gutter = len(head) - len(head.lstrip(_WS)) + 1
-    gutter += len(head[gutter:]) - len(head[gutter:].lstrip(_WS))
-    body = [_rstrip_line(_slice_runs(rows[0], gutter, len(head)))]
-    body += [_rstrip_line(_dedent(row, gutter)) for row in rows[1:]]
-    while body and not plain_text(body[-1]).strip():
-        body.pop()
-    flat = "\n".join(plain_text(row) for row in body).strip()
-    if not flat or flat in _INPUT_PLACEHOLDERS:
-        return [], False
-    return body, _PASTED_TOKEN.fullmatch(flat) is None
 
 
 def _slice_runs(runs: list[Run], start: int, end: int) -> list[Run]:
@@ -607,20 +574,18 @@ def _trim_blank_edges(lines: list[list[Run]]) -> list[list[Run]]:
 
 
 def pane_view(text: str, *, strip: bool = True) -> PaneView:
-    """Turn one raw pane read into the viewport and any stranded draft."""
+    """Turn one raw pane read into the viewport, without the agent's input box."""
     lines = _tokenise(text)
     split = _split_chrome(lines)
-    # The statusline under the input box is dropped with it: the stats strip says what it said.
-    body, _status, prompt = split if split is not None else (lines, [], [])
+    # The input box is cut: its text may not be the person's, so it is never drawn as theirs.
+    # The statusline under it goes too; the stats strip says what it said.
+    body = split[0] if split is not None else lines
     body = _strip_decoration(body) if strip else [_rstrip_line(line) for line in body]
-    draft, takeover = _draft(prompt)
     return PaneView(
         lines=[
             Line(runs, clip=strip and _is_wide_rule(plain_text(runs)))
             for runs in _trim_blank_edges(body)
         ],
-        draft=draft,
-        takeover=takeover,
     )
 
 

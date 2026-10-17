@@ -18,8 +18,6 @@ from herdr_pwa import tailscale
 from herdr_pwa.validation import is_not_json
 
 IDENTITY_HEADER = "tailscale-user-login"
-NAME_HEADER = "tailscale-user-name"
-PROFILE_PIC_HEADER = "tailscale-user-profile-pic"
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 VIA_TAILSCALE = "tailscale"
 VIA_CONFIG = "config"
@@ -89,8 +87,6 @@ class Identity:
     """The login a request acts as, and whether the ingress or the config supplied it."""
 
     login: str
-    display_name: str = ""
-    profile_pic: str = ""
     via: str = VIA_TAILSCALE
 
     @property
@@ -125,11 +121,7 @@ def identify(headers: Mapping[str, str], access: Access) -> Identity:
             # tailscale status truncates logins, so a wrong pin looks right at a glance.
             log_detail=f"login {login!r} is not the pinned HP_TAILNET_LOGIN {pin!r}",
         )
-    return Identity(
-        login=login,
-        display_name=lowered.get(NAME_HEADER, "").strip(),
-        profile_pic=lowered.get(PROFILE_PIC_HEADER, "").strip(),
-    )
+    return Identity(login=login)
 
 
 def unpinned_warning(access: Access) -> str | None:

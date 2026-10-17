@@ -355,8 +355,8 @@ def test_a_report_is_drawn_once_inside_its_notice_and_not_as_a_card(tmp_path: Pa
     assert 'class="turn turn--peer"' not in chat
     assert chat.count('<div class="notice__report">') == 1
     # Words from the report: present once, and inside the notice.
-    assert chat.count("Both tickets are done on branch") == 1
-    assert chat.index("Both tickets are done on branch") > chat.index('class="notice__report"')
+    assert chat.count("Both changes are done on branch") == 1
+    assert chat.index("Both changes are done on branch") > chat.index('class="notice__report"')
     assert "No report yet." not in chat
     report = chat[chat.index('<div class="notice__report">') :]
     assert '<div class="prose turn__fold">' in report
@@ -369,7 +369,7 @@ def test_an_agent_that_has_not_reported_says_so_in_plain_words(tmp_path: Path) -
     assert "has not reported yet" not in chat
     assert "SubagentHandback" not in chat
     assert "Output in" not in chat
-    assert '<span class="notice__text">Writes: send once</span>' in chat
+    assert '<span class="notice__text">Writes: no double sends</span>' in chat
     assert '<span aria-hidden="true">&middot; </span>finished</span>' in chat
     assert '<span aria-hidden="true">&middot; </span>29m</span>' in chat
 
@@ -393,7 +393,7 @@ def test_a_command_opens_on_the_whole_command_its_ending_and_its_output(tmp_path
     assert '<span aria-hidden="true">&middot; </span>exit 1</span>' in chat
     assert '<span aria-hidden="true">&middot; </span>exit 0</span>' in chat
     result = chat[chat.index('<pre class="tool__result notice__result">') :]
-    assert result.split("</pre>")[0].endswith("grep -E &#39;^FAILED&#39; $S/orch-check-writes.txt")
+    assert result.split("</pre>")[0].endswith("grep -E &#39;^FAILED&#39; $S/check-writes.txt")
     assert '<p class="notice__meta">Completed (exit code 1: No matches found)</p>' in chat
     assert "tasks/ba64oymf1.output</span>" in chat
 

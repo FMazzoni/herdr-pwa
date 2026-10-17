@@ -122,7 +122,6 @@ class LoopState:
 
     running: bool = False
     ticks: int = 0
-    last_tick_at: float = 0.0
     read_error: str = ""
 
 
@@ -204,7 +203,6 @@ class Notifier:
             )
             self._managed.forget([agent.target for agent in snapshot.agents])
             self.state.ticks += 1
-            self.state.last_tick_at = self._clock()
             if step.slot is None:
                 return Tick(devices=len(devices), step=step)
             return Tick(devices=len(devices), step=step, sent=self._send(step.slot, devices))

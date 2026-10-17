@@ -3,6 +3,8 @@ name = "herdr-pwa"
 version = "2.0.0"
 description = "A self-hosted phone dashboard for watching and driving herdr agents."
 requires-python = ">=3.13"
+license = "MIT"
+license-files = ["LICENSE"]
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.34",

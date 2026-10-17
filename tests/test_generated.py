@@ -121,7 +121,6 @@ AGENT_FIELDS_MODELLED = {
     "revision",
     "name",
     "state_change_seq",
-    "tab_id",
     "terminal_title",
     "terminal_title_stripped",
     "title",
@@ -135,6 +134,7 @@ AGENT_FIELDS_IGNORED = {
     "launch_pending",  # likewise
     "screen_detection_skipped",
     "state_labels",  # detection-rule labels behind agent_status
+    "tab_id",  # a phone renders a feed, not a window manager: tabs are not modelled
     "terminal_id",  # pane_id is the address we use
     "tokens",  # usage counters, capped at 32 keys by the schema
 }
@@ -142,8 +142,6 @@ AGENT_FIELDS_IGNORED = {
 SNAPSHOT_FIELDS_MODELLED = {
     "agents",
     "focused_pane_id",
-    "focused_tab_id",
-    "focused_workspace_id",
     "panes",
     "protocol",
     "version",
@@ -151,7 +149,7 @@ SNAPSHOT_FIELDS_MODELLED = {
 }
 
 # A phone renders a feed, not a window manager, so the terminal geometry is not modelled.
-SNAPSHOT_FIELDS_IGNORED = {"layouts", "tabs"}
+SNAPSHOT_FIELDS_IGNORED = {"focused_tab_id", "focused_workspace_id", "layouts", "tabs"}
 
 
 def test_every_agent_field_is_either_modelled_or_knowingly_ignored() -> None:

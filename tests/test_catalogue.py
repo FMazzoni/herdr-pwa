@@ -1,4 +1,4 @@
-"""The screen catalogue: every named state draws, and the old app's names are all accounted for."""
+"""The screen catalogue: every named state draws, under a name of its own."""
 
 import re
 import threading
@@ -6,16 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.catalogue import (
-    LEGACY_KEYS,
-    NOT_YET,
-    STATES,
-    V2_ONLY,
-    State,
-    build,
-    pick,
-    ported,
-)
+from tests.catalogue import STATES, State, build, pick
 from tests.webfakes import SEND_KEYS, Hold
 
 # The fragments a page pulls in on load, which is where a broken screen usually breaks.
@@ -43,16 +34,9 @@ def test_every_state_draws_without_a_server_error(state: State, tmp_path: Path) 
         assert statuses == [(state.path, 401)]
 
 
-def test_every_old_key_is_either_ported_or_listed_as_not_yet() -> None:
-    assert set(ported()).isdisjoint(NOT_YET)
-    assert sorted([*ported(), *NOT_YET]) == sorted(LEGACY_KEYS)
-    assert len(LEGACY_KEYS) == len(set(LEGACY_KEYS)) == 89
-
-
-def test_names_are_unique_and_every_new_name_is_declared() -> None:
+def test_names_are_unique() -> None:
     names = [s.name for s in STATES]
     assert len(names) == len(set(names))
-    assert sorted(set(names) - set(LEGACY_KEYS)) == sorted(V2_ONLY)
 
 
 def test_a_tap_state_says_what_to_wait_for_before_tapping() -> None:

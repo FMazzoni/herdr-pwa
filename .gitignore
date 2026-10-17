@@ -4,10 +4,11 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .env
-/.agents
+/.agents/*
+!/.agents/skills/
 /evidence/
 /.claude/*
 !/.claude/settings.json
 !/.claude/hooks/
-!/.claude/skills/
+!/.claude/skills
 /.worktrees/

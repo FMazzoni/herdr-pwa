@@ -58,6 +58,18 @@ def test_every_script_a_page_runs_is_precached_and_linked_in_order(tmp_path: Pat
     assert linked[0] == "htmx.min.js"
 
 
+# htmx.org@2.0.10's dist/htmx.min.js as published: the vendored copy is upgraded by replacing the
+# file whole and both lines here, never by editing it.
+HTMX_VERSION = "2.0.10"
+HTMX_SHA256 = "71ea67185bfa8c98c39d31717c6fce5d852370fcdfd129db4543774d3145c0de"
+
+
+def test_the_vendored_htmx_is_the_published_release() -> None:
+    vendored = (STATIC_DIR / "htmx.min.js").read_bytes()
+    assert f'version:"{HTMX_VERSION}"'.encode() in vendored
+    assert hashlib.sha256(vendored).hexdigest() == HTMX_SHA256
+
+
 def test_the_cache_name_moves_only_when_precache_does() -> None:
     named = re.search(r'const CACHE_NAME = CACHE_PREFIX \+ "([^"]+)";', WORKER.read_text())
     assert named is not None

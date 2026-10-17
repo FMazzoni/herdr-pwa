@@ -174,6 +174,17 @@ def raise_for_error_frame(payload: Frame) -> None:
     raise EngineError(message, code=code)
 
 
+def _open_socket(purpose: str) -> socket.socket:
+    """A fresh Unix stream socket, its one failure that is not a connect said in words."""
+    try:
+        return socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    except OSError as exc:
+        why = f"could not open a socket {purpose}: {exc}"
+        if exc.errno in _EXHAUSTED:
+            why += "; there are no file descriptors left to open one with"
+        raise EngineUnavailable(why) from exc
+
+
 def _why_unreachable(path: Path, exc: OSError) -> str:
     """Say which of the "it isn't there" shapes a failed connect was."""
     if isinstance(exc, FileNotFoundError):
@@ -444,15 +455,12 @@ class SocketTransport:
         return sock
 
     def _new_socket(self) -> socket.socket:
-        """Create the descriptor, mapping the one failure that is not a connect."""
+        """Create the descriptor; failing to is a failed attempt, and backs off like one."""
         try:
-            return socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        except OSError as exc:
+            return _open_socket(f"to reach the runner at {self.path}")
+        except EngineUnavailable:
             self._penalise()
-            why = f"could not open a socket to reach the runner at {self.path}: {exc}"
-            if exc.errno in _EXHAUSTED:
-                why += "; there are no file descriptors left to open one with"
-            raise EngineUnavailable(why) from exc
+            raise
 
     def _why_unreachable(self, exc: OSError) -> str:
         """Say which of the three "it isn't there" shapes this was."""
@@ -614,13 +622,7 @@ class EventStream:
 
     def _connect(self) -> socket.socket:
         """A connection of this stream's own, registered so `close` can reach it."""
-        try:
-            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        except OSError as exc:
-            why = f"could not open a socket for the event stream: {exc}"
-            if exc.errno in _EXHAUSTED:
-                why += "; there are no file descriptors left to open one with"
-            raise EngineUnavailable(why) from exc
+        sock = _open_socket("for the event stream")
         with self._lock:
             if self._closed:
                 sock.close()

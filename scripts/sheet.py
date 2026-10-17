@@ -1,4 +1,4 @@
-"""A contact sheet: per state, the old app's screen beside this one's, both shot as an iPhone."""
+"""A contact sheet: per state, a saved shot beside this tree's, both shot as the same phone."""
 
 import argparse
 import base64
@@ -13,13 +13,10 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from geometry_gate import CACHE  # noqa: E402
 from shots import DEVICES, IPHONE, Device, missing_browser, shoot  # noqa: E402
 
-from tests.catalogue import NOT_YET, STATES, V2_ONLY, pick  # noqa: E402
+from tests.catalogue import STATES, pick  # noqa: E402
 
-# The old app's screens, shot once per device before its checkout was retired; never re-rendered.
-FROZEN = CACHE / "legacy-shots"
 SHEETS = ROOT / ".agents" / "sheets"
 TITLES = {s.name: s.title for s in STATES}
 
@@ -30,7 +27,6 @@ class Side:
 
     label: str
     shots: Path
-    missing: dict[str, str]
     device: Device = IPHONE
 
 
@@ -47,7 +43,7 @@ def _cell(side: Side, key: str, *, embed: bool, page: Path) -> str:
     if not shot.is_file():
         # A before folder shot before this device existed has no picture at its width.
         folder = side.shots / side.device.name
-        why = side.missing.get(key, "no screen" if folder.is_dir() else "no shot at this width")
+        why = "no screen" if folder.is_dir() else "no shot at this width"
         return f'<figure class="none">{head}<p>{html.escape(why)}</p></figure>'
     src = _image(shot, embed=embed, page=page)
     full = shot.with_suffix(".full.png")
@@ -108,22 +104,17 @@ def write_sheet(keys: list[str], left: Side, right: Side, page: Path, *, embed: 
     return page
 
 
-def _left(args: argparse.Namespace, device: Device) -> Side:
-    if args.left is not None:
-        return Side(args.left_label, args.left, {}, device)
-    missing = dict.fromkeys(V2_ONLY, "the old app had no screen of this name")
-    return Side("old app (frozen)", FROZEN, missing, device)
-
-
 def main(argv: list[str] | None = None) -> int:
     """Shoot both sides for the named states and write the sheet."""
     parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     parser.add_argument("keys", nargs="*", help="catalogue keys (default: every state)")
     parser.add_argument("--out", type=Path, help="the sheet's HTML path")
     parser.add_argument("--embed", action="store_true", help="one self-contained file, 1x PNGs")
-    parser.add_argument("--left", type=Path, help="a saved shots folder instead of the old app")
+    parser.add_argument(
+        "--left", type=Path, required=True, help="a saved shots folder (`just shots --out DIR`)"
+    )
     parser.add_argument("--left-label", default="before", help="the heading for --left")
-    parser.add_argument("--right-label", default="v2", help="the heading for this tree")
+    parser.add_argument("--right-label", default="after", help="the heading for this tree")
     parser.add_argument(
         "--device",
         choices=[d.name for d in DEVICES],
@@ -135,15 +126,13 @@ def main(argv: list[str] | None = None) -> int:
     if why:
         print(f"sheet: skipped, {why}")
         return 0
-    # An old key with no screen here yet still gets a row, so the gap is seen, not skipped.
-    shown = [k for k in args.keys if k not in NOT_YET]
-    states = pick(shown) if shown or not args.keys else []
-    keys = list(args.keys) or [s.name for s in states]
+    states = pick(args.keys)
+    keys = [s.name for s in states]
     work = SHEETS / time.strftime("%Y%m%d-%H%M%S")
     device = next(d for d in DEVICES if d.name == args.device)
-    left = _left(args, device)
-    failed = shoot(states, work / "v2", (device,), css_pixels=args.embed)
-    right = Side(args.right_label, work / "v2", NOT_YET, device)
+    left = Side(args.left_label, args.left, device)
+    failed = shoot(states, work / "after", (device,), css_pixels=args.embed)
+    right = Side(args.right_label, work / "after", device)
     page = write_sheet(keys, left, right, args.out or work / "index.html", embed=args.embed)
     for line in failed:
         print(f"  FAIL {line}")
