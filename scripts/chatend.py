@@ -263,6 +263,33 @@ def follow(driver: Marionette, base: str, tab: Tab, rig: Rig, home: Path) -> lis
     return problems + _scrolled_up_stays(driver, tab, rig, home)
 
 
+# How often the page fetched its own view: a swap would land it by the swap's pin, not the first.
+VIEW_READS = r"""
+const view = document.getElementById("agent-view");
+if (!view) return -1;
+const own = new URL(view.getAttribute("data-hp-poll"), location.href).href;
+return performance.getEntriesByType("resource").filter((e) => e.name === own).length;
+"""
+
+
+def cold(driver: Marionette, base: str, tab: Tab, _rig: Rig, _home: Path) -> list[str]:
+    """A tab loaded straight from its address, as a link, a restored tab or a bookmark opens it,
+    lands on its newest line with no swap to land it."""
+    driver.send("WebDriver:Navigate", {"url": base + tab.state.path})
+    seen = _wait_for(driver, tab.newest)
+    if not seen:
+        return [f"{tab.name}: never drew its newest line"]
+    if not seen.get("scrollable"):
+        return [f"{tab.name}: fits on one screen, so it proves nothing"]
+    reads = driver.script(VIEW_READS)
+    if reads != 0:
+        return [f"{tab.name}: fetched its view {reads} times, so a swap landed it, not the load"]
+    problems = _shown(seen, f"{tab.name}, loaded")
+    if _num(seen, "gap") > DRIFT:
+        problems.append(f"{tab.name}: loaded {_num(seen, 'gap'):.0f}px above the end")
+    return problems
+
+
 def asked(driver: Marionette, base: str, tab: Tab, _rig: Rig, _home: Path) -> list[str]:
     """An agent with a question open lands at the end like any other page, with the question
     after the newest line and it and every option on the first screen, above the dock."""
@@ -1467,6 +1494,8 @@ def _tabs() -> tuple[tuple[Tab, Callable[[Marionette, str, Tab, Rig, Path], list
         (Tab("pane unheard read", pane, last_line, _scroll_pane), unheard_read),
         (Tab("strip under a finger", strip, "", _say), strip_under_finger),
         (Tab("pane end", pane, last_line, _print), follow),
+        (Tab("pane cold", pane, last_line, _print), cold),
+        (Tab("chat cold", chat, last_reply, _say), cold),
         (Tab("pane nudged up", pane, last_line, _scroll_pane), scrolling_up(0.4, 10)),
         (Tab("pane scrolled up", pane, last_line, _scroll_pane), scrolling_up(0.05, 40)),
         (Tab("chat nudged up", chat, last_reply, _reply), scrolling_up(0.4, 10)),
