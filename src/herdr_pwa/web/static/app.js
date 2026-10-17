@@ -56,6 +56,9 @@
   document.addEventListener("htmx:afterSettle", function () {
     armTimers(document);
   });
+  document.addEventListener("DOMContentLoaded", function () {
+    armTimers(document);
+  });
 
   /* ---- A details the reader opened stays open across the polls that redraw it ----
    * A fold, a tool's result or any other disclosure in the view: each is keyed by the turn it

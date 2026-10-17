@@ -250,10 +250,6 @@
     swapY = detail.shouldSwap ? window.scrollY : null;
   });
 
-  document.addEventListener("DOMContentLoaded", function () {
-    armTimers(document);
-  });
-
   hp.bus.on("swapped:scroll", function (detail) {
     if (hp.isRead(detail)) {
       if (swapEnd) {
