@@ -229,3 +229,60 @@ def test_a_pad_key_drawn_under_another_screen_is_still_refused(tmp_path: Path) -
     result = send_key(rig(tmp_path, herd).writer, KeyAsk(S1, "enter", drawn_from=drawn))
     assert isinstance(result, Refused), result
     assert result.refusal is Refusal.SCREEN_CHANGED
+
+
+# herdr lags the dialog closing: measured live on hermes's /new confirm, the dialog left the
+# screen within 40ms of the key while herdr said blocked for about 260ms more, then done.
+AFTER_ANSWER = (FIXTURES / "hermes" / "answered-still-flagged.txt").read_text()
+
+
+def _answer_lands(herd: FakeHerd, _params: dict[str, JsonValue]) -> None:
+    herd.screens[P3] = [AFTER_ANSWER]
+
+    def herdr_catches_up(herd: FakeHerd, _params: dict[str, JsonValue]) -> None:
+        herd.agents[P3]["agent_status"] = "done"
+
+    def still_blocked(herd: FakeHerd, _params: dict[str, JsonValue]) -> None:
+        # The fake answers from live state, so the flip lands on the read after this one.
+        herd.after["agent.get"] = herdr_catches_up
+
+    herd.after["agent.get"] = still_blocked
+
+
+def _slash_confirm_rig(tmp_path: Path) -> Rig:
+    herd = FakeHerd()
+    herd.put(P3, S1, status="blocked")
+    herd.screens[P3] = [SLASH_CONFIRM]
+    return rig(tmp_path, herd)
+
+
+def test_the_screen_herdr_still_calls_blocked_holds_no_question() -> None:
+    assert not BlockedPrompt.parse(AFTER_ANSWER).identity
+
+
+def test_a_tap_that_landed_while_herdr_lagged_is_confirmed(tmp_path: Path) -> None:
+    r = _slash_confirm_rig(tmp_path)
+    r.herd.after[SEND_KEYS] = _answer_lands
+    drawn = control_token(BlockedPrompt.parse(SLASH_CONFIRM))
+    result = send_key(r.writer, KeyAsk(S1, "3", drawn_from=drawn))
+    assert isinstance(result, KeySent), result
+    assert (result.outcome, result.evidence) == (Outcome.CONFIRMED, Evidence.GONE)
+    assert result.prompt is None
+    outcomes = [rec.get("result") for rec in r.audit_records if rec["phase"] == "outcome"]
+    assert outcomes == ["confirmed:gone"]
+
+
+def test_a_dialog_back_after_a_blank_blocked_read_is_not_confirmed(tmp_path: Path) -> None:
+    r = _slash_confirm_rig(tmp_path)
+
+    def redrawn(herd: FakeHerd, _params: dict[str, JsonValue]) -> None:
+        # One read with the dialog mid-redraw, then the same question again: nothing landed.
+        herd.screens[P3] = [AFTER_ANSWER, SLASH_CONFIRM]
+
+    r.herd.after[SEND_KEYS] = redrawn
+    drawn = control_token(BlockedPrompt.parse(SLASH_CONFIRM))
+    result = send_key(r.writer, KeyAsk(S1, "3", drawn_from=drawn))
+    assert isinstance(result, KeySent), result
+    assert (result.outcome, result.evidence) == (Outcome.UNCONFIRMED, Evidence.UNMOVED)
+    assert result.prompt is not None
+    assert control_token(result.prompt) == drawn

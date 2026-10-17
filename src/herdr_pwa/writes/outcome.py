@@ -116,9 +116,7 @@ def _saw(poll: Poll, aimed: str) -> Evidence:
 def _settled(seen: _Run, *, ends: bool) -> Watched | None:
     if seen.gone >= GONE_POLLS:
         return Watched(Outcome.CONFIRMED, Evidence.GONE, None, seen.polls)
-    # Unread settles on one read: accepted claims nothing and draws no controls to be wrong about.
-    if seen.saw is Evidence.UNREAD:
-        return Watched(Outcome.ACCEPTED, Evidence.UNREAD, None, seen.polls)
+    # Unread never settles early: herdr says blocked for a few reads after a dialog has gone.
     if seen.moved >= MOVED_POLLS:
         ended = Outcome.UNCONFIRMED if ends else Outcome.CONFIRMED
         return Watched(ended, Evidence.MOVED, seen.poll, seen.polls)
@@ -129,6 +127,8 @@ def _spent(seen: _Run, *, ends: bool) -> Watched:
     # Report what the run mostly saw; a flicker qualifies it, never replaces it.
     if seen.saw is not Evidence.UNMOVED and seen.flickered:
         return Watched(Outcome.ACCEPTED, Evidence.FLICKER, None, seen.polls)
+    if seen.saw is Evidence.UNREAD:
+        return Watched(Outcome.ACCEPTED, Evidence.UNREAD, None, seen.polls)
     still = Outcome.UNCONFIRMED if ends else Outcome.ACCEPTED
     return Watched(still, Evidence.UNMOVED, seen.last, seen.polls)
 
