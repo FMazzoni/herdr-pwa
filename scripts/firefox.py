@@ -2,10 +2,13 @@
 
 import configparser
 import contextlib
+import fcntl
 import json
+import os
 import shutil
 import socket
 import subprocess
+import sys
 import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -22,6 +25,11 @@ CONNECT_SECONDS = 60.0
 # Each look at the port is a fresh connect, so look less often than at a page.
 CONNECT_STEP = 0.25
 POPUP_SECONDS = 10.0
+# Per user, so every browser job on the machine (gate, geometry, shots, a walk) queues for one
+# browser: several at once under load is where the 'worker died' and NOT LOADED reds came from.
+LOCK = Path.home() / ".cache" / "herdr-pwa-v2" / "geometry.lock"
+# The holder's descriptor for the lock, which its own workers inherit so they run under it.
+HELD_FD = "HP_BROWSER_LOCK_FD"
 
 PREFS = {
     "browser.shell.checkDefaultBrowser": "false",
@@ -131,6 +139,61 @@ def version() -> str:
     return f"{app.get('Vendor', '')} {app.get('Name', '')} {app.get('Version', '')}".strip()
 
 
+def inherited() -> tuple[int, ...]:
+    """The lock descriptor this process holds, for a worker to inherit; empty when it holds none."""
+    raw = os.environ.get(HELD_FD, "")
+    if not raw.isdigit():
+        return ()
+    fd = int(raw)
+    try:
+        mine, lock = os.fstat(fd), LOCK.stat()
+        if (mine.st_dev, mine.st_ino) != (lock.st_dev, lock.st_ino):
+            return ()
+        # Succeeds only on the holder's own open file, which a stray variable cannot fake.
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        return ()
+    return (fd,)
+
+
+def _holder() -> str:
+    return f"pid {os.getpid()} ({' '.join(sys.argv)}) in {Path.cwd()}"
+
+
+@contextmanager
+def held() -> Iterator[None]:
+    """Hold the per-user browser lock for the block; a second job waits and is told who has it."""
+    if inherited():
+        yield
+        return
+    LOCK.parent.mkdir(parents=True, exist_ok=True)
+    with LOCK.open("a+", encoding="utf-8") as handle:
+        try:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            handle.seek(0)
+            holder = handle.read().strip() or "a job that has not said who it is yet"
+            print(
+                f"browser lock: waiting for {holder} to finish; one browser job runs per machine",
+                file=sys.stderr,
+                flush=True,
+            )
+            fcntl.flock(handle, fcntl.LOCK_EX)
+        handle.truncate(0)
+        handle.write(_holder() + "\n")
+        handle.flush()
+        before = os.environ.get(HELD_FD)
+        os.environ[HELD_FD] = str(handle.fileno())
+        try:
+            yield
+        finally:
+            if before is None:
+                os.environ.pop(HELD_FD, None)
+            else:
+                os.environ[HELD_FD] = before
+            handle.truncate(0)
+
+
 def _connect(port: int, process: subprocess.Popen[bytes]) -> Marionette:
     driver: Marionette | None = None
 
@@ -148,8 +211,8 @@ def _connect(port: int, process: subprocess.Popen[bytes]) -> Marionette:
 
 @contextmanager
 def browser() -> Iterator[Marionette]:
-    """Headless Firefox on a throwaway profile, quit and deleted afterwards."""
-    with tempfile.TemporaryDirectory(prefix="hp-geometry-") as directory:
+    """Headless Firefox on a throwaway profile, quit and deleted afterwards, under the lock."""
+    with held(), tempfile.TemporaryDirectory(prefix="hp-geometry-") as directory:
         profile = Path(directory)
         port = free_port()
         prefs = {"marionette.port": str(port), **PREFS}

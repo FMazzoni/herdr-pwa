@@ -1,26 +1,22 @@
 """Run the geometry checks only when something they measure has changed, and record a pass."""
 
 import argparse
-import fcntl
 import hashlib
 import json
 import sys
 import time
 from pathlib import Path
-from typing import IO
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from scripts.firefox import available, version  # noqa: E402
+from scripts.firefox import available, held, version  # noqa: E402
 from tests.catalogue import CAPTURES  # noqa: E402
 
 # Per user rather than per worktree: a fresh worktree whose guarded files match a tree already
 # measured reuses that receipt. A cache of a result, never a record anyone reviews.
 CACHE = Path.home() / ".cache" / "herdr-pwa-v2"
 RECEIPTS = CACHE / "geometry"
-# Per user too, so parallel agents queue for one Firefox instead of five.
-LOCK = CACHE / "geometry.lock"
 
 # Everything that decides what the browser lays out, plus the harness itself.
 GUARDED = (
@@ -70,18 +66,6 @@ def fingerprint() -> str:
 def receipt(current: str) -> Path:
     """Where a green run for ``current`` leaves its receipt."""
     return RECEIPTS / f"{current}.json"
-
-
-def held() -> IO[str]:
-    """Take the per-user browser lock, saying so when another run already holds it."""
-    LOCK.parent.mkdir(parents=True, exist_ok=True)
-    handle = LOCK.open("w")
-    try:
-        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except OSError:
-        print("geometry: waiting for another run to release the browser lock", flush=True)
-        fcntl.flock(handle, fcntl.LOCK_EX)
-    return handle
 
 
 def run(current: str) -> int:

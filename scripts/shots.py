@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
+from firefox import held  # noqa: E402
 from geometry import HTMX_SETTLED, Switch, install, serve  # noqa: E402
 from playwright.sync_api import (  # noqa: E402
     Browser,
@@ -72,8 +73,8 @@ class Phone:
 
 @contextmanager
 def webkit() -> Iterator[Phone]:
-    """A running headless WebKit, closed afterwards."""
-    with sync_playwright() as p:
+    """A running headless WebKit, closed afterwards, under the same lock as every browser job."""
+    with held(), sync_playwright() as p:
         browser = p.webkit.launch()
         try:
             yield Phone(p, browser)
