@@ -31,7 +31,7 @@ class _Verdict(NamedTuple):
     found: bool
 
 
-class _Held:
+class _PerScreen:
     """Per session, one verdict, decided again only when its screen or status moves."""
 
     def __init__(self, held: int) -> None:
@@ -60,8 +60,8 @@ class Stalls:
     def __init__(self, roots: TranscriptRoots, *, held: int = MAX_HELD) -> None:
         """Read logs under *roots*, as the Chat tab does."""
         self._roots: TranscriptRoots = roots
-        self._stalls: _Held = _Held(held)
-        self._dialogs: _Held = _Held(held)
+        self._stalls: _PerScreen = _PerScreen(held)
+        self._dialogs: _PerScreen = _PerScreen(held)
 
     def of(self, agents: Iterable[Agent]) -> frozenset[str]:
         """The sessions among *agents* stopped on a full context."""
