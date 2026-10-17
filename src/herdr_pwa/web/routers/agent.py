@@ -9,6 +9,7 @@ from typing import Annotated, Final
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from markupsafe import Markup
+from pydantic import BaseModel, ConfigDict, Field
 
 from herdr_pwa import panetext
 from herdr_pwa.decisions import needs_you
@@ -49,22 +50,30 @@ def read_stats(web: WebState, agent: Agent) -> Stats:
     return stats_for(Reading(agent.agent or "", status, usage, now=web.wall()))
 
 
-def read_chat(
-    web: WebState,
-    agent: Agent,
-    *,
-    start: int | None = None,
-    before: int | None = None,
-    log: str = "",
-) -> ChatView:
+class ChatQuery(BaseModel):
+    """Which page of the chat the reader asked for, and which of the agent's logs it reads."""
+
+    # Frozen, so the shared _NEWEST default cannot be changed by one reader under another.
+    model_config = ConfigDict(frozen=True)
+
+    # `start` keeps what the reader already has, earlier pages included; `before` asks for one
+    # more page above it; neither is the newest page of messages.
+    start: int | None = Field(default=None, ge=0)
+    before: int | None = Field(default=None, ge=0)
+    log: str = Field(default="", max_length=200)
+
+
+_NEWEST: Final = ChatQuery()
+
+
+def read_chat(web: WebState, agent: Agent, query: ChatQuery = _NEWEST) -> ChatView:
     """The Chat tab's window: the newest page of messages, or the one the reader asked for."""
-    ask = Ask(messages=web.settings.chat_messages, start=start, before=before)
-    source = Source.of(
-        agent.session, agent_kind=agent.agent, root=web.settings.transcript_roots or None, log=log
-    )
+    ask = Ask(messages=web.settings.chat_messages, start=query.start, before=query.before)
+    roots = web.settings.transcript_roots
+    source = Source.of(agent.session, agent_kind=agent.agent, root=roots or None, log=query.log)
     page = chat_window(source, ask=ask, tails=web.tails)
-    said = doubt(agent, web.settings.transcript_roots)
-    drawn = start is not None or before is not None
+    said = doubt(agent, roots)
+    drawn = query.start is not None or query.before is not None
     # Every page reaches the newest turn, an earlier one included, so each says what is on its way.
     return chat_view(page, turning=_turning(web, agent), doubt=said, drawn=drawn)
 
@@ -140,15 +149,10 @@ def _page_route(router: APIRouter, web: WebState) -> None:
 def _view_routes(router: APIRouter, web: WebState) -> None:
     @router.get("/chat", dependencies=[Depends(hidden_tick)])
     def chat(  # pyright: ignore[reportUnusedFunction]
-        session: str,
-        start: Annotated[int | None, Query(ge=0)] = None,
-        before: Annotated[int | None, Query(ge=0)] = None,
-        log: Annotated[str, Query(max_length=200)] = "",
+        session: str, query: Annotated[ChatQuery, Query()]
     ) -> HTMLResponse:
-        # `start` keeps what the reader already has, earlier pages included; `before` asks for
-        # one more page above it; neither is the newest page of messages.
         agent = find_agent(web, session)
-        chat = read_chat(web, agent, start=start, before=before, log=log)
+        chat = read_chat(web, agent, query)
         context = {"agent": agent, "chat": chat}
         if chat.held:
             return web.pages.fragment("chat_note.html", context, headers=KEEP_DRAWN)

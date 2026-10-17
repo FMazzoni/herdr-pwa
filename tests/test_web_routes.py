@@ -503,6 +503,15 @@ def test_a_refresh_that_cannot_read_the_log_swaps_only_the_note(tmp_path: Path) 
     assert HELD not in healed.text
 
 
+@pytest.mark.parametrize("ask", ["start=-1", "before=-1", f"log={'x' * 201}"])
+def test_a_chat_ask_out_of_bounds_is_refused(tmp_path: Path, ask: str) -> None:
+    """The chat's query holds its bounds: no negative cursor, no log name past 200 characters."""
+    _talking(tmp_path)
+    rig = build_rig(tmp_path)
+    refused = rig.http.get(f"/agent/{WORKING_SESSION}/chat?{ask}", headers=FRAGMENT)
+    assert refused.status_code == 422
+
+
 def test_an_unreadable_log_on_opening_says_so_in_the_whole_view(tmp_path: Path) -> None:
     """Nothing is drawn yet, so there is nothing to keep: the view is drawn with its note."""
     _talking(tmp_path).chmod(0)
