@@ -28,6 +28,7 @@ const PRECACHE = [
   "/static/interrupt.js",
   "/static/folds.js",
   "/static/chatend.js",
+  "/static/voice.js",
   "/static/app.js",
   "/static/htmx.min.js",
   "/static/icon.svg",
