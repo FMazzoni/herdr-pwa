@@ -475,7 +475,6 @@ def test_a_pane_with_no_input_box_comes_back_untouched() -> None:
     text = "a\nb\nc"
     view = pane_view(text)
     assert [plain_text(line.runs) for line in view.lines] == ["a", "b", "c"]
-    assert view.draft == []
 
 
 @pytest.mark.parametrize(
@@ -512,7 +511,6 @@ def test_a_heavy_or_double_rule_is_a_rule_but_not_an_input_box_border() -> None:
     for glyph in ("━", "═", "┄", "—", "="):
         rule = glyph * 158
         view = pane_view(f"keep me\n{rule}\n\u276f draft\n{rule}\n st")
-        assert view.draft == [], glyph
         assert "st" in [plain_text(line.runs).strip() for line in view.lines], glyph
 
 
@@ -557,55 +555,11 @@ def test_the_chrome_comes_off_in_column_faithful_mode_too() -> None:
     """`strip` is a question about LAYOUT. Where text goes is a different one."""
     view = pane_view("out\n" + box(draft="hi", status=("s",)), strip=False)
     assert [plain_text(line.runs) for line in view.lines] == ["out"]
-    assert [plain_text(line) for line in view.draft] == ["hi"]
 
 
-# --------------------------------------------------------------------------
-# A draft stranded on the prompt line
-# --------------------------------------------------------------------------
-
-
-def test_a_recalled_draft_is_surfaced_with_take_over_offered() -> None:
+def test_a_draft_in_the_input_box_is_never_drawn() -> None:
     view = pane_view("out\n" + box(draft="fix the failing test", status=("s",)))
-    assert [plain_text(line) for line in view.draft] == ["fix the failing test"]
-    assert view.takeover is True
-
-
-def test_a_multi_line_draft_keeps_its_lines_and_loses_the_gutter() -> None:
-    """The TUI indents continuation rows under the text. That indent is chrome."""
-    tail = f"{BORDER}\n\u276f first line\n  second line\n{BORDER}\n st"
-    view = pane_view("out\n" + tail)
-    assert [plain_text(line) for line in view.draft] == ["first line", "second line"]
-
-
-def test_an_input_placeholder_is_not_a_draft() -> None:
-    """The TUI paints hint text on the prompt line when the box is EMPTY."""
-    view = pane_view("out\n" + box(draft="Press up to edit queued messages"))
-    assert view.draft == []
-    assert view.takeover is False
-
-
-def test_an_empty_prompt_line_is_not_a_draft() -> None:
-    assert pane_view("out\n" + box()).draft == []
-
-
-def test_take_over_is_withdrawn_for_an_opaque_paste_token() -> None:
-    """Claude collapses a long paste to '[Pasted text #N +M lines]'."""
-    view = pane_view("out\n" + box(draft="[Pasted text #3 +412 lines]"))
-    assert [plain_text(line) for line in view.draft] == ["[Pasted text #3 +412 lines]"]
-    assert view.takeover is False
-
-
-def test_a_draft_that_merely_quotes_the_paste_token_still_offers_take_over() -> None:
-    """Matched whole, never as a substring: this is somebody's real sentence."""
-    view = pane_view("out\n" + box(draft="why does [Pasted text #3 +2 lines] appear?"))
-    assert view.takeover is True
-
-
-def test_a_draft_is_kept_verbatim_and_not_padding_collapsed() -> None:
-    """It is a message somebody meant to send, not a pane to be made legible."""
-    view = pane_view("out\n" + box(draft="a" + " " * 20 + "b"))
-    assert [plain_text(line) for line in view.draft] == ["a" + " " * 20 + "b"]
+    assert [plain_text(line.runs) for line in view.lines] == ["out"]
 
 
 # --------------------------------------------------------------------------
