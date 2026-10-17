@@ -646,3 +646,18 @@ def test_a_launch_prompt_is_read_back_for_as_long_as_the_tui_takes_to_draw(tmp_p
     assert isinstance(result, AgentStarted)
     assert isinstance(result.first, PromptSent)
     assert result.first.verified
+
+
+def test_only_a_tab_launched_with_its_prompt_keeps_no_shell_history(tmp_path: Path) -> None:
+    r = argv_rig(tmp_path)
+    _ = start_agent(r.writer, ask(tmp_path, "opencode", prompt="fix it"), which=everywhere)
+    [tab] = r.herd.writes("tab.create")
+    # bash saves no history when HISTFILE is null, so the command line herdr typed is not kept.
+    assert tab["env"] == {"OPENCODE_CONFIG_CONTENT": OPENCODE_ASK, "HISTFILE": ""}
+    for kind, prompt in (("opencode", ""), ("claude", "fix it")):
+        r = listening_rig(tmp_path)
+        _ = start_agent(r.writer, ask(tmp_path, kind, prompt=prompt), which=everywhere)
+        [tab] = r.herd.writes("tab.create")
+        env = tab.get("env") or {}
+        assert isinstance(env, dict)
+        assert "HISTFILE" not in env

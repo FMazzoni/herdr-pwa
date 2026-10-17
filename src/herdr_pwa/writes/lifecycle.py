@@ -263,13 +263,16 @@ def _launch(writer: Writer, request: StartRequest, name: str) -> _Launched | Ref
     harness = launch_of(request.kind)
     if harness is None:
         return Refused(Refusal.BAD_KIND, "created")
+    prompt = request.prompt if harness.takes_prompt and request.prompt.strip() else ""
+    # herdr types the launch into the tab's shell, which would keep the prompt in its history file;
+    # a null HISTFILE saves none (bash(1), HISTFILE). Only this tab's shell, and only then.
+    env = {**harness.env, "HISTFILE": ""} if prompt else harness.env
     try:
         pane = writer.client.create_tab(
-            NewTab(request.workspace_id, request.cwd.strip(), name, env=harness.env)
+            NewTab(request.workspace_id, request.cwd.strip(), name, env=env)
         )
     except EngineError as exc:
         return Refused(refusal_for(exc), "created", detail=str(exc))
-    prompt = request.prompt if harness.takes_prompt and request.prompt.strip() else ""
     launch = Launch(name, request.kind, pane, harness.args(request.model, prompt))
     launched = _spawn(writer, launch, prompt)
     if isinstance(launched, Refused):
