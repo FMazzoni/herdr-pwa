@@ -38,68 +38,6 @@
     }
   }
 
-  /* A composer's draft survives navigation: kept per session in this tab only,
-   * restored as a value (never markup), dropped once sent or at a no-echo prompt. */
-  var DRAFT = "hp-draft:";
-
-  // The tab's or the device's storage, or null where reading it at all throws.
-  function storage(name) {
-    try {
-      return window[name];
-    } catch (err) {
-      return null;
-    }
-  }
-
-  function keep(box) {
-    var s = storage("sessionStorage");
-    if (!s) {
-      return;
-    }
-    try {
-      if (box.value) {
-        s.setItem(DRAFT + box.getAttribute("data-hp-draft"), box.value);
-      } else {
-        s.removeItem(DRAFT + box.getAttribute("data-hp-draft"));
-      }
-    } catch (err) {
-      /* storage full or blocked: the draft lives only in the box. */
-    }
-  }
-
-  function settle(within) {
-    var boxes = within.querySelectorAll("textarea[data-hp-draft]");
-    var s = storage("sessionStorage");
-    for (var i = 0; i < boxes.length; i++) {
-      var box = boxes[i];
-      var key = DRAFT + box.getAttribute("data-hp-draft");
-      var form = box.form;
-      var sent = form && form.querySelector("[data-hp-sent]");
-      try {
-        if (s && (sent || box.hasAttribute("data-hp-forget"))) {
-          s.removeItem(key);
-        } else if (s && !box.value) {
-          box.value = s.getItem(key) || "";
-        }
-      } catch (err) {
-        /* unreadable storage: nothing to restore. */
-      }
-    }
-  }
-
-  document.addEventListener("input", function (event) {
-    var box = event.target;
-    if (box && box.matches && box.matches("textarea[data-hp-draft]")) {
-      keep(box);
-    }
-  });
-  bus.on("swapped:restore", function (detail) {
-    settle(detail.elt.parentNode || document);
-  });
-  bus.on("ready:restore", function () {
-    settle(document);
-  });
-
   /* ---- Live updates: the server names a stale region, and the region fetches itself ----
    * One stream per page names the regions on it (data-hp-topic). An event carries only a
    * topic; the region then asks its own route, so every swap rule in this file still applies.
@@ -394,7 +332,7 @@
   if (columnsButton) {
     var kept = false;
     try {
-      var device = storage("localStorage");
+      var device = hp.storage("localStorage");
       kept = !!device && device.getItem(COLUMNS) === "1";
     } catch (err) {
       kept = false;
@@ -405,7 +343,7 @@
       var on = columnsButton.getAttribute("aria-pressed") !== "true";
       showColumns(columnsButton, on);
       try {
-        var device = storage("localStorage");
+        var device = hp.storage("localStorage");
         if (device) {
           device.setItem(COLUMNS, on ? "1" : "0");
         }
