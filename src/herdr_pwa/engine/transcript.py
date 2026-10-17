@@ -1796,7 +1796,7 @@ def _usage_of(record: ClaudeRecord) -> tuple[str, _Usage, str] | None:
     return message.id, message.usage, model
 
 
-def _count(value: int | None) -> int:
+def token_count(value: int | None) -> int:
     """One usage field as a non-negative int, whatever the provider actually wrote."""
     return value if value is not None and value > 0 else 0
 
@@ -1805,12 +1805,12 @@ def _add_usage(tally: SessionUsage, usage: _Usage, model: str) -> None:
     """Fold one message's usage into *tally*, in place."""
     details = usage.output_tokens_details
     tally.messages += 1
-    tally.input_tokens += _count(usage.input_tokens)
-    tally.output_tokens += _count(usage.output_tokens)
-    tally.cache_creation_tokens += _count(usage.cache_creation_input_tokens)
-    tally.cache_read_tokens += _count(usage.cache_read_input_tokens)
+    tally.input_tokens += token_count(usage.input_tokens)
+    tally.output_tokens += token_count(usage.output_tokens)
+    tally.cache_creation_tokens += token_count(usage.cache_creation_input_tokens)
+    tally.cache_read_tokens += token_count(usage.cache_read_input_tokens)
     if details is not None:
-        tally.thinking_tokens += _count(details.thinking_tokens)
+        tally.thinking_tokens += token_count(details.thinking_tokens)
     if model:
         # Claude Code answers from one provider, so the reference carries none.
         remember(tally, ModelRef(model))
@@ -1837,9 +1837,9 @@ def spend_of(tally: SessionUsage, ref: ModelRef) -> ModelSpend | None:
 def _prompt_size(usage: _Usage) -> int:
     """Everything that went UP with one message: fresh, cache-written, cache-read."""
     return (
-        _count(usage.input_tokens)
-        + _count(usage.cache_creation_input_tokens)
-        + _count(usage.cache_read_input_tokens)
+        token_count(usage.input_tokens)
+        + token_count(usage.cache_creation_input_tokens)
+        + token_count(usage.cache_read_input_tokens)
     )
 
 
