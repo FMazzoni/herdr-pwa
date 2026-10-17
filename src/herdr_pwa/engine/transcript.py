@@ -387,6 +387,26 @@ class _Opaque(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
 
+class _Queued(BaseModel):
+    """An ``attachment`` record's body: a ``queued_command`` is what the harness delivered mid-turn."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    type: Text = None
+    prompt: Text = None
+    origin: Annotated[RecordOrigin | None, OR_NONE] = None
+
+
+class _Launch(BaseModel):
+    """A tool result's ``toolUseResult``, as far as it says a background agent was started."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    status: Text = None
+    agent_id: Text = Field(default=None, validation_alias="agentId")
+    description: Text = None
+
+
 class ClaudeRecord(BaseModel):
     """One line of a Claude Code log, holding only the fields this reader looks at."""
 
@@ -420,6 +440,10 @@ class ClaudeRecord(BaseModel):
     # Measured: the harness writes a refused turn as an assistant record from model "<synthetic>".
     is_api_error: Flag = Field(default=None, validation_alias="isApiErrorMessage")
     error: Text = None
+    attachment: Annotated[_Queued | None, OR_NONE] = None
+    tool_use_result: Annotated[_Launch | None, OR_NONE] = Field(
+        default=None, validation_alias="toolUseResult"
+    )
 
 
 def claude_record(raw: bytes) -> ClaudeRecord | None:
@@ -960,7 +984,6 @@ def _take_forward(chunk: bytes, start: int, parse: TurnParser, gather: Gather) -
 
 _SKIP_TYPES: Final = frozenset(
     {
-        "attachment",
         "ai-title",
         "atis-latch",
         "file-history-delta",
@@ -1243,6 +1266,26 @@ def _local_command(record: ClaudeRecord, stamp: TurnStamp) -> TranscriptTurn | N
     return None
 
 
+# Measured: a notice or a peer's message delivered while a turn runs is written only as an
+# attachment of this type (943 notices and 140 messages on this box, 9 also as user records).
+_QUEUED: Final = "queued_command"
+
+
+def _delivered(record: ClaudeRecord) -> TaskNotice | PeerMessage | None:
+    """The task notice or peer message a queued-command attachment delivered, if it is one."""
+    queued = record.attachment
+    if queued is None or queued.type != _QUEUED:
+        return None
+    found = injected(queued.origin, queued.prompt or "", human=False)
+    # A prompt the person queued is not read here: only what the harness delivered.
+    return found if isinstance(found, TaskNotice | PeerMessage) else None
+
+
+def _queued_turn(record: ClaudeRecord, stamp: TurnStamp) -> TranscriptTurn | None:
+    found = _delivered(record)
+    return _injected_turn(found, stamp) if found is not None else None
+
+
 def _claude_turn(record: ClaudeRecord) -> TranscriptTurn | None:
     """One Claude Code JSONL record as a chat turn, or ``None`` to drop it."""
     kind = record.type
@@ -1253,6 +1296,8 @@ def _claude_turn(record: ClaudeRecord) -> TranscriptTurn | None:
     # Measured: /artifacts, /branch, /feedback and others are written this way, same tags.
     if kind == "system" and record.subtype == "local_command":
         return _local_command(record, stamp)
+    if kind == "attachment":
+        return _queued_turn(record, stamp)
     if kind in _SKIP_TYPES or record.message is None:
         return None
     return _message_turn(record, stamp)
@@ -1694,8 +1739,21 @@ class ModelSpend(Spend):
     ref: ModelRef
 
 
+class SpawnedAgent(BaseModel):
+    """An agent the session started in the background, by the task id its records name."""
+
+    task: str
+    description: str = ""
+    started: str = ""
+    # When a notice said it was over; a notice that it waits on its own work does not count.
+    done: bool = False
+    ended: str = ""
+    failed: bool = False
+
+
 class SessionUsage(Spend):
-    """What one session has spent, summed over every log its thread has lived in."""
+    """What one session has spent, summed over every log its thread has lived in, and the agents
+    it started in the background."""
 
     # The newest message's whole prompt: how full the window is now, not a total.
     context_tokens: int = 0
@@ -1711,6 +1769,7 @@ class SessionUsage(Spend):
     # When the newest prompt was sent, and when the newest record landed; empty when unknown.
     turn_started: str = ""
     last_at: str = ""
+    agents: list[SpawnedAgent] = Field(default_factory=list[SpawnedAgent])
 
 
 _SYNTHETIC_MODEL: Final = "<synthetic>"
@@ -1786,9 +1845,71 @@ class LiveTally(BaseModel):
     end: int = 0
 
 
+# Measured: a background agent's launch result, and its notices however they were delivered.
+_SPAWN_MARKS: Final = (b'"async_launched"', b"<task-notification>", b'"queued_command"')
+
+
 def _worth(raw: bytes) -> bool:
-    """Whether a line can carry usage or a prompt; everything else is not parsed at all."""
-    return b'"usage"' in raw or b'"promptSource"' in raw or b'"origin"' in raw
+    """Whether a line can carry usage, a prompt or a spawned agent; nothing else is parsed."""
+    if b'"usage"' in raw or b'"promptSource"' in raw or b'"origin"' in raw:
+        return True
+    return any(mark in raw for mark in _SPAWN_MARKS)
+
+
+_ASYNC_LAUNCHED: Final = "async_launched"
+
+
+def _spawned(tally: SessionUsage, task: str) -> SpawnedAgent:
+    """*task*'s entry in *tally*, added when this is the first record naming it."""
+    for agent in tally.agents:
+        if agent.task == task:
+            return agent
+    agent = SpawnedAgent(task=task)
+    tally.agents.append(agent)
+    return agent
+
+
+def _ending(record: ClaudeRecord) -> TaskNotice | PeerMessage | None:
+    """What *record* says ended a background agent: its notice, or its hand-back report.
+
+    Measured: an agent that hands back while its own work runs is told "waiting", and once
+    handed back its run is over, so no "finished" ever follows.
+    """
+    found = _delivered(record)
+    content = record.message.content if record.message is not None else None
+    if found is None and record.type == "user" and isinstance(content, str):
+        found = injected(record.origin, content, human=_is_human(record))
+    if isinstance(found, TaskNotice) and found.kind == "Agent" and not found.waiting:
+        return found
+    return found if isinstance(found, PeerMessage) and found.report else None
+
+
+def _launched(record: ClaudeRecord, tally: SessionUsage) -> bool:
+    launch = record.tool_use_result
+    if launch is None or launch.status != _ASYNC_LAUNCHED or not launch.agent_id:
+        return False
+    agent = _spawned(tally, launch.agent_id)
+    agent.description = launch.description or agent.description
+    agent.started = record.timestamp or agent.started
+    return True
+
+
+def _tally_spawned(record: ClaudeRecord, tally: SessionUsage) -> None:
+    """Add a background agent's launch or its ending to *tally*, if *record* is one."""
+    if _launched(record, tally):
+        return
+    found = _ending(record)
+    if found is None or not found.task:
+        return
+    agent = _spawned(tally, found.task)
+    notice = found if isinstance(found, TaskNotice) else None
+    if notice is not None and not agent.description:
+        agent.description = notice.detail
+    at = record.timestamp or ""
+    # Logs are read newest first, then their ancestors: the latest ending stands.
+    if not agent.done or at > agent.ended:
+        agent.done, agent.ended = True, at
+        agent.failed = notice is not None and notice.failed
 
 
 def _tally_log(path: Path, live: LiveTally, *, newest: bool, start: int = 0) -> int:
@@ -1828,6 +1949,7 @@ def _tally_line(raw: bytes, tally: SessionUsage, seen: set[str], *, newest: bool
     record = _record(raw)
     if newest and record.timestamp:
         tally.last_at = record.timestamp
+    _tally_spawned(record, tally)
     if record.type == "user" and not record.is_meta and _is_human(record):
         _tally_prompt(record, tally, seen, newest=newest)
         return

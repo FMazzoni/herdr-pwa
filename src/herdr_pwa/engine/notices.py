@@ -29,12 +29,14 @@ _DONE: Final = "completed"
 # Agent "<description>" failed: <why>, Agent "<description>" was stopped by Claude,
 # Background command "<command>" completed (exit code 1: No matches found),
 # Background command "<command>" failed with exit code 143, ... was stopped because <why>,
-# and Task "<description>" was stopped by main session.
+# Task "<description>" was stopped by main session, and Agent "<description>" is waiting on its
+# own background work, which is an agent that stopped but is not done: it notifies again.
 _SUMMARY: Final = re.compile(
     r'\A(Agent|Background command|Task) "(.*?)" '
-    r"((?:was )?(finished|completed|failed|killed|stopped)(?:\W.*)?)\Z",
+    r"((?:was |is )?(finished|completed|failed|killed|stopped|waiting)(?:\W.*)?)\Z",
     re.DOTALL,
 )
+_WAITING: Final = "waiting"
 _KINDS: Final = {"Agent": "Agent", "Background command": "Command", "Task": "Task"}
 _EXIT: Final = re.compile(r"exit code (-?\d+)")
 # What the harness puts in an agent's result in place of the report it delivers as a message.
@@ -99,7 +101,7 @@ class TaskNotice:
         found = _SUMMARY.match(self.summary)
         if found is None or found.group(3) == found.group(4):
             return ""
-        said = found.group(3).removeprefix("was ")
+        said = found.group(3).removeprefix("was ").removeprefix("is ")
         return said[:1].upper() + said[1:]
 
     @property
@@ -111,6 +113,12 @@ class TaskNotice:
         if code is None:
             return word
         return f"{word}, exit {code.group(1)}" if self.failed else f"exit {code.group(1)}"
+
+    @property
+    def waiting(self) -> bool:
+        """Whether its task stopped with work of its own still running, so it is not over."""
+        found = _SUMMARY.match(self.summary)
+        return found is not None and found.group(4) == _WAITING
 
     @property
     def said(self) -> str:

@@ -26,7 +26,7 @@ from herdr_pwa.web.deps import WebState, hidden_tick, viewer_guard
 from herdr_pwa.web.herd import agent_status, asked_by, find_agent
 from herdr_pwa.web.naming import page_title
 from herdr_pwa.web.routers.compose import answer_region, composer_region
-from herdr_pwa.web.stats import Reading, Stats, stats_for, turn_times
+from herdr_pwa.web.stats import Reading, Stats, spawned_times, stats_for, turn_times
 from herdr_pwa.web.writing import first_note
 from herdr_pwa.writes.resolve import doubt
 
@@ -85,11 +85,13 @@ def _turning(web: WebState, agent: Agent) -> Turning:
     # The prompt's stamp names the turn, so answering a question mid-turn keeps its verb; with
     # no tally, herdr's sequence, which it bumps on every status change, names the stretch.
     turn = usage.turn_started or str(agent.state_change_seq)
+    now = web.wall()
     return Turning(
         status=status,
         stretch=f"{agent.session}:{turn}",
         asked=asked_by(web, agent) if needs_you(status) else "",
-        times=turn_times(usage, web.wall()),
+        times=turn_times(usage, now),
+        spawned=spawned_times(usage, now),
     )
 
 
