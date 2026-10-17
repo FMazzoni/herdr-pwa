@@ -183,6 +183,28 @@ class Tab:
     scale: float = 1.0
 
 
+@dataclass(frozen=True)
+class WalkCtx:
+    """What one walk is handed: the browser, the app's address, the tab, its rig and its home."""
+
+    driver: Marionette
+    base: str
+    tab: Tab
+    rig: Rig
+    home: Path
+
+    def open(self) -> None:
+        """Load the tab's page from its address."""
+        self.driver.send("WebDriver:Navigate", {"url": self.base + self.tab.state.path})
+
+    def grow(self, n: int) -> str:
+        """Grow the tab by its ``n``th newest line; return that line's text."""
+        return self.tab.grow(self.rig, self.home, n)
+
+
+type Walk = Callable[[WalkCtx], list[str]]
+
+
 def _probe(driver: Marionette) -> dict[str, object]:
     found = driver.script(PROBE)
     return found if isinstance(found, dict) else {}
@@ -238,11 +260,12 @@ def _print(rig: Rig, _home: Path, n: int) -> str:
     return text
 
 
-def _scrolled_up_stays(driver: Marionette, tab: Tab, rig: Rig, home: Path) -> list[str]:
+def _scrolled_up_stays(ctx: WalkCtx) -> list[str]:
+    driver, tab = ctx.driver, ctx.tab
     driver.script("window.scrollTo(0, 200);")
     settle(driver, READER_STILL_MS)
     before = _num(_idle(driver), "scrollY")
-    newest = tab.grow(rig, home, 2)
+    newest = ctx.grow(2)
     driver.script(POKE)
     after = _num(_wait_for(driver, newest), "scrollY")
     if abs(after - before) <= DRIFT:
@@ -252,19 +275,20 @@ def _scrolled_up_stays(driver: Marionette, tab: Tab, rig: Rig, home: Path) -> li
     ]
 
 
-def follow(driver: Marionette, base: str, tab: Tab, rig: Rig, home: Path) -> list[str]:
+def follow(ctx: WalkCtx) -> list[str]:
     """Open on the end, follow a new line there, then scroll up and stay put."""
-    driver.send("WebDriver:Navigate", {"url": base + tab.state.path})
+    driver, tab = ctx.driver, ctx.tab
+    ctx.open()
     seen = _wait_for(driver, tab.newest)
     if not seen:
         return [f"{tab.name}: never drew its newest line"]
     if not seen.get("scrollable"):
         return [f"{tab.name}: fits on one screen, so it proves nothing"]
     problems = _shown(seen, f"{tab.name}, opened")
-    newest = tab.grow(rig, home, 1)
+    newest = ctx.grow(1)
     driver.script(POKE)
     problems += _shown(_wait_for(driver, newest), f"{tab.name}, after a poll at the end")
-    return problems + _scrolled_up_stays(driver, tab, rig, home)
+    return problems + _scrolled_up_stays(ctx)
 
 
 # How often the page fetched its own view: a swap would land it by the swap's pin, not the first.
@@ -276,10 +300,11 @@ return performance.getEntriesByType("resource").filter((e) => e.name === own).le
 """
 
 
-def cold(driver: Marionette, base: str, tab: Tab, _rig: Rig, _home: Path) -> list[str]:
+def cold(ctx: WalkCtx) -> list[str]:
     """A tab loaded straight from its address, as a link, a restored tab or a bookmark opens it,
     lands on its newest line with no swap to land it."""
-    driver.send("WebDriver:Navigate", {"url": base + tab.state.path})
+    driver, tab = ctx.driver, ctx.tab
+    ctx.open()
     seen = _wait_for(driver, tab.newest)
     if not seen:
         return [f"{tab.name}: never drew its newest line"]
@@ -363,14 +388,15 @@ class SlowLink:
 
 def slow_link(
     mount: Callable[[ASGIApp], None],
-) -> Callable[[Marionette, str, Tab, Rig, Path], list[str]]:
+) -> Walk:
     """The cold walk on a slow link, able to serve the app as one by remounting it."""
 
-    def walk(driver: Marionette, base: str, tab: Tab, rig: Rig, home: Path) -> list[str]:
+    def walk(ctx: WalkCtx) -> list[str]:
         """A frame that ran before chatend.js did leaves the page to land on its newest line."""
+        tab, rig = ctx.tab, ctx.rig
         link = SlowLink(rig.http.app)
         mount(link)
-        problems = cold(driver, base, tab, rig, home)
+        problems = cold(ctx)
         if not (link.held and link.framed.is_set()):
             return [*problems, f"{tab.name}: no frame ran before chatend.js, so it proves nothing"]
         return problems
@@ -378,10 +404,11 @@ def slow_link(
     return walk
 
 
-def asked(driver: Marionette, base: str, tab: Tab, _rig: Rig, _home: Path) -> list[str]:
+def asked(ctx: WalkCtx) -> list[str]:
     """An agent with a question open lands at the end like any other page, with the question
     after the newest line and it and every option on the first screen, above the dock."""
-    driver.send("WebDriver:Navigate", {"url": base + tab.state.path})
+    driver, tab = ctx.driver, ctx.tab
+    ctx.open()
     seen = _wait_for(driver, tab.newest)
     if not seen or seen.get("questionTop") is None or not seen.get("options"):
         return [f"{tab.name}: never drew its question, its options and its newest line"]
@@ -425,10 +452,11 @@ def _tall(driver: Marionette) -> dict[str, object]:
     return found if isinstance(found, dict) else {}
 
 
-def tall_question(driver: Marionette, base: str, tab: Tab, _rig: Rig, _home: Path) -> list[str]:
+def tall_question(ctx: WalkCtx) -> list[str]:
     """A question taller than the room between the bar and the dock lands with its first line
     just under the bar, not at the very end with only Interrupt showing."""
-    driver.send("WebDriver:Navigate", {"url": base + tab.state.path})
+    driver, tab = ctx.driver, ctx.tab
+    ctx.open()
     if not _until(lambda: bool(_tall(driver))):
         return [f"{tab.name}: never drew its question"]
     if tab.scale != 1.0:
@@ -461,9 +489,10 @@ def _jump(driver: Marionette) -> dict[str, object]:
     return found if isinstance(found, dict) else {}
 
 
-def waiting_pill(driver: Marionette, base: str, tab: Tab, _rig: Rig, _home: Path) -> list[str]:
+def waiting_pill(ctx: WalkCtx) -> list[str]:
     """Scrolled up from a waiting question, the reader is offered a way back, which works."""
-    driver.send("WebDriver:Navigate", {"url": base + tab.state.path})
+    driver, tab = ctx.driver, ctx.tab
+    ctx.open()
     if not _wait_for(driver, tab.newest):
         return [f"{tab.name}: never drew its newest line"]
     if _jump(driver).get("shown"):
@@ -508,9 +537,10 @@ def _tool_chat(turns: int) -> list[dict[str, JsonValue]]:
     ]
 
 
-def kept_open(driver: Marionette, base: str, tab: Tab, _rig: Rig, _home: Path) -> list[str]:
+def kept_open(ctx: WalkCtx) -> list[str]:
     """Open a tool's result far from the end; a poll leaves it open and the page where it was."""
-    driver.send("WebDriver:Navigate", {"url": base + tab.state.path})
+    driver, tab = ctx.driver, ctx.tab
+    ctx.open()
     if not _wait_for(driver, tab.newest) or not driver.script(OPEN_RESULT):
         return [f"{tab.name}: never drew its tool result"]
     settle(driver, READER_STILL_MS)
@@ -593,9 +623,10 @@ def _fold_problems(name: str, seen: dict[str, object], *, opened: bool) -> list[
     return problems
 
 
-def burst(driver: Marionette, base: str, tab: Tab, _rig: Rig, home: Path) -> list[str]:
+def burst(ctx: WalkCtx) -> list[str]:
     """Land folded; open a fold and a call in it; a poll that adds a call leaves both open."""
-    driver.send("WebDriver:Navigate", {"url": base + tab.state.path})
+    driver, tab, home = ctx.driver, ctx.tab, ctx.home
+    ctx.open()
     if not _wait_for(driver, tab.newest):
         return [f"{tab.name}: never drew its reply"]
     landed = driver.script(READ_FOLD)
@@ -684,11 +715,10 @@ return { ...window.__hpStrip, busy: !!busy, there: !!document.getElementById("ag
 STRIP_STALE = "htmx.trigger(document.getElementById('agent-stats'), 'hp:stale');"
 
 
-def strip_under_finger(
-    driver: Marionette, base: str, tab: Tab, _rig: Rig, _home: Path
-) -> list[str]:
+def strip_under_finger(ctx: WalkCtx) -> list[str]:
     """The stats strip's redraw waits while a finger is down, and lands once it lifts."""
-    driver.send("WebDriver:Navigate", {"url": base + tab.state.path})
+    driver, tab = ctx.driver, ctx.tab
+    ctx.open()
     if not _read_until(driver, READ_STRIP, lambda s: bool(s.get("there")) and not s.get("busy")):
         return [f"{tab.name}: the strip never drew"]
     driver.script(FINGER, "touchstart")
@@ -726,16 +756,17 @@ return { heard: window.__hpHeard, swaps: window.__hpSwaps, scrollY: window.scrol
 UNHEARD_PX = 400
 
 
-def unheard_scroll(driver: Marionette, base: str, tab: Tab, rig: Rig, home: Path) -> list[str]:
+def unheard_scroll(ctx: WalkCtx) -> list[str]:
     """A write's swap that lands before the reader's scroll is heard does not keep them pinned."""
-    driver.send("WebDriver:Navigate", {"url": base + tab.state.path})
+    driver, tab = ctx.driver, ctx.tab
+    ctx.open()
     seen = _wait_for(driver, tab.newest)
     if not seen or not seen.get("scrollable"):
         return [f"{tab.name}: never drew a page tall enough to scroll"]
     up = driver.script(UNHEARD, UNHEARD_PX)
     if not _read_until(driver, HEARD, lambda s: _num(s, "heard") >= 1):
         return [f"{tab.name}: the reader's scroll was never heard"]
-    tab.grow(rig, home, 1)
+    ctx.grow(1)
     driver.script(POKE)
     after = _read_until(driver, HEARD, lambda s: _num(s, "swaps") >= 1 and not s.get("busy"))
     if not after or not isinstance(up, int | float):
@@ -784,13 +815,14 @@ return { up: seen.up, heard: seen.heard || 0, atEnd: seen.atEnd || 0, swaps: see
 """
 
 
-def unheard_read(driver: Marionette, base: str, tab: Tab, rig: Rig, home: Path) -> list[str]:
+def unheard_read(ctx: WalkCtx) -> list[str]:
     """The view's redraw that lands before the reader's scroll is heard does not pull them back."""
-    driver.send("WebDriver:Navigate", {"url": base + tab.state.path})
+    driver, tab = ctx.driver, ctx.tab
+    ctx.open()
     seen = _wait_for(driver, tab.newest)
     if not seen or not seen.get("scrollable"):
         return [f"{tab.name}: never drew a page tall enough to scroll"]
-    tab.grow(rig, home, 1)
+    ctx.grow(1)
     driver.script(UNHEARD_READ, UNHEARD_PX)
 
     def landed() -> dict[str, object]:
@@ -948,8 +980,9 @@ def _refreshes(driver: Marionette, hub: Hub, newest: str) -> int:
     return _count(driver)
 
 
-def _open_live(driver: Marionette, base: str, tab: Tab, rig: Rig) -> list[str]:
-    driver.send("WebDriver:Navigate", {"url": base + tab.state.path})
+def _open_live(ctx: WalkCtx) -> list[str]:
+    driver, tab, rig = ctx.driver, ctx.tab, ctx.rig
+    ctx.open()
     if not _wait_for(driver, tab.newest):
         return [f"{tab.name}: never drew its newest turn"]
     if not _until(lambda: _hub(rig).listeners >= 1):
@@ -959,9 +992,10 @@ def _open_live(driver: Marionette, base: str, tab: Tab, rig: Rig) -> list[str]:
     return []
 
 
-def twenty(driver: Marionette, base: str, tab: Tab, _rig: Rig, _home: Path) -> list[str]:
+def twenty(ctx: WalkCtx) -> list[str]:
     """A tool-heavy transcript opens on twenty messages, with a way to the page above."""
-    driver.send("WebDriver:Navigate", {"url": base + tab.state.path})
+    driver, tab = ctx.driver, ctx.tab
+    ctx.open()
     if not _wait_for(driver, tab.newest):
         return [f"{tab.name}: never drew its newest turn"]
     seen = driver.script(EARLIER, "")
@@ -975,10 +1009,11 @@ def twenty(driver: Marionette, base: str, tab: Tab, _rig: Rig, _home: Path) -> l
     return problems
 
 
-def earlier(driver: Marionette, base: str, tab: Tab, _rig: Rig, _home: Path) -> list[str]:
+def earlier(ctx: WalkCtx) -> list[str]:
     """Load earlier lands a page above the reader, who stays on the message they were reading,
     even when the page was short enough that the reader was also at the end."""
-    driver.send("WebDriver:Navigate", {"url": base + tab.state.path})
+    driver, tab = ctx.driver, ctx.tab
+    ctx.open()
     if not _wait_for(driver, tab.newest):
         return [f"{tab.name}: never drew its newest turn"]
     driver.script("window.scrollTo(0, 0);")
@@ -1021,9 +1056,10 @@ def _click_earlier() -> str:
     return 'document.querySelector(".chat__earlier-button").click(); return true;'
 
 
-def refreshed_once(driver: Marionette, base: str, tab: Tab, rig: Rig, home: Path) -> list[str]:
+def refreshed_once(ctx: WalkCtx) -> list[str]:
     """A live page does not poll, and one change to the transcript is exactly one refresh."""
-    problems = _open_live(driver, base, tab, rig)
+    driver, tab, rig, home = ctx.driver, ctx.tab, ctx.rig, ctx.home
+    problems = _open_live(ctx)
     if problems:
         return problems
     if quiet := _quiet_count(driver):
@@ -1052,12 +1088,13 @@ def _refusing(app: ASGIApp) -> ASGIApp:
 
 def falls_back(
     mount: Callable[[ASGIApp], None],
-) -> Callable[[Marionette, str, Tab, Rig, Path], list[str]]:
+) -> Walk:
     """The stream-loss walk, able to take the stream down by remounting the app."""
 
-    def walk(driver: Marionette, base: str, tab: Tab, rig: Rig, home: Path) -> list[str]:
+    def walk(ctx: WalkCtx) -> list[str]:
         """With the stream gone the page polls; once it is back the polling stops."""
-        problems = _open_live(driver, base, tab, rig)
+        driver, tab, rig, home = ctx.driver, ctx.tab, ctx.rig, ctx.home
+        problems = _open_live(ctx)
         if problems:
             return problems
         hub = _hub(rig)
@@ -1136,15 +1173,16 @@ def _walked(driver: Marionette) -> dict[str, object]:
     return found if isinstance(found, dict) else {}
 
 
-def _redraw_while(driver: Marionette, tab: Tab, rig: Rig, home: Path) -> int:
+def _redraw_while(ctx: WalkCtx) -> int:
     """Redraw the region on a cadence until the reader's walk is done; the last count drawn."""
+    driver = ctx.driver
     n = 1
 
     def walked() -> bool:
         nonlocal n
         if _walked(driver).get("done"):
             return True
-        tab.grow(rig, home, n)
+        ctx.grow(n)
         driver.script(POKE)
         n += 1
         return False
@@ -1181,23 +1219,22 @@ def _walk_problems(name: str, walk: dict[str, object], travelled: int) -> list[s
     return problems
 
 
-def scrolling_up(
-    every: float, count: int
-) -> Callable[[Marionette, str, Tab, Rig, Path], list[str]]:
+def scrolling_up(every: float, count: int) -> Walk:
     """The walk for one cadence: ``count`` steps up, one every ``every`` seconds."""
 
-    def walk(driver: Marionette, base: str, tab: Tab, rig: Rig, home: Path) -> list[str]:
+    def walk(ctx: WalkCtx) -> list[str]:
         """Scroll up from the end in small steps while the region is redrawn: never pulled
         back, and the line being read stays where it was across every redraw."""
-        driver.send("WebDriver:Navigate", {"url": base + tab.state.path})
+        driver, tab = ctx.driver, ctx.tab
+        ctx.open()
         seen = _wait_for(driver, tab.newest)
         if not seen or not seen.get("scrollable"):
             return [f"{tab.name}: never drew a page taller than the screen"]
         driver.script(SCROLL_UP, STEP, round(every * 1000), count)
-        n = _redraw_while(driver, tab, rig, home)
+        n = _redraw_while(ctx)
         if not _walked(driver).get("done"):
             return [f"{tab.name}: the reader's walk never finished"]
-        newest = tab.grow(rig, home, n)
+        newest = ctx.grow(n)
         # A poke while a redraw is in flight is dropped (htmx's default sync), so poke until
         # the newest line is drawn.
         poked = _until(lambda: _poked(driver, newest), step=REDRAW_SECONDS)
@@ -1424,11 +1461,12 @@ def _swap_problems(name: str, found: object) -> list[str]:
     return problems
 
 
-def keyboard_up(driver: Marionette, base: str, tab: Tab, rig: Rig, home: Path) -> list[str]:
+def keyboard_up(ctx: WalkCtx) -> list[str]:
     """With the keyboard up, scroll up through the chat while it is redrawn: the composer rides
     the band's bottom edge at every step, the keyboard reads as open throughout, and the reader
     is neither pulled back nor moved."""
-    driver.send("WebDriver:Navigate", {"url": base + tab.state.path})
+    driver, tab = ctx.driver, ctx.tab
+    ctx.open()
     seen = _wait_for(driver, tab.newest)
     if not seen or not seen.get("scrollable"):
         return [f"{tab.name}: never drew a page taller than the band"]
@@ -1438,8 +1476,8 @@ def keyboard_up(driver: Marionette, base: str, tab: Tab, rig: Rig, home: Path) -
     pans = [f"{tab.name}: a pan of the band moved the pinned page {moves}x"] if moves else []
     pans += _swap_problems(tab.name, driver.script_async(SWAP, SWAP_TOPS))
     driver.script(SCROLL_UP, STEP, 50, KEYBOARD_STEPS)
-    n = _redraw_while(driver, tab, rig, home)
-    newest = tab.grow(rig, home, n)
+    n = _redraw_while(ctx)
+    newest = ctx.grow(n)
     poked = _until(lambda: _poked(driver, newest), step=REDRAW_SECONDS)
     if not poked or not _wait_for(driver, newest):
         return [f"{tab.name}: the redraw after the reader stopped never landed"]
@@ -1512,10 +1550,11 @@ def _kept(name: str, was: dict[str, object], now: dict[str, object]) -> list[str
     return problems
 
 
-def locked(driver: Marionette, base: str, tab: Tab, _rig: Rig, home: Path) -> list[str]:
+def locked(ctx: WalkCtx) -> list[str]:
     """A refresh that cannot read the log (its harness holds the store locked) keeps the turns
     drawn and the reader on the one they were reading, says so under them, and heals."""
-    driver.send("WebDriver:Navigate", {"url": base + tab.state.path})
+    driver, tab, home = ctx.driver, ctx.tab, ctx.home
+    ctx.open()
     if not _wait_for(driver, tab.newest):
         return [f"{tab.name}: never drew its newest turn"]
     driver.script("window.scrollTo(0, 400);")
@@ -1568,10 +1607,11 @@ return { fresh: !!strip && !strip.__hpOld, busy: !!busy, open: !!(sheet && sheet
 """
 
 
-def stats_open(driver: Marionette, base: str, tab: Tab, _rig: Rig, _home: Path) -> list[str]:
+def stats_open(ctx: WalkCtx) -> list[str]:
     """A reader at the end with the stats sheet open stays at the end, the sheet still open, when
     the strip redraws: the sheet sits in the sticky bar, so it is part of the page's height."""
-    driver.send("WebDriver:Navigate", {"url": base + tab.state.path})
+    driver, tab = ctx.driver, ctx.tab
+    ctx.open()
     if not _wait_for(driver, tab.newest):
         return [f"{tab.name}: never drew its newest line"]
     sheet = driver.script(OPEN_SHEET)
@@ -1599,7 +1639,7 @@ def stats_open(driver: Marionette, base: str, tab: Tab, _rig: Rig, _home: Path) 
     return problems
 
 
-def _tabs() -> tuple[tuple[Tab, Callable[[Marionette, str, Tab, Rig, Path], list[str]]], ...]:
+def _tabs() -> tuple[tuple[Tab, Walk], ...]:
     blocked = runner(lambda: herd(**BLOCKED), long_pane(LINES) + capture(MENU))
     chat = State("chat", f"{AGENT}?tab=chat", "", runner(snapshot_frame), long_chat(TURNS))
     pane = State("pane", f"{AGENT}?tab=pane", "", runner(snapshot_frame, long_pane(LINES)))
@@ -1661,7 +1701,7 @@ def _tabs() -> tuple[tuple[Tab, Callable[[Marionette, str, Tab, Rig, Path], list
 
 def _walks(
     mount: Callable[[ASGIApp], None],
-) -> list[tuple[Tab, Callable[[Marionette, str, Tab, Rig, Path], list[str]]]]:
+) -> list[tuple[Tab, Walk]]:
     chat = State("stream loss", f"{AGENT}?tab=chat", "", runner(snapshot_frame), long_chat(TURNS))
     lost = State(chat.name, chat.path, "", chat.replies, chat.transcript, settings=LIVE_SETTINGS)
     slow = State("slow link", f"{AGENT}?tab=chat", "", runner(snapshot_frame), long_chat(TURNS))
@@ -1697,7 +1737,7 @@ def run(
         first = driver.handles()[0]
         phone_window(driver, tab.width, tab.height)
         try:
-            problems += walk(driver, base, tab, rig, home)
+            problems += walk(WalkCtx(driver, base, tab, rig, home))
         finally:
             driver.send("WebDriver:CloseWindow", {})
             driver.send("WebDriver:SwitchToWindow", {"handle": first})
