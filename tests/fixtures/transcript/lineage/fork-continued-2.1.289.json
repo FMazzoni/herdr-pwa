@@ -1,0 +1,23 @@
+{
+ "advisorModel": "claude-opus-5-5",
+ "apiBlockIndex": 0,
+ "cwd": "(redacted for the fixture)",
+ "effort": "medium",
+ "entrypoint": "cli",
+ "gitBranch": "(redacted for the fixture)",
+ "isSidechain": false,
+ "message": "(redacted for the fixture)",
+ "parentUuid": "0000002c-0000-0000-0000-000000000000",
+ "perTurnEffort": "medium",
+ "requestId": "(redacted for the fixture)",
+ "requestedModel": "claude-opus-5-5",
+ "serverClassifierRequest": "(redacted for the fixture)",
+ "sessionId": "5e55000b-0000-0000-0000-000000000000",
+ "session_id": "5e55000a-0000-0000-0000-000000000000",
+ "slug": "(redacted for the fixture)",
+ "timestamp": "2026-10-16T23:15:09.413Z",
+ "type": "assistant",
+ "userType": "external",
+ "uuid": "0000002d-0000-0000-0000-000000000000",
+ "version": "2.1.296"
+}

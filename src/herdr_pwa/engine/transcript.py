@@ -558,17 +558,30 @@ def _background_handoff(path: Path) -> bool:
     return False
 
 
-def _last_timestamp(path: Path) -> str:
-    """The newest ``timestamp`` in *path*, from a bounded tail read."""
+def _tail_window(path: Path) -> bytes:
+    """The last ``_TAIL_BYTES`` of *path*, or empty if it cannot be read."""
     try:
         size = path.stat().st_size
         with path.open("rb") as handle:
             handle.seek(max(0, size - _TAIL_BYTES))
-            window = handle.read(_TAIL_BYTES)
+            return handle.read(_TAIL_BYTES)
     except OSError:
-        return ""
-    for raw in reversed(window.split(b"\n")):
+        return b""
+
+
+def _last_timestamp(path: Path) -> str:
+    """The newest ``timestamp`` in *path*, from a bounded tail read."""
+    for raw in reversed(_tail_window(path).split(b"\n")):
         stamp = _record(raw).timestamp
+        if stamp:
+            return stamp
+    return ""
+
+
+def _last_writer(path: Path) -> str:
+    """The session whose stamp is on *path*'s newest stamped record, from a bounded tail read."""
+    for raw in reversed(_tail_window(path).split(b"\n")):
+        stamp = _record(raw).stamp
         if stamp:
             return stamp
     return ""
@@ -609,66 +622,99 @@ def _copies(directory: Path) -> dict[str, list[Path]]:
     return edges
 
 
-def _descendants(session: str, edges: dict[str, list[Path]]) -> list[Path]:
-    """Every log downstream of *session*, breadth-first, bounded and cycle-safe."""
-    seen = {session}
-    frontier = [session]
+# One step of the walk: a log's session name, and its path once contained to the root.
+_Hop = tuple[str, Path]
+
+
+@dataclass(slots=True)
+class _Lineage:
+    """What every hop of one walk shares: where it may go, who it is for, what it has seen."""
+
+    base: Path
+    session: str
+    edges: dict[str, list[Path]]
+    seen: set[str]
+
+
+def _descendants(named: Path, lineage: _Lineage) -> list[Path]:
+    """Every log downstream of *named* that may replace its parent, breadth-first and bounded."""
+    lineage.seen.add(lineage.session)
+    frontier: list[_Hop] = [(lineage.session, named)]
     found: list[Path] = []
     for _ in range(_MAX_HOPS):
-        onward = _one_hop(frontier, edges, seen, found)
-        if not onward:
+        frontier = _one_hop(frontier, lineage)
+        if not frontier:
             return found
-        frontier = onward
+        found.extend(path for _, path in frontier)
     return found
 
 
-def _one_hop(
-    frontier: list[str], edges: dict[str, list[Path]], seen: set[str], found: list[Path]
-) -> list[str]:
-    """The unseen children of *frontier*, recorded into *seen* and *found*."""
-    onward: list[str] = []
-    for parent in frontier:
-        for child in edges.get(parent, ()):
-            if child.stem in seen:
-                continue
-            seen.add(child.stem)
-            found.append(child)
-            onward.append(child.stem)
+def _one_hop(frontier: list[_Hop], lineage: _Lineage) -> list[_Hop]:
+    """The unseen children of *frontier* that each hold no less than the log they came from."""
+    onward: list[_Hop] = []
+    for parent, path in frontier:
+        children = [
+            child for child in lineage.edges.get(parent, ()) if child.stem not in lineage.seen
+        ]
+        lineage.seen.update(child.stem for child in children)
+        # Per edge, not off the named file: every hop after a compacted handoff is smaller than it.
+        floor = _size(path)
+        if floor is not None:
+            onward += _admitted(children, lineage, floor)
     return onward
+
+
+def _admitted(children: list[Path], lineage: _Lineage, floor: int) -> list[_Hop]:
+    """The *children* that may replace a log of *floor* bytes, each contained to the root."""
+    found: list[_Hop] = []
+    for child in children:
+        resolved = _eligible(child, lineage, floor)
+        if resolved is not None:
+            found.append((child.stem, resolved))
+    return found
+
+
+def _size(path: Path) -> int | None:
+    """*path*'s size in bytes, or ``None`` when it cannot be read."""
+    try:
+        return path.stat().st_size
+    except OSError:
+        return None
 
 
 def _follow(named: Path, session: str, base: Path) -> Path:
     """*named*, or the copy the conversation continued in. Never LESS history."""
     newest = _last_timestamp(named)
-    try:
-        floor = named.stat().st_size
-    except OSError:
-        return named
     if not newest:
         return named
     best = named
-    for candidate in _descendants(session, _copies(named.parent)):
-        resolved = _eligible(candidate, base, floor)
-        if resolved is None:
-            continue
-        stamp = _last_timestamp(resolved)
+    lineage = _Lineage(base, session, _copies(named.parent), set())
+    for candidate in _descendants(named, lineage):
+        stamp = _last_timestamp(candidate)
         if stamp > newest:
-            best, newest = resolved, stamp
+            best, newest = candidate, stamp
     return best
 
 
-def _eligible(candidate: Path, base: Path, floor: int) -> Path | None:
+def _eligible(candidate: Path, lineage: _Lineage, floor: int) -> Path | None:
     """*candidate* resolved, if it may replace a log of *floor* bytes, else ``None``."""
     # Contained to the same root the named file came through, never a union of roots.
-    resolved = _contained(candidate, base)
+    resolved = _contained(candidate, lineage.base)
     if resolved is None:
         return None
     try:
-        if resolved.stat().st_size < floor and not _background_handoff(resolved):
-            return None
+        smaller = resolved.stat().st_size < floor
     except OSError:
         return None
+    if smaller and not _waived(resolved, lineage.session):
+        return None
     return resolved
+
+
+def _waived(path: Path, session: str) -> bool:
+    """Whether *path* may hold less than its parent: a compacted handoff, or *session* writing it."""
+    # Measured on 2.1.289: a compaction can move the session into a smaller foreground copy.
+    return _background_handoff(path) or _last_writer(path) == session
 
 
 def _in_root(base: Path, session: str, *, follow: bool) -> Path | None:
