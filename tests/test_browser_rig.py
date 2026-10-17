@@ -122,8 +122,10 @@ def test_a_direct_geometry_run_holds_the_lock_over_all_its_workers(
 
     monkeypatch.setattr(geometry, "drive", drive)
 
+    monkeypatch.setattr(sys, "argv", ["geometry.py", "--only", geometry.HISTORY])
+
     def start() -> None:
-        geometry.main(["--only", geometry.HISTORY])
+        geometry.main()
 
     _queues_behind(lock, launched, start)
 
@@ -243,9 +245,9 @@ def test_one_state_whose_browser_fails_reports_itself_and_the_rest_of_its_chunk_
     bad = chunk[1]
     measured: list[str] = []
 
-    def run_state(
-        _driver: object, state: geometry.State, _base: str, _size: object, _tally: object
-    ) -> None:
+    def run_state(*args: object) -> None:
+        state = args[1]
+        assert isinstance(state, geometry.State)
         if state.name == bad:
             raise geometry.BrowserError("getComputedStyle: Argument 1 is not an object")
         measured.append(state.name)

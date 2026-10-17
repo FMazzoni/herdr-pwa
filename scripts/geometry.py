@@ -777,28 +777,22 @@ def _strings(value: object) -> list[str]:
     return [str(v) for v in value] if isinstance(value, list) else []
 
 
-def _states(task: Task, driver: Marionette, base: str, switch: Switch, scratch: Path) -> Tally:
-    """Run a chunk of states at one size; one state's browser failure is that state's alone."""
-    tally = Tally()
-    size = Size(int(str(task["width"])), float(str(task["scale"])))
-    phone_window(driver, size.width, HEIGHT)
-    for state in pick(_strings(task["names"])):
-        try:
-            mounted = install(switch, state, scratch)
-            tally.problems += [f"{size.label(state.name)}: {p}" for p in mounted]
-            run_state(driver, state, base, size, tally)
-        except BrowserError as exc:
-            tally.problems.append(f"{size.label(state.name)}: the browser failed: {exc}")
-    driver.send("WebDriver:CloseWindow", {})
-    driver.send("WebDriver:SwitchToWindow", {"handle": driver.handles()[0]})
-    return tally
-
-
 def _do(task: Task, driver: Marionette, base: str, switch: Switch, scratch: Path) -> Tally:
-    """Run one task in this worker's browser."""
-    if task["kind"] == "states":
-        return _states(task, driver, base, switch, scratch)
+    """Run one task in this worker's browser; one state's browser failure is that state's alone."""
     tally = Tally()
+    if task["kind"] == "states":
+        size = Size(int(str(task["width"])), float(str(task["scale"])))
+        phone_window(driver, size.width, HEIGHT)
+        for state in pick(_strings(task["names"])):
+            try:
+                mounted = install(switch, state, scratch)
+                tally.problems += [f"{size.label(state.name)}: {p}" for p in mounted]
+                run_state(driver, state, base, size, tally)
+            except BrowserError as exc:
+                tally.problems.append(f"{size.label(state.name)}: the browser failed: {exc}")
+        driver.send("WebDriver:CloseWindow", {})
+        driver.send("WebDriver:SwitchToWindow", {"handle": driver.handles()[0]})
+        return tally
     module = str(task["module"])
     if module == CHAT_END and task.get("names"):
         only = frozenset(_strings(task["names"]))
@@ -877,19 +871,6 @@ def _ask(process: subprocess.Popen[str], task: Task) -> str:
     return stdout.readline()
 
 
-def _spawn() -> subprocess.Popen[str]:
-    command = [sys.executable, str(Path(__file__).resolve()), "--worker"]
-    # The worker inherits the run's lock descriptor, so it runs under the lock, not beside it.
-    return subprocess.Popen(
-        command,
-        cwd=ROOT,
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        text=True,
-        pass_fds=inherited(),
-    )
-
-
 def _bury(process: subprocess.Popen[str]) -> None:
     if process.poll() is None:
         process.kill()
@@ -899,8 +880,8 @@ def _bury(process: subprocess.Popen[str]) -> None:
 def drive(work: list[Task], jobs: int) -> Tally:
     """Hand ``work`` to ``jobs`` workers, each with its own server and browser, and add up.
 
-    A task whose worker dies runs once more in a fresh worker, and the report says so; a task
-    whose worker dies twice fails.
+    A task whose worker dies goes back on the queue and runs once more, and the report says so;
+    a task whose worker dies twice fails. Fresh workers are started for what a death left over.
     """
     queue: Queue[Task] = Queue()
     for task in work:
@@ -917,37 +898,46 @@ def drive(work: list[Task], jobs: int) -> Tally:
             tally.retries.append(label)
         queue.put({**task, "retried": True})
 
-    def feed(process: subprocess.Popen[str] | None) -> None:
+    def feed(process: subprocess.Popen[str]) -> None:
         while True:
             try:
                 task = queue.get_nowait()
             except Empty:
                 break
-            # A dead worker is replaced only when there is a task for its successor.
-            process = process or _spawn()
             line = _ask(process, task)
-            if line:
-                with lock:
-                    _merge(tally, dict(_LINE.validate_json(line)))
-                continue
-            _bury(process)
-            died(task)
-            process = None
-        if process is None:
-            return
+            if not line:
+                _bury(process)
+                died(task)
+                return
+            with lock:
+                _merge(tally, dict(_LINE.validate_json(line)))
         if process.stdin is not None:
             process.stdin.close()
         if process.wait() != 0:
             with lock:
                 tally.problems.append(f"a geometry worker exited {process.returncode}")
 
-    threads = [
-        threading.Thread(target=feed, args=(_spawn(),)) for _ in range(max(1, min(jobs, len(work))))
-    ]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join()
+    command = [sys.executable, str(Path(__file__).resolve()), "--worker"]
+    while not queue.empty():
+        # Each worker inherits the run's lock descriptor, so it runs under the lock, not beside it.
+        processes = [
+            subprocess.Popen(
+                command,
+                cwd=ROOT,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                text=True,
+                pass_fds=inherited(),
+            )
+            for _ in range(max(1, min(jobs, queue.qsize())))
+        ]
+        threads = [threading.Thread(target=feed, args=(p,)) for p in processes]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        for process in processes:
+            _bury(process)
     return tally
 
 
