@@ -1494,6 +1494,14 @@ LIFECYCLE: Final = (
         title="Started, and not yet an agent",
     ),
     State(
+        "starting-first-unverified",
+        "/starting/w1:p9?first=unverified",
+        # No Pane tab here yet, so the note says where to look and Check again keeps it.
+        'main .banner--held ~ .actions a[href$="?first=unverified"]',
+        runner(snapshot_frame),
+        title="Started, its first prompt not seen on the pane, and not yet an agent",
+    ),
+    State(
         "agent-first-block",
         DOOR,
         "main .keys--pad",
@@ -1807,6 +1815,7 @@ V2_ONLY: Final = (
     "pane-long",
     "chat-unsupported",
     "agent-first-unverified",
+    "starting-first-unverified",
     "usage-chat",
     "usage-long-turn",
     "usage-crowded",

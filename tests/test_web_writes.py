@@ -297,6 +297,37 @@ def test_the_starting_door_redirects_once_there_is_a_session(tmp_path: Path) -> 
     assert response.headers["location"] == f"/agent/{S1}"
 
 
+@pytest.mark.parametrize("first", ["unverified", "sent", "not_ready"])
+def test_the_starting_door_carries_a_known_first_note_to_the_agent_page(
+    tmp_path: Path, first: str
+) -> None:
+    w = idle(tmp_path)
+    response = w.http.get(f"/starting/w1:p3?first={first}", follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == f"/agent/{S1}?first={first}"
+
+
+def test_the_starting_door_never_echoes_an_unknown_first_into_the_redirect(
+    tmp_path: Path,
+) -> None:
+    w = idle(tmp_path)
+    response = w.http.get("/starting/w1:p3?first=%3Cscript%3E", follow_redirects=False)
+    assert response.headers["location"] == f"/agent/{S1}"
+
+
+def test_the_starting_door_says_where_an_unverified_first_prompt_can_be_checked(
+    tmp_path: Path,
+) -> None:
+    herd = FakeHerd()
+    herd.put(P5, "", status="idle", launch_pending=True)
+    page = web(tmp_path, herd).http.get("/starting/w1:p5?first=unverified").text
+    banner = re.search(r'<p class="banner banner--held">.*?</p>', page, re.S)
+    assert banner is not None, "the carried prompt's banner"
+    assert "once it is up" in banner[0], "this page has no Pane tab, so it says where to look"
+    assert "banner__go" not in banner[0]
+    assert 'href="/starting/w1%3Ap5?first=unverified"' in page, "checking again keeps the note"
+
+
 def test_the_starting_door_sends_a_pad_key_to_a_session_less_agent(tmp_path: Path) -> None:
     herd = FakeHerd()
     herd.put(P3, "", status="blocked", launch_pending=True)

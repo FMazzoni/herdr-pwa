@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from typing import Annotated, Final
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -33,6 +34,7 @@ from herdr_pwa.web.writing import (
     opened,
     raise_if_gone,
     ticked,
+    with_first,
 )
 from herdr_pwa.writes.answer import KeyAsk, KeySent, send_key, send_starting_key
 from herdr_pwa.writes.guard import asks_a_question
@@ -324,8 +326,11 @@ def _door_page(router: APIRouter, web: WebState) -> None:
         target = address_of(pane)
         agent = web.client.snapshot().by_target(target)
         if agent is not None and agent.session:
-            return RedirectResponse(agent_url(agent.session), status_code=303)
-        context = {**_door_context(target, agent), "first": first_note(first)}
+            return RedirectResponse(with_first(agent_url(agent.session), first), status_code=303)
+        context = {
+            **_door_context(target, agent, first=first),
+            "first": first_note(first, pane_tab=False),
+        }
         return web.pages.page("starting.html", context)
 
 
@@ -355,8 +360,12 @@ def _door_writes(router: APIRouter, writes: WriteRoutes) -> None:
         return _door(web, target, _Knock(result, key=key.strip().lower()))
 
 
-def _door_context(pane: PaneId, agent: Agent | None, text: str = "") -> dict[str, object]:
-    return {"pane": pane, "agent": agent, "pad": DOOR_KEYS, "text": text}
+def _door_context(
+    pane: PaneId, agent: Agent | None, text: str = "", *, first: str = ""
+) -> dict[str, object]:
+    # Checking again keeps the first prompt's note, which the redirect then carries on.
+    again = with_first(f"/starting/{quote(pane, safe='')}", first)
+    return {"pane": pane, "agent": agent, "pad": DOOR_KEYS, "text": text, "again": again}
 
 
 @dataclass(frozen=True, slots=True)
