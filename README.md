@@ -61,3 +61,8 @@ same recipe.
 Tests never touch a real herdr session: they run against captured output in
 `tests/fixtures/` (see its README). `just live-session` starts a throwaway herdr session
 for driving the app by hand. `docs/design.md` covers how the phone screens are built.
+
+## Licence
+
+MIT, see `LICENSE`. The collie screens vendored under `tests/fixtures/foreign/collie/`
+keep their own MIT notice beside them.
