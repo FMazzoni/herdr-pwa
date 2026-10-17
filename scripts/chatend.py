@@ -1465,8 +1465,6 @@ const line = sheet.querySelector("summary").getBoundingClientRect().height;
 if (!sheet.open) sheet.querySelector("summary").click();
 return { open: sheet.open, grew: sheet.getBoundingClientRect().height - line };
 """
-# Safari has no scroll anchoring (MDN, overflow-anchor); Firefox's would hide a move under the bar.
-NO_ANCHORING = "document.documentElement.style.overflowAnchor = 'none';"
 # Mark the strip as drawn before, then have it redraw itself as the stream would.
 STATS_STALE = r"""
 document.getElementById("agent-stats").__hpOld = true;
@@ -1488,7 +1486,6 @@ def stats_open(driver: Marionette, base: str, tab: Tab, _rig: Rig, _home: Path) 
     driver.send("WebDriver:Navigate", {"url": base + tab.state.path})
     if not _wait_for(driver, tab.newest):
         return [f"{tab.name}: never drew its newest line"]
-    driver.script(NO_ANCHORING)
     sheet = driver.script(OPEN_SHEET)
     if not isinstance(sheet, dict) or not sheet.get("open") or _num(sheet, "grew") <= DRIFT:
         return [f"{tab.name}: the stats sheet would not open taller than its line: {sheet}"]
