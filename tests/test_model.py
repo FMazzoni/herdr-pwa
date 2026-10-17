@@ -423,6 +423,17 @@ def test_every_cursor_glyph_reads_as_a_menu_row_and_not_only_as_a_cursor(
     assert p.shape is MenuShape.SINGLE_CHOICE
 
 
+def test_a_bracketed_number_is_a_row_too() -> None:
+    p = BlockedPrompt.parse("Proceed?\n\n\u276f [1] Yes\n  [2] No\n")
+    assert [(o.number, o.label) for o in p.options] == [(1, "Yes"), (2, "No")]
+    assert p.shape is MenuShape.SINGLE_CHOICE
+
+
+@pytest.mark.parametrize("rows", ["[1. Yes\n  [2. No", "1] Yes\n  2] No", "[1) Yes\n  [2) No"])
+def test_a_half_bracketed_number_is_not_a_row(rows: str) -> None:
+    assert BlockedPrompt.parse(f"Proceed?\n\n\u276f {rows}\n").options == ()
+
+
 HERMES_CLARIFY = (
     "  \u250a \u2753 preparing clarify\u2026\n"
     "\u256d\u2500 Hermes needs your input \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e\n"

@@ -29,6 +29,7 @@ class _Source(BaseModel):
 
     commit: str = ""
     captures: str = ""
+    glob: str = "*"
 
 
 class _Meta(BaseModel):
@@ -46,9 +47,12 @@ class _Ledger(BaseModel):
 
 
 def sources() -> dict[str, dict[str, str]]:
-    """Each clone's pinned commit and captures directory, as the ledger recorded them."""
+    """Each clone's pinned commit, captures directory and file pattern, as the ledger recorded them."""
     found = _Ledger.model_validate_json(LEDGER_PATH.read_bytes()).meta.foreign_sources
-    return {name: {"commit": s.commit, "captures": s.captures} for name, s in found.items()}
+    return {
+        name: {"commit": s.commit, "captures": s.captures, "glob": s.glob}
+        for name, s in found.items()
+    }
 
 
 def head(clone: Path) -> str | None:

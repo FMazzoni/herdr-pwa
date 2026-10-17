@@ -20,7 +20,15 @@ must see past it. The spaces after the bar stay, so an option's indented
 description keeps its depth.
 """
 
-OPTION_RE = re.compile(r"^\s*[>\u276f▸▶‣*\-•]?\s*(\d{1,2})\s*[.):]\s+(?P<label>\S.*?)\s*$")
+OPTION_RE = re.compile(
+    r"^\s*[>\u276f▸▶‣*\-•]?\s*(?P<open>\[)?(?P<number>\d{1,2})(?(open)\]|\s*[.):])"
+    r"\s+(?P<label>\S.*?)\s*$"
+)
+"""One numbered row: ``1. Yes``, ``2) No``, or hermes's bracketed ``[1] Approve Once``.
+
+The bracket must close on the same number it opened on, so ``[1. x`` and ``1] x``
+are not rows: a half-bracketed number is prose, not a menu.
+"""
 
 _DIVIDER_RE = re.compile(r"^[\s─━╌╍┄┅┈┉═—=_·•\-]{4,}$")
 
@@ -969,7 +977,8 @@ def _unboxed(line: str) -> str:
     column's body: a plan's numbered steps beside its outline are not options.
     """
     tail = _TRAILING_SIDE_RE.match(line)
-    return tail.group(1) if tail is not None else line
+    # The pad up to the closing side goes too: a padded blank row would read as a rule.
+    return tail.group(1).rstrip() if tail is not None else line
 
 
 def _panel_footer(lines: list[str]) -> list[str]:
@@ -1013,7 +1022,7 @@ def _upto_last_option(inside: list[str]) -> list[str]:
 def _trailing_menu(lines: list[str]) -> list[tuple[int, int, str]] | None:
     """The ``1..n`` option run anchored at the end of the viewport, or ``None``."""
     matches = [
-        (i, int(m.group(1)), m.group("label"))
+        (i, int(m.group("number")), m.group("label"))
         for i, line in enumerate(lines)
         if (m := OPTION_RE.match(line))
     ]

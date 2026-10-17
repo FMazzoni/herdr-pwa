@@ -544,7 +544,7 @@ def test_the_anchor_is_the_only_thing_refusing_that_shape() -> None:
     text = read("capture-idle-numbered-recap", "detection").replace(
         "\u25cf 1. README.md", "  1. README.md"
     )
-    numbers = [int(m.group(1)) for line in text.splitlines() if (m := OPTION_RE.match(line))]
+    numbers = [int(m.group("number")) for line in text.splitlines() if (m := OPTION_RE.match(line))]
     assert numbers == [1, 2, 3], (
         "the option run is no longer buildable from this capture, so "
         "test_a_numbered_recap_with_the_terminal_below_it_is_refused would "
