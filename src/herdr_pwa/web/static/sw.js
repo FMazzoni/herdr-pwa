@@ -23,6 +23,7 @@ const PRECACHE = [
   "/static/drafts.js",
   "/static/backnav.js",
   "/static/sendhold.js",
+  "/static/stream.js",
   "/static/geometry.js",
   "/static/chatend.js",
   "/static/app.js",
