@@ -8,7 +8,7 @@ from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from pathlib import Path
-from typing import Annotated, ClassVar, Final, NamedTuple, Protocol, override
+from typing import Annotated, BinaryIO, ClassVar, Final, NamedTuple, Protocol, override
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter, ValidationError
 
@@ -70,6 +70,11 @@ MAX_USAGE_BYTES: Final = 64 * 1024 * 1024
 _CHUNK: Final = 256 * 1024
 
 _HEAD_BYTES: Final = 64 * 1024
+
+# Measured: the largest compact summary on this box is 28 KB, the record a cut stamp rides.
+_HEAD_FINISH: Final = 256 * 1024
+
+_FINISH_STEP: Final = 16 * 1024
 
 _TAIL_BYTES: Final = 64 * 1024
 
@@ -474,12 +479,30 @@ def _contained(path: Path, base: Path) -> Path | None:
 
 
 def _head_window(path: Path) -> bytes:
-    """The first ``_HEAD_BYTES`` of *path*, or empty if it cannot be read."""
+    """The first ``_HEAD_BYTES`` of *path*, the record they cut finished, or empty if unreadable."""
     try:
         with path.open("rb") as handle:
-            return handle.read(_HEAD_BYTES)
+            window = handle.read(_HEAD_BYTES)
+            if len(window) < _HEAD_BYTES or window.endswith(b"\n"):
+                return window
+            return window + _rest_of_record(handle)
     except OSError:
         return b""
+
+
+def _rest_of_record(handle: BinaryIO) -> bytes:
+    """The bytes through the next newline, or none if it is further than ``_HEAD_FINISH``."""
+    # Measured on 2.1.283: a handoff's parent stamp rides a compact summary the window cuts.
+    taken = bytearray()
+    while len(taken) < _HEAD_FINISH:
+        step = handle.read(min(_FINISH_STEP, _HEAD_FINISH - len(taken)))
+        end = step.find(b"\n")
+        if end >= 0:
+            return bytes(taken + step[: end + 1])
+        if not step:
+            return b""
+        taken += step
+    return b""
 
 
 def _head_records(window: bytes) -> Iterator[ClaudeRecord]:
@@ -587,7 +610,7 @@ def _last_writer(path: Path) -> str:
     return ""
 
 
-# A log's head never changes once the file outgrows the window, so its parent is read once.
+# A head never changes once the file outgrows the window and its finish, so it is read once.
 _HEADS: Final[dict[tuple[str, int, int, int], str]] = {}
 
 _HEADS_MAX: Final = 4096
@@ -599,7 +622,7 @@ def _copied_from_cached(path: Path) -> str:
         stat = path.stat()
     except OSError:
         return ""
-    key = (str(path), stat.st_dev, stat.st_ino, min(stat.st_size, _HEAD_BYTES))
+    key = (str(path), stat.st_dev, stat.st_ino, min(stat.st_size, _HEAD_BYTES + _HEAD_FINISH))
     found = _HEADS.get(key)
     if found is None:
         if len(_HEADS) >= _HEADS_MAX:
