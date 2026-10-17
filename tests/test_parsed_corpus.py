@@ -24,6 +24,7 @@ FIXTURES = _foreign.REPO / "tests" / "fixtures"
 GOLDEN = FIXTURES / "parsed-corpus.json"
 FOREIGN_PREFIX = "foreign/"
 COLOUR_SUFFIX = "#ansi"
+ESCAPE = "\x1b"
 
 # The screens this repo captured, as text reads; the four sources of a capture each count.
 _TEXT_GLOBS = ("capture-*/*.txt", "hermes/*.txt")
@@ -59,11 +60,13 @@ def screens(root: Path) -> dict[str, Path]:
 
 
 def parse(key: str, path: Path) -> BlockedPrompt:
-    """The prompt *path* parses to, read the way its kind of capture is read."""
+    """The prompt *path* parses to, read the way the app reads a blocked pane."""
     raw = path.read_text(encoding="utf-8", errors="replace")
-    if key.endswith(COLOUR_SUFFIX):
-        return BlockedPrompt.parse(as_text_read(raw), ansi=raw)
-    return BlockedPrompt.parse(raw)
+    # A text capture with escapes still in it is a colour read under another name.
+    if not key.endswith(COLOUR_SUFFIX) and ESCAPE not in raw:
+        return BlockedPrompt.parse(raw)
+    # herdr strips a text read before the app sees it; the colour read is the capture itself.
+    return BlockedPrompt.from_reads(as_text_read(raw), lambda: raw)
 
 
 def described(prompt: BlockedPrompt) -> dict[str, JsonValue]:
@@ -116,6 +119,11 @@ def test_no_screen_parses_to_anything_but_what_it_was_pinned_to(corpus_root: Pat
         if golden.get(key) != now
     }
     assert not changed, changed
+
+
+def test_no_screen_reaches_the_grammar_with_its_escapes_in(corpus_root: Path) -> None:
+    raw = {key for key, path in screens(corpus_root).items() if ESCAPE in parse(key, path).raw}
+    assert not raw, sorted(raw)
 
 
 def test_the_walk_reaches_every_kind_of_capture(corpus_root: Path) -> None:

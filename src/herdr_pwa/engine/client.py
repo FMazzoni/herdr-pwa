@@ -473,19 +473,20 @@ class HerdrClient:
         text = self.read(
             target, replace(options, source=wire_request.ReadSource.detection, colour=False)
         )
-        prompt = BlockedPrompt.parse(text, target=target, session=session)
-        if not prompt.wants_colour:
-            return prompt
+        return BlockedPrompt.from_reads(
+            text, lambda: self._colour_read(target, options), target=target, session=session
+        )
+
+    def _colour_read(self, target: PaneId, options: ReadOptions) -> str | None:
+        """The visible viewport in colour, or ``None`` when the read fails."""
         try:
             # The detection buffer answers colour reads stripped (measured on
             # the rig); the visible viewport is the one that keeps the SGR.
-            visible = replace(options, source=wire_request.ReadSource.visible, colour=True)
-            ansi = self.read(target, visible)
+            return self.read(
+                target, replace(options, source=wire_request.ReadSource.visible, colour=True)
+            )
         except EngineError:
-            return prompt
-        # Text and colour from this one read: beside an older text read, a cursor may sit on a moved row.
-        text = panetext.as_text_read(ansi)
-        return BlockedPrompt.parse(text, target=target, session=session, ansi=ansi)
+            return None
 
     # ----------------------------------------------------------------------
     # Writes -- every one of these fails closed on an unexpected protocol
