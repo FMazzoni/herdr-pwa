@@ -1,0 +1,4718 @@
+{
+  "tests/fixtures/capture-blocked-askuserquestion-menu/detection.txt": {
+    "shape": "single-choice",
+    "question": "Should I force-push to main?",
+    "body": "☐ Push?\nShould I force-push to main?",
+    "options": [
+      [
+        1,
+        "Force-push",
+        null
+      ],
+      [
+        2,
+        "Open a PR instead",
+        null
+      ],
+      [
+        3,
+        "Do nothing",
+        null
+      ],
+      [
+        4,
+        "Type something.",
+        null
+      ],
+      [
+        5,
+        "Chat about this",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "enter",
+        "select"
+      ],
+      [
+        "up",
+        "navigate"
+      ],
+      [
+        "down",
+        "navigate"
+      ],
+      [
+        "esc",
+        "cancel"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "ff5a7fe0e37af100",
+    "token": "ff5a7fe0e37af100"
+  },
+  "tests/fixtures/capture-blocked-askuserquestion-menu/recent-unwrapped.txt": {
+    "shape": "single-choice",
+    "question": "Should I force-push to main?",
+    "body": "☐ Push?\nShould I force-push to main?",
+    "options": [
+      [
+        1,
+        "Force-push",
+        null
+      ],
+      [
+        2,
+        "Open a PR instead",
+        null
+      ],
+      [
+        3,
+        "Do nothing",
+        null
+      ],
+      [
+        4,
+        "Type something.",
+        null
+      ],
+      [
+        5,
+        "Chat about this",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "enter",
+        "select"
+      ],
+      [
+        "up",
+        "navigate"
+      ],
+      [
+        "down",
+        "navigate"
+      ],
+      [
+        "esc",
+        "cancel"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "ff5a7fe0e37af100",
+    "token": "ff5a7fe0e37af100"
+  },
+  "tests/fixtures/capture-blocked-askuserquestion-menu/recent.txt": {
+    "shape": "single-choice",
+    "question": "Should I force-push to main?",
+    "body": "☐ Push?\nShould I force-push to main?",
+    "options": [
+      [
+        1,
+        "Force-push",
+        null
+      ],
+      [
+        2,
+        "Open a PR instead",
+        null
+      ],
+      [
+        3,
+        "Do nothing",
+        null
+      ],
+      [
+        4,
+        "Type something.",
+        null
+      ],
+      [
+        5,
+        "Chat about this",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "enter",
+        "select"
+      ],
+      [
+        "up",
+        "navigate"
+      ],
+      [
+        "down",
+        "navigate"
+      ],
+      [
+        "esc",
+        "cancel"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "ff5a7fe0e37af100",
+    "token": "ff5a7fe0e37af100"
+  },
+  "tests/fixtures/capture-blocked-askuserquestion-menu/visible.txt": {
+    "shape": "single-choice",
+    "question": "Should I force-push to main?",
+    "body": "☐ Push?\nShould I force-push to main?",
+    "options": [
+      [
+        1,
+        "Force-push",
+        null
+      ],
+      [
+        2,
+        "Open a PR instead",
+        null
+      ],
+      [
+        3,
+        "Do nothing",
+        null
+      ],
+      [
+        4,
+        "Type something.",
+        null
+      ],
+      [
+        5,
+        "Chat about this",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "enter",
+        "select"
+      ],
+      [
+        "up",
+        "navigate"
+      ],
+      [
+        "down",
+        "navigate"
+      ],
+      [
+        "esc",
+        "cancel"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "ff5a7fe0e37af100",
+    "token": "ff5a7fe0e37af100"
+  },
+  "tests/fixtures/capture-blocked-askuserquestion-wrapped/detection.txt": {
+    "shape": "single-choice",
+    "question": "Which colour do you prefer?",
+    "body": "☐ Colour preference\nWhich colour do you prefer?",
+    "options": [
+      [
+        1,
+        "I prefer vibrant blues that remind me of clear skies",
+        null
+      ],
+      [
+        2,
+        "I enjoy warm golden yellows that create a sense of",
+        null
+      ],
+      [
+        3,
+        "I like calming greens that represent nature and",
+        null
+      ],
+      [
+        4,
+        "I prefer deep reds that symbolize passion and energy",
+        null
+      ],
+      [
+        5,
+        "Type something.",
+        null
+      ],
+      [
+        6,
+        "Chat about this",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "enter",
+        "select"
+      ],
+      [
+        "up",
+        "navigate"
+      ],
+      [
+        "down",
+        "navigate"
+      ],
+      [
+        "esc",
+        "cancel"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "8fa04ae1bd39fa34",
+    "token": "8fa04ae1bd39fa34"
+  },
+  "tests/fixtures/capture-blocked-askuserquestion-wrapped/recent-unwrapped.txt": {
+    "shape": "single-choice",
+    "question": "Which colour do you prefer?",
+    "body": "☐ Colour preference\nWhich colour do you prefer?",
+    "options": [
+      [
+        1,
+        "I prefer vibrant blues that remind me of clear skies",
+        null
+      ],
+      [
+        2,
+        "I enjoy warm golden yellows that create a sense of",
+        null
+      ],
+      [
+        3,
+        "I like calming greens that represent nature and",
+        null
+      ],
+      [
+        4,
+        "I prefer deep reds that symbolize passion and energy",
+        null
+      ],
+      [
+        5,
+        "Type something.",
+        null
+      ],
+      [
+        6,
+        "Chat about this",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "enter",
+        "select"
+      ],
+      [
+        "up",
+        "navigate"
+      ],
+      [
+        "down",
+        "navigate"
+      ],
+      [
+        "esc",
+        "cancel"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "8fa04ae1bd39fa34",
+    "token": "8fa04ae1bd39fa34"
+  },
+  "tests/fixtures/capture-blocked-askuserquestion-wrapped/recent.txt": {
+    "shape": "single-choice",
+    "question": "Which colour do you prefer?",
+    "body": "☐ Colour preference\nWhich colour do you prefer?",
+    "options": [
+      [
+        1,
+        "I prefer vibrant blues that remind me of clear skies",
+        null
+      ],
+      [
+        2,
+        "I enjoy warm golden yellows that create a sense of",
+        null
+      ],
+      [
+        3,
+        "I like calming greens that represent nature and",
+        null
+      ],
+      [
+        4,
+        "I prefer deep reds that symbolize passion and energy",
+        null
+      ],
+      [
+        5,
+        "Type something.",
+        null
+      ],
+      [
+        6,
+        "Chat about this",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "enter",
+        "select"
+      ],
+      [
+        "up",
+        "navigate"
+      ],
+      [
+        "down",
+        "navigate"
+      ],
+      [
+        "esc",
+        "cancel"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "8fa04ae1bd39fa34",
+    "token": "8fa04ae1bd39fa34"
+  },
+  "tests/fixtures/capture-blocked-askuserquestion-wrapped/visible.txt": {
+    "shape": "single-choice",
+    "question": "Which colour do you prefer?",
+    "body": "☐ Colour preference\nWhich colour do you prefer?",
+    "options": [
+      [
+        1,
+        "I prefer vibrant blues that remind me of clear skies",
+        null
+      ],
+      [
+        2,
+        "I enjoy warm golden yellows that create a sense of",
+        null
+      ],
+      [
+        3,
+        "I like calming greens that represent nature and",
+        null
+      ],
+      [
+        4,
+        "I prefer deep reds that symbolize passion and energy",
+        null
+      ],
+      [
+        5,
+        "Type something.",
+        null
+      ],
+      [
+        6,
+        "Chat about this",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "enter",
+        "select"
+      ],
+      [
+        "up",
+        "navigate"
+      ],
+      [
+        "down",
+        "navigate"
+      ],
+      [
+        "esc",
+        "cancel"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "8fa04ae1bd39fa34",
+    "token": "8fa04ae1bd39fa34"
+  },
+  "tests/fixtures/capture-blocked-mcp-elicitation-accept/detection.txt": {
+    "shape": "unknown",
+    "question": "Deploy the staging build now?",
+    "body": "MCP server “elicit-probe” requests your input\nDeploy the staging build now?\n✔ Confirm: ☒\nDeploy now\n❯ Accept    Decline\nEsc to cancel · ↑/↓ to navigate",
+    "options": [],
+    "hints": [
+      [
+        "esc",
+        "cancel"
+      ],
+      [
+        "up",
+        "navigate"
+      ],
+      [
+        "down",
+        "navigate"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "7dcccb36cf4f7ad1",
+    "token": "7dcccb36cf4f7ad1"
+  },
+  "tests/fixtures/capture-blocked-mcp-elicitation-accept/recent-unwrapped.txt": {
+    "shape": "unknown",
+    "question": "Deploy the staging build now?",
+    "body": "MCP server “elicit-probe” requests your input\nDeploy the staging build now?\n✔ Confirm: ☒\nDeploy now\n❯ Accept    Decline\nEsc to cancel · ↑/↓ to navigate",
+    "options": [],
+    "hints": [
+      [
+        "esc",
+        "cancel"
+      ],
+      [
+        "up",
+        "navigate"
+      ],
+      [
+        "down",
+        "navigate"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "7dcccb36cf4f7ad1",
+    "token": "7dcccb36cf4f7ad1"
+  },
+  "tests/fixtures/capture-blocked-mcp-elicitation-accept/recent.txt": {
+    "shape": "unknown",
+    "question": "Deploy the staging build now?",
+    "body": "MCP server “elicit-probe” requests your input\nDeploy the staging build now?\n✔ Confirm: ☒\nDeploy now\n❯ Accept    Decline\nEsc to cancel · ↑/↓ to navigate",
+    "options": [],
+    "hints": [
+      [
+        "esc",
+        "cancel"
+      ],
+      [
+        "up",
+        "navigate"
+      ],
+      [
+        "down",
+        "navigate"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "7dcccb36cf4f7ad1",
+    "token": "7dcccb36cf4f7ad1"
+  },
+  "tests/fixtures/capture-blocked-mcp-elicitation-accept/visible.txt": {
+    "shape": "unknown",
+    "question": "Deploy the staging build now?",
+    "body": "MCP server “elicit-probe” requests your input\nDeploy the staging build now?\n✔ Confirm: ☒\nDeploy now\n❯ Accept    Decline\nEsc to cancel · ↑/↓ to navigate",
+    "options": [],
+    "hints": [
+      [
+        "esc",
+        "cancel"
+      ],
+      [
+        "up",
+        "navigate"
+      ],
+      [
+        "down",
+        "navigate"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "7dcccb36cf4f7ad1",
+    "token": "7dcccb36cf4f7ad1"
+  },
+  "tests/fixtures/capture-blocked-mcp-elicitation-confirm/detection.txt": {
+    "shape": "multi-select",
+    "question": "Deploy the staging build now?",
+    "body": "MCP server “elicit-probe” requests your input\nDeploy the staging build now?\n❯ * Confirm: ☐\nDeploy now\nAccept    Decline\nEsc to cancel · ↑/↓ to navigate · Backspace to unset · Space to toggle",
+    "options": [],
+    "hints": [
+      [
+        "esc",
+        "cancel"
+      ],
+      [
+        "up",
+        "navigate"
+      ],
+      [
+        "down",
+        "navigate"
+      ],
+      [
+        "space",
+        "toggle"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "23369c253004b707",
+    "token": "23369c253004b707"
+  },
+  "tests/fixtures/capture-blocked-mcp-elicitation-confirm/recent-unwrapped.txt": {
+    "shape": "multi-select",
+    "question": "Deploy the staging build now?",
+    "body": "MCP server “elicit-probe” requests your input\nDeploy the staging build now?\n❯ * Confirm: ☐\nDeploy now\nAccept    Decline\nEsc to cancel · ↑/↓ to navigate · Backspace to unset · Space to toggle",
+    "options": [],
+    "hints": [
+      [
+        "esc",
+        "cancel"
+      ],
+      [
+        "up",
+        "navigate"
+      ],
+      [
+        "down",
+        "navigate"
+      ],
+      [
+        "space",
+        "toggle"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "23369c253004b707",
+    "token": "23369c253004b707"
+  },
+  "tests/fixtures/capture-blocked-mcp-elicitation-confirm/recent.txt": {
+    "shape": "multi-select",
+    "question": "Deploy the staging build now?",
+    "body": "MCP server “elicit-probe” requests your input\nDeploy the staging build now?\n❯ * Confirm: ☐\nDeploy now\nAccept    Decline\nEsc to cancel · ↑/↓ to navigate · Backspace to unset · Space to toggle",
+    "options": [],
+    "hints": [
+      [
+        "esc",
+        "cancel"
+      ],
+      [
+        "up",
+        "navigate"
+      ],
+      [
+        "down",
+        "navigate"
+      ],
+      [
+        "space",
+        "toggle"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "23369c253004b707",
+    "token": "23369c253004b707"
+  },
+  "tests/fixtures/capture-blocked-mcp-elicitation-confirm/visible.txt": {
+    "shape": "multi-select",
+    "question": "Deploy the staging build now?",
+    "body": "MCP server “elicit-probe” requests your input\nDeploy the staging build now?\n❯ * Confirm: ☐\nDeploy now\nAccept    Decline\nEsc to cancel · ↑/↓ to navigate · Backspace to unset · Space to toggle",
+    "options": [],
+    "hints": [
+      [
+        "esc",
+        "cancel"
+      ],
+      [
+        "up",
+        "navigate"
+      ],
+      [
+        "down",
+        "navigate"
+      ],
+      [
+        "space",
+        "toggle"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "23369c253004b707",
+    "token": "23369c253004b707"
+  },
+  "tests/fixtures/capture-blocked-mcp-elicitation-form/detection.txt": {
+    "shape": "unknown",
+    "question": "Fill in the release details",
+    "body": "MCP server “elicit-probe” requests your input\nFill in the release details\n❯ * Release name: Type something…\nShort name\n* Channel: not set\nReplica count: not set\nNotify team: not set\nAccept    Decline\nEsc to cancel · ↑/↓ to navigate · Backspace to unset",
+    "options": [],
+    "hints": [
+      [
+        "esc",
+        "cancel"
+      ],
+      [
+        "up",
+        "navigate"
+      ],
+      [
+        "down",
+        "navigate"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "b35788f697576945",
+    "token": "b35788f697576945"
+  },
+  "tests/fixtures/capture-blocked-mcp-elicitation-form/recent-unwrapped.txt": {
+    "shape": "unknown",
+    "question": "Fill in the release details",
+    "body": "MCP server “elicit-probe” requests your input\nFill in the release details\n❯ * Release name: Type something…\nShort name\n* Channel: not set\nReplica count: not set\nNotify team: not set\nAccept    Decline\nEsc to cancel · ↑/↓ to navigate · Backspace to unset",
+    "options": [],
+    "hints": [
+      [
+        "esc",
+        "cancel"
+      ],
+      [
+        "up",
+        "navigate"
+      ],
+      [
+        "down",
+        "navigate"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "b35788f697576945",
+    "token": "b35788f697576945"
+  },
+  "tests/fixtures/capture-blocked-mcp-elicitation-form/recent.txt": {
+    "shape": "unknown",
+    "question": "Fill in the release details",
+    "body": "MCP server “elicit-probe” requests your input\nFill in the release details\n❯ * Release name: Type something…\nShort name\n* Channel: not set\nReplica count: not set\nNotify team: not set\nAccept    Decline\nEsc to cancel · ↑/↓ to navigate · Backspace to unset",
+    "options": [],
+    "hints": [
+      [
+        "esc",
+        "cancel"
+      ],
+      [
+        "up",
+        "navigate"
+      ],
+      [
+        "down",
+        "navigate"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "b35788f697576945",
+    "token": "b35788f697576945"
+  },
+  "tests/fixtures/capture-blocked-mcp-elicitation-form/visible.txt": {
+    "shape": "unknown",
+    "question": "Fill in the release details",
+    "body": "MCP server “elicit-probe” requests your input\nFill in the release details\n❯ * Release name: Type something…\nShort name\n* Channel: not set\nReplica count: not set\nNotify team: not set\nAccept    Decline\nEsc to cancel · ↑/↓ to navigate · Backspace to unset",
+    "options": [],
+    "hints": [
+      [
+        "esc",
+        "cancel"
+      ],
+      [
+        "up",
+        "navigate"
+      ],
+      [
+        "down",
+        "navigate"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "b35788f697576945",
+    "token": "b35788f697576945"
+  },
+  "tests/fixtures/capture-blocked-mcp-elicitation-form-enum/detection.txt": {
+    "shape": "unknown",
+    "question": "Fill in the release details",
+    "body": "MCP server “elicit-probe” requests your input\nFill in the release details\n* Release name: not set\nShort name\n❯ * Channel: ▾\n❯ ◯ stable\n◯ beta\n◯ nightly\nReplica count: not set\nNotify team: not set\nAccept    Decline\nEsc to cancel · ↑/↓ to navigate · Backspace to unset · Space to select",
+    "options": [],
+    "hints": [
+      [
+        "esc",
+        "cancel"
+      ],
+      [
+        "up",
+        "navigate"
+      ],
+      [
+        "down",
+        "navigate"
+      ],
+      [
+        "space",
+        "select"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "2e0476cc146b5bd7",
+    "token": "2e0476cc146b5bd7"
+  },
+  "tests/fixtures/capture-blocked-mcp-elicitation-form-enum/recent-unwrapped.txt": {
+    "shape": "unknown",
+    "question": "Fill in the release details",
+    "body": "MCP server “elicit-probe” requests your input\nFill in the release details\n* Release name: not set\nShort name\n❯ * Channel: ▾\n❯ ◯ stable\n◯ beta\n◯ nightly\nReplica count: not set\nNotify team: not set\nAccept    Decline\nEsc to cancel · ↑/↓ to navigate · Backspace to unset · Space to select",
+    "options": [],
+    "hints": [
+      [
+        "esc",
+        "cancel"
+      ],
+      [
+        "up",
+        "navigate"
+      ],
+      [
+        "down",
+        "navigate"
+      ],
+      [
+        "space",
+        "select"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "2e0476cc146b5bd7",
+    "token": "2e0476cc146b5bd7"
+  },
+  "tests/fixtures/capture-blocked-mcp-elicitation-form-enum/recent.txt": {
+    "shape": "unknown",
+    "question": "Fill in the release details",
+    "body": "MCP server “elicit-probe” requests your input\nFill in the release details\n* Release name: not set\nShort name\n❯ * Channel: ▾\n❯ ◯ stable\n◯ beta\n◯ nightly\nReplica count: not set\nNotify team: not set\nAccept    Decline\nEsc to cancel · ↑/↓ to navigate · Backspace to unset · Space to select",
+    "options": [],
+    "hints": [
+      [
+        "esc",
+        "cancel"
+      ],
+      [
+        "up",
+        "navigate"
+      ],
+      [
+        "down",
+        "navigate"
+      ],
+      [
+        "space",
+        "select"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "2e0476cc146b5bd7",
+    "token": "2e0476cc146b5bd7"
+  },
+  "tests/fixtures/capture-blocked-mcp-elicitation-form-enum/visible.txt": {
+    "shape": "unknown",
+    "question": "Fill in the release details",
+    "body": "MCP server “elicit-probe” requests your input\nFill in the release details\n* Release name: not set\nShort name\n❯ * Channel: ▾\n❯ ◯ stable\n◯ beta\n◯ nightly\nReplica count: not set\nNotify team: not set\nAccept    Decline\nEsc to cancel · ↑/↓ to navigate · Backspace to unset · Space to select",
+    "options": [],
+    "hints": [
+      [
+        "esc",
+        "cancel"
+      ],
+      [
+        "up",
+        "navigate"
+      ],
+      [
+        "down",
+        "navigate"
+      ],
+      [
+        "space",
+        "select"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "2e0476cc146b5bd7",
+    "token": "2e0476cc146b5bd7"
+  },
+  "tests/fixtures/capture-blocked-multiselect-checklist/detection.txt": {
+    "shape": "multi-select",
+    "question": "Which seasons?",
+    "body": "←  ☒ Seasons  ✔ Submit  →\nWhich seasons?",
+    "options": [
+      [
+        1,
+        "spring",
+        false
+      ],
+      [
+        2,
+        "summer",
+        false
+      ],
+      [
+        3,
+        "autumn",
+        true
+      ],
+      [
+        4,
+        "winter",
+        false
+      ],
+      [
+        5,
+        "Type something",
+        false
+      ],
+      [
+        6,
+        "Chat about this",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "enter",
+        "select"
+      ],
+      [
+        "up",
+        "navigate"
+      ],
+      [
+        "down",
+        "navigate"
+      ],
+      [
+        "esc",
+        "cancel"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": [
+      1,
+      "Seasons"
+    ],
+    "corroborated": true,
+    "identity": "256151b68718cdc8",
+    "token": "256151b68718cdc8"
+  },
+  "tests/fixtures/capture-blocked-multiselect-checklist/recent-unwrapped.txt": {
+    "shape": "multi-select",
+    "question": "Which seasons?",
+    "body": "←  ☒ Seasons  ✔ Submit  →\nWhich seasons?",
+    "options": [
+      [
+        1,
+        "spring",
+        false
+      ],
+      [
+        2,
+        "summer",
+        false
+      ],
+      [
+        3,
+        "autumn",
+        true
+      ],
+      [
+        4,
+        "winter",
+        false
+      ],
+      [
+        5,
+        "Type something",
+        false
+      ],
+      [
+        6,
+        "Chat about this",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "enter",
+        "select"
+      ],
+      [
+        "up",
+        "navigate"
+      ],
+      [
+        "down",
+        "navigate"
+      ],
+      [
+        "esc",
+        "cancel"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": [
+      1,
+      "Seasons"
+    ],
+    "corroborated": true,
+    "identity": "256151b68718cdc8",
+    "token": "256151b68718cdc8"
+  },
+  "tests/fixtures/capture-blocked-multiselect-checklist/recent.txt": {
+    "shape": "multi-select",
+    "question": "Which seasons?",
+    "body": "←  ☒ Seasons  ✔ Submit  →\nWhich seasons?",
+    "options": [
+      [
+        1,
+        "spring",
+        false
+      ],
+      [
+        2,
+        "summer",
+        false
+      ],
+      [
+        3,
+        "autumn",
+        true
+      ],
+      [
+        4,
+        "winter",
+        false
+      ],
+      [
+        5,
+        "Type something",
+        false
+      ],
+      [
+        6,
+        "Chat about this",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "enter",
+        "select"
+      ],
+      [
+        "up",
+        "navigate"
+      ],
+      [
+        "down",
+        "navigate"
+      ],
+      [
+        "esc",
+        "cancel"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": [
+      1,
+      "Seasons"
+    ],
+    "corroborated": true,
+    "identity": "256151b68718cdc8",
+    "token": "256151b68718cdc8"
+  },
+  "tests/fixtures/capture-blocked-multiselect-checklist/visible.txt": {
+    "shape": "multi-select",
+    "question": "Which seasons?",
+    "body": "←  ☒ Seasons  ✔ Submit  →\nWhich seasons?",
+    "options": [
+      [
+        1,
+        "spring",
+        false
+      ],
+      [
+        2,
+        "summer",
+        false
+      ],
+      [
+        3,
+        "autumn",
+        true
+      ],
+      [
+        4,
+        "winter",
+        false
+      ],
+      [
+        5,
+        "Type something",
+        false
+      ],
+      [
+        6,
+        "Chat about this",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "enter",
+        "select"
+      ],
+      [
+        "up",
+        "navigate"
+      ],
+      [
+        "down",
+        "navigate"
+      ],
+      [
+        "esc",
+        "cancel"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": [
+      1,
+      "Seasons"
+    ],
+    "corroborated": true,
+    "identity": "256151b68718cdc8",
+    "token": "256151b68718cdc8"
+  },
+  "tests/fixtures/capture-blocked-opencode-multiselect/detection.txt": {
+    "shape": "multi-select",
+    "question": "1. [✓] PostgreSQL\nPostgreSQL database\n2. [ ] SQLite\nSQLite database\n3. [ ] DuckDB\nDuckDB database\n4. [ ] Type your own answer",
+    "body": "Databases   Confirm\nWhich databases do you want? (select all that apply)\n1. [✓] PostgreSQL\nPostgreSQL database\n2. [ ] SQLite\nSQLite database\n3. [ ] DuckDB\nDuckDB database\n4. [ ] Type your own answer\n⇆ tab  ↑↓ select  enter toggle  esc dismiss",
+    "options": [],
+    "hints": [
+      [
+        "tab",
+        "tab"
+      ],
+      [
+        "up",
+        "select"
+      ],
+      [
+        "down",
+        "select"
+      ],
+      [
+        "enter",
+        "toggle"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "35866eceb9713818",
+    "token": "35866eceb9713818"
+  },
+  "tests/fixtures/capture-blocked-opencode-multiselect/recent-unwrapped.txt": {
+    "shape": "multi-select",
+    "question": "1. [✓] PostgreSQL\nPostgreSQL database\n2. [ ] SQLite\nSQLite database\n3. [ ] DuckDB\nDuckDB database\n4. [ ] Type your own answer",
+    "body": "Databases   Confirm\nWhich databases do you want? (select all that apply)\n1. [✓] PostgreSQL\nPostgreSQL database\n2. [ ] SQLite\nSQLite database\n3. [ ] DuckDB\nDuckDB database\n4. [ ] Type your own answer\n⇆ tab  ↑↓ select  enter toggle  esc dismiss",
+    "options": [],
+    "hints": [
+      [
+        "tab",
+        "tab"
+      ],
+      [
+        "up",
+        "select"
+      ],
+      [
+        "down",
+        "select"
+      ],
+      [
+        "enter",
+        "toggle"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "35866eceb9713818",
+    "token": "35866eceb9713818"
+  },
+  "tests/fixtures/capture-blocked-opencode-multiselect/recent.txt": {
+    "shape": "multi-select",
+    "question": "1. [✓] PostgreSQL\nPostgreSQL database\n2. [ ] SQLite\nSQLite database\n3. [ ] DuckDB\nDuckDB database\n4. [ ] Type your own answer",
+    "body": "Databases   Confirm\nWhich databases do you want? (select all that apply)\n1. [✓] PostgreSQL\nPostgreSQL database\n2. [ ] SQLite\nSQLite database\n3. [ ] DuckDB\nDuckDB database\n4. [ ] Type your own answer\n⇆ tab  ↑↓ select  enter toggle  esc dismiss",
+    "options": [],
+    "hints": [
+      [
+        "tab",
+        "tab"
+      ],
+      [
+        "up",
+        "select"
+      ],
+      [
+        "down",
+        "select"
+      ],
+      [
+        "enter",
+        "toggle"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "35866eceb9713818",
+    "token": "35866eceb9713818"
+  },
+  "tests/fixtures/capture-blocked-opencode-multiselect/visible.txt": {
+    "shape": "multi-select",
+    "question": "1. [✓] PostgreSQL\nPostgreSQL database\n2. [ ] SQLite\nSQLite database\n3. [ ] DuckDB\nDuckDB database\n4. [ ] Type your own answer",
+    "body": "Databases   Confirm\nWhich databases do you want? (select all that apply)\n1. [✓] PostgreSQL\nPostgreSQL database\n2. [ ] SQLite\nSQLite database\n3. [ ] DuckDB\nDuckDB database\n4. [ ] Type your own answer\n⇆ tab  ↑↓ select  enter toggle  esc dismiss",
+    "options": [],
+    "hints": [
+      [
+        "tab",
+        "tab"
+      ],
+      [
+        "up",
+        "select"
+      ],
+      [
+        "down",
+        "select"
+      ],
+      [
+        "enter",
+        "toggle"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "35866eceb9713818",
+    "token": "35866eceb9713818"
+  },
+  "tests/fixtures/capture-blocked-opencode-permission/detection.txt": {
+    "shape": "buttons",
+    "question": "△ Permission required\n# Shell command",
+    "body": "△ Permission required\n# Shell command\n$ touch fixture1.txt",
+    "options": [
+      [
+        1,
+        "Allow once",
+        null
+      ],
+      [
+        2,
+        "Allow always",
+        null
+      ],
+      [
+        3,
+        "Reject",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "left",
+        "select"
+      ],
+      [
+        "right",
+        "select"
+      ],
+      [
+        "enter",
+        "confirm"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "b195bf19c8de9319",
+    "token": "b195bf19c8de9319"
+  },
+  "tests/fixtures/capture-blocked-opencode-permission/recent-unwrapped.txt": {
+    "shape": "buttons",
+    "question": "△ Permission required\n# Shell command",
+    "body": "△ Permission required\n# Shell command\n$ touch fixture1.txt",
+    "options": [
+      [
+        1,
+        "Allow once",
+        null
+      ],
+      [
+        2,
+        "Allow always",
+        null
+      ],
+      [
+        3,
+        "Reject",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "left",
+        "select"
+      ],
+      [
+        "right",
+        "select"
+      ],
+      [
+        "enter",
+        "confirm"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "b195bf19c8de9319",
+    "token": "b195bf19c8de9319"
+  },
+  "tests/fixtures/capture-blocked-opencode-permission/recent.txt": {
+    "shape": "buttons",
+    "question": "△ Permission required\n# Shell command",
+    "body": "△ Permission required\n# Shell command\n$ touch fixture1.txt",
+    "options": [
+      [
+        1,
+        "Allow once",
+        null
+      ],
+      [
+        2,
+        "Allow always",
+        null
+      ],
+      [
+        3,
+        "Reject",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "left",
+        "select"
+      ],
+      [
+        "right",
+        "select"
+      ],
+      [
+        "enter",
+        "confirm"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "b195bf19c8de9319",
+    "token": "b195bf19c8de9319"
+  },
+  "tests/fixtures/capture-blocked-opencode-permission/visible.txt": {
+    "shape": "buttons",
+    "question": "△ Permission required\n# Shell command",
+    "body": "△ Permission required\n# Shell command\n$ touch fixture1.txt",
+    "options": [
+      [
+        1,
+        "Allow once",
+        null
+      ],
+      [
+        2,
+        "Allow always",
+        null
+      ],
+      [
+        3,
+        "Reject",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "left",
+        "select"
+      ],
+      [
+        "right",
+        "select"
+      ],
+      [
+        "enter",
+        "confirm"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "b195bf19c8de9319",
+    "token": "b195bf19c8de9319"
+  },
+  "tests/fixtures/capture-blocked-opencode-question/detection.txt": {
+    "shape": "unknown",
+    "question": "1. PostgreSQL\nPostgreSQL database\n2. SQLite\nSQLite database\n3. DuckDB\nDuckDB database\n4. Type your own answer",
+    "body": "Which database?\n1. PostgreSQL\nPostgreSQL database\n2. SQLite\nSQLite database\n3. DuckDB\nDuckDB database\n4. Type your own answer\n↑↓ select  enter submit  esc dismiss",
+    "options": [],
+    "hints": [
+      [
+        "up",
+        "select"
+      ],
+      [
+        "down",
+        "select"
+      ],
+      [
+        "enter",
+        "submit"
+      ],
+      [
+        "esc",
+        "dismiss"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "3946ca89deba19dd",
+    "token": "3946ca89deba19dd"
+  },
+  "tests/fixtures/capture-blocked-opencode-question/recent-unwrapped.txt": {
+    "shape": "unknown",
+    "question": "1. PostgreSQL\nPostgreSQL database\n2. SQLite\nSQLite database\n3. DuckDB\nDuckDB database\n4. Type your own answer",
+    "body": "Which database?\n1. PostgreSQL\nPostgreSQL database\n2. SQLite\nSQLite database\n3. DuckDB\nDuckDB database\n4. Type your own answer\n↑↓ select  enter submit  esc dismiss",
+    "options": [],
+    "hints": [
+      [
+        "up",
+        "select"
+      ],
+      [
+        "down",
+        "select"
+      ],
+      [
+        "enter",
+        "submit"
+      ],
+      [
+        "esc",
+        "dismiss"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "3946ca89deba19dd",
+    "token": "3946ca89deba19dd"
+  },
+  "tests/fixtures/capture-blocked-opencode-question/recent.txt": {
+    "shape": "unknown",
+    "question": "1. PostgreSQL\nPostgreSQL database\n2. SQLite\nSQLite database\n3. DuckDB\nDuckDB database\n4. Type your own answer",
+    "body": "Which database?\n1. PostgreSQL\nPostgreSQL database\n2. SQLite\nSQLite database\n3. DuckDB\nDuckDB database\n4. Type your own answer\n↑↓ select  enter submit  esc dismiss",
+    "options": [],
+    "hints": [
+      [
+        "up",
+        "select"
+      ],
+      [
+        "down",
+        "select"
+      ],
+      [
+        "enter",
+        "submit"
+      ],
+      [
+        "esc",
+        "dismiss"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "3946ca89deba19dd",
+    "token": "3946ca89deba19dd"
+  },
+  "tests/fixtures/capture-blocked-opencode-question/visible.txt": {
+    "shape": "unknown",
+    "question": "1. PostgreSQL\nPostgreSQL database\n2. SQLite\nSQLite database\n3. DuckDB\nDuckDB database\n4. Type your own answer",
+    "body": "Which database?\n1. PostgreSQL\nPostgreSQL database\n2. SQLite\nSQLite database\n3. DuckDB\nDuckDB database\n4. Type your own answer\n↑↓ select  enter submit  esc dismiss",
+    "options": [],
+    "hints": [
+      [
+        "up",
+        "select"
+      ],
+      [
+        "down",
+        "select"
+      ],
+      [
+        "enter",
+        "submit"
+      ],
+      [
+        "esc",
+        "dismiss"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "3946ca89deba19dd",
+    "token": "3946ca89deba19dd"
+  },
+  "tests/fixtures/capture-blocked-opencode-questions-tabs/detection.txt": {
+    "shape": "unknown",
+    "question": "1. Rustic\nRustic style\n2. Modern\nModern style\n3. Type your own answer",
+    "body": "Vibe   Budget   Confirm\nWhich vibe?\n1. Rustic\nRustic style\n2. Modern\nModern style\n3. Type your own answer\n⇆ tab  ↑↓ select  enter confirm  esc dismiss",
+    "options": [],
+    "hints": [
+      [
+        "tab",
+        "tab"
+      ],
+      [
+        "up",
+        "select"
+      ],
+      [
+        "down",
+        "select"
+      ],
+      [
+        "enter",
+        "confirm"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "6936c25ce32fb006",
+    "token": "6936c25ce32fb006"
+  },
+  "tests/fixtures/capture-blocked-opencode-questions-tabs/recent-unwrapped.txt": {
+    "shape": "unknown",
+    "question": "1. Rustic\nRustic style\n2. Modern\nModern style\n3. Type your own answer",
+    "body": "Vibe   Budget   Confirm\nWhich vibe?\n1. Rustic\nRustic style\n2. Modern\nModern style\n3. Type your own answer\n⇆ tab  ↑↓ select  enter confirm  esc dismiss",
+    "options": [],
+    "hints": [
+      [
+        "tab",
+        "tab"
+      ],
+      [
+        "up",
+        "select"
+      ],
+      [
+        "down",
+        "select"
+      ],
+      [
+        "enter",
+        "confirm"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "6936c25ce32fb006",
+    "token": "6936c25ce32fb006"
+  },
+  "tests/fixtures/capture-blocked-opencode-questions-tabs/recent.txt": {
+    "shape": "unknown",
+    "question": "1. Rustic\nRustic style\n2. Modern\nModern style\n3. Type your own answer",
+    "body": "Vibe   Budget   Confirm\nWhich vibe?\n1. Rustic\nRustic style\n2. Modern\nModern style\n3. Type your own answer\n⇆ tab  ↑↓ select  enter confirm  esc dismiss",
+    "options": [],
+    "hints": [
+      [
+        "tab",
+        "tab"
+      ],
+      [
+        "up",
+        "select"
+      ],
+      [
+        "down",
+        "select"
+      ],
+      [
+        "enter",
+        "confirm"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "6936c25ce32fb006",
+    "token": "6936c25ce32fb006"
+  },
+  "tests/fixtures/capture-blocked-opencode-questions-tabs/visible.txt": {
+    "shape": "unknown",
+    "question": "1. Rustic\nRustic style\n2. Modern\nModern style\n3. Type your own answer",
+    "body": "Vibe   Budget   Confirm\nWhich vibe?\n1. Rustic\nRustic style\n2. Modern\nModern style\n3. Type your own answer\n⇆ tab  ↑↓ select  enter confirm  esc dismiss",
+    "options": [],
+    "hints": [
+      [
+        "tab",
+        "tab"
+      ],
+      [
+        "up",
+        "select"
+      ],
+      [
+        "down",
+        "select"
+      ],
+      [
+        "enter",
+        "confirm"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "6936c25ce32fb006",
+    "token": "6936c25ce32fb006"
+  },
+  "tests/fixtures/capture-blocked-permission-prompt/detection.txt": {
+    "shape": "single-choice",
+    "question": "Do you want to proceed?",
+    "body": "Bash command\ncurl -sS https://example.com/demo-permission-probe | head -c 20\nFetch URL and show first 20 bytes\nThis command requires approval\nDo you want to proceed?",
+    "options": [
+      [
+        1,
+        "Yes",
+        null
+      ],
+      [
+        2,
+        "Yes, and don’t ask again for: curl -sS https://example.com/demo-permission-probe",
+        null
+      ],
+      [
+        3,
+        "No",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "esc",
+        "cancel"
+      ],
+      [
+        "tab",
+        "amend"
+      ],
+      [
+        "ctrl-e",
+        "explain"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "df367cc1fe91d4f1",
+    "token": "df367cc1fe91d4f1"
+  },
+  "tests/fixtures/capture-blocked-permission-prompt/recent-unwrapped.txt": {
+    "shape": "single-choice",
+    "question": "Do you want to proceed?",
+    "body": "Bash command\ncurl -sS https://example.com/demo-permission-probe | head -c 20\nFetch URL and show first 20 bytes\nThis command requires approval\nDo you want to proceed?",
+    "options": [
+      [
+        1,
+        "Yes",
+        null
+      ],
+      [
+        2,
+        "Yes, and don’t ask again for: curl -sS https://example.com/demo-permission-probe",
+        null
+      ],
+      [
+        3,
+        "No",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "esc",
+        "cancel"
+      ],
+      [
+        "tab",
+        "amend"
+      ],
+      [
+        "ctrl-e",
+        "explain"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "df367cc1fe91d4f1",
+    "token": "df367cc1fe91d4f1"
+  },
+  "tests/fixtures/capture-blocked-permission-prompt/recent.txt": {
+    "shape": "single-choice",
+    "question": "Do you want to proceed?",
+    "body": "Bash command\ncurl -sS https://example.com/demo-permission-probe | head -c 20\nFetch URL and show first 20 bytes\nThis command requires approval\nDo you want to proceed?",
+    "options": [
+      [
+        1,
+        "Yes",
+        null
+      ],
+      [
+        2,
+        "Yes, and don’t ask again for: curl -sS https://example.com/demo-permission-probe",
+        null
+      ],
+      [
+        3,
+        "No",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "esc",
+        "cancel"
+      ],
+      [
+        "tab",
+        "amend"
+      ],
+      [
+        "ctrl-e",
+        "explain"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "df367cc1fe91d4f1",
+    "token": "df367cc1fe91d4f1"
+  },
+  "tests/fixtures/capture-blocked-permission-prompt/visible.txt": {
+    "shape": "single-choice",
+    "question": "Do you want to proceed?",
+    "body": "Bash command\ncurl -sS https://example.com/demo-permission-probe | head -c 20\nFetch URL and show first 20 bytes\nThis command requires approval\nDo you want to proceed?",
+    "options": [
+      [
+        1,
+        "Yes",
+        null
+      ],
+      [
+        2,
+        "Yes, and don’t ask again for: curl -sS https://example.com/demo-permission-probe",
+        null
+      ],
+      [
+        3,
+        "No",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "esc",
+        "cancel"
+      ],
+      [
+        "tab",
+        "amend"
+      ],
+      [
+        "ctrl-e",
+        "explain"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "df367cc1fe91d4f1",
+    "token": "df367cc1fe91d4f1"
+  },
+  "tests/fixtures/capture-blocked-permission-prompt-wrapped/detection.txt": {
+    "shape": "single-choice",
+    "question": "Do you want to proceed?",
+    "body": "Bash command\ncurl -sS https://example.com/thing | head -c 20\nRun curl command against example.com and display\nfirst 20 characters\nThis command requires approval\nDo you want to proceed?",
+    "options": [
+      [
+        1,
+        "Yes",
+        null
+      ],
+      [
+        2,
+        "Yes, and don’t ask again for: curl -sS",
+        null
+      ],
+      [
+        3,
+        "No",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "esc",
+        "cancel"
+      ],
+      [
+        "tab",
+        "amend"
+      ],
+      [
+        "ctrl-e",
+        "explain"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "5b0295108751562f",
+    "token": "5b0295108751562f"
+  },
+  "tests/fixtures/capture-blocked-permission-prompt-wrapped/recent-unwrapped.txt": {
+    "shape": "single-choice",
+    "question": "Do you want to proceed?",
+    "body": "Bash command\ncurl -sS https://example.com/thing | head -c 20\nRun curl command against example.com and display\nfirst 20 characters\nThis command requires approval\nDo you want to proceed?",
+    "options": [
+      [
+        1,
+        "Yes",
+        null
+      ],
+      [
+        2,
+        "Yes, and don’t ask again for: curl -sS",
+        null
+      ],
+      [
+        3,
+        "No",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "esc",
+        "cancel"
+      ],
+      [
+        "tab",
+        "amend"
+      ],
+      [
+        "ctrl-e",
+        "explain"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "5b0295108751562f",
+    "token": "5b0295108751562f"
+  },
+  "tests/fixtures/capture-blocked-permission-prompt-wrapped/recent.txt": {
+    "shape": "single-choice",
+    "question": "Do you want to proceed?",
+    "body": "Bash command\ncurl -sS https://example.com/thing | head -c 20\nRun curl command against example.com and display\nfirst 20 characters\nThis command requires approval\nDo you want to proceed?",
+    "options": [
+      [
+        1,
+        "Yes",
+        null
+      ],
+      [
+        2,
+        "Yes, and don’t ask again for: curl -sS",
+        null
+      ],
+      [
+        3,
+        "No",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "esc",
+        "cancel"
+      ],
+      [
+        "tab",
+        "amend"
+      ],
+      [
+        "ctrl-e",
+        "explain"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "5b0295108751562f",
+    "token": "5b0295108751562f"
+  },
+  "tests/fixtures/capture-blocked-permission-prompt-wrapped/visible.txt": {
+    "shape": "single-choice",
+    "question": "Do you want to proceed?",
+    "body": "Bash command\ncurl -sS https://example.com/thing | head -c 20\nRun curl command against example.com and display\nfirst 20 characters\nThis command requires approval\nDo you want to proceed?",
+    "options": [
+      [
+        1,
+        "Yes",
+        null
+      ],
+      [
+        2,
+        "Yes, and don’t ask again for: curl -sS",
+        null
+      ],
+      [
+        3,
+        "No",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "esc",
+        "cancel"
+      ],
+      [
+        "tab",
+        "amend"
+      ],
+      [
+        "ctrl-e",
+        "explain"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "5b0295108751562f",
+    "token": "5b0295108751562f"
+  },
+  "tests/fixtures/capture-blocked-permission-write/detection.txt": {
+    "shape": "single-choice",
+    "question": "Do you want to create notes.txt?",
+    "body": "Do you want to create notes.txt?",
+    "options": [
+      [
+        1,
+        "Yes",
+        null
+      ],
+      [
+        2,
+        "Yes, allow all edits during this session (shift+tab)",
+        null
+      ],
+      [
+        3,
+        "No",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "esc",
+        "cancel"
+      ],
+      [
+        "tab",
+        "amend"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "f8938e999a6ca0a9",
+    "token": "f8938e999a6ca0a9"
+  },
+  "tests/fixtures/capture-blocked-permission-write/recent-unwrapped.txt": {
+    "shape": "single-choice",
+    "question": "Do you want to create notes.txt?",
+    "body": "Do you want to create notes.txt?",
+    "options": [
+      [
+        1,
+        "Yes",
+        null
+      ],
+      [
+        2,
+        "Yes, allow all edits during this session (shift+tab)",
+        null
+      ],
+      [
+        3,
+        "No",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "esc",
+        "cancel"
+      ],
+      [
+        "tab",
+        "amend"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "f8938e999a6ca0a9",
+    "token": "f8938e999a6ca0a9"
+  },
+  "tests/fixtures/capture-blocked-permission-write/recent.txt": {
+    "shape": "single-choice",
+    "question": "Do you want to create notes.txt?",
+    "body": "Do you want to create notes.txt?",
+    "options": [
+      [
+        1,
+        "Yes",
+        null
+      ],
+      [
+        2,
+        "Yes, allow all edits during this session (shift+tab)",
+        null
+      ],
+      [
+        3,
+        "No",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "esc",
+        "cancel"
+      ],
+      [
+        "tab",
+        "amend"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "f8938e999a6ca0a9",
+    "token": "f8938e999a6ca0a9"
+  },
+  "tests/fixtures/capture-blocked-permission-write/visible.txt": {
+    "shape": "single-choice",
+    "question": "Do you want to create notes.txt?",
+    "body": "Do you want to create notes.txt?",
+    "options": [
+      [
+        1,
+        "Yes",
+        null
+      ],
+      [
+        2,
+        "Yes, allow all edits during this session (shift+tab)",
+        null
+      ],
+      [
+        3,
+        "No",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "esc",
+        "cancel"
+      ],
+      [
+        "tab",
+        "amend"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "f8938e999a6ca0a9",
+    "token": "f8938e999a6ca0a9"
+  },
+  "tests/fixtures/capture-blocked-plan-approval/detection.txt": {
+    "shape": "single-choice",
+    "question": "Claude has written up a plan and is ready to execute. Would you like to proceed?",
+    "body": "Claude has written up a plan and is ready to execute. Would you like to proceed?",
+    "options": [
+      [
+        1,
+        "Yes, auto-accept edits",
+        null
+      ],
+      [
+        2,
+        "Yes, manually approve edits",
+        null
+      ],
+      [
+        3,
+        "Tell Claude what to change",
+        null
+      ]
+    ],
+    "hints": [],
+    "handoffs": [
+      [
+        "ctrl-g",
+        "edit in vim"
+      ]
+    ],
+    "focus": null,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "f694e9da656a9373",
+    "token": "f694e9da656a9373"
+  },
+  "tests/fixtures/capture-blocked-plan-approval/recent-unwrapped.txt": {
+    "shape": "single-choice",
+    "question": "Claude has written up a plan and is ready to execute. Would you like to proceed?",
+    "body": "Claude has written up a plan and is ready to execute. Would you like to proceed?",
+    "options": [
+      [
+        1,
+        "Yes, auto-accept edits",
+        null
+      ],
+      [
+        2,
+        "Yes, manually approve edits",
+        null
+      ],
+      [
+        3,
+        "Tell Claude what to change",
+        null
+      ]
+    ],
+    "hints": [],
+    "handoffs": [
+      [
+        "ctrl-g",
+        "edit in vim"
+      ]
+    ],
+    "focus": null,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "f694e9da656a9373",
+    "token": "f694e9da656a9373"
+  },
+  "tests/fixtures/capture-blocked-plan-approval/recent.txt": {
+    "shape": "single-choice",
+    "question": "Claude has written up a plan and is ready to execute. Would you like to proceed?",
+    "body": "Claude has written up a plan and is ready to execute. Would you like to proceed?",
+    "options": [
+      [
+        1,
+        "Yes, auto-accept edits",
+        null
+      ],
+      [
+        2,
+        "Yes, manually approve edits",
+        null
+      ],
+      [
+        3,
+        "Tell Claude what to change",
+        null
+      ]
+    ],
+    "hints": [],
+    "handoffs": [
+      [
+        "ctrl-g",
+        "edit in vim"
+      ]
+    ],
+    "focus": null,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "f694e9da656a9373",
+    "token": "f694e9da656a9373"
+  },
+  "tests/fixtures/capture-blocked-plan-approval/visible.txt": {
+    "shape": "single-choice",
+    "question": "Claude has written up a plan and is ready to execute. Would you like to proceed?",
+    "body": "Claude has written up a plan and is ready to execute. Would you like to proceed?",
+    "options": [
+      [
+        1,
+        "Yes, auto-accept edits",
+        null
+      ],
+      [
+        2,
+        "Yes, manually approve edits",
+        null
+      ],
+      [
+        3,
+        "Tell Claude what to change",
+        null
+      ]
+    ],
+    "hints": [],
+    "handoffs": [
+      [
+        "ctrl-g",
+        "edit in vim"
+      ]
+    ],
+    "focus": null,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "f694e9da656a9373",
+    "token": "f694e9da656a9373"
+  },
+  "tests/fixtures/capture-blocked-trust-folder/detection.txt": {
+    "shape": "single-choice",
+    "question": "Quick safety check: Is this a project you created or one you trust? (Like your own code, a well-known open source project, or work from your team). If\nnot, take a moment to review what's in this folder first.",
+    "body": "Accessing workspace:\n/home/user/demo-trust-probe\nQuick safety check: Is this a project you created or one you trust? (Like your own code, a well-known open source project, or work from your team). If\nnot, take a moment to review what's in this folder first.\nClaude Code'll be able to read, edit, and execute files here.\nSecurity guide",
+    "options": [
+      [
+        1,
+        "Yes, I trust this folder",
+        null
+      ],
+      [
+        2,
+        "No, exit",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "enter",
+        "confirm"
+      ],
+      [
+        "esc",
+        "cancel"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "9ac3507c9c451839",
+    "token": "9ac3507c9c451839"
+  },
+  "tests/fixtures/capture-blocked-trust-folder/recent-unwrapped.txt": {
+    "shape": "single-choice",
+    "question": "Quick safety check: Is this a project you created or one you trust? (Like your own code, a well-known open source project, or work from your team). If\nnot, take a moment to review what's in this folder first.",
+    "body": "Accessing workspace:\n/home/user/demo-trust-probe\nQuick safety check: Is this a project you created or one you trust? (Like your own code, a well-known open source project, or work from your team). If\nnot, take a moment to review what's in this folder first.\nClaude Code'll be able to read, edit, and execute files here.\nSecurity guide",
+    "options": [
+      [
+        1,
+        "Yes, I trust this folder",
+        null
+      ],
+      [
+        2,
+        "No, exit",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "enter",
+        "confirm"
+      ],
+      [
+        "esc",
+        "cancel"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "9ac3507c9c451839",
+    "token": "9ac3507c9c451839"
+  },
+  "tests/fixtures/capture-blocked-trust-folder/recent.txt": {
+    "shape": "single-choice",
+    "question": "Quick safety check: Is this a project you created or one you trust? (Like your own code, a well-known open source project, or work from your team). If\nnot, take a moment to review what's in this folder first.",
+    "body": "Accessing workspace:\n/home/user/demo-trust-probe\nQuick safety check: Is this a project you created or one you trust? (Like your own code, a well-known open source project, or work from your team). If\nnot, take a moment to review what's in this folder first.\nClaude Code'll be able to read, edit, and execute files here.\nSecurity guide",
+    "options": [
+      [
+        1,
+        "Yes, I trust this folder",
+        null
+      ],
+      [
+        2,
+        "No, exit",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "enter",
+        "confirm"
+      ],
+      [
+        "esc",
+        "cancel"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "9ac3507c9c451839",
+    "token": "9ac3507c9c451839"
+  },
+  "tests/fixtures/capture-blocked-trust-folder/visible.txt": {
+    "shape": "single-choice",
+    "question": "Quick safety check: Is this a project you created or one you trust? (Like your own code, a well-known open source project, or work from your team). If\nnot, take a moment to review what's in this folder first.",
+    "body": "Accessing workspace:\n/home/user/demo-trust-probe\nQuick safety check: Is this a project you created or one you trust? (Like your own code, a well-known open source project, or work from your team). If\nnot, take a moment to review what's in this folder first.\nClaude Code'll be able to read, edit, and execute files here.\nSecurity guide",
+    "options": [
+      [
+        1,
+        "Yes, I trust this folder",
+        null
+      ],
+      [
+        2,
+        "No, exit",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "enter",
+        "confirm"
+      ],
+      [
+        "esc",
+        "cancel"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "9ac3507c9c451839",
+    "token": "9ac3507c9c451839"
+  },
+  "tests/fixtures/capture-idle-claude-prompt/detection.txt": {
+    "shape": "none",
+    "question": "herdr-pwa [main] | ctx: 71% | 113h8m | +3782/-1221                                                                                    Opus 5\n⏵⏵ auto mode on (shift+tab to cycle) · ← 1 agent",
+    "body": "herdr-pwa [main] | ctx: 71% | 113h8m | +3782/-1221                                                                                    Opus 5\n⏵⏵ auto mode on (shift+tab to cycle) · ← 1 agent",
+    "options": [],
+    "hints": [],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "",
+    "token": "077571ff98f268dd"
+  },
+  "tests/fixtures/capture-idle-claude-prompt/recent-unwrapped.txt": {
+    "shape": "none",
+    "question": "herdr-pwa [main] | ctx: 71% | 113h8m | +3782/-1221                                                                                    Opus 5\n⏵⏵ auto mode on (shift+tab to cycle) · ← 1 agent",
+    "body": "herdr-pwa [main] | ctx: 71% | 113h8m | +3782/-1221                                                                                    Opus 5\n⏵⏵ auto mode on (shift+tab to cycle) · ← 1 agent",
+    "options": [],
+    "hints": [],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "",
+    "token": "1e78f9d078ccc607"
+  },
+  "tests/fixtures/capture-idle-claude-prompt/recent.txt": {
+    "shape": "none",
+    "question": "herdr-pwa [main] | ctx: 71% | 113h8m | +3782/-1221                                                                                    Opus 5\n⏵⏵ auto mode on (shift+tab to cycle) · ← 1 agent",
+    "body": "herdr-pwa [main] | ctx: 71% | 113h8m | +3782/-1221                                                                                    Opus 5\n⏵⏵ auto mode on (shift+tab to cycle) · ← 1 agent",
+    "options": [],
+    "hints": [],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "",
+    "token": "0773e3f8497bcd23"
+  },
+  "tests/fixtures/capture-idle-claude-prompt/visible.txt": {
+    "shape": "none",
+    "question": "herdr-pwa [main] | ctx: 71% | 113h8m | +3782/-1221                                                                                    Opus 5\n⏵⏵ auto mode on (shift+tab to cycle) · ← 1 agent",
+    "body": "herdr-pwa [main] | ctx: 71% | 113h8m | +3782/-1221                                                                                    Opus 5\n⏵⏵ auto mode on (shift+tab to cycle) · ← 1 agent",
+    "options": [],
+    "hints": [],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "",
+    "token": "077571ff98f268dd"
+  },
+  "tests/fixtures/capture-idle-numbered-recap/detection.txt": {
+    "shape": "none",
+    "question": "herdr-pwa [main] | ctx: 3% | 0m                                                                                                     Opus 5\n⏵⏵ auto mode on (shift+tab to cycle) · ← 1 agent",
+    "body": "herdr-pwa [main] | ctx: 3% | 0m                                                                                                     Opus 5\n⏵⏵ auto mode on (shift+tab to cycle) · ← 1 agent",
+    "options": [],
+    "hints": [],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "",
+    "token": "7410f1838ba225a1"
+  },
+  "tests/fixtures/capture-idle-numbered-recap/recent-unwrapped.txt": {
+    "shape": "none",
+    "question": "herdr-pwa [main] | ctx: 3% | 0m                                                                                                     Opus 5\n⏵⏵ auto mode on (shift+tab to cycle) · ← 1 agent",
+    "body": "herdr-pwa [main] | ctx: 3% | 0m                                                                                                     Opus 5\n⏵⏵ auto mode on (shift+tab to cycle) · ← 1 agent",
+    "options": [],
+    "hints": [],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "",
+    "token": "c82d638525778734"
+  },
+  "tests/fixtures/capture-idle-numbered-recap/recent.txt": {
+    "shape": "none",
+    "question": "herdr-pwa [main] | ctx: 3% | 0m                                                                                                     Opus 5\n⏵⏵ auto mode on (shift+tab to cycle) · ← 1 agent",
+    "body": "herdr-pwa [main] | ctx: 3% | 0m                                                                                                     Opus 5\n⏵⏵ auto mode on (shift+tab to cycle) · ← 1 agent",
+    "options": [],
+    "hints": [],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "",
+    "token": "c80ad858f36f2ccb"
+  },
+  "tests/fixtures/capture-idle-numbered-recap/visible.txt": {
+    "shape": "none",
+    "question": "herdr-pwa [main] | ctx: 3% | 0m                                                                                                     Opus 5\n⏵⏵ auto mode on (shift+tab to cycle) · ← 1 agent",
+    "body": "herdr-pwa [main] | ctx: 3% | 0m                                                                                                     Opus 5\n⏵⏵ auto mode on (shift+tab to cycle) · ← 1 agent",
+    "options": [],
+    "hints": [],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "",
+    "token": "7410f1838ba225a1"
+  },
+  "tests/fixtures/capture-working-claude/detection.txt": {
+    "shape": "none",
+    "question": "● main\n◯ general-purpose  Checking command_timeout default in settings.py                                                                   3m 50s · ↓ 94.1k tokens\n◯ general-purpose  Verifying vendored htmx.min.js checksums                                                                          2m 47s · ↓ 55.2k tokens\n◯ general-purpose  Reading the pairing flow in cli.py                                                                                2m 15s · ↓ 42.0k tokens\n◯ general-purpose  Reading model.py's status mapping                                                                                 1m 47s · ↓ 53.1k tokens\n◯ general-purpose  Inspecting capture-idle-claude-prompt detection.txt                                                               1m 17s · ↓ 36.8k tokens\n⧉  architecture",
+    "body": "herdr-pwa [main] | ctx: 56% | 2h58m | +962/-167                                                                                       Opus 5\n⏵⏵ auto mode on (shift+tab to cycle) · ← 1 agent\nmain\n◯ general-purpose  Checking command_timeout default in settings.py                                                                   3m 50s · ↓ 94.1k tokens\n◯ general-purpose  Verifying vendored htmx.min.js checksums                                                                          2m 47s · ↓ 55.2k tokens\n◯ general-purpose  Reading the pairing flow in cli.py                                                                                2m 15s · ↓ 42.0k tokens\n◯ general-purpose  Reading model.py's status mapping                                                                                 1m 47s · ↓ 53.1k tokens\n◯ general-purpose  Inspecting capture-idle-claude-prompt detection.txt                                                               1m 17s · ↓ 36.8k tokens\n⧉  architecture",
+    "options": [],
+    "hints": [],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "",
+    "token": "48506c5cc8e5734d"
+  },
+  "tests/fixtures/capture-working-claude/recent-unwrapped.txt": {
+    "shape": "none",
+    "question": "● main\n◯ general-purpose  Checking command_timeout default in settings.py                                                                   3m 50s · ↓ 94.1k tokens\n◯ general-purpose  Verifying vendored htmx.min.js checksums                                                                          2m 47s · ↓ 55.2k tokens\n◯ general-purpose  Reading the pairing flow in cli.py                                                                                2m 15s · ↓ 42.0k tokens\n◯ general-purpose  Reading model.py's status mapping                                                                                 1m 47s · ↓ 53.1k tokens\n◯ general-purpose  Inspecting capture-idle-claude-prompt detection.txt                                                               1m 17s · ↓ 36.8k tokens\n⧉  architecture",
+    "body": "herdr-pwa [main] | ctx: 56% | 2h58m | +962/-167                                                                                       Opus 5\n⏵⏵ auto mode on (shift+tab to cycle) · ← 1 agent\nmain\n◯ general-purpose  Checking command_timeout default in settings.py                                                                   3m 50s · ↓ 94.1k tokens\n◯ general-purpose  Verifying vendored htmx.min.js checksums                                                                          2m 47s · ↓ 55.2k tokens\n◯ general-purpose  Reading the pairing flow in cli.py                                                                                2m 15s · ↓ 42.0k tokens\n◯ general-purpose  Reading model.py's status mapping                                                                                 1m 47s · ↓ 53.1k tokens\n◯ general-purpose  Inspecting capture-idle-claude-prompt detection.txt                                                               1m 17s · ↓ 36.8k tokens\n⧉  architecture",
+    "options": [],
+    "hints": [],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "",
+    "token": "711702aea7035321"
+  },
+  "tests/fixtures/capture-working-claude/recent.txt": {
+    "shape": "none",
+    "question": "● main\n◯ general-purpose  Checking command_timeout default in settings.py                                                                   3m 50s · ↓ 94.1k tokens\n◯ general-purpose  Verifying vendored htmx.min.js checksums                                                                          2m 47s · ↓ 55.2k tokens\n◯ general-purpose  Reading the pairing flow in cli.py                                                                                2m 15s · ↓ 42.0k tokens\n◯ general-purpose  Reading model.py's status mapping                                                                                 1m 47s · ↓ 53.1k tokens\n◯ general-purpose  Inspecting capture-idle-claude-prompt detection.txt                                                               1m 17s · ↓ 36.8k tokens\n⧉  architecture",
+    "body": "herdr-pwa [main] | ctx: 56% | 2h58m | +962/-167                                                                                       Opus 5\n⏵⏵ auto mode on (shift+tab to cycle) · ← 1 agent\nmain\n◯ general-purpose  Checking command_timeout default in settings.py                                                                   3m 50s · ↓ 94.1k tokens\n◯ general-purpose  Verifying vendored htmx.min.js checksums                                                                          2m 47s · ↓ 55.2k tokens\n◯ general-purpose  Reading the pairing flow in cli.py                                                                                2m 15s · ↓ 42.0k tokens\n◯ general-purpose  Reading model.py's status mapping                                                                                 1m 47s · ↓ 53.1k tokens\n◯ general-purpose  Inspecting capture-idle-claude-prompt detection.txt                                                               1m 17s · ↓ 36.8k tokens\n⧉  architecture",
+    "options": [],
+    "hints": [],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "",
+    "token": "828ebb58927e6ab6"
+  },
+  "tests/fixtures/capture-working-claude/visible.txt": {
+    "shape": "none",
+    "question": "● main\n◯ general-purpose  Checking command_timeout default in settings.py                                                                   3m 50s · ↓ 94.1k tokens\n◯ general-purpose  Verifying vendored htmx.min.js checksums                                                                          2m 47s · ↓ 55.2k tokens\n◯ general-purpose  Reading the pairing flow in cli.py                                                                                2m 15s · ↓ 42.0k tokens\n◯ general-purpose  Reading model.py's status mapping                                                                                 1m 47s · ↓ 53.1k tokens\n◯ general-purpose  Inspecting capture-idle-claude-prompt detection.txt                                                               1m 17s · ↓ 36.8k tokens\n⧉  architecture",
+    "body": "herdr-pwa [main] | ctx: 56% | 2h58m | +962/-167                                                                                       Opus 5\n⏵⏵ auto mode on (shift+tab to cycle) · ← 1 agent\nmain\n◯ general-purpose  Checking command_timeout default in settings.py                                                                   3m 50s · ↓ 94.1k tokens\n◯ general-purpose  Verifying vendored htmx.min.js checksums                                                                          2m 47s · ↓ 55.2k tokens\n◯ general-purpose  Reading the pairing flow in cli.py                                                                                2m 15s · ↓ 42.0k tokens\n◯ general-purpose  Reading model.py's status mapping                                                                                 1m 47s · ↓ 53.1k tokens\n◯ general-purpose  Inspecting capture-idle-claude-prompt detection.txt                                                               1m 17s · ↓ 36.8k tokens\n⧉  architecture",
+    "options": [],
+    "hints": [],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "",
+    "token": "48506c5cc8e5734d"
+  },
+  "tests/fixtures/hermes/answered-still-flagged.txt": {
+    "shape": "none",
+    "question": "❯ Explain this error and how to fix it",
+    "body": "",
+    "options": [],
+    "hints": [],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "",
+    "token": "c50361cd21e9b466"
+  },
+  "tests/fixtures/hermes/blocked-approval.txt": {
+    "shape": "single-choice",
+    "question": "curl -s http://host/x | python3\n… (choose Show full command)",
+    "body": "⚠️  Dangerous Command\ncurl -s http://host/x | python3\n… (choose Show full command)",
+    "options": [
+      [
+        1,
+        "Allow once",
+        null
+      ],
+      [
+        2,
+        "Allow for this session",
+        null
+      ],
+      [
+        3,
+        "Add to permanent allowlist",
+        null
+      ],
+      [
+        4,
+        "Deny",
+        null
+      ],
+      [
+        5,
+        "Show full command",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "up",
+        "select"
+      ],
+      [
+        "down",
+        "select"
+      ],
+      [
+        "enter",
+        "confirm"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "6af6e88ac46c8dde",
+    "token": "6af6e88ac46c8dde"
+  },
+  "tests/fixtures/hermes/blocked-clarify.txt": {
+    "shape": "single-choice",
+    "question": "1 questions\n▸ Which database should I migrate first?",
+    "body": "1 questions\n▸ Which database should I migrate first?",
+    "options": [
+      [
+        1,
+        "users (Recommended)",
+        null
+      ],
+      [
+        2,
+        "orders",
+        null
+      ],
+      [
+        3,
+        "invoices",
+        null
+      ],
+      [
+        4,
+        "Other (type your answer)",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "up",
+        "select"
+      ],
+      [
+        "down",
+        "select"
+      ],
+      [
+        "enter",
+        "lock"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "347bd8201d08be57",
+    "token": "347bd8201d08be57"
+  },
+  "tests/fixtures/hermes/blocked-slash-confirm.txt": {
+    "shape": "single-choice",
+    "question": "This starts a fresh session.\nThe current conversation history will be discarded.",
+    "body": "⚠️  /new — destroys conversation state\nThis starts a fresh session.\nThe current conversation history will be discarded.",
+    "options": [
+      [
+        1,
+        "Approve Once — proceed this time only",
+        null
+      ],
+      [
+        2,
+        "Always Approve — proceed and silence this prompt permanently",
+        null
+      ],
+      [
+        3,
+        "Cancel — keep current conversation",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "up",
+        "select"
+      ],
+      [
+        "down",
+        "select"
+      ],
+      [
+        "enter",
+        "confirm"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "6c8d893d8c6c81a4",
+    "token": "6c8d893d8c6c81a4"
+  },
+  "tests/fixtures/hermes/stopped-approval.txt": {
+    "shape": "single-choice",
+    "question": "curl -fsSL http://127.0.0.1:9/install.sh | sudo -n bash -s --\n--force",
+    "body": "⚠️  Dangerous Command\ncurl -fsSL http://127.0.0.1:9/install.sh | sudo -n bash -s --\n--force",
+    "options": [
+      [
+        1,
+        "Allow once",
+        null
+      ],
+      [
+        2,
+        "Allow for this session",
+        null
+      ],
+      [
+        3,
+        "Add to permanent allowlist",
+        null
+      ],
+      [
+        4,
+        "Deny",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "up",
+        "select"
+      ],
+      [
+        "down",
+        "select"
+      ],
+      [
+        "enter",
+        "confirm"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "49de74a6916881b0",
+    "token": "49de74a6916881b0"
+  },
+  "tests/fixtures/capture-blocked-mcp-elicitation-accept/visible.ansi#ansi": {
+    "shape": "unknown",
+    "question": "Deploy the staging build now?",
+    "body": "MCP server “elicit-probe” requests your input\nDeploy the staging build now?\n✔ Confirm: ☒\nDeploy now\n❯ Accept    Decline\nEsc to cancel · ↑/↓ to navigate",
+    "options": [],
+    "hints": [
+      [
+        "esc",
+        "cancel"
+      ],
+      [
+        "up",
+        "navigate"
+      ],
+      [
+        "down",
+        "navigate"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "7dcccb36cf4f7ad1",
+    "token": "7dcccb36cf4f7ad1"
+  },
+  "tests/fixtures/capture-blocked-mcp-elicitation-confirm/visible.ansi#ansi": {
+    "shape": "multi-select",
+    "question": "Deploy the staging build now?",
+    "body": "MCP server “elicit-probe” requests your input\nDeploy the staging build now?\n❯ * Confirm: ☐\nDeploy now\nAccept    Decline\nEsc to cancel · ↑/↓ to navigate · Backspace to unset · Space to toggle",
+    "options": [],
+    "hints": [
+      [
+        "esc",
+        "cancel"
+      ],
+      [
+        "up",
+        "navigate"
+      ],
+      [
+        "down",
+        "navigate"
+      ],
+      [
+        "space",
+        "toggle"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "23369c253004b707",
+    "token": "23369c253004b707"
+  },
+  "tests/fixtures/capture-blocked-mcp-elicitation-form/visible.ansi#ansi": {
+    "shape": "unknown",
+    "question": "Fill in the release details",
+    "body": "MCP server “elicit-probe” requests your input\nFill in the release details\n❯ * Release name: Type something…\nShort name\n* Channel: not set\nReplica count: not set\nNotify team: not set\nAccept    Decline\nEsc to cancel · ↑/↓ to navigate · Backspace to unset",
+    "options": [],
+    "hints": [
+      [
+        "esc",
+        "cancel"
+      ],
+      [
+        "up",
+        "navigate"
+      ],
+      [
+        "down",
+        "navigate"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "b35788f697576945",
+    "token": "b35788f697576945"
+  },
+  "tests/fixtures/capture-blocked-mcp-elicitation-form-enum/visible.ansi#ansi": {
+    "shape": "unknown",
+    "question": "Fill in the release details",
+    "body": "MCP server “elicit-probe” requests your input\nFill in the release details\n* Release name: not set\nShort name\n❯ * Channel: ▾\n❯ ◯ stable\n◯ beta\n◯ nightly\nReplica count: not set\nNotify team: not set\nAccept    Decline\nEsc to cancel · ↑/↓ to navigate · Backspace to unset · Space to select",
+    "options": [],
+    "hints": [
+      [
+        "esc",
+        "cancel"
+      ],
+      [
+        "up",
+        "navigate"
+      ],
+      [
+        "down",
+        "navigate"
+      ],
+      [
+        "space",
+        "select"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "2e0476cc146b5bd7",
+    "token": "2e0476cc146b5bd7"
+  },
+  "tests/fixtures/capture-blocked-opencode-multiselect/visible.ansi#ansi": {
+    "shape": "multi-select",
+    "question": "Which databases do you want? (select all that apply)",
+    "body": "Databases   Confirm\nWhich databases do you want? (select all that apply)",
+    "options": [
+      [
+        1,
+        "PostgreSQL",
+        true
+      ],
+      [
+        2,
+        "SQLite",
+        false
+      ],
+      [
+        3,
+        "DuckDB",
+        false
+      ],
+      [
+        4,
+        "Type your own answer",
+        false
+      ]
+    ],
+    "hints": [
+      [
+        "tab",
+        "tab"
+      ],
+      [
+        "up",
+        "select"
+      ],
+      [
+        "down",
+        "select"
+      ],
+      [
+        "enter",
+        "toggle"
+      ]
+    ],
+    "handoffs": [],
+    "focus": 0,
+    "stepper": [
+      0,
+      "Databases"
+    ],
+    "corroborated": true,
+    "identity": "1b1d9bc937989c47",
+    "token": "1b1d9bc937989c47"
+  },
+  "tests/fixtures/capture-blocked-opencode-permission/visible.ansi#ansi": {
+    "shape": "buttons",
+    "question": "△ Permission required\n# Shell command",
+    "body": "△ Permission required\n# Shell command\n$ touch fixture1.txt",
+    "options": [
+      [
+        1,
+        "Allow once",
+        null
+      ],
+      [
+        2,
+        "Allow always",
+        null
+      ],
+      [
+        3,
+        "Reject",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "left",
+        "select"
+      ],
+      [
+        "right",
+        "select"
+      ],
+      [
+        "enter",
+        "confirm"
+      ]
+    ],
+    "handoffs": [],
+    "focus": 0,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "b195bf19c8de9319",
+    "token": "b195bf19c8de9319"
+  },
+  "tests/fixtures/capture-blocked-opencode-question/visible.ansi#ansi": {
+    "shape": "single-choice",
+    "question": "Which database?",
+    "body": "Which database?",
+    "options": [
+      [
+        1,
+        "PostgreSQL",
+        null
+      ],
+      [
+        2,
+        "SQLite",
+        null
+      ],
+      [
+        3,
+        "DuckDB",
+        null
+      ],
+      [
+        4,
+        "Type your own answer",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "up",
+        "select"
+      ],
+      [
+        "down",
+        "select"
+      ],
+      [
+        "enter",
+        "submit"
+      ],
+      [
+        "esc",
+        "dismiss"
+      ]
+    ],
+    "handoffs": [],
+    "focus": 0,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "9637ccc172e2bead",
+    "token": "9637ccc172e2bead"
+  },
+  "tests/fixtures/capture-blocked-opencode-questions-tabs/visible.ansi#ansi": {
+    "shape": "single-choice",
+    "question": "Which vibe?",
+    "body": "Vibe   Budget   Confirm\nWhich vibe?",
+    "options": [
+      [
+        1,
+        "Rustic",
+        null
+      ],
+      [
+        2,
+        "Modern",
+        null
+      ],
+      [
+        3,
+        "Type your own answer",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "tab",
+        "tab"
+      ],
+      [
+        "up",
+        "select"
+      ],
+      [
+        "down",
+        "select"
+      ],
+      [
+        "enter",
+        "confirm"
+      ]
+    ],
+    "handoffs": [],
+    "focus": 0,
+    "stepper": [
+      0,
+      "Vibe",
+      "Budget"
+    ],
+    "corroborated": true,
+    "identity": "260498fbf6f80d0c",
+    "token": "260498fbf6f80d0c"
+  },
+  "tests/fixtures/ansi/claude-blocked-bash-permission.ansi#ansi": {
+    "shape": "single-choice",
+    "question": "Do you want to proceed?",
+    "body": "Bash command\ncurl -sS https://example.com/ansi1-colour-probe | head -c 20\nFetch first 20 bytes from example.com/ansi1-colour-probe\nThis command requires approval\nDo you want to proceed?",
+    "options": [
+      [
+        1,
+        "Yes",
+        null
+      ],
+      [
+        2,
+        "Yes, and don’t ask again for: curl -sS https://example.com/ansi1-colour-probe",
+        null
+      ],
+      [
+        3,
+        "No",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "esc",
+        "cancel"
+      ],
+      [
+        "tab",
+        "amend"
+      ],
+      [
+        "ctrl-e",
+        "explain"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "a3d4b1f70f790ad7",
+    "token": "a3d4b1f70f790ad7"
+  },
+  "tests/fixtures/ansi/claude-blocked-bash-permission.detection.ansi#ansi": {
+    "shape": "single-choice",
+    "question": "Do you want to proceed?",
+    "body": "Bash command\ncurl -sS https://example.com/ansi1-colour-probe | head -c 20\nFetch first 20 bytes from example.com/ansi1-colour-probe\nThis command requires approval\nDo you want to proceed?",
+    "options": [
+      [
+        1,
+        "Yes",
+        null
+      ],
+      [
+        2,
+        "Yes, and don’t ask again for: curl -sS https://example.com/ansi1-colour-probe",
+        null
+      ],
+      [
+        3,
+        "No",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "esc",
+        "cancel"
+      ],
+      [
+        "tab",
+        "amend"
+      ],
+      [
+        "ctrl-e",
+        "explain"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "a3d4b1f70f790ad7",
+    "token": "a3d4b1f70f790ad7"
+  },
+  "tests/fixtures/ansi/claude-idle-welcome.ansi#ansi": {
+    "shape": "none",
+    "question": "herdr-pwa [main] | ctx: 0% | 0m                                                                                                       Haiku 4.5\n⏸ manual mode on · ← 1 agent",
+    "body": "herdr-pwa [main] | ctx: 0% | 0m                                                                                                       Haiku 4.5\n⏸ manual mode on · ← 1 agent",
+    "options": [],
+    "hints": [],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "",
+    "token": "b6f93d669a20c367"
+  },
+  "tests/fixtures/rig/blocked-build-scrollback.ansi#ansi": {
+    "shape": "none",
+    "question": "$ step 000: applied to the cluster\n$ step 001: applied to the cluster\n$ step 002: applied to the cluster\n$ step 003: applied to the cluster\n$ step 004: applied to the cluster\n$ step 005: applied to the cluster\n$ step 006: applied to the cluster\n$ step 007: applied to the cluster\n$ step 008: applied to the cluster\n$ step 009: applied to the cluster\n$ step 010: applied to the cluster\n$ step 011: applied to the cluster\n$ step 012: applied to the cluster\n$ step 013: applied to the cluster\n$ step 014: applied to the cluster\n$ step 015: applied to the cluster\n$ step 016: applied to the cluster\n$ step 017: applied to the cluster\n$ step 018: applied to the cluster\n$ step 019: applied to the cluster\n$ step 020: applied to the cluster\n$ step 021: applied to the cluster\n$ step 022: applied to the cluster\n$ step 023: applied to the cluster",
+    "body": "$ step 000: applied to the cluster\n$ step 001: applied to the cluster\n$ step 002: applied to the cluster\n$ step 003: applied to the cluster\n$ step 004: applied to the cluster\n$ step 005: applied to the cluster\n$ step 006: applied to the cluster\n$ step 007: applied to the cluster\n$ step 008: applied to the cluster\n$ step 009: applied to the cluster\n$ step 010: applied to the cluster\n$ step 011: applied to the cluster\n$ step 012: applied to the cluster\n$ step 013: applied to the cluster\n$ step 014: applied to the cluster\n$ step 015: applied to the cluster\n$ step 016: applied to the cluster\n$ step 017: applied to the cluster\n$ step 018: applied to the cluster\n$ step 019: applied to the cluster\n$ step 020: applied to the cluster\n$ step 021: applied to the cluster\n$ step 022: applied to the cluster\n$ step 023: applied to the cluster",
+    "options": [],
+    "hints": [],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "",
+    "token": "904ff0af0e90e701"
+  },
+  "tests/fixtures/rig/claude-statusline-bars.ansi#ansi": {
+    "shape": "none",
+    "question": "█████░░░░░ 52% │ ⏱ 12m │ 💰 $1.20 • 🧠 Opus 5.5 • ❯ main",
+    "body": "█████░░░░░ 52% │ ⏱ 12m │ 💰 $1.20 • 🧠 Opus 5.5 • ❯ main",
+    "options": [],
+    "hints": [],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "",
+    "token": "61c9156768f2f8f6"
+  },
+  "tests/fixtures/rig/claude-statusline-narrow.ansi#ansi": {
+    "shape": "none",
+    "question": "herdr-pwa [main] | ctx: 22% | 5h: 46%(now) | 7d: 91\n⏵⏵ auto mode on (shift+tab to cycle)",
+    "body": "herdr-pwa [main] | ctx: 22% | 5h: 46%(now) | 7d: 91\n⏵⏵ auto mode on (shift+tab to cycle)",
+    "options": [],
+    "hints": [],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "",
+    "token": "68ed7e754cc6410e"
+  },
+  "tests/fixtures/rig/claude-statusline-powerline.ansi#ansi": {
+    "shape": "none",
+    "question": " main   Opus 5.5   ctx 22%   5h 46% · 7d 91% \n⏵⏵ auto mode on (shift+tab to cycle)",
+    "body": " main   Opus 5.5   ctx 22%   5h 46% · 7d 91% \n⏵⏵ auto mode on (shift+tab to cycle)",
+    "options": [],
+    "hints": [],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "",
+    "token": "889476f50ae12580"
+  },
+  "tests/fixtures/rig/claude-statusline-rows.ansi#ansi": {
+    "shape": "none",
+    "question": "Opus 5.5 | herdr-pwa [main]\nctx 22% | 5h 46%(now) | 7d 91%(1d5h)\n6h34m | +226/-0\n⏵⏵ auto mode on (shift+tab to cycle)",
+    "body": "Opus 5.5 | herdr-pwa [main]\nctx 22% | 5h 46%(now) | 7d 91%(1d5h)\n6h34m | +226/-0\n⏵⏵ auto mode on (shift+tab to cycle)",
+    "options": [],
+    "hints": [],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "",
+    "token": "729136e57afb113d"
+  },
+  "tests/fixtures/rig/claude-statusline.ansi#ansi": {
+    "shape": "none",
+    "question": "herdr-pwa [main] | ctx: 22% | 5h: 46%(now) | 7d: 91%(1d5h) | 6h34m | proj: 41% | +226/-0 | Opus 5.5\n⏵⏵ auto mode on (shift+tab to cycle) · ← 1 agent",
+    "body": "herdr-pwa [main] | ctx: 22% | 5h: 46%(now) | 7d: 91%(1d5h) | 6h34m | proj: 41% | +226/-0 | Opus 5.5\n⏵⏵ auto mode on (shift+tab to cycle) · ← 1 agent",
+    "options": [],
+    "hints": [],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "",
+    "token": "7a41f36649482003"
+  },
+  "tests/fixtures/rig/opencode-scrollback-list.ansi#ansi": {
+    "shape": "unknown",
+    "question": "The build broke on the schema step. Two ways out, and one more if you'd rather wait.\nWhich one do you want?",
+    "body": "↑↓ select  enter submit  esc dismiss",
+    "options": [],
+    "hints": [
+      [
+        "up",
+        "select"
+      ],
+      [
+        "down",
+        "select"
+      ],
+      [
+        "enter",
+        "submit"
+      ],
+      [
+        "esc",
+        "dismiss"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "e5aa4f18e188b00c",
+    "token": "e5aa4f18e188b00c"
+  },
+  "foreign/collie/claude--draft-footer-empty.txt": {
+    "shape": "none",
+    "question": "● main\n◯ worker:scout  Reviewing the test suite                                1m 17s · ↓ 12.0k tokens",
+    "body": "[Opus 4.8] ~/projects/acme-app on main* ctx:33% 5h:74%/2h:00m 7d:85%/2d:13h\n⏵⏵ bypass permissions on (shift+tab to cycle) · ← 1 agent\nmain\n◯ worker:scout  Reviewing the test suite                                1m 17s · ↓ 12.0k tokens",
+    "options": [],
+    "hints": [],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "",
+    "token": "6556a9b715fee528"
+  },
+  "foreign/collie/claude--draft-footer-single.txt": {
+    "shape": "none",
+    "question": "● main\n◯ worker:scout  Reviewing the test suite                                1m 17s · ↓ 12.0k tokens",
+    "body": "[Opus 4.8] ~/projects/acme-app on main* ctx:33% 5h:74%/2h:00m 7d:85%/2d:13h\n⏵⏵ bypass permissions on (shift+tab to cycle) · ← 1 agent\nmain\n◯ worker:scout  Reviewing the test suite                                1m 17s · ↓ 12.0k tokens",
+    "options": [],
+    "hints": [],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "",
+    "token": "3063ed65b24f49a7"
+  },
+  "foreign/collie/claude--draft-footer-wrapped.txt": {
+    "shape": "none",
+    "question": "● main\n◯ worker:scout  Reviewing the test suite                                1m 17s · ↓ 12.0k tokens",
+    "body": "[Opus 4.8] ~/projects/acme-app on main* ctx:33% 5h:74%/2h:00m 7d:85%/2d:13h\n⏵⏵ bypass permissions on (shift+tab to cycle) · ← 1 agent\nmain\n◯ worker:scout  Reviewing the test suite                                1m 17s · ↓ 12.0k tokens",
+    "options": [],
+    "hints": [],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "",
+    "token": "e350007a370a4175"
+  },
+  "foreign/collie/claude--draft-paste-placeholder.txt": {
+    "shape": "none",
+    "question": "[Opus 4.8 (1M context)] ~/playground/collie-demo-h…\n⏸ manual mode on",
+    "body": "[Opus 4.8 (1M context)] ~/playground/collie-demo-h…\n⏸ manual mode on",
+    "options": [],
+    "hints": [],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "",
+    "token": "1d036813dd24b5d4"
+  },
+  "foreign/collie/claude--draft-paste-split-partial.txt": {
+    "shape": "none",
+    "question": "⚠ Transcript saving is off — inherited CLAUDE_CODE_CHILD_SESSION marker · restart with CLAUDE_CODE_FORCE_SESSION_PERSISTENCE=1 to keep future transcripts\n[Opus·medium] ~/playground/collie-demo-herd/juniper\npaste again to expand",
+    "body": "⚠ Transcript saving is off — inherited CLAUDE_CODE_CHILD_SESSION marker · restart with CLAUDE_CODE_FORCE_SESSION_PERSISTENCE=1 to keep future transcripts\n[Opus·medium] ~/playground/collie-demo-herd/juniper\npaste again to expand",
+    "options": [],
+    "hints": [],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "",
+    "token": "4a2bd71b8c1a7e29"
+  },
+  "foreign/collie/claude--draft-paste-split-tail.txt": {
+    "shape": "none",
+    "question": "⚠ Transcript saving is off — inherited CLAUDE_CODE_CHILD_SESSION marker · restart with CLAUDE_CODE_FORCE_SESSION_PERSISTENCE=1 to keep future transcripts\n[Opus·medium] ~/playground/collie-demo-herd/juniper\npaste again to expand",
+    "body": "⚠ Transcript saving is off — inherited CLAUDE_CODE_CHILD_SESSION marker · restart with CLAUDE_CODE_FORCE_SESSION_PERSISTENCE=1 to keep future transcripts\n[Opus·medium] ~/playground/collie-demo-herd/juniper\npaste again to expand",
+    "options": [],
+    "hints": [],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "",
+    "token": "05e16a1804f9d76b"
+  },
+  "foreign/collie/claude--draft-wrapped.txt": {
+    "shape": "none",
+    "question": "[Opus 4.8 (1M context)] ~/playground/collie-demo-h…\n⏸ manual mode on",
+    "body": "[Opus 4.8 (1M context)] ~/playground/collie-demo-h…\n⏸ manual mode on",
+    "options": [],
+    "hints": [],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "",
+    "token": "a87be57b18a5cce3"
+  },
+  "foreign/collie/claude--menu-model-picker-moved.txt": {
+    "shape": "unknown",
+    "question": "◐ Medium effort ←/→ to adjust",
+    "body": "❯ /model\n⎿  Set model to Haiku 4.5 and saved as your default for new sessions\n❯ /model\n⎿  Set model to Opus 5 (1M context) (default) and saved as your default for new sessions\n▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔\nSelect model\nSwitch between Claude models. Your pick becomes the default for new sessions. For other/previous model names, specify with --model.\n1. Default (recommended) ✔  Opus 5 with 1M context · Best for everyday, complex tasks\n2. Opus (1M context)        Opus 5 with 1M context · Best for everyday, complex tasks\n❯ 3. Fable                    Fable 5 · Most capable for your hardest and longest-running tasks\n4. Sonnet                   Sonnet 5 · Efficient for routine tasks\n5. Haiku                    Haiku 4.5 · Fastest for quick answers\n◐ Medium effort ←/→ to adjust\nEnter to set as default · s to use this session only · Esc to cancel",
+    "options": [],
+    "hints": [
+      [
+        "enter",
+        "set as default"
+      ],
+      [
+        "esc",
+        "cancel"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "51f3aea879eef0fa",
+    "token": "51f3aea879eef0fa"
+  },
+  "foreign/collie/claude--menu-model-picker.txt": {
+    "shape": "unknown",
+    "question": "◐ Medium effort ←/→ to adjust",
+    "body": "❯ /model\n⎿  Set model to Haiku 4.5 and saved as your default for new sessions\n❯ /model\n⎿  Set model to Opus 5 (1M context) (default) and saved as your default for new sessions\n▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔\nSelect model\nSwitch between Claude models. Your pick becomes the default for new sessions. For other/previous model names, specify with --model.\n❯ 1. Default (recommended) ✔  Opus 5 with 1M context · Best for everyday, complex tasks\n2. Opus (1M context)        Opus 5 with 1M context · Best for everyday, complex tasks\n3. Fable                    Fable 5 · Most capable for your hardest and longest-running tasks\n4. Sonnet                   Sonnet 5 · Efficient for routine tasks\n5. Haiku                    Haiku 4.5 · Fastest for quick answers\n◐ Medium effort ←/→ to adjust\nEnter to set as default · s to use this session only · Esc to cancel",
+    "options": [],
+    "hints": [
+      [
+        "enter",
+        "set as default"
+      ],
+      [
+        "esc",
+        "cancel"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "8f6e38c3c065bf9a",
+    "token": "8f6e38c3c065bf9a"
+  },
+  "foreign/collie/claude--permission-bash.txt": {
+    "shape": "single-choice",
+    "question": "Do you want to proceed?",
+    "body": "Bash command\nmkfifo fixture-fifo\nCreate a named pipe (FIFO)\nThis command requires approval\nDo you want to proceed?",
+    "options": [
+      [
+        1,
+        "Yes",
+        null
+      ],
+      [
+        2,
+        "Yes, and don’t ask again for: mkfifo fixture-fifo *",
+        null
+      ],
+      [
+        3,
+        "No",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "esc",
+        "cancel"
+      ],
+      [
+        "tab",
+        "amend"
+      ],
+      [
+        "ctrl-e",
+        "explain"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "1361537fd3891ae0",
+    "token": "1361537fd3891ae0"
+  },
+  "foreign/collie/claude--permission-edit.txt": {
+    "shape": "single-choice",
+    "question": "Do you want to create hello.txt?",
+    "body": "Do you want to create hello.txt?",
+    "options": [
+      [
+        1,
+        "Yes",
+        null
+      ],
+      [
+        2,
+        "Yes, allow all edits during this session (shift+tab)",
+        null
+      ],
+      [
+        3,
+        "No",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "esc",
+        "cancel"
+      ],
+      [
+        "tab",
+        "amend"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "4a8fbfc35376475c",
+    "token": "4a8fbfc35376475c"
+  },
+  "foreign/collie/claude--plan-approval--feedback-focused.txt": {
+    "shape": "single-choice",
+    "question": "Claude has written up a plan and is ready to execute. Would you like to proceed?",
+    "body": "Claude has written up a plan and is ready to execute. Would you like to proceed?",
+    "options": [
+      [
+        1,
+        "Yes, clear context (5% used) and use auto mode",
+        null
+      ],
+      [
+        2,
+        "Yes, and use auto mode",
+        null
+      ],
+      [
+        3,
+        "Yes, manually approve edits",
+        null
+      ],
+      [
+        4,
+        "Tell Claude what to change",
+        null
+      ]
+    ],
+    "hints": [],
+    "handoffs": [
+      [
+        "ctrl-g",
+        "edit in vim"
+      ]
+    ],
+    "focus": null,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "a7cd989b55070200",
+    "token": "a7cd989b55070200"
+  },
+  "foreign/collie/claude--plan-approval--feedback-typed.txt": {
+    "shape": "single-choice",
+    "question": "Claude has written up a plan and is ready to execute. Would you like to proceed?",
+    "body": "Claude has written up a plan and is ready to execute. Would you like to proceed?",
+    "options": [
+      [
+        1,
+        "Yes, clear context (4% used) and use auto mode",
+        null
+      ],
+      [
+        2,
+        "Yes, and use auto mode",
+        null
+      ],
+      [
+        3,
+        "Yes, manually approve edits",
+        null
+      ],
+      [
+        4,
+        "use a guard clause instead",
+        null
+      ]
+    ],
+    "hints": [],
+    "handoffs": [
+      [
+        "ctrl-g",
+        "edit in vim"
+      ]
+    ],
+    "focus": null,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "0ca99ec0d325f039",
+    "token": "0ca99ec0d325f039"
+  },
+  "foreign/collie/claude--plan-approval--feedback-wrapped.txt": {
+    "shape": "unknown",
+    "question": "Claude has written up a plan and is ready to execute. Would you like to proceed?",
+    "body": "Claude has written up a plan and is ready to execute. Would you like to proceed?\n1. Yes, and use auto mode\n❯ 2. Yes, manually approve edits\n3. Keep the nested structure instead of a guard clause, but extract each condition into a small named predicate so the intent reads at the call site, and leave the\nexported name unchanged.\nshift+tab to approve with this feedback\nctrl+g to edit in nano · ~/.claude/plans/refactor-validate-in-validate-js-purrfect-candle.md",
+    "options": [],
+    "hints": [],
+    "handoffs": [
+      [
+        "ctrl-g",
+        "edit in nano"
+      ]
+    ],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "87cf6c71aaf0aee6",
+    "token": "87cf6c71aaf0aee6"
+  },
+  "foreign/collie/claude--plan-approval--three-row-focused.txt": {
+    "shape": "single-choice",
+    "question": "Claude has written up a plan and is ready to execute. Would you like to proceed?",
+    "body": "Claude has written up a plan and is ready to execute. Would you like to proceed?",
+    "options": [
+      [
+        1,
+        "Yes, and use auto mode",
+        null
+      ],
+      [
+        2,
+        "Yes, manually approve edits",
+        null
+      ],
+      [
+        3,
+        "Tell Claude what to change",
+        null
+      ]
+    ],
+    "hints": [],
+    "handoffs": [
+      [
+        "ctrl-g",
+        "edit in nano"
+      ]
+    ],
+    "focus": null,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "fe5f150207123f19",
+    "token": "fe5f150207123f19"
+  },
+  "foreign/collie/claude--plan-approval--three-row-typed-focused.txt": {
+    "shape": "single-choice",
+    "question": "Claude has written up a plan and is ready to execute. Would you like to proceed?",
+    "body": "Claude has written up a plan and is ready to execute. Would you like to proceed?",
+    "options": [
+      [
+        1,
+        "Yes, and use auto mode",
+        null
+      ],
+      [
+        2,
+        "Yes, manually approve edits",
+        null
+      ],
+      [
+        3,
+        "use a guard clause instead",
+        null
+      ]
+    ],
+    "hints": [],
+    "handoffs": [
+      [
+        "ctrl-g",
+        "edit in nano"
+      ]
+    ],
+    "focus": null,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "f6f9ee1f803821a5",
+    "token": "f6f9ee1f803821a5"
+  },
+  "foreign/collie/claude--plan-approval--three-row.txt": {
+    "shape": "single-choice",
+    "question": "Claude has written up a plan and is ready to execute. Would you like to proceed?",
+    "body": "Claude has written up a plan and is ready to execute. Would you like to proceed?",
+    "options": [
+      [
+        1,
+        "Yes, and use auto mode",
+        null
+      ],
+      [
+        2,
+        "Yes, manually approve edits",
+        null
+      ],
+      [
+        3,
+        "Tell Claude what to change",
+        null
+      ]
+    ],
+    "hints": [],
+    "handoffs": [
+      [
+        "ctrl-g",
+        "edit in nano"
+      ]
+    ],
+    "focus": null,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "fe5f150207123f19",
+    "token": "fe5f150207123f19"
+  },
+  "foreign/collie/claude--plan-approval.txt": {
+    "shape": "single-choice",
+    "question": "Claude has written up a plan and is ready to execute. Would you like to proceed?",
+    "body": "Claude has written up a plan and is ready to execute. Would you like to proceed?",
+    "options": [
+      [
+        1,
+        "Yes, and use auto mode",
+        null
+      ],
+      [
+        2,
+        "Yes, manually approve edits",
+        null
+      ],
+      [
+        3,
+        "No, refine with Ultraplan on Claude Code on the web",
+        null
+      ],
+      [
+        4,
+        "Tell Claude what to change",
+        null
+      ]
+    ],
+    "hints": [],
+    "handoffs": [
+      [
+        "ctrl-g",
+        "edit in"
+      ]
+    ],
+    "focus": null,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "eeff548df4e5d582",
+    "token": "eeff548df4e5d582"
+  },
+  "foreign/collie/claude--rename-resolved.txt": {
+    "shape": "none",
+    "question": "[Opus 4.8 (1M context)] ~/playground/collie-demo-…\n⏸ manual mode on",
+    "body": "[Opus 4.8 (1M context)] ~/playground/collie-demo-…\n⏸ manual mode on",
+    "options": [],
+    "hints": [],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "",
+    "token": "9d1769f378f6942c"
+  },
+  "foreign/collie/claude--select-menu.txt": {
+    "shape": "single-choice",
+    "question": "Which color theme should the dashboard use?",
+    "body": "☐ Color Theme\nWhich color theme should the dashboard use?",
+    "options": [
+      [
+        1,
+        "Red",
+        null
+      ],
+      [
+        2,
+        "Green",
+        null
+      ],
+      [
+        3,
+        "Blue",
+        null
+      ],
+      [
+        4,
+        "Type something.",
+        null
+      ],
+      [
+        5,
+        "Chat about this",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "enter",
+        "select"
+      ],
+      [
+        "up",
+        "navigate"
+      ],
+      [
+        "down",
+        "navigate"
+      ],
+      [
+        "esc",
+        "cancel"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "79e22e1ec38ef3d6",
+    "token": "79e22e1ec38ef3d6"
+  },
+  "foreign/collie/claude--select-multi.txt": {
+    "shape": "single-choice",
+    "question": "How should I approach the work?",
+    "body": "←  ☒ Focus area  ☐ Scope  ☐ Workflow  ✔ Submit  →\nHow should I approach the work?",
+    "options": [
+      [
+        1,
+        "Plan first",
+        null
+      ],
+      [
+        2,
+        "Just build it",
+        null
+      ],
+      [
+        3,
+        "Build + verify",
+        null
+      ],
+      [
+        4,
+        "Type something.",
+        null
+      ],
+      [
+        5,
+        "Chat about this",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "enter",
+        "select"
+      ],
+      [
+        "tab",
+        "navigate"
+      ],
+      [
+        "up",
+        "navigate"
+      ],
+      [
+        "down",
+        "navigate"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": [
+      1,
+      "Focus area",
+      "Scope",
+      "Workflow"
+    ],
+    "corroborated": true,
+    "identity": "10834b26d099d3d6",
+    "token": "10834b26d099d3d6"
+  },
+  "foreign/collie/claude--select-multiselect-review.txt": {
+    "shape": "single-choice",
+    "question": "Ready to submit your answers?",
+    "body": "←  ☐ Toppings  ✔ Submit  →\nReview your answers\n⚠ You have not answered all questions\nReady to submit your answers?",
+    "options": [
+      [
+        1,
+        "Submit answers",
+        null
+      ],
+      [
+        2,
+        "Cancel",
+        null
+      ]
+    ],
+    "hints": [],
+    "handoffs": [],
+    "focus": null,
+    "stepper": [
+      0,
+      "Toppings"
+    ],
+    "corroborated": true,
+    "identity": "a2d8b328b586ae8d",
+    "token": "a2d8b328b586ae8d"
+  },
+  "foreign/collie/claude--select-preview-note-attached.txt": {
+    "shape": "single-choice",
+    "question": "Which widget design should we use?",
+    "body": "☐ Design\nWhich widget design should we use?",
+    "options": [
+      [
+        1,
+        "Boxy",
+        null
+      ],
+      [
+        2,
+        "Rounded",
+        null
+      ],
+      [
+        3,
+        "Minimal",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "enter",
+        "select"
+      ],
+      [
+        "up",
+        "navigate"
+      ],
+      [
+        "down",
+        "navigate"
+      ],
+      [
+        "esc",
+        "cancel"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "755e698e4332ccae",
+    "token": "755e698e4332ccae"
+  },
+  "foreign/collie/claude--select-preview-note-input.txt": {
+    "shape": "unknown",
+    "question": "Chat about this",
+    "body": "Chat about this\nEnter to select · ↑/↓ to navigate · n to add notes · ctrl+g to edit in nano · Esc to cancel",
+    "options": [],
+    "hints": [
+      [
+        "enter",
+        "select"
+      ],
+      [
+        "up",
+        "navigate"
+      ],
+      [
+        "down",
+        "navigate"
+      ]
+    ],
+    "handoffs": [
+      [
+        "ctrl-g",
+        "edit in nano"
+      ]
+    ],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "848f3de059fc4e7c",
+    "token": "848f3de059fc4e7c"
+  },
+  "foreign/collie/claude--select-preview.txt": {
+    "shape": "single-choice",
+    "question": "Which widget design should we use?",
+    "body": "☐ Design\nWhich widget design should we use?",
+    "options": [
+      [
+        1,
+        "Boxy",
+        null
+      ],
+      [
+        2,
+        "Rounded",
+        null
+      ],
+      [
+        3,
+        "Minimal",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "enter",
+        "select"
+      ],
+      [
+        "up",
+        "navigate"
+      ],
+      [
+        "down",
+        "navigate"
+      ],
+      [
+        "esc",
+        "cancel"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": true,
+    "identity": "755e698e4332ccae",
+    "token": "755e698e4332ccae"
+  },
+  "foreign/collie/claude--send-inflight.txt": {
+    "shape": "none",
+    "question": "[Opus 4.8 (1M context)] ~/playground/collie-demo-…\n⏸ manual mode on",
+    "body": "[Opus 4.8 (1M context)] ~/playground/collie-demo-…\n⏸ manual mode on",
+    "options": [],
+    "hints": [],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "",
+    "token": "bf2732a0e11f878d"
+  },
+  "foreign/collie/claude--wizard-multiselect-checked.txt": {
+    "shape": "multi-select",
+    "question": "Which toppings would you like on your pizza?",
+    "body": "←  ☒ Toppings  ☐ Crust  ✔ Submit  →\nWhich toppings would you like on your pizza?",
+    "options": [
+      [
+        1,
+        "Pepperoni",
+        true
+      ],
+      [
+        2,
+        "Mushrooms",
+        false
+      ],
+      [
+        3,
+        "Bell peppers",
+        true
+      ],
+      [
+        4,
+        "Extra cheese",
+        false
+      ],
+      [
+        5,
+        "Type something",
+        false
+      ],
+      [
+        6,
+        "Chat about this",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "enter",
+        "select"
+      ],
+      [
+        "tab",
+        "navigate"
+      ],
+      [
+        "up",
+        "navigate"
+      ],
+      [
+        "down",
+        "navigate"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": [
+      1,
+      "Toppings",
+      "Crust"
+    ],
+    "corroborated": true,
+    "identity": "cb4e52ae9962c542",
+    "token": "cb4e52ae9962c542"
+  },
+  "foreign/collie/claude--wizard-multiselect-final.txt": {
+    "shape": "multi-select",
+    "question": "Which extras should we add on the side?",
+    "body": "←  ☒ Size  ☐ Extras  ✔ Submit  →\nWhich extras should we add on the side?",
+    "options": [
+      [
+        1,
+        "Garlic knots",
+        false
+      ],
+      [
+        2,
+        "Caesar salad",
+        false
+      ],
+      [
+        3,
+        "Dipping sauces",
+        false
+      ],
+      [
+        4,
+        "Type something",
+        false
+      ],
+      [
+        5,
+        "Chat about this",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "enter",
+        "select"
+      ],
+      [
+        "tab",
+        "navigate"
+      ],
+      [
+        "up",
+        "navigate"
+      ],
+      [
+        "down",
+        "navigate"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": [
+      1,
+      "Size",
+      "Extras"
+    ],
+    "corroborated": true,
+    "identity": "d977a7f9a1a48107",
+    "token": "d977a7f9a1a48107"
+  },
+  "foreign/collie/claude--wizard-multiselect-pointer-next.txt": {
+    "shape": "multi-select",
+    "question": "Which toppings would you like on your pizza?",
+    "body": "←  ☒ Toppings  ☐ Crust  ✔ Submit  →\nWhich toppings would you like on your pizza?",
+    "options": [
+      [
+        1,
+        "Pepperoni",
+        true
+      ],
+      [
+        2,
+        "Mushrooms",
+        false
+      ],
+      [
+        3,
+        "Bell peppers",
+        true
+      ],
+      [
+        4,
+        "Extra cheese",
+        false
+      ],
+      [
+        5,
+        "Type something",
+        false
+      ],
+      [
+        6,
+        "Chat about this",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "enter",
+        "select"
+      ],
+      [
+        "tab",
+        "navigate"
+      ],
+      [
+        "up",
+        "navigate"
+      ],
+      [
+        "down",
+        "navigate"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": [
+      1,
+      "Toppings",
+      "Crust"
+    ],
+    "corroborated": true,
+    "identity": "cb4e52ae9962c542",
+    "token": "cb4e52ae9962c542"
+  },
+  "foreign/collie/claude--wizard-multiselect-q1.txt": {
+    "shape": "multi-select",
+    "question": "Which toppings would you like on your pizza?",
+    "body": "←  ☐ Toppings  ☐ Crust  ✔ Submit  →\nWhich toppings would you like on your pizza?",
+    "options": [
+      [
+        1,
+        "Pepperoni",
+        false
+      ],
+      [
+        2,
+        "Mushrooms",
+        false
+      ],
+      [
+        3,
+        "Bell peppers",
+        false
+      ],
+      [
+        4,
+        "Extra cheese",
+        false
+      ],
+      [
+        5,
+        "Type something",
+        false
+      ],
+      [
+        6,
+        "Chat about this",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "enter",
+        "select"
+      ],
+      [
+        "tab",
+        "navigate"
+      ],
+      [
+        "up",
+        "navigate"
+      ],
+      [
+        "down",
+        "navigate"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": [
+      0,
+      "Toppings",
+      "Crust"
+    ],
+    "corroborated": true,
+    "identity": "b8698bc102352fad",
+    "token": "b8698bc102352fad"
+  },
+  "foreign/collie/claude--wizard-preview-note-attached.txt": {
+    "shape": "single-choice",
+    "question": "Which card layout should we use?",
+    "body": "←  ☐ Card layout  ☐ Dark mode  ✔ Submit  →\nWhich card layout should we use?",
+    "options": [
+      [
+        1,
+        "Grid",
+        null
+      ],
+      [
+        2,
+        "List",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "enter",
+        "select"
+      ],
+      [
+        "up",
+        "navigate"
+      ],
+      [
+        "down",
+        "navigate"
+      ],
+      [
+        "tab",
+        "switch questions"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": [
+      0,
+      "Card layout",
+      "Dark mode"
+    ],
+    "corroborated": true,
+    "identity": "0148a156bd77edc6",
+    "token": "0148a156bd77edc6"
+  },
+  "foreign/collie/claude--wizard-preview-q1.txt": {
+    "shape": "single-choice",
+    "question": "Which card layout should we use?",
+    "body": "←  ☐ Card layout  ☐ Dark mode  ✔ Submit  →\nWhich card layout should we use?",
+    "options": [
+      [
+        1,
+        "Grid",
+        null
+      ],
+      [
+        2,
+        "List",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "enter",
+        "select"
+      ],
+      [
+        "up",
+        "navigate"
+      ],
+      [
+        "down",
+        "navigate"
+      ],
+      [
+        "tab",
+        "switch questions"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": [
+      0,
+      "Card layout",
+      "Dark mode"
+    ],
+    "corroborated": true,
+    "identity": "0148a156bd77edc6",
+    "token": "0148a156bd77edc6"
+  },
+  "foreign/collie/claude--wizard-preview-wrapped-label.txt": {
+    "shape": "single-choice",
+    "question": "Which card layout should we use?",
+    "body": "←  ☐ Card layout  ☐ Dark mode  ✔ Submit  →\nWhich card layout should we use?",
+    "options": [
+      [
+        1,
+        "Grid of equal-width cards",
+        null
+      ],
+      [
+        2,
+        "List",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "enter",
+        "select"
+      ],
+      [
+        "up",
+        "navigate"
+      ],
+      [
+        "down",
+        "navigate"
+      ],
+      [
+        "tab",
+        "switch questions"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": [
+      0,
+      "Card layout",
+      "Dark mode"
+    ],
+    "corroborated": true,
+    "identity": "cbb726d8373581b0",
+    "token": "cbb726d8373581b0"
+  },
+  "foreign/collie/claude--wizard-q1-revisit.txt": {
+    "shape": "single-choice",
+    "question": "Which focus area should we work on?",
+    "body": "←  ☒ Focus area  ☐ Scope  ☐ Workflow  ✔ Submit  →\nWhich focus area should we work on?",
+    "options": [
+      [
+        1,
+        "Parser",
+        null
+      ],
+      [
+        2,
+        "UI ✔",
+        null
+      ],
+      [
+        3,
+        "Tests",
+        null
+      ],
+      [
+        4,
+        "Type something.",
+        null
+      ],
+      [
+        5,
+        "Chat about this",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "enter",
+        "select"
+      ],
+      [
+        "tab",
+        "navigate"
+      ],
+      [
+        "up",
+        "navigate"
+      ],
+      [
+        "down",
+        "navigate"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": [
+      1,
+      "Focus area",
+      "Scope",
+      "Workflow"
+    ],
+    "corroborated": true,
+    "identity": "f04343eaa059e481",
+    "token": "f04343eaa059e481"
+  },
+  "foreign/collie/claude--wizard-q1.txt": {
+    "shape": "single-choice",
+    "question": "Which focus area should we work on?",
+    "body": "←  ☐ Focus area  ☐ Scope  ☐ Workflow  ✔ Submit  →\nWhich focus area should we work on?",
+    "options": [
+      [
+        1,
+        "Parser",
+        null
+      ],
+      [
+        2,
+        "UI",
+        null
+      ],
+      [
+        3,
+        "Tests",
+        null
+      ],
+      [
+        4,
+        "Type something.",
+        null
+      ],
+      [
+        5,
+        "Chat about this",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "enter",
+        "select"
+      ],
+      [
+        "tab",
+        "navigate"
+      ],
+      [
+        "up",
+        "navigate"
+      ],
+      [
+        "down",
+        "navigate"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": [
+      0,
+      "Focus area",
+      "Scope",
+      "Workflow"
+    ],
+    "corroborated": true,
+    "identity": "e9306d9ca74eda8e",
+    "token": "e9306d9ca74eda8e"
+  },
+  "foreign/collie/claude--wizard-q2.txt": {
+    "shape": "single-choice",
+    "question": "What scope should this work have?",
+    "body": "←  ☒ Focus area  ☐ Scope  ☐ Workflow  ✔ Submit  →\nWhat scope should this work have?",
+    "options": [
+      [
+        1,
+        "Small",
+        null
+      ],
+      [
+        2,
+        "Medium",
+        null
+      ],
+      [
+        3,
+        "Large",
+        null
+      ],
+      [
+        4,
+        "Type something.",
+        null
+      ],
+      [
+        5,
+        "Chat about this",
+        null
+      ]
+    ],
+    "hints": [
+      [
+        "enter",
+        "select"
+      ],
+      [
+        "tab",
+        "navigate"
+      ],
+      [
+        "up",
+        "navigate"
+      ],
+      [
+        "down",
+        "navigate"
+      ]
+    ],
+    "handoffs": [],
+    "focus": null,
+    "stepper": [
+      1,
+      "Focus area",
+      "Scope",
+      "Workflow"
+    ],
+    "corroborated": true,
+    "identity": "6ba9408e7bcbf15d",
+    "token": "6ba9408e7bcbf15d"
+  },
+  "foreign/collie/claude--wizard-submit-unanswered.txt": {
+    "shape": "single-choice",
+    "question": "Ready to submit your answers?",
+    "body": "←  ☐ Focus area  ☐ Scope  ☐ Workflow  ✔ Submit  →\nReview your answers\n⚠ You have not answered all questions\nReady to submit your answers?",
+    "options": [
+      [
+        1,
+        "Submit answers",
+        null
+      ],
+      [
+        2,
+        "Cancel",
+        null
+      ]
+    ],
+    "hints": [],
+    "handoffs": [],
+    "focus": null,
+    "stepper": [
+      0,
+      "Focus area",
+      "Scope",
+      "Workflow"
+    ],
+    "corroborated": true,
+    "identity": "79c84d4c5a81ca27",
+    "token": "79c84d4c5a81ca27"
+  },
+  "foreign/collie/claude--wizard-submit.txt": {
+    "shape": "single-choice",
+    "question": "Ready to submit your answers?",
+    "body": "←  ☒ Focus area  ☒ Scope  ☒ Workflow  ✔ Submit  →\nReview your answers\nWhich focus area should we work on?\n→ UI\nWhat scope should this work have?\n→ Medium\nHow should we approach the work?\n→ Plan first\nReady to submit your answers?",
+    "options": [
+      [
+        1,
+        "Submit answers",
+        null
+      ],
+      [
+        2,
+        "Cancel",
+        null
+      ]
+    ],
+    "hints": [],
+    "handoffs": [],
+    "focus": null,
+    "stepper": [
+      3,
+      "Focus area",
+      "Scope",
+      "Workflow"
+    ],
+    "corroborated": true,
+    "identity": "b24ab9309d2561f8",
+    "token": "b24ab9309d2561f8"
+  },
+  "foreign/collie/claude--working.txt": {
+    "shape": "none",
+    "question": "[Fable 5] ctx:15% ~/playground/collie on feature/block-renderer* 151.5k tokens\n⏵⏵ bypass permissions on (shift+tab to cycle) · ← for agents",
+    "body": "[Fable 5] ctx:15% ~/playground/collie on feature/block-renderer* 151.5k tokens\n⏵⏵ bypass permissions on (shift+tab to cycle) · ← for agents",
+    "options": [],
+    "hints": [],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "",
+    "token": "c70fb6a6702eb19e"
+  }
+}
