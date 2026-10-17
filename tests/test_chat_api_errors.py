@@ -218,7 +218,7 @@ def _opencode_chat(tmp_path: Path) -> str:
         "source": "herdr:opencode",
         "value": ERRORED,
     }
-    agent["cwd"] = agent["foreground_cwd"] = "/home/owner/project"
+    agent["cwd"] = agent["foreground_cwd"] = "/home/user/project"
     build(tmp_path / "transcripts" / "opencode.db", ERROR_ROWS)
     rig = build_rig(tmp_path, {SNAPSHOT: frame})
     return rig.http.get(f"/agent/{ERRORED}/chat", headers={"HX-Request": "true"}).text

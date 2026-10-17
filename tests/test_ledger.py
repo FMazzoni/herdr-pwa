@@ -31,8 +31,9 @@ from herdr_pwa.engine import BlockedPrompt, Snapshot, rank
 REPO = Path(__file__).resolve().parents[1]
 FIXTURES = REPO / "tests" / "fixtures"
 LEDGER_PATH = FIXTURES / "ledger.json"
-# Pinned so the golden file can only change by a reviewed edit to this line.
-LEDGER_SHA256 = "a2030ae75b74b3c8b3b81328c8a5c01caa496a365e8812de6d55c07c792d0457"
+# Pinned so the golden file can only change by a reviewed edit to this line. Verdicts never
+# change; input hashes are re-pinned when a capture is scrubbed or replaced (see meta.rehashed).
+LEDGER_SHA256 = "72cb4d21da3e72f0e89f0454e4108b102c211ef946b6b583fb6b95a228619e7f"
 FOREIGN_PREFIX = "foreign/"
 # collie's claude screens ship under tests/fixtures/foreign (MIT); the rest of the outside corpus
 # was removed by the user, and its rows stay in the frozen ledger untested.

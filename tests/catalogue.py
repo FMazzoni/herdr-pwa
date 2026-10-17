@@ -55,7 +55,7 @@ UNBROKEN_TITLE: Final = "renameEveryLegacyIdentifierAcrossTheMonorepoWithoutTouc
 LONG_URL: Final = "https://example.com/" + "a1b2c3d4" * 24 + "?query=" + "x" * 80
 LONG_QUESTION: Final = (
     "Should I force-push the rewritten history of "
-    f"/home/owner/projects/{UNBROKEN}/src/very/deep/module/path.py to main, which "
+    f"/home/user/projects/{UNBROKEN}/src/very/deep/module/path.py to main, which "
     "overwrites three commits that other people may already have pulled?"
 )
 WIDE_ROW: Final = "│ " + " ".join(f"col{i:03d}" for i in range(40)) + " │"
@@ -74,7 +74,7 @@ STATUS_TAIL: Final = (
     + "─" * 158
     + "\n  \x1b[2m\x1b[38;2;153;153;153mherdr-pwa [main] | \x1b[0m"
     "\x1b[38;2;153;153;153mctx: \x1b[0m\x1b[38;5;2m16%\x1b[0m"
-    "\x1b[2m\x1b[38;2;153;153;153m | 5h: \x1b[0m\x1b[38;5;3m22%\x1b[0m\n"
+    "\x1b[2m\x1b[38;2;153;153;153m | \x1b[0m\x1b[38;5;3m12m\x1b[0m\n"
     "  \x1b[0m\x1b[38;2;153;153;153m⏸ auto mode on · ← 1 agent\x1b[0m"
 )
 
@@ -774,7 +774,7 @@ def _opencode_mixed() -> dict[str, JsonValue]:
     agent_session = agent["agent_session"]
     assert isinstance(agent_session, dict)
     agent_session["value"] = MIXED_SESSION
-    agent["cwd"] = agent["foreground_cwd"] = "/home/owner/project"
+    agent["cwd"] = agent["foreground_cwd"] = "/home/user/project"
     return frame
 
 
@@ -1908,6 +1908,7 @@ TURNS: Final = (
 )
 
 STATES: Final = (*FEED, *AGENT_PAGE, *TAPPED, *ANSWERED, *LIFECYCLE, *STATS, *FILES, *TURNS)
+
 
 def pick(names: list[str]) -> list[State]:
     """The named states in catalogue order, or every state for no names; unknown names raise."""

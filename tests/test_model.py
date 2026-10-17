@@ -1117,7 +1117,7 @@ TRUST_DIALOG = (
     "──────────────────────────────────────────\n"
     " Accessing workspace:\n"
     "\n"
-    " /home/owner/probe\n"
+    " /home/user/probe\n"
     "\n"
     " Quick safety check: Is this a project you created or one you trust?\n"
     "\n"
