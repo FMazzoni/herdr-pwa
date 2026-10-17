@@ -609,51 +609,66 @@ def _copies(directory: Path) -> dict[str, list[Path]]:
     return edges
 
 
-def _descendants(session: str, edges: dict[str, list[Path]]) -> list[Path]:
-    """Every log downstream of *session*, breadth-first, bounded and cycle-safe."""
-    seen = {session}
-    frontier = [session]
+# One step of the walk: a log's session name, and its path once contained to the root.
+_Hop = tuple[str, Path]
+
+
+def _descendants(named: _Hop, edges: dict[str, list[Path]], base: Path) -> list[Path]:
+    """Every log downstream of *named* that may replace its parent, breadth-first and bounded."""
+    seen = {named[0]}
+    frontier = [named]
     found: list[Path] = []
     for _ in range(_MAX_HOPS):
-        onward = _one_hop(frontier, edges, seen, found)
-        if not onward:
+        frontier = _one_hop(frontier, edges, seen, base)
+        if not frontier:
             return found
-        frontier = onward
+        found.extend(path for _, path in frontier)
     return found
 
 
 def _one_hop(
-    frontier: list[str], edges: dict[str, list[Path]], seen: set[str], found: list[Path]
-) -> list[str]:
-    """The unseen children of *frontier*, recorded into *seen* and *found*."""
-    onward: list[str] = []
-    for parent in frontier:
-        for child in edges.get(parent, ()):
-            if child.stem in seen:
-                continue
-            seen.add(child.stem)
-            found.append(child)
-            onward.append(child.stem)
+    frontier: list[_Hop], edges: dict[str, list[Path]], seen: set[str], base: Path
+) -> list[_Hop]:
+    """The unseen children of *frontier* that each hold no less than the log they came from."""
+    onward: list[_Hop] = []
+    for parent, path in frontier:
+        children = [child for child in edges.get(parent, ()) if child.stem not in seen]
+        seen.update(child.stem for child in children)
+        # Per edge, not off the named file: every hop after a compacted handoff is smaller than it.
+        floor = _size(path)
+        if floor is not None:
+            onward += _admitted(children, base, floor)
     return onward
+
+
+def _admitted(children: list[Path], base: Path, floor: int) -> list[_Hop]:
+    """The *children* that may replace a log of *floor* bytes, each contained to *base*."""
+    found: list[_Hop] = []
+    for child in children:
+        resolved = _eligible(child, base, floor)
+        if resolved is not None:
+            found.append((child.stem, resolved))
+    return found
+
+
+def _size(path: Path) -> int | None:
+    """*path*'s size in bytes, or ``None`` when it cannot be read."""
+    try:
+        return path.stat().st_size
+    except OSError:
+        return None
 
 
 def _follow(named: Path, session: str, base: Path) -> Path:
     """*named*, or the copy the conversation continued in. Never LESS history."""
     newest = _last_timestamp(named)
-    try:
-        floor = named.stat().st_size
-    except OSError:
-        return named
     if not newest:
         return named
     best = named
-    for candidate in _descendants(session, _copies(named.parent)):
-        resolved = _eligible(candidate, base, floor)
-        if resolved is None:
-            continue
-        stamp = _last_timestamp(resolved)
+    for candidate in _descendants((session, named), _copies(named.parent), base):
+        stamp = _last_timestamp(candidate)
         if stamp > newest:
-            best, newest = resolved, stamp
+            best, newest = candidate, stamp
     return best
 
 

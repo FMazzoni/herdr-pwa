@@ -4,12 +4,21 @@ from __future__ import annotations
 
 import json
 import os
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
 from pydantic import JsonValue, TypeAdapter
 
-from herdr_pwa.engine import HistoryState, Source, locate
+from herdr_pwa.engine import (
+    Ask,
+    HistoryState,
+    Source,
+    TailCache,
+    UsageCache,
+    chat_window,
+    locate,
+)
 from tests.engine_seam import Window, history
 
 FIXTURES = Path(__file__).parent / "fixtures" / "transcript" / "lineage"
@@ -483,3 +492,92 @@ def test_an_edge_pushed_past_the_head_window_is_not_followed(project: Path) -> N
         lead=60,
     )
     assert locate(ROOT, root=project.parent) == named
+
+
+# A chain: the floor is the file each copy was taken FROM, not the file herdr named
+
+BG_PRESERVED = _fixture("bg-preserved-2.1.283.json")
+SIBLING = "eeeeeeee-0000-0000-0000-000000000000"
+NEPHEW = "ffffffff-0000-0000-0000-000000000000"
+
+
+@dataclass(frozen=True)
+class _Copy:
+    """One log copied out of another, and the newest timestamp it holds."""
+
+    session: str
+    parent: str
+    last: str
+
+
+def _onward(directory: Path, copy: _Copy, records: int) -> Path:
+    """A background log whose head carries its parent's stamp and no compaction."""
+    session, last = copy.session, copy.last
+    preserved = dict(BG_PRESERVED)
+    preserved["sessionId"] = session
+    preserved["session_id"] = copy.parent
+    lines = [json.dumps({"sessionId": session, "type": "ai-title"}), json.dumps(preserved)]
+    lines += [
+        json.dumps(_record(session, index, "2026-01-01T00:00:00.000Z")) for index in range(records)
+    ]
+    lines.append(json.dumps(_record(session, 999, last)))
+    path = directory / f"{session}.jsonl"
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
+
+
+def _chain(project: Path) -> tuple[Path, Path, Path]:
+    """ROOT, handed off compacted to COPY, handed off again uncompacted to LATER."""
+    named = _log(project, ROOT, last="2026-08-20T18:12:00.000Z", records=300, pad=4000)
+    first = _handoff(project, COPY, parent=ROOT, last="2026-08-21T00:00:00.000Z", records=3)
+    second = _onward(project, _Copy(LATER, COPY, "2026-08-23T01:08:00.000Z"), 20)
+    assert first.stat().st_size < second.stat().st_size < named.stat().st_size
+    return named, first, second
+
+
+def test_the_captured_onward_record_is_background_and_not_a_boundary() -> None:
+    """What makes the second hop need the per-copy floor: nothing in it waives one."""
+    assert BG_PRESERVED["sessionKind"] == "bg"
+    assert BG_PRESERVED["type"] == "assistant"
+    assert "compactMetadata" not in BG_PRESERVED
+    assert "isCompactSummary" not in BG_PRESERVED
+
+
+def test_a_second_handoff_smaller_than_the_named_file_is_followed(project: Path) -> None:
+    """Stopping at the first hop leaves the Chat on a file nothing writes any more."""
+    _, _, second = _chain(project)
+    assert locate(ROOT, root=project.parent) == second
+
+
+def test_a_sibling_fork_off_the_named_file_is_still_refused_beside_a_chain(
+    project: Path,
+) -> None:
+    """Larger and newer than both hops, but it holds less than the file it was copied from."""
+    named, _, second = _chain(project)
+    sibling = _log(project, SIBLING, last="2026-08-24T00:00:00.000Z", records=60, copied_from=ROOT)
+    assert second.stat().st_size < sibling.stat().st_size < named.stat().st_size
+    assert locate(ROOT, root=project.parent) == second
+
+
+def test_a_refused_copy_lends_nothing_to_the_copies_made_from_it(project: Path) -> None:
+    """A refused sibling's child, larger than the sibling, is still down a dead branch."""
+    named = _log(project, ROOT, last="2026-08-20T18:12:00.000Z", records=300, pad=4000)
+    sibling = _log(project, SIBLING, last="2026-08-21T00:00:00.000Z", copied_from=ROOT)
+    nephew = _log(project, NEPHEW, last="2026-08-24T00:00:00.000Z", records=60, copied_from=SIBLING)
+    assert sibling.stat().st_size < nephew.stat().st_size < named.stat().st_size
+    assert locate(ROOT, root=project.parent) == named
+
+
+def test_the_chat_and_the_usage_move_when_the_chain_grows(project: Path) -> None:
+    """Both caches key on the located path, so they must re-locate rather than hold it."""
+    _log(project, ROOT, last="2026-08-20T18:12:00.000Z", records=300, pad=4000)
+    first = _handoff(project, COPY, parent=ROOT, last="2026-08-21T00:00:00.000Z", records=3)
+    source = Source.of(ROOT, agent_kind="claude", root=project.parent)
+    tails, usage = TailCache(), UsageCache()
+    assert chat_window(source, ask=Ask(messages=5), tails=tails).log == first.stem
+    assert usage.read(source).last_at == "2026-08-21T00:00:00.000Z"
+    second = _onward(project, _Copy(LATER, COPY, "2026-08-23T01:08:00.000Z"), 20)
+    held = Source.of(ROOT, agent_kind="claude", root=project.parent, log=first.stem)
+    moved = chat_window(held, ask=Ask(messages=5), tails=tails)
+    assert (moved.log, moved.moved) == (second.stem, True)
+    assert usage.read(source).last_at == "2026-08-23T01:08:00.000Z"
