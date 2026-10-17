@@ -12,9 +12,13 @@ one refresh, and a lost stream falls back to polling and then recovers.
 
 A reader who scrolls up from the end in small steps while the agent works is never pulled back
 to it, and the line they are reading stays where it was across every redraw, even one that lands
-before their scroll is heard."""
+before their scroll is heard. On a slow link, where a frame runs before the page's last script
+arrives, the chat still opens on its newest line."""
 
+import asyncio
+import contextlib
 import json
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -22,7 +26,7 @@ from pathlib import Path
 from firefox import Marionette, phone_window
 from pydantic import JsonValue
 from settle import READER_STILL_MS, settle
-from starlette.types import ASGIApp, Receive, Scope, Send
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from herdr_pwa.web.events import Hub
 from tests.catalogue import (
@@ -288,6 +292,90 @@ def cold(driver: Marionette, base: str, tab: Tab, _rig: Rig, _home: Path) -> lis
     if _num(seen, "gap") > DRIFT:
         problems.append(f"{tab.name}: loaded {_num(seen, 'gap'):.0f}px above the end")
     return problems
+
+
+# A slow link, as a phone's often is, lets a frame run between two of the page's scripts. The page
+# is made to measure itself after geometry.js (a resize, as iOS sends while its bars settle), and
+# chatend.js is held back until that frame has run.
+FRAME_JS = "/walk/frame.js"
+FRAMED = "/walk/framed"
+FRAME = f'dispatchEvent(new Event("resize")); requestAnimationFrame(() => fetch("{FRAMED}"));'
+AFTER_GEOMETRY = re.compile(rb'<script src="/static/geometry\.js\?v=[0-9a-f]+" defer></script>')
+# Under a digest the server does not know, chatend.js is never cached, so every load fetches it.
+CHATEND_URL = re.compile(rb"(/static/chatend\.js\?v=)([0-9a-f]+)")
+
+
+async def _serve(send: Send, body: bytes, kind: bytes) -> None:
+    headers = [(b"content-type", kind), (b"content-length", str(len(body)).encode())]
+    await send({"type": "http.response.start", "status": 200, "headers": headers})
+    await send({"type": "http.response.body", "body": body})
+
+
+def _late_page(page: bytes) -> bytes:
+    """``page`` measuring itself after geometry.js, with chatend.js fetched afresh."""
+    page = CHATEND_URL.sub(lambda m: m[1] + b"0" * len(m[2]), page)
+    tag = f'<script src="{FRAME_JS}" defer></script>'.encode()
+    return AFTER_GEOMETRY.sub(lambda m: m[0] + tag, page)
+
+
+def _rewriting(send: Send) -> Send:
+    async def sending(message: Message) -> None:
+        if message["type"] == "http.response.start":
+            # The page grows by a tag; the rig's own collector sets the length again.
+            kept = [(k, v) for k, v in message["headers"] if k.lower() != b"content-length"]
+            message = {**message, "headers": kept}
+        elif message["type"] == "http.response.body":
+            message = {**message, "body": _late_page(bytes(message.get("body", b"")))}
+        await send(message)
+
+    return sending
+
+
+class SlowLink:
+    """``app`` with chatend.js held back until the page has drawn a frame after geometry.js."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+        self.framed = asyncio.Event()
+        self.held = False
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        """Serve the frame's script and its signal, hold chatend.js for it, pass the rest."""
+        path = str(scope["path"]) if scope["type"] == "http" else ""
+        if path == FRAME_JS:
+            await _serve(send, FRAME.encode(), b"text/javascript")
+            return
+        if path == FRAMED:
+            self.framed.set()
+            await _serve(send, b"", b"text/plain")
+            return
+        if path == "/static/chatend.js":
+            self.held = True
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(self.framed.wait(), WAIT_SECONDS)
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        # Unzipped, so the page's script tags can be rewritten.
+        headers = [(k, v) for k, v in scope["headers"] if k.lower() != b"accept-encoding"]
+        await self.app({**scope, "headers": headers}, receive, _rewriting(send))
+
+
+def slow_link(
+    mount: Callable[[ASGIApp], None],
+) -> Callable[[Marionette, str, Tab, Rig, Path], list[str]]:
+    """The cold walk on a slow link, able to serve the app as one by remounting it."""
+
+    def walk(driver: Marionette, base: str, tab: Tab, rig: Rig, home: Path) -> list[str]:
+        """A frame that ran before chatend.js did leaves the page to land on its newest line."""
+        link = SlowLink(rig.http.app)
+        mount(link)
+        problems = cold(driver, base, tab, rig, home)
+        if not (link.held and link.framed.is_set()):
+            return [*problems, f"{tab.name}: no frame ran before chatend.js, so it proves nothing"]
+        return problems
+
+    return walk
 
 
 def asked(driver: Marionette, base: str, tab: Tab, _rig: Rig, _home: Path) -> list[str]:
@@ -1576,7 +1664,12 @@ def _walks(
 ) -> list[tuple[Tab, Callable[[Marionette, str, Tab, Rig, Path], list[str]]]]:
     chat = State("stream loss", f"{AGENT}?tab=chat", "", runner(snapshot_frame), long_chat(TURNS))
     lost = State(chat.name, chat.path, "", chat.replies, chat.transcript, settings=LIVE_SETTINGS)
-    return [*_tabs(), (Tab("stream loss", lost, f"Reply {TURNS - 1}:", _say), falls_back(mount))]
+    slow = State("slow link", f"{AGENT}?tab=chat", "", runner(snapshot_frame), long_chat(TURNS))
+    return [
+        *_tabs(),
+        (Tab("stream loss", lost, f"Reply {TURNS - 1}:", _say), falls_back(mount)),
+        (Tab("chat slow link", slow, f"Reply {TURNS - 1}:", _say), slow_link(mount)),
+    ]
 
 
 def names() -> list[str]:
