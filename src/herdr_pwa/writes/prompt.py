@@ -256,37 +256,39 @@ def _settled(
     return Refused(Refusal.NOT_READY, _VERB)
 
 
-def send_first_prompt(
-    writer: Writer, pane: PaneId, text: str, *, drawn_against: str = "", confirmed: bool = False
-) -> PromptSent | Refused:
+@dataclass(frozen=True, slots=True)
+class FirstPromptAsk:
+    """A prompt for a session-less agent: its pane, the text, and the screen it was typed against."""
+
+    pane: PaneId
+    text: str
+    # The digest the door was drawn against; a confirm counts only with it.
+    drawn_against: str = ""
+    confirmed: bool = False
+
+
+def send_first_prompt(writer: Writer, ask: FirstPromptAsk) -> PromptSent | Refused:
     """Type the prompt that gives a late-identity agent its session, by address."""
-    return one_at_a_time(
-        f"pane:{pane}",
-        _VERB,
-        lambda: _send_first_prompt(
-            writer, pane, text, drawn_against=drawn_against, confirmed=confirmed
-        ),
-    )
+    return one_at_a_time(f"pane:{ask.pane}", _VERB, lambda: _send_first_prompt(writer, ask))
 
 
-def _send_first_prompt(
-    writer: Writer, pane: PaneId, text: str, *, drawn_against: str, confirmed: bool
-) -> PromptSent | Refused:
+def _send_first_prompt(writer: Writer, ask: FirstPromptAsk) -> PromptSent | Refused:
     snap = snapshot_now(writer.client, verb=_VERB)
     if isinstance(snap, Refused):
         return snap
-    agent = snap.by_target(pane)
+    agent = snap.by_target(ask.pane)
     if agent is None:
         return Refused(Refusal.GONE, _VERB)
     # Once a session exists every write is keyed on it, never on the recyclable address.
     if agent.session:
         return Refused(Refusal.HAS_IDENTITY, _VERB)
-    refused = _text_refusal(text) or _settled(writer.client, pane, writer.pacing)
+    refused = _text_refusal(ask.text) or _settled(writer.client, ask.pane, writer.pacing)
     if refused is not None:
         return refused
     # A confirm counts only with the digest of the screen it was asked about.
-    bound = confirmed and bool(drawn_against)
-    return _type(writer, _Send(pane, NO_SESSION, text, drawn_against, bound, issue=True))
+    bound = ask.confirmed and bool(ask.drawn_against)
+    send = _Send(ask.pane, NO_SESSION, ask.text, ask.drawn_against, bound, issue=True)
+    return _type(writer, send)
 
 
 def send_opening_prompt(writer: Writer, pane: PaneId, text: str) -> PromptSent | Refused:

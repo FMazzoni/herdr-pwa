@@ -159,30 +159,33 @@ def _send_key(writer: Writer, ask: KeyAsk) -> KeySent | Refused:
     return _press(writer, agent, key, prompt)
 
 
-def send_starting_key(
-    writer: Writer, pane: PaneId, key: str, *, confirmed: bool = False
-) -> KeySent | Refused:
+@dataclass(frozen=True, slots=True)
+class StartingKeyAsk:
+    """A pad key for a session-less agent stopped during launch: its pane and the key."""
+
+    pane: PaneId
+    key: str
+    confirmed: bool = False
+
+
+def send_starting_key(writer: Writer, ask: StartingKeyAsk) -> KeySent | Refused:
     """Send a pad key to a session-less agent stopped during launch (a trust dialog), by address."""
-    return one_at_a_time(
-        f"pane:{pane}", _VERB, lambda: _send_starting_key(writer, pane, key, confirmed=confirmed)
-    )
+    return one_at_a_time(f"pane:{ask.pane}", _VERB, lambda: _send_starting_key(writer, ask))
 
 
-def _send_starting_key(
-    writer: Writer, pane: PaneId, key: str, *, confirmed: bool
-) -> KeySent | Refused:
-    key = key.strip().lower()
+def _send_starting_key(writer: Writer, ask: StartingKeyAsk) -> KeySent | Refused:
+    key = ask.key.strip().lower()
     if key not in _STARTING_KEYS:
         return Refused(Refusal.KEY_NOT_OFFERED, _VERB)
     snap = snapshot_now(writer.client, verb=_VERB)
     if isinstance(snap, Refused):
         return snap
-    agent = snap.by_target(pane)
+    agent = snap.by_target(ask.pane)
     if agent is None or agent.status is not AgentStatus.BLOCKED:
         return Refused(Refusal.NOT_WAITING, _VERB)
     if agent.session:
         return Refused(Refusal.HAS_IDENTITY, _VERB)
-    if key == INTERRUPT_KEY and not confirmed:
+    if key == INTERRUPT_KEY and not ask.confirmed:
         return Refused(Refusal.CONFIRM, _VERB)
     # The wire check then asserts the pane still holds no session at all.
     return _press(writer, agent.model_copy(update={"session": NO_SESSION}), key, None)

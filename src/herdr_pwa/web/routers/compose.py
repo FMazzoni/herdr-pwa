@@ -36,12 +36,18 @@ from herdr_pwa.web.writing import (
     ticked,
     with_first,
 )
-from herdr_pwa.writes.answer import KeyAsk, KeySent, send_key, send_starting_key
+from herdr_pwa.writes.answer import KeyAsk, KeySent, StartingKeyAsk, send_key, send_starting_key
 from herdr_pwa.writes.guard import asks_a_question
 from herdr_pwa.writes.keys import PAD_KEYS, allowed_keys, answer_digits, control_token, pad_keys
 from herdr_pwa.writes.lifecycle import EndAsk, end_agent
 from herdr_pwa.writes.outcome import Evidence, Outcome
-from herdr_pwa.writes.prompt import PromptAsk, PromptSent, send_first_prompt, send_prompt
+from herdr_pwa.writes.prompt import (
+    FirstPromptAsk,
+    PromptAsk,
+    PromptSent,
+    send_first_prompt,
+    send_prompt,
+)
 from herdr_pwa.writes.refusal import Refused
 
 ANSWER_CADENCE: Final = 5
@@ -342,21 +348,21 @@ def _door_writes(router: APIRouter, writes: WriteRoutes) -> None:
         values = post.values
         target = address_of(pane)
         text = values.get("text", "")
-        result = send_first_prompt(
-            post.writer,
+        ask = FirstPromptAsk(
             target,
             text,
             drawn_against=values.get("screen", "").strip(),
             confirmed=ticked(values, "confirm"),
         )
+        result = send_first_prompt(post.writer, ask)
         return _door(web, target, _Knock(result, text=text))
 
     @router.post("/starting/{pane}/keys")
     def first_key(pane: str, post: Annotated[Posted, Depends(writes.post)]) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
         target = address_of(pane)
         key = post.values.get("key", "")
-        confirmed = ticked(post.values, "confirm")
-        result = send_starting_key(post.writer, target, key, confirmed=confirmed)
+        ask = StartingKeyAsk(target, key, confirmed=ticked(post.values, "confirm"))
+        result = send_starting_key(post.writer, ask)
         return _door(web, target, _Knock(result, key=key.strip().lower()))
 
 
