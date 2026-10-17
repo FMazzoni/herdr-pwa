@@ -9,6 +9,9 @@ from typing import Final
 STATIC_DIR: Final = Path(__file__).parent / "static"
 STATIC_PREFIX: Final = "/static/"
 _DIGEST_CHARS: Final = 12
+# The page's own scripts, in the order they run: classic and deferred, so after htmx and in this
+# order; the first defines window.hp, which the rest share.
+SCRIPTS: Final = ("hp.js", "backnav.js", "sendhold.js", "geometry.js", "chatend.js", "app.js")
 
 
 @dataclass(frozen=True, slots=True)

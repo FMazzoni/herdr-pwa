@@ -1,262 +1,14 @@
-/* herdr-pwa: the only hand-written client script. It never builds markup from
- * strings and never evals. Regions are redrawn when the event stream says they
- * went stale; htmx trigger filters would need eval, so the server stops a hidden
- * page's polls (HTTP 286) and this script re-arms them. */
-(function () {
+/* herdr-pwa: what of the page's script has not moved to a section file of its own. It never
+ * builds markup from strings and never evals. Regions are redrawn when the event stream says they
+ * went stale; htmx trigger filters would need eval, so the server stops a hidden page's polls
+ * (HTTP 286) and this script re-arms them. */
+(function (hp) {
   "use strict";
 
-  /* ---- The page's decisions, apart from the page ----
-   * What lies between the two markers reads only its arguments: it is handed what was measured
-   * and says what to do. tests/js loads that stretch of this file alone, in a context that has no
-   * page, no clock and no timers, so a reference to any of them there fails the tests. The rest
-   * of this file measures and acts. */
-  // hp:logic:start
-  var logic = (function () {
-    // How close to the very bottom a reader's own scroll must come to pin the page again.
-    var BOTTOM_PX = 2;
-    // The stream's first retry, and the longest it waits between retries.
-    var RETRY_FIRST_MS = 1000;
-    var RETRY_MAX_MS = 30000;
-
-    /* The pin, as { pinned, lastY, reader }: lastY is where the page was last left, by the reader
-     * or by this script, and reader says whether this event was the reader's own scroll. Each
-     * event carries what was measured as it happened: y, the scroll position, and gap, how far the
-     * page still runs below the screen. */
-    function pin(state, event) {
-      var bottom = event.gap <= BOTTOM_PX;
-      var next = { pinned: state.pinned, lastY: state.lastY, reader: false };
-      switch (event.type) {
-        // A scroll ending where this script left the page was this script's; any other is the
-        // reader's, and pins the page at the very end and unpins it anywhere else.
-        case "scroll":
-          if (event.y !== state.lastY) {
-            next = { pinned: bottom, lastY: event.y, reader: true };
-          }
-          return next;
-        // This script moved the page (a hold, an outcome brought into view).
-        case "moved":
-          next.lastY = event.y;
-          return next;
-        // This script went to the end: pinned only if it got there, since a tall question's top
-        // is not the end.
-        case "landed":
-          return { pinned: bottom, lastY: event.y, reader: false };
-        // A swap claims the page only if it moved it: one that left the page where it stood
-        // claims nothing, since the reader's last scroll may not have been heard yet.
-        case "swapped":
-          if (event.before === null || event.y !== event.before) {
-            next.lastY = event.y;
-          }
-          return next;
-        // A fold opened short of the end: the reader is reading the fold now.
-        case "unfolded":
-          next.pinned = state.pinned && bottom;
-          return next;
-        case "earlier":
-          next.pinned = false;
-          return next;
-        // Sending, or the tap on "Question waiting": the reader is reading the end.
-        case "sent":
-        case "jumped":
-          next.pinned = true;
-          return next;
-        default:
-          throw new Error("no such pin event: " + event.type);
-      }
-    }
-
-    /* Where landing at the end leaves the page: the end, unless a waiting question is taller than
-     * the room between the bar and the dock; then the question's top, just under the bar. */
-    function landing(page) {
-      var end = page.scrollHeight - page.viewHeight;
-      if (!page.asking || page.regionHeight <= page.dockTop - page.barBottom) {
-        return end;
-      }
-      return Math.min(end, page.scrollY + page.askedTop - page.barBottom);
-    }
-
-    // One server-sent event block: its event name (message when it has none) and its data.
-    function eventOf(block) {
-      var found = { kind: "message", data: "" };
-      block.split("\n").forEach(function (line) {
-        if (line.indexOf("event:") === 0) {
-          found.kind = line.slice(6).trim();
-        } else if (line.indexOf("data:") === 0) {
-          found.data = line.slice(5).trim();
-        }
-      });
-      return found;
-    }
-
-    // The topic a block calls stale, or null: only "stale" is acted on, and its data is a topic.
-    function staleTopic(block) {
-      var heard = eventOf(block);
-      return heard.kind === "stale" && heard.data ? heard.data : null;
-    }
-
-    // An open page watched the agent finish when a redraw first shows it done: say so once.
-    function finishedNow(before, after) {
-      return after === "done" && before !== "done";
-    }
-
-    // Each whole block in what has arrived from `from` on, and where the unfinished rest begins.
-    function blocks(text, from) {
-      var whole = [];
-      var cut = text.indexOf("\n\n", from);
-      while (cut !== -1) {
-        whole.push(text.slice(from, cut));
-        from = cut + 2;
-        cut = text.indexOf("\n\n", from);
-      }
-      return { blocks: whole, from: from };
-    }
-
-    // A lost stream waits `ms` before its next try, and twice that (up to the cap) after it.
-    function backoff(ms) {
-      return { wait: ms, next: Math.min(ms * 2, RETRY_MAX_MS) };
-    }
-
-    /* What to hold in place across a swap, from the units' boxes in page order: the first wholly
-     * in view under the bar, else the first still on screen at all, as when one turn is taller
-     * than the screen. Its index, or -1. */
-    function markAt(boxes, under, viewHeight) {
-      var partly = -1;
-      for (var i = 0; i < boxes.length; i++) {
-        if (boxes[i].bottom <= 0) {
-          continue;
-        }
-        if (boxes[i].top >= under && boxes[i].top < viewHeight) {
-          return i;
-        }
-        partly = partly === -1 ? i : partly;
-      }
-      return partly;
-    }
-
-    /* The same unit after the swap: the same key, nearest its old place, since both windows drop
-     * their oldest as new ones arrive and the feed re-sorts its cards. Its index, or -1. */
-    function nearest(keys, key, index) {
-      var best = -1;
-      for (var i = 0; i < keys.length; i++) {
-        var nearer = best === -1 || Math.abs(i - index) < Math.abs(best - index);
-        if (nearer && keys[i] === key) {
-          best = i;
-        }
-      }
-      return best;
-    }
-
-    /* A read's swap is put off while the reader is busy, for any region that fetches itself and
-     * can be found again by its id. */
-    function defers(region, busy) {
-      return busy && region.polled && !!region.id;
-    }
-
-    // The no-reply notice stays up at least this long: past the answer region's 5s poll, so it
-    // can be read before a redraw takes it away.
-    var LOST_READ_MS = 8000;
-
-    /* How much longer a read must wait before it may redraw the answer region, from how long its
-     * no-reply notice has been up (-1: none is up). */
-    function lostHold(shownFor) {
-      return shownFor < 0 ? 0 : Math.max(0, LOST_READ_MS - shownFor);
-    }
-
-    /* The status bubble's motion styles, every one in this one place, picked by the bubble's
-     * data-working-motion (web/chat.py's WORKING_MOTION names the default). A style is how long
-     * one crest takes to cross the words (period, ms), how wide it is as a share of them (reach),
-     * and how high it lifts a letter (rise, em); null is a style that never moves. To add one,
-     * add an entry here and name it in WORKING_MOTION to wear it. */
-    var MOTIONS = {
-      // One gentle crest of colour crossing the words, nothing lifted.
-      crest: { period: 1600, reach: 0.35, rise: 0 },
-      // The same crest lifting each letter a little as it passes, as the first working line did.
-      "crest-lift": { period: 1600, reach: 0.35, rise: 0.08 },
-      // A slower, wider crest, for a calmer bubble.
-      drift: { period: 2800, reach: 0.5, rise: 0 },
-      still: null,
-    };
-
-    var MINUTE = 60;
-    var HOUR = 3600;
-    var DAY = 86400;
-
-    /* A span in the words herdr_pwa.clock.elapsed gives it: 42s, 4m 12s, 2m, 1h 12m, 2d 7h. The
-     * server words the first drawing; this only carries it on between redraws, and
-     * tests/fixtures/elapsed.json holds both to the same table. */
-    function elapsed(seconds) {
-      var whole = Math.max(0, Math.floor(seconds));
-      if (whole >= DAY) {
-        return Math.floor(whole / DAY) + "d " + Math.floor((whole % DAY) / HOUR) + "h";
-      }
-      if (whole >= HOUR) {
-        return Math.floor(whole / HOUR) + "h " + Math.floor((whole % HOUR) / MINUTE) + "m";
-      }
-      if (whole < MINUTE) {
-        return whole + "s";
-      }
-      var rest = whole % MINUTE;
-      return Math.floor(whole / MINUTE) + "m" + (rest ? " " + rest + "s" : "");
-    }
-
-    // A quiet stretch in whole minutes, as the server words it.
-    function quietFor(seconds) {
-      return "No activity for " + elapsed(Math.floor(seconds / MINUTE) * MINUTE);
-    }
-
-    /* Whether a bubble drawn `quiet` seconds after the log last moved has, `sinceMs` later, been
-     * still past `after` seconds: nothing redraws a log that does not move, so this page says so. */
-    function goneQuiet(quiet, sinceMs, after) {
-      if (quiet === null || !(after > 0)) {
-        return false;
-      }
-      return quiet + sinceMs / 1000 >= after;
-    }
-
-    // How wide the wave's crest is, as a share of the words it crosses, unless a motion says.
-    var WAVE_REACH = 0.35;
-
-    /* How far the wave lifts a glyph at `x` on a verb `width` wide, `phase` (0 to 1) of the way
-     * through one sweep: 0 to 1, a soft crest that enters on the left and leaves on the right, so
-     * the crest moves at one speed across a wide m and a narrow i alike. */
-    function wave(x, width, phase, share) {
-      var reach = Math.max(width * (share || WAVE_REACH), 1);
-      var crest = -reach + phase * (width + 2 * reach);
-      var off = Math.abs(x - crest) / reach;
-      return off >= 1 ? 0 : (1 + Math.cos(Math.PI * off)) / 2;
-    }
-
-    /* Where a glyph centred at `x` stands across the crest, for the colour it wears: 0 at the
-     * trailing edge, 1 at the leading edge, so the colours run through the crest as one gradient. */
-    function glow(x, width, phase, share) {
-      var reach = Math.max(width * (share || WAVE_REACH), 1);
-      var crest = -reach + phase * (width + 2 * reach);
-      return Math.min(1, Math.max(0, (x - crest) / (2 * reach) + 0.5));
-    }
-
-    return {
-      RETRY_FIRST_MS: RETRY_FIRST_MS,
-      pin: pin,
-      landing: landing,
-      eventOf: eventOf,
-      staleTopic: staleTopic,
-      finishedNow: finishedNow,
-      blocks: blocks,
-      backoff: backoff,
-      markAt: markAt,
-      nearest: nearest,
-      defers: defers,
-      LOST_READ_MS: LOST_READ_MS,
-      lostHold: lostHold,
-      MOTIONS: MOTIONS,
-      elapsed: elapsed,
-      quietFor: quietFor,
-      goneQuiet: goneQuiet,
-      wave: wave,
-      glow: glow,
-    };
-  })();
-  // hp:logic:end
+  var logic = hp.logic;
+  var bus = hp.bus;
+  var refetch = hp.refetch;
+  var isRead = hp.isRead;
 
   /* Every request from a hidden page says so; its poll answers 286 and stops. */
   document.addEventListener("htmx:configRequest", function (event) {
@@ -267,108 +19,13 @@
 
   /* htmx 2 refuses to swap a non-2xx; a fragment the server marked is the honest
    * failure screen, and it carries the poll that heals the page. */
-  document.addEventListener("htmx:beforeSwap", function (event) {
-    var xhr = event.detail.xhr;
-    if (xhr && xhr.status >= 400 && xhr.getResponseHeader("HP-Fragment") === "1") {
-      event.detail.shouldSwap = true;
-      event.detail.isError = false;
-    }
-    sheetAnswer(event.detail);
-  });
-
-  /* ---- Back belongs to the herd ----
-   * The feed is the root: only its own links push. Every other move replaces the
-   * entry it leaves, so a swipe back from anywhere lands on the feed, never on a
-   * tab, a spent form or a door that forwards onward. */
-
-  function isSheet(detail) {
-    var elt = detail.requestConfig && detail.requestConfig.elt;
-    return !!(elt && elt.closest && elt.closest("[data-hp-sheet]"));
-  }
-
-  /* A sheet's refusal is a whole page at a 4xx and is the answer, so it is shown;
-   * a failure fragment has no main to select, so it replaces the main whole. */
-  function sheetAnswer(detail) {
+  bus.on("swap:admit", function (detail) {
     var xhr = detail.xhr;
-    if (!xhr || !isSheet(detail) || xhr.status < 400) {
-      return;
-    }
-    detail.shouldSwap = true;
-    detail.isError = false;
-    if (String(xhr.responseText).indexOf("<main") === -1) {
-      detail.selectOverride = "unset";
-    }
-  }
-
-  function plainClick(event) {
-    return event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
-  }
-
-  /* A request still open when a navigation starts keeps this page out of the back-forward cache
-   * (Firefox decides before pagehide), so an open event stream is closed first and the page
-   * leaves a moment later. */
-  var LEAVE_MS = 50;
-
-  function leave(href, replace) {
-    var go = function () {
-      if (replace) {
-        window.location.replace(href);
-      } else {
-        window.location.assign(href);
-      }
-    };
-    if (stream) {
-      closeStream();
-      window.setTimeout(go, LEAVE_MS);
-    } else {
-      go();
-    }
-  }
-
-  // A plain tap on a link to another page of this app, not a new tab, a download or a #jump.
-  function pageLink(event) {
-    var link = event.target && event.target.closest ? event.target.closest("a[href]") : null;
-    if (!link || !plainClick(event) || link.target || link.hasAttribute("download")) {
-      return null;
-    }
-    var here = window.location;
-    if (link.origin !== here.origin || (link.pathname === here.pathname && link.search === here.search && link.hash)) {
-      return null;
-    }
-    return link;
-  }
-
-  document.addEventListener("click", function (event) {
-    var link = pageLink(event);
-    if (!link || event.defaultPrevented) {
-      return;
-    }
-    if (link.hasAttribute("data-hp-replace")) {
-      event.preventDefault();
-      /* Leaving mid-write would hide whether it landed. */
-      if (!sending()) {
-        leave(link.href, true);
-      }
-    } else if (stream) {
-      event.preventDefault();
-      leave(link.href, false);
+    if (xhr && xhr.status >= 400 && xhr.getResponseHeader("HP-Fragment") === "1") {
+      detail.shouldSwap = true;
+      detail.isError = false;
     }
   });
-
-  /* A finished write names its page; htmx's own redirect would push, so the page replaces. */
-  document.addEventListener("hp:opened", function (event) {
-    var where = event.detail && event.detail.where;
-    if (typeof where === "string" && where.charAt(0) === "/" && where.charAt(1) !== "/") {
-      leave(where, true);
-    }
-  });
-
-  /* A region fetches itself as its own source, so its hx-sync rule applies: a key tap's request
-   * replaces this one, and this one waits behind a key already out. With no source htmx uses the
-   * body, and the redraw would land over the key's controls mid-send. */
-  function refetch(node) {
-    window.htmx.ajax("GET", node.getAttribute("data-hp-poll"), { source: node, target: node, swap: "outerHTML" });
-  }
 
   /* Re-fetch every polling region once the page is visible again. */
   function rearm() {
@@ -436,104 +93,11 @@
       keep(box);
     }
   });
-  document.addEventListener("htmx:afterSwap", function (event) {
-    settle(event.detail.elt.parentNode || document);
+  bus.on("swapped:restore", function (detail) {
+    settle(detail.elt.parentNode || document);
   });
-  document.addEventListener("DOMContentLoaded", function () {
+  bus.on("ready:restore", function () {
     settle(document);
-  });
-
-  /* Back and End are disabled while any write is in flight, or the result is never seen. Each
-   * write is held by its own request, so a read finishing meanwhile releases nothing. */
-  var writing = [];
-
-  function sending() {
-    return writing.length > 0;
-  }
-
-  function showSending() {
-    document.body.classList.toggle("is-sending", sending());
-  }
-
-  // beforeSend, not beforeRequest: a request a listener cancels never sends, and never finishes.
-  document.addEventListener("htmx:beforeSend", function (event) {
-    var detail = event.detail;
-    if (detail.requestConfig && detail.requestConfig.verb !== "get" && writing.indexOf(detail.xhr) === -1) {
-      writing.push(detail.xhr);
-      showSending();
-    }
-  });
-  document.addEventListener("htmx:afterRequest", function (event) {
-    var at = writing.indexOf(event.detail.xhr);
-    if (at !== -1) {
-      writing.splice(at, 1);
-      showSending();
-    }
-  });
-
-  /* ---- A tap on the answer region always says what became of it ----
-   * The outcome banner is scrolled into view if the thumb left the region's top off screen,
-   * and a tap that got no reply at all (a dropped link) shows the region's own notice. */
-  function showOutcome(banner) {
-    var top = banner.getBoundingClientRect().top;
-    if (top < barBottom() || top > window.innerHeight * 0.6) {
-      banner.scrollIntoView({ block: "start" });
-      ownScroll();
-    }
-  }
-
-  document.addEventListener("htmx:afterSwap", function (event) {
-    var config = event.detail.requestConfig;
-    var region = document.getElementById("answer");
-    if (!region || !config || config.verb === "get") {
-      return;
-    }
-    var banner = region.querySelector(".answer > .banner:not([hidden])");
-    if (banner) {
-      showOutcome(banner);
-    }
-  });
-
-  // The no-reply notice showing now, and when it came up.
-  var lostShown = { notice: null, at: 0 };
-  var lostTimer = 0;
-
-  function lost(event) {
-    var elt = event.detail && event.detail.elt;
-    var region = elt && elt.closest ? elt.closest("#answer") : null;
-    var notice = region ? region.querySelector("[data-hp-lost]") : null;
-    if (notice) {
-      if (notice.hidden) {
-        lostShown = { notice: notice, at: Date.now() };
-      }
-      notice.hidden = false;
-      showOutcome(notice);
-    }
-  }
-  document.addEventListener("htmx:sendError", lost);
-  document.addEventListener("htmx:timeout", lost);
-  document.addEventListener("htmx:responseError", lost);
-
-  /* A read that would redraw the notice away before it could be read is dropped, and the region
-   * fetched afresh once it has been up long enough. A tap's own answer is never held. */
-  document.addEventListener("htmx:beforeSwap", function (event) {
-    var target = event.detail.target;
-    if (!target || target.id !== "answer" || !isRead(event.detail)) {
-      return;
-    }
-    var notice = lostShown.notice;
-    var up = !!notice && notice.isConnected && !notice.hidden;
-    var wait = logic.lostHold(up ? Date.now() - lostShown.at : -1);
-    if (wait <= 0) {
-      return;
-    }
-    event.detail.shouldSwap = false;
-    window.clearTimeout(lostTimer);
-    lostTimer = window.setTimeout(function () {
-      if (target.isConnected && typeof window.htmx !== "undefined") {
-        refetch(target);
-      }
-    }, wait);
   });
 
   /* ---- Live updates: the server names a stale region, and the region fetches itself ----
@@ -592,6 +156,14 @@
     }
   }
 
+  /* Whether the page's stream is open, and closing it: a page leaving closes it first. */
+  hp.stream = {
+    open: function () {
+      return !!stream;
+    },
+    close: closeStream,
+  };
+
   function closeStream() {
     var mine = stream;
     // Cleared first: aborting fires loadend, which must not read as a lost stream.
@@ -641,7 +213,7 @@
   }
 
   /* The stream is an XMLHttpRequest read as it arrives: no EventSource reconnecting on its own
-   * behind the backoff, and abort() ends it at once when the page leaves (see leave()). */
+   * behind the backoff, and abort() ends it at once when the page leaves (backnav.js, leave()). */
   function connect() {
     window.clearTimeout(retryTimer);
     retryTimer = 0;
@@ -700,109 +272,12 @@
       for (var i = 0; i < nodes.length; i++) {
         nodes[i].classList.add("is-stale");
       }
-      writing = [];
-      showSending();
+      hp.sendhold.reset();
       missed = false;
       rearm();
       connect();
     }
   });
-
-  /* ---- The composer dock ----
-   * The composer is fixed to the bottom. The page reserves the dock's real height, and
-   * while the iOS keyboard is open the dock rides on top of it: the layout viewport keeps
-   * its height there and the visible band pans inside it as the reader scrolls, so the dock
-   * is lifted by the gap between the band's bottom and the layout viewport's. */
-  var root = document.documentElement;
-  var docking = false;
-  var dockedBand = -1;
-  var dockedH = -1;
-  var liftedKb = -1;
-  var watched = null;
-  // The dock grows with iPhone Text Size and with any banner in it; nothing else says so.
-  var sizes = typeof window.ResizeObserver === "function" ? new window.ResizeObserver(redock) : null;
-
-  function dock() {
-    docking = false;
-    var bar = document.getElementById("composer");
-    if (!bar) {
-      return;
-    }
-    if (sizes && watched !== bar) {
-      if (watched) {
-        sizes.unobserve(watched);
-      }
-      sizes.observe(bar);
-      watched = bar;
-    }
-    var band = lift();
-    var height = bar.offsetHeight;
-    // A pinned reader stays at the end as the keyboard opens or the dock grows; a pan of the band
-    // is the reader's own scroll (or nothing), so it never moves the page.
-    var wasEnd = (band !== dockedBand || height !== dockedH) && pin.pinned;
-    dockedBand = band;
-    if (height !== dockedH) {
-      root.style.setProperty("--dock-h", height + "px");
-      dockedH = height;
-    }
-    if (wasEnd) {
-      toEnd();
-    }
-  }
-
-  // The keyboard's lift alone, cheap enough to run inside a visualViewport event: iOS swaps the
-  // band's offset mid-fling and draws the next frame with whatever lift the handler left.
-  // Returns the band's height while the keyboard is open, else 0.
-  function lift() {
-    var view = window.visualViewport;
-    // Against the layout viewport the dock is fixed to: WebKit reports innerHeight as the band.
-    var layout = root.clientHeight;
-    var keyboard = !!view && typing() && Math.round(layout - view.height * view.scale) > 0;
-    var covered = keyboard ? Math.max(0, Math.round(layout - view.height - view.offsetTop)) : 0;
-    // On <html> every write restyles the whole chat, so an unchanged lift is not written.
-    if (covered !== liftedKb) {
-      root.style.setProperty("--kb", covered + "px");
-      liftedKb = covered;
-    }
-    // Open for as long as the band is short, not only while it sits above the layout's bottom.
-    root.classList.toggle("is-keyboard", keyboard);
-    return keyboard ? Math.round(view.height) : 0;
-  }
-
-  function viewMoved() {
-    if (document.getElementById("composer")) {
-      lift();
-    }
-    redock();
-  }
-
-  // Only a field that takes text raises the keyboard; a short band without one is the browser's bars.
-  var NO_KEYS = /^(button|checkbox|radio|submit|reset|file|range|color|hidden|image)$/;
-  function typing() {
-    var field = document.activeElement;
-    if (!field) {
-      return false;
-    }
-    return field.tagName === "TEXTAREA" || field.isContentEditable
-      || (field.tagName === "INPUT" && !NO_KEYS.test(field.type));
-  }
-
-  function redock() {
-    if (!docking) {
-      docking = true;
-      window.requestAnimationFrame(dock);
-    }
-  }
-
-  if (window.visualViewport) {
-    window.visualViewport.addEventListener("resize", viewMoved);
-    window.visualViewport.addEventListener("scroll", viewMoved);
-  }
-  window.addEventListener("resize", redock);
-  document.addEventListener("focusin", redock);
-  document.addEventListener("focusout", redock);
-  document.addEventListener("input", redock);
-  document.addEventListener("htmx:afterSettle", redock);
 
   /* ---- An armed interrupt disarms itself ----
    * After data-hp-disarm seconds the answer region is fetched afresh, which draws it
@@ -819,7 +294,7 @@
       if (!node.isConnected || !region || typeof window.htmx === "undefined") {
         return;
       }
-      if (Date.now() - lastTouch < 1500 || sending()) {
+      if (Date.now() - lastTouch < 1500 || hp.sendhold.sending()) {
         disarmLater(node, 1.5);
         return;
       }
@@ -863,16 +338,16 @@
     var unit = details.closest(".turn");
     var inside = unit ? unit.querySelectorAll("details") : [];
     var own = details.getAttribute("data-hp-key");
-    return (unit ? unitKey(unit) : "") + "#" + (own || Array.prototype.indexOf.call(inside, details));
+    return (unit ? hp.chatend.unitKey(unit) : "") + "#" + (own || Array.prototype.indexOf.call(inside, details));
   }
 
-  document.addEventListener("htmx:beforeSwap", function (event) {
-    if (!isView(event.detail)) {
+  bus.on("swap:capture", function (detail) {
+    if (!isView(detail)) {
       return;
     }
     unfolded = [];
     drawn = [];
-    var all = event.detail.target.querySelectorAll("details");
+    var all = detail.target.querySelectorAll("details");
     for (var i = 0; i < all.length; i++) {
       drawn.push(detailsKey(all[i]));
       if (all[i].open) {
@@ -881,8 +356,8 @@
     }
   });
 
-  document.addEventListener("htmx:afterSwap", function (event) {
-    if (!isView(event.detail) || !unfolded.length) {
+  bus.on("swapped:restore", function (detail) {
+    if (!isView(detail) || !unfolded.length) {
       return;
     }
     var keys = unfolded;
@@ -901,320 +376,6 @@
       for (var d = outerDetails(all[i]); d && was.indexOf(detailsKey(d)) === -1; d = outerDetails(d)) {
         d.open = true;
       }
-    }
-  });
-
-  /* ---- Chat and Pane open on their newest line and follow it only while the reader is pinned ----
-   * Both read oldest first, so the end of the page is the newest turn or terminal line, just
-   * above the dock, and a question the agent asks sits after that, where the thumb is. Pinned is
-   * a state, not a position: set on landing at the end, cleared by a scroll of the reader's that
-   * leaves the end, and set again only when the reader reaches the very end themselves or sends.
-   * A pinned page follows the end; any other keeps what the reader is reading where it was. */
-  // A redraw waits until the reader's scroll has been still this long, and no finger is down.
-  var IDLE_MS = 250;
-  var pin = { pinned: true, lastY: window.scrollY, reader: false };
-  var swapEnd = false;
-  var swapMark = null;
-  var touching = false;
-  var readerScrolledAt = 0;
-  var deferred = [];
-  var idleTimer = 0;
-
-  // A chat turn, or a line of the terminal mirror.
-  var READ_UNITS = "#agent-view .turn, #agent-view > .pane > .pane__line";
-  // What a poll may not move under the reader: those, and the feed's cards, which re-sort.
-  var ANCHORS = READ_UNITS + ", #feed-list .card";
-
-  function readUnits() {
-    return document.querySelectorAll(READ_UNITS);
-  }
-
-  // How far the page still runs below the screen.
-  function gap() {
-    return root.scrollHeight - window.innerHeight - window.scrollY;
-  }
-
-  // The pin after `event`, with where the page is now and how far it runs on below.
-  function pinOn(type, extra) {
-    var event = { type: type, y: window.scrollY, gap: gap() };
-    for (var name in extra) {
-      event[name] = extra[name];
-    }
-    pin = logic.pin(pin, event);
-  }
-
-  // This script moved the page: the scroll event that follows is not the reader's.
-  function ownScroll() {
-    pinOn("moved");
-  }
-
-  // The question itself, else its first option (a tappable one is an .option too), else the region.
-  function askedIn(region) {
-    return region.querySelector(".answer__question, .option") || region;
-  }
-
-  function asking() {
-    var region = document.getElementById("answer");
-    // A failure standing in for the region under its id is not a question.
-    return !!(region && region.classList.contains("answer") && !region.classList.contains("answer--quiet"));
-  }
-
-  /* The end, unless a waiting question is taller than the room between the bar and the dock:
-   * then its top, just under the bar, so the question and its first options show and Interrupt
-   * waits below. The bar is measured, since what it holds varies by page. */
-  function endY() {
-    var region = document.getElementById("answer");
-    var bar = document.getElementById("composer");
-    var waiting = !!region && asking();
-    return logic.landing({
-      scrollHeight: root.scrollHeight,
-      viewHeight: window.innerHeight,
-      scrollY: window.scrollY,
-      asking: waiting,
-      regionHeight: waiting ? region.getBoundingClientRect().height : 0,
-      askedTop: waiting ? askedIn(region).getBoundingClientRect().top : 0,
-      dockTop: bar ? bar.getBoundingClientRect().top : window.innerHeight,
-      barBottom: barBottom(),
-    });
-  }
-
-  // Pinned only if this actually reached the end; a tall question's top is not the end.
-  function toEnd() {
-    if (readUnits().length) {
-      window.scrollTo(0, endY());
-      pinOn("landed");
-    }
-  }
-
-  // A card names its agent; a turn or a line is known by its text.
-  function unitKey(unit) {
-    return unit.getAttribute("data-hp-key") || String(unit.textContent).slice(0, 160);
-  }
-
-  function barBottom() {
-    var bar = document.querySelector(".topbar");
-    return bar ? bar.getBoundingClientRect().bottom : 0;
-  }
-
-  /* What to hold in place across a swap: the first unit wholly in view under the top bar,
-   * else the first still on screen at all, as when one turn is taller than the screen. */
-  function mark(anchors) {
-    var units = document.querySelectorAll(anchors || ANCHORS);
-    var boxes = Array.prototype.map.call(units, function (unit) {
-      return unit.getBoundingClientRect();
-    });
-    var at = logic.markAt(boxes, barBottom(), window.innerHeight);
-    return at === -1 ? null : { key: unitKey(units[at]), index: at, top: boxes[at].top, anchors: anchors };
-  }
-
-  /* The same unit after the swap: same key, nearest its old place, since both windows drop
-   * their oldest as new ones arrive and the feed re-sorts its cards. */
-  function hold(held) {
-    var units = document.querySelectorAll(held.anchors || ANCHORS);
-    var best = logic.nearest(Array.prototype.map.call(units, unitKey), held.key, held.index);
-    if (best !== -1) {
-      window.scrollBy(0, units[best].getBoundingClientRect().top - held.top);
-      ownScroll();
-    }
-  }
-
-  /* Only the reader moves the pin: a scroll this script did not make pins the page if it ends at
-   * the very end and unpins it anywhere else, down as well as up, since a reader who opened a
-   * tool's output scrolls down into it. A page that shrank under a pinned reader stays pinned. */
-  function hearScroll() {
-    pinOn("scroll");
-    if (pin.reader) {
-      readerScrolledAt = Date.now();
-    }
-  }
-  window.addEventListener("scroll", hearScroll, { passive: true });
-
-  // Opening a fold at the end pushes the end away: the reader is reading the fold now.
-  document.addEventListener("toggle", function (event) {
-    var details = event.target;
-    if (details.open && details.closest && details.closest("#agent-view")) {
-      pinOn("unfolded");
-    }
-  }, true);
-
-  // This listener is also what lets iOS Safari apply :active, which the press states in app.css need.
-  document.addEventListener("touchstart", function () {
-    touching = true;
-  }, { capture: true, passive: true });
-  ["touchend", "touchcancel"].forEach(function (name) {
-    document.addEventListener(name, function (event) {
-      touching = event.touches.length > 0;
-      // Momentum runs on after the finger lifts; its scroll events keep the redraw waiting.
-      readerScrolledAt = Date.now();
-    }, { capture: true, passive: true });
-  });
-
-  function readerBusy() {
-    return touching || Date.now() - readerScrolledAt < IDLE_MS;
-  }
-
-  // Each region whose redraw waited is fetched afresh once the reader is still.
-  function redrawWhenStill() {
-    window.clearTimeout(idleTimer);
-    idleTimer = window.setTimeout(function () {
-      idleTimer = 0;
-      // A redraw during a write would draw live controls under the answer still on its way.
-      if (readerBusy() || sending()) {
-        redrawWhenStill();
-        return;
-      }
-      var ids = deferred;
-      deferred = [];
-      ids.forEach(function (id) {
-        var node = document.getElementById(id);
-        if (node && typeof window.htmx !== "undefined") {
-          refetch(node);
-        }
-      });
-    }, IDLE_MS);
-  }
-
-  /* Never redraw under a finger or a running scroll: a programmatic scroll then fights the
-   * reader's (iOS drops momentum). That holds for every region that redraws itself, the stats
-   * strip and the feed as much as the view, since each swap ends in a move to the end or a hold.
-   * The answer is dropped and the region fetched afresh, by its id, once still. */
-  function deferring(detail) {
-    var target = detail.target;
-    if (!target || !logic.defers({ id: target.id, polled: target.hasAttribute("data-hp-poll") }, readerBusy())) {
-      return false;
-    }
-    detail.shouldSwap = false;
-    if (deferred.indexOf(target.id) === -1) {
-      deferred.push(target.id);
-    }
-    redrawWhenStill();
-    return true;
-  }
-
-  /* A write's answer is newer than a read its region put off, and draws what the write did;
-   * the read, fetched after it, would redraw that outcome away. */
-  function superseded(detail) {
-    var target = detail.target;
-    var at = target && detail.shouldSwap ? deferred.indexOf(target.id) : -1;
-    if (at !== -1) {
-      deferred.splice(at, 1);
-    }
-  }
-
-  function isRead(detail) {
-    return !!(detail.requestConfig && detail.requestConfig.verb === "get");
-  }
-
-  // An earlier page lands above the reader: hold a message, never follow the end.
-  var EARLIER_ANCHORS = "#agent-view article.turn[data-hp-key]";
-
-  function isEarlier(detail) {
-    var elt = detail.requestConfig && detail.requestConfig.elt;
-    return !!(elt && elt.hasAttribute && elt.hasAttribute("data-hp-earlier"));
-  }
-
-  document.addEventListener("htmx:beforeSwap", function (event) {
-    if (!isRead(event.detail)) {
-      superseded(event.detail);
-      return;
-    }
-    /* A scroll is told of on the next frame, and a read can land before it: the reader who has
-     * just left the end would still read as pinned and be taken back. Hear it now. */
-    hearScroll();
-    if (isEarlier(event.detail)) {
-      pinOn("earlier");
-      swapEnd = false;
-      swapMark = mark(EARLIER_ANCHORS) || mark();
-      return;
-    }
-    if (deferring(event.detail)) {
-      return;
-    }
-    // Only the agent view follows its end; the feed is read from the top.
-    swapEnd = !!document.getElementById("agent-view") && pin.pinned;
-    swapMark = swapEnd ? null : mark();
-  });
-
-  // Where the page stood as a swap began, so the swap is blamed only for a move it made.
-  var swapY = null;
-  document.addEventListener("htmx:beforeSwap", function (event) {
-    swapY = event.detail.shouldSwap ? window.scrollY : null;
-  });
-
-  /* The page arrives with its view, the question and the composer already drawn, so it lands as
-   * its first swap used to: the dock's room reserved first, which lands a pinned page at the end. */
-  document.addEventListener("DOMContentLoaded", function () {
-    dock();
-    armTimers(document);
-  });
-
-  document.addEventListener("htmx:afterSwap", function (event) {
-    if (isRead(event.detail)) {
-      if (swapEnd) {
-        toEnd();
-      } else if (swapMark) {
-        hold(swapMark);
-      }
-      swapMark = null;
-    }
-    // A swap that shortened the page moved it too, and that move was not the reader's.
-    pinOn("swapped", { before: swapY });
-    swapY = null;
-  });
-
-  /* ---- "Question waiting" floats above the dock while the question is below the reader ----
-   * Shown only when the reader has scrolled away from a question still off screen; a tap takes
-   * them back to the end and pins it. Said once per question, never on every scroll. */
-  var jump = document.getElementById("hp-jump");
-  var jumpSaid = "";
-
-  function questionBelow() {
-    var region = document.getElementById("answer");
-    if (pin.pinned || !asking() || region.querySelector(".banner[data-hp-sent]")) {
-      return false;
-    }
-    var bar = document.getElementById("composer");
-    var dockTop = bar ? bar.getBoundingClientRect().top : window.innerHeight;
-    // Waiting below until the question itself (else the region's first line) is wholly in view.
-    return askedIn(region).getBoundingClientRect().bottom > dockTop;
-  }
-
-  function showJump() {
-    if (!jump) {
-      return;
-    }
-    var below = questionBelow();
-    jump.hidden = !below;
-    var question = below ? document.querySelector("#answer .answer__question") : null;
-    var key = question ? words(question) : below ? "waiting" : "";
-    if (below && key !== jumpSaid) {
-      say("A question is waiting at the end.");
-    }
-    if (below) {
-      jumpSaid = key;
-    }
-  }
-
-  if (jump) {
-    window.addEventListener("scroll", showJump, { passive: true });
-    document.addEventListener("htmx:afterSettle", showJump);
-    jump.addEventListener("click", function () {
-      pinOn("jumped");
-      toEnd();
-      showJump();
-      var first = document.querySelector("#answer button, #answer a[href]");
-      if (first) {
-        first.focus({ preventScroll: true });
-      }
-    });
-  }
-
-  /* Sending is reading the end: the reply lands there. */
-  document.addEventListener("htmx:beforeRequest", function (event) {
-    var elt = event.detail.elt;
-    if (elt && elt.id === "composer") {
-      pinOn("sent");
-      toEnd();
     }
   });
 
@@ -1288,6 +449,9 @@
     return String(node.innerText || node.textContent).replace(/\s+/g, " ").trim();
   }
 
+  // The one voice of the page, for news a section of its own has (a question waiting below).
+  hp.voice = { say: say, words: words };
+
   // What a focused control is, so its twin can be found in the region's next drawing.
   function focusMark(target) {
     var active = document.activeElement;
@@ -1326,11 +490,11 @@
     }
   }
 
-  document.addEventListener("htmx:beforeSwap", function (event) {
-    var target = event.detail.target;
-    var xhr = event.detail.xhr;
+  bus.on("swap:capture", function (detail) {
+    var target = detail.target;
+    var xhr = detail.xhr;
     // A hidden page's stopped poll swaps nothing, and nothing would settle to clear the mark.
-    if (!target || !event.detail.shouldSwap || (xhr && xhr.getResponseHeader("HX-Reswap") === "none")) {
+    if (!target || !detail.shouldSwap || (xhr && xhr.getResponseHeader("HX-Reswap") === "none")) {
       return;
     }
     var host = target.parentElement;
@@ -1339,7 +503,7 @@
       busyHosts.push(host);
     }
     refocus = focusMark(target);
-    writeTarget = isRead(event.detail) ? "" : target.id;
+    writeTarget = isRead(detail) ? "" : target.id;
   });
 
   // The newest message in the chat, if the newest thing in it is the agent speaking.
@@ -1349,7 +513,7 @@
     return last && last.classList.contains("turn--agent") ? last : null;
   }
 
-  document.addEventListener("htmx:afterSwap", function (event) {
+  bus.on("swapped:announce", function (detail) {
     if (refocus) {
       refocusIn(refocus);
       refocus = null;
@@ -1363,11 +527,11 @@
       writeTarget = "";
       return;
     }
-    if (!isRead(event.detail) || !document.querySelector("#agent-view.chat")) {
+    if (!isRead(detail) || !document.querySelector("#agent-view.chat")) {
       return;
     }
     var newest = newestMessage();
-    var key = newest ? unitKey(newest) : "";
+    var key = newest ? hp.chatend.unitKey(newest) : "";
     // The first drawing is the page opening, not news.
     if (newestSaid !== null && newest && key !== newestSaid) {
       say("New message: " + words(newest).replace(/^Agent:\s*/, "").slice(0, 140));
@@ -1376,10 +540,10 @@
   });
 
   // The conversation the page opened on is not news either.
-  document.addEventListener("DOMContentLoaded", function () {
+  bus.on("ready:announce", function () {
     if (document.querySelector("#agent-view.chat")) {
       var newest = newestMessage();
-      newestSaid = newest ? unitKey(newest) : "";
+      newestSaid = newest ? hp.chatend.unitKey(newest) : "";
     }
   });
 
@@ -1682,15 +846,16 @@
   /* ---- The stats strip keeps its details open across the redraws that refresh it ---- */
   var statsOpen = false;
 
-  document.addEventListener("htmx:beforeSwap", function (event) {
-    var target = event.detail.target;
+  bus.on("swap:capture", function (detail) {
+    var target = detail.target;
     if (target && target.id === "agent-stats") {
       var sheet = target.querySelector("details");
       statsOpen = !!(sheet && sheet.open);
     }
   });
 
-  document.addEventListener("htmx:afterSwap", function () {
+  // After the page has its place, as it always has: reopening it first would move the hold.
+  bus.on("swapped:settle", function () {
     var sheet = statsOpen ? document.querySelector("#agent-stats details") : null;
     statsOpen = false;
     if (sheet) {
@@ -1944,18 +1109,16 @@
     }
   }
 
-  document.addEventListener("DOMContentLoaded", function () {
+  function showBubble() {
     tellBubble();
     startBubble();
-  });
-  document.addEventListener("htmx:afterSwap", function () {
-    tellBubble();
-    startBubble();
-  });
+  }
+  bus.on("ready:announce", showBubble);
+  bus.on("swapped:announce", showBubble);
   document.addEventListener("visibilitychange", wakeBubble);
   window.addEventListener("pageshow", wakeBubble);
   stillness.addEventListener("change", function () {
     stopBubble();
     startBubble();
   });
-})();
+})(window.hp);

@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse
 from jinja2 import DictLoader, Environment, StrictUndefined
 from markupsafe import Markup
 
-from herdr_pwa.web.assets import Assets
+from herdr_pwa.web.assets import SCRIPTS, Assets
 
 TEMPLATES_DIR: Final = Path(__file__).parent / "templates"
 FRAGMENT_HEADER: Final = "HP-Fragment"
@@ -38,6 +38,7 @@ class Pages:
         self.shared: dict[str, object] = {
             "asset": assets.url,
             "build": assets.build,
+            "scripts": SCRIPTS,
             "device_report": device_report,
             "fallback": fallback,
         }
