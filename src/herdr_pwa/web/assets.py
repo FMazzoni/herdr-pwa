@@ -11,7 +11,7 @@ STATIC_PREFIX: Final = "/static/"
 _DIGEST_CHARS: Final = 12
 # The page's own scripts, in the order they run: classic and deferred, so after htmx and in this
 # order; the first defines window.hp, which the rest share.
-SCRIPTS: Final = ("hp.js", "drafts.js", "backnav.js", "sendhold.js", "stream.js", "geometry.js", "interrupt.js", "chatend.js", "app.js")
+SCRIPTS: Final = ("hp.js", "drafts.js", "backnav.js", "sendhold.js", "stream.js", "geometry.js", "interrupt.js", "folds.js", "chatend.js", "app.js")
 
 
 @dataclass(frozen=True, slots=True)
