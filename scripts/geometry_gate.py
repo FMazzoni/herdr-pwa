@@ -17,6 +17,8 @@ from tests.catalogue import CAPTURES  # noqa: E402
 # measured reuses that receipt. A cache of a result, never a record anyone reviews.
 CACHE = Path.home() / ".cache" / "herdr-pwa-v2"
 RECEIPTS = CACHE / "geometry"
+# One receipt per browser test that passed, under the tree's fingerprint, so pytest skips it.
+WALK_RECEIPTS = RECEIPTS / "walks"
 
 # Everything that decides what the browser lays out, plus the harness itself.
 GUARDED = (
@@ -38,6 +40,7 @@ GUARDED = (
     "tests/waiting.py",
     "tests/_fake_herd.py",
     "scripts/geometry_gate.py",
+    "tests/browser",
 )
 SKIP = ("__pycache__",)
 
@@ -66,6 +69,20 @@ def fingerprint() -> str:
 def receipt(current: str) -> Path:
     """Where a green run for ``current`` leaves its receipt."""
     return RECEIPTS / f"{current}.json"
+
+
+def walk_receipt(current: str, test: str) -> Path:
+    """Where browser test ``test`` (a pytest node id) leaves its receipt for tree ``current``."""
+    name = hashlib.sha256(test.encode()).hexdigest()[:16]
+    return WALK_RECEIPTS / current / f"{name}.json"
+
+
+def record_walk(current: str, test: str, seconds: float) -> None:
+    """Leave the receipt that lets ``test`` be skipped until ``current`` changes."""
+    path = walk_receipt(current, test)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    body = {"fingerprint": current, "test": test, "seconds": round(seconds, 1)}
+    path.write_text(json.dumps(body, indent=2) + "\n", encoding="utf-8")
 
 
 def run(current: str) -> int:

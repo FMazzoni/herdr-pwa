@@ -62,6 +62,8 @@ WAIT_SECONDS = 15.0
 DRIFT = 3
 TURNS = 24
 LINES = 120
+# The newest line of the pane walks' terminal.
+LAST_LINE = f"step {LINES - 1:03d}"
 
 # Where the newest turn or terminal line, and the question if any, sit against the dock.
 PROBE = r"""
@@ -258,6 +260,15 @@ def _print(rig: Rig, _home: Path, n: int) -> str:
     text = f"newest output line {n}"
     rig.wire.replies[READ] = read_frame(long_pane(LINES) + text + "\n")
     return text
+
+
+def _pane() -> State:
+    return State("pane", f"{AGENT}?tab=pane", "", runner(snapshot_frame, long_pane(LINES)))
+
+
+def pane_tab(name: str) -> Tab:
+    """The Pane tab over a terminal taller than the screen, which prints a newest line per grow."""
+    return Tab(name, _pane(), LAST_LINE, _print)
 
 
 def _scrolled_up_stays(ctx: WalkCtx) -> list[str]:
@@ -1642,14 +1653,13 @@ def stats_open(ctx: WalkCtx) -> list[str]:
 def _tabs() -> tuple[tuple[Tab, Walk], ...]:
     blocked = runner(lambda: herd(**BLOCKED), long_pane(LINES) + capture(MENU))
     chat = State("chat", f"{AGENT}?tab=chat", "", runner(snapshot_frame), long_chat(TURNS))
-    pane = State("pane", f"{AGENT}?tab=pane", "", runner(snapshot_frame, long_pane(LINES)))
+    pane = _pane()
     asking_chat = State("asking chat", chat.path, "", blocked, long_chat(TURNS))
     asking_pane = State("asking pane", pane.path, "", blocked)
     last_reply = f"Reply {TURNS - 1}:"
     [plan] = pick(["agent-answer-plan"])
     [ticks] = pick(["agent-answer-multiselect"])
     [strip] = pick(["usage-chat"])
-    last_line = f"step {LINES - 1:03d}"
     tool = State("tool result", chat.path, "", runner(snapshot_frame), _tool_chat(TURNS))
     folds = State("tool burst", chat.path, "", runner(snapshot_frame), _burst_chat(BURST))
     heavy = State("tool heavy", chat.path, "", runner(snapshot_frame), tool_heavy_chat())
@@ -1673,14 +1683,13 @@ def _tabs() -> tuple[tuple[Tab, Walk], ...]:
         (Tab("unheard scroll", chat, last_reply, _say), unheard_scroll),
         (Tab("unheard read", chat, last_reply, _say), unheard_read),
         (Tab("locked log", chat, last_reply, _say), locked),
-        (Tab("pane unheard read", pane, last_line, _scroll_pane), unheard_read),
+        (Tab("pane unheard read", pane, LAST_LINE, _scroll_pane), unheard_read),
         (Tab("strip under a finger", strip, "", _say), strip_under_finger),
-        (Tab("pane end", pane, last_line, _print), follow),
-        (Tab("pane cold", pane, last_line, _print), cold),
+        (pane_tab("pane end"), follow),
         (Tab("chat cold", chat, last_reply, _say), cold),
         (Tab("chat stats open", chat, last_reply, _say), stats_open),
-        (Tab("pane nudged up", pane, last_line, _scroll_pane), scrolling_up(0.4, 10)),
-        (Tab("pane scrolled up", pane, last_line, _scroll_pane), scrolling_up(0.05, 40)),
+        (Tab("pane nudged up", pane, LAST_LINE, _scroll_pane), scrolling_up(0.4, 10)),
+        (Tab("pane scrolled up", pane, LAST_LINE, _scroll_pane), scrolling_up(0.05, 40)),
         (Tab("chat nudged up", chat, last_reply, _reply), scrolling_up(0.4, 10)),
         (Tab("chat scrolled up", chat, last_reply, _reply), scrolling_up(0.05, 40)),
         (
