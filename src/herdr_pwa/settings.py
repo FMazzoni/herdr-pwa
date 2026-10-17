@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="HP_", extra="ignore")
 
     host: str = "127.0.0.1"
-    # 8770 belongs to the live bridge until cutover; 8771 is legacy's test port.
+    # 8770 belongs to the live bridge until cutover.
     port: int = 8772
     state_dir: Path = Field(default_factory=_default_state_dir)
     socket_path: Path | None = None
