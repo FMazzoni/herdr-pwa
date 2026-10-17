@@ -633,3 +633,16 @@ def test_a_launch_prompt_fills_in_after_a_model() -> None:
     assert launch is not None
     assert launch.args("", "") == ()
     assert launch.args("m", "hi") == ("--model", "m", "--prompt=hi")
+
+
+def test_a_launch_prompt_is_read_back_for_as_long_as_the_tui_takes_to_draw(tmp_path: Path) -> None:
+    r = argv_rig(tmp_path)
+    r.herd.after["agent.start"] = lambda herd, _params: herd.agents[NEW_PANE].update(
+        interactive_ready=True, launch_pending=False
+    )
+    # Measured: opencode draws a launch prompt seconds after agent.start returns, not within one.
+    r.herd.screens[NEW_PANE] = [""] * 8 + [echoed("> fix it")]
+    result = start_agent(r.writer, ask(tmp_path, "opencode", prompt="fix it"), which=everywhere)
+    assert isinstance(result, AgentStarted)
+    assert isinstance(result.first, PromptSent)
+    assert result.first.verified

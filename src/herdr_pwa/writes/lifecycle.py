@@ -27,7 +27,13 @@ from herdr_pwa.engine import (
 )
 from herdr_pwa.writes.guard import destructive_reason, unsendable
 from herdr_pwa.writes.outcome import Evidence, Outcome, Pacing, audit_result
-from herdr_pwa.writes.prompt import PromptSent, read_back, send_opening_prompt
+from herdr_pwa.writes.prompt import (
+    LAUNCH_READS,
+    Echo,
+    PromptSent,
+    read_back,
+    send_opening_prompt,
+)
 from herdr_pwa.writes.refusal import Refusal, Refused, failed_result, refusal_for
 from herdr_pwa.writes.resolve import (
     Writer,
@@ -294,13 +300,12 @@ def _spawn_prompted(writer: Writer, launch: Launch, prompt: str) -> _Launched | 
         except EngineError as exc:
             entry.outcome(failed_result(exc))
             return Refused(refusal_for(exc), "created", detail=str(exc))
-        settled = _await_session(writer.client, started, writer.pacing)
-        shown = read_back(writer.client, pane, prompt, "", writer.pacing)
+        shown = read_back(writer.client, Echo(pane, prompt), writer.pacing, reads=LAUNCH_READS)
         outcome, evidence = (
             (Outcome.CONFIRMED, Evidence.ECHO) if shown else (Outcome.ACCEPTED, Evidence.ARGV)
         )
         entry.outcome(audit_result(outcome, evidence))
-    return _Launched(settled, PromptSent(pane, outcome, evidence))
+    return _Launched(started, PromptSent(pane, outcome, evidence))
 
 
 def start_agent(
