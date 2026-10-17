@@ -10,9 +10,16 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, BinaryIO, ClassVar, Final, NamedTuple, Protocol, override
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter, ValidationError
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    ConfigDict,
+    Field,
+    JsonValue,
+    TypeAdapter,
+    ValidationError,
+)
 
-from herdr_pwa.diff import EditArgs, FileDiff, tool_diff
 from herdr_pwa.engine.generated.request import IntegrationTarget
 from herdr_pwa.engine.model import Agent, SessionId
 from herdr_pwa.engine.notices import (
@@ -125,8 +132,6 @@ class TranscriptTurn(BaseModel):
     result: str = ""
     failed: bool = False
     result_truncated: bool = False
-    # Kept out of `text`, which stays the one-line gist (the path), as Collie's summarizeToolInput does.
-    diff: FileDiff | None = None
     # The frontier just before this turn: `before=at` leaves it out, `after=at` starts with it.
     at: int = -1
     # How a task notice says its task ended ("finished", "exit 0") and how long it ran; its
@@ -267,9 +272,14 @@ class TranscriptPage(BaseModel):
 # What a Claude Code record holds, as far as this reader looks
 
 
-class ToolInput(EditArgs):
-    """A tool call's arguments: the one that names the call, and any file it changes."""
+class ToolInput(BaseModel):
+    """A tool call's arguments, as far as naming the call goes, however a harness spells them."""
 
+    model_config = ConfigDict(extra="ignore")
+
+    file_path: Text = Field(default=None, validation_alias=AliasChoices("file_path", "filePath"))
+    notebook_path: Text = None
+    path: Text = None
     command: Text = None
     pattern: Text = None
     query: Text = None
@@ -1250,7 +1260,6 @@ def _assistant_record(record: ClaudeRecord, stamp: TurnStamp) -> TranscriptTurn 
                 tool=block.called,
                 truncated=cut,
                 call=block.id or "",
-                diff=tool_diff(block.input),
             )
         if btype == "thinking":
             # Measured: an empty `thinking` string and a signature blob, so nothing to render.

@@ -7,7 +7,6 @@ from typing import Annotated, ClassVar, Final, override
 
 from pydantic import BaseModel, ConfigDict, Json, TypeAdapter, ValidationError
 
-from herdr_pwa.diff import tool_diff
 from herdr_pwa.engine.store import Row, SessionStore, consult
 from herdr_pwa.engine.transcript import (
     MAX_PROSE_CHARS,
@@ -195,7 +194,6 @@ def _call_turn(
         tool=str(function.name or tool_name or ""),
         truncated=cut,
         call=first.id or first.call_id or "",
-        diff=tool_diff(function.arguments),
     )
 
 

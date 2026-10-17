@@ -7,9 +7,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, ClassVar, Final, NamedTuple, Protocol, Self, override
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, ValidationError
 
-from herdr_pwa.diff import EditArgs, tool_diff
 from herdr_pwa.engine.notices import INTERRUPTED_CODE, ApiError, api_error, status_code
 from herdr_pwa.engine.store import SessionStore, consult
 from herdr_pwa.engine.transcript import (
@@ -75,9 +74,14 @@ def _named(path: Path) -> bool:
 # What opencode's records hold, as far as this reader looks: each model ignores the rest.
 
 
-class _ToolInput(EditArgs):
-    """A tool part's input: the one argument that names the call, and any file it changes."""
+class _ToolInput(BaseModel):
+    """A tool part's input, as far as naming the call goes."""
 
+    model_config = ConfigDict(extra="ignore")
+
+    file_path: Text = Field(default=None, validation_alias=AliasChoices("file_path", "filePath"))
+    path: Text = None
+    content: Text = None
     command: Text = None
     pattern: Text = None
     query: Text = None
@@ -554,7 +558,6 @@ def _tool_turn(part: _Part, stamp: TurnStamp) -> TranscriptTurn:
         result=result,
         failed=failed,
         result_truncated=result_cut,
-        diff=tool_diff(args),
     )
 
 
