@@ -37,10 +37,8 @@ class ServeState:
     host: str
     target: str
     published: bool
-    configured: bool
     occupied_by: str
     funnel: bool
-    changed: bool
     etag: str
     config: ServeConfig = field(default_factory=dict[str, JsonValue])
 
@@ -87,10 +85,8 @@ def serve_state(
         host=name,
         target=target,
         published=ours,
-        configured=tailscale.is_serving(config),
         occupied_by="" if ours else existing,
         funnel=_funnel_enabled(config),
-        changed=False,
         etag=reply.etag,
         config=config,
     )
@@ -111,7 +107,7 @@ def publish(api: tailscale.LocalApi, state: ServeState) -> ServeState:
             f"Refusing to take it over. Use that port, or '{TEARDOWN_COMMAND}' if it is stale."
         )
     _write_serve_config(api, _with_our_handler(state), etag=state.etag)
-    return replace(state, published=True, configured=True, changed=True)
+    return replace(state, published=True)
 
 
 def pair(

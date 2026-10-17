@@ -10,6 +10,7 @@ from herdr_pwa.auth import (
     Access,
     AssumedLoginUnsafeError,
     AuthError,
+    Identity,
     LoginNotAllowedError,
     MissingIdentityError,
     MissingOriginError,
@@ -48,16 +49,11 @@ def test_the_module_does_not_trust_the_peer_or_forwarded_for() -> None:
         assert word not in source.lower(), word
 
 
-def test_identity_is_the_header_with_its_name_and_picture() -> None:
+def test_identity_is_the_login_alone_and_keeps_no_name_or_picture() -> None:
     who = identify(
         through_ingress(**{"Tailscale-User-Name": "You", "Tailscale-User-Profile-Pic": "p"}), PINNED
     )
-    assert (who.login, who.display_name, who.profile_pic, who.via) == (
-        LOGIN,
-        "You",
-        "p",
-        "tailscale",
-    )
+    assert who == Identity(login=LOGIN, via="tailscale")
     assert not who.is_assumed
 
 
