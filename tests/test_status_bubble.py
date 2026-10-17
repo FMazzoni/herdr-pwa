@@ -300,6 +300,18 @@ def test_the_route_draws_the_receipt_once_the_turn_is_done(tmp_path: Path) -> No
     assert "3 tool calls" in found.group(1)
 
 
+def test_the_chat_tab_alone_carries_the_switch_that_stops_the_animation(tmp_path: Path) -> None:
+    write_transcript(tmp_path / "transcripts", WORKING_SESSION, turn_chat("tool"))
+    rig = build_rig(tmp_path, {SNAPSHOT: _status("working"), READ: read_frame("")})
+    chat = rig.http.get(f"/agent/{WORKING_SESSION}?tab=chat").text
+    switch = 'data-hp-still aria-pressed="false">Stop the animation</button>'
+    # Hidden until bubble.js shows it with the choice this device remembers.
+    assert re.search(rf'<p class="agent__columns" hidden><button [^>]*{switch}</p>', chat)
+    pane = rig.http.get(f"/agent/{WORKING_SESSION}?tab=pane").text
+    assert "data-hp-still" not in pane
+    assert "data-hp-columns" in pane
+
+
 def test_the_old_working_line_is_gone(tmp_path: Path) -> None:
     body = _chat(tmp_path, "thinking", "working")
     assert "chat__working" not in body

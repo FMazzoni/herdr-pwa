@@ -345,5 +345,27 @@
     }
   }
 
-  window.hp = { logic: logic, bus: bus, refetch: refetch, isRead: isRead, storage: storage };
+  // A yes-or-no this device remembers, false wherever its storage cannot be read.
+  function kept(key) {
+    try {
+      var device = storage("localStorage");
+      return !!device && device.getItem(key) === "1";
+    } catch (err) {
+      return false;
+    }
+  }
+
+  // Remembers a yes-or-no on this device; where storage is blocked it lasts this page only.
+  function keep(key, on) {
+    try {
+      var device = storage("localStorage");
+      if (device) {
+        device.setItem(key, on ? "1" : "0");
+      }
+    } catch (err) {
+      /* blocked storage: the caller's page still shows the choice. */
+    }
+  }
+
+  window.hp = { logic: logic, bus: bus, refetch: refetch, isRead: isRead, storage: storage, kept: kept, keep: keep };
 })();

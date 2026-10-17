@@ -11,6 +11,9 @@
    * style that is still, the words stand still and the timer still ticks. VoiceOver is told only
    * when the state changes: working, quiet, needs you, done. */
   var stillness = window.matchMedia("(prefers-reduced-motion: reduce)");
+  // Stop the animation, remembered on this device: every bubble wears the still motion (WCAG 2.2.2).
+  var STILL = "hp-still";
+  var held = hp.kept(STILL);
   var bubble = {
     node: null, stretch: "", start: 0, drawnAt: 0, ran: null, quiet: null, after: NaN,
     motion: null, glyphs: [], frame: 0, tick: 0, seen: false, observer: null,
@@ -24,7 +27,7 @@
   }
 
   function motionOf(node) {
-    var name = node.getAttribute("data-working-motion") || "";
+    var name = held ? "still" : node.getAttribute("data-working-motion") || "";
     return Object.prototype.hasOwnProperty.call(hp.logic.MOTIONS, name) ? hp.logic.MOTIONS[name] : null;
   }
 
@@ -162,7 +165,7 @@
       if (shown) {
         hp.voice.say(shown.getAttribute("data-hp-said") || "");
       }
-      if (state === "done" && bubbleState !== "") {
+      if (state === "done" && bubbleState !== "" && !held) {
         shown.classList.add("is-folding");
       }
     }
@@ -190,17 +193,32 @@
     b.ran = attrNumber(node.getAttribute("data-hp-ran"));
     b.quiet = attrNumber(node.getAttribute("data-hp-quiet"));
     b.after = attrNumber(node.getAttribute("data-hp-quiet-after"));
-    b.motion = motionOf(node);
-    if (node.getAttribute("data-hp-bubble") === "working" && b.motion && !stillness.matches) {
-      b.glyphs = layGlyphs(node, b.motion);
-      drawCrest(b.drawnAt);
-      b.observer = new IntersectionObserver(function (entries) {
-        b.seen = entries[entries.length - 1].isIntersecting;
-        runCrest();
-      });
-      b.observer.observe(node);
-    }
+    startCrest(node);
     tickBubble();
+  }
+
+  // The crest, where the bubble is working and its motion may move.
+  function startCrest(node) {
+    var b = bubble;
+    b.motion = motionOf(node);
+    if (node.getAttribute("data-hp-bubble") !== "working" || !b.motion || stillness.matches) {
+      return;
+    }
+    b.glyphs = layGlyphs(node, b.motion);
+    drawCrest(window.performance.now());
+    b.observer = new IntersectionObserver(function (entries) {
+      b.seen = entries[entries.length - 1].isIntersecting;
+      runCrest();
+    });
+    b.observer.observe(node);
+  }
+
+  // A new motion for the bubble on screen; its timer and quiet clock carry on as they were.
+  function restyleBubble() {
+    stopCrest();
+    if (bubble.node) {
+      startCrest(bubble.node);
+    }
   }
 
   function wakeBubble() {
@@ -218,8 +236,17 @@
   hp.bus.on("swapped:announce", showBubble);
   document.addEventListener("visibilitychange", wakeBubble);
   window.addEventListener("pageshow", wakeBubble);
-  stillness.addEventListener("change", function () {
-    stopBubble();
-    startBubble();
-  });
+  stillness.addEventListener("change", restyleBubble);
+
+  var stillButton = document.querySelector("[data-hp-still]");
+  if (stillButton) {
+    stillButton.setAttribute("aria-pressed", held ? "true" : "false");
+    stillButton.parentNode.hidden = false;
+    stillButton.addEventListener("click", function () {
+      held = stillButton.getAttribute("aria-pressed") !== "true";
+      stillButton.setAttribute("aria-pressed", held ? "true" : "false");
+      hp.keep(STILL, held);
+      restyleBubble();
+    });
+  }
 })(window.hp);
