@@ -11,9 +11,9 @@ import pytest
 from pydantic import JsonValue
 
 from herdr_pwa.decisions import Overlay, read_status, screen_asks
-from herdr_pwa.engine import AgentStatus, BlockedPrompt
+from herdr_pwa.engine import AgentStatus, BlockedPrompt, MenuShape
 from herdr_pwa.writes.answer import KeyAsk, KeySent, send_key
-from herdr_pwa.writes.keys import control_token
+from herdr_pwa.writes.keys import answer_digits, control_token
 from herdr_pwa.writes.outcome import Evidence, Outcome
 from herdr_pwa.writes.refusal import Refusal, Refused
 from tests._fake_herd import FIXTURES, P3, S1, SETTLED, FakeHerd, Rig, capture, rig
@@ -163,14 +163,42 @@ def test_it_pushes_needs_you(tmp_path: Path) -> None:
 
 # A countdown is not a new screen
 
-# hermes's slash-command confirm: herdr flags it blocked, its `[1]` rows are not parsed as
-# options, so its controls are drawn against the screen itself, countdown and clocks included.
+# hermes's slash-command confirm: herdr flags it blocked, it numbers its rows `[1]`, and it
+# ticks a countdown under them every second, with clocks in the status bar below that.
 SLASH_CONFIRM = (FIXTURES / "hermes" / "blocked-slash-confirm.txt").read_text()
 
 
 def _ticked(screen: str) -> str:
     """The same dialog a few seconds on: its countdown and the status bar's clock moved."""
     return screen.replace("(19s)", "(13s)").replace("✓ 3m", "✓ 4m")
+
+
+def test_the_bracketed_rows_are_the_options_and_each_earns_its_digit() -> None:
+    prompt = BlockedPrompt.parse(SLASH_CONFIRM)
+    assert prompt.shape is MenuShape.SINGLE_CHOICE
+    assert [(o.number, o.label) for o in prompt.options] == [
+        (1, "Approve Once — proceed this time only"),
+        (2, "Always Approve — proceed and silence this prompt permanently"),
+        (3, "Cancel — keep current conversation"),
+    ]
+    assert answer_digits(prompt) == ("1", "2", "3")
+
+
+def test_the_token_is_the_question_posed_and_the_countdown_is_not_in_it() -> None:
+    drawn = BlockedPrompt.parse(SLASH_CONFIRM)
+    assert drawn.identity
+    assert control_token(drawn) == drawn.identity
+    assert control_token(BlockedPrompt.parse(_ticked(SLASH_CONFIRM))) == drawn.identity
+
+
+def test_a_digit_drawn_before_the_countdown_ticked_is_still_taken(tmp_path: Path) -> None:
+    herd = FakeHerd()
+    herd.put(P3, S1, status="blocked")
+    herd.screens[P3] = [_ticked(SLASH_CONFIRM)]
+    drawn = control_token(BlockedPrompt.parse(SLASH_CONFIRM))
+    result = send_key(rig(tmp_path, herd).writer, KeyAsk(S1, "3", drawn_from=drawn))
+    assert isinstance(result, KeySent), result
+    assert herd.writes(SEND_KEYS) == [{"target": "w1:p3", "keys": ["3"]}]
 
 
 def test_a_pad_key_drawn_before_the_countdown_ticked_is_still_taken(tmp_path: Path) -> None:
