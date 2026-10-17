@@ -444,7 +444,7 @@ class Switch:
         if self.app is None:
             raise RuntimeError("no state is being served")
         if scope["type"] == "http" and str(scope["path"]).startswith(RIG_PREFIX):
-            await self._rig(scope, receive, send)
+            await self._rig(str(scope["path"]), receive, send)
             return
         write = scope["type"] == "http" and scope["method"] != "GET"
         self.writing += write
@@ -453,8 +453,8 @@ class Switch:
         finally:
             self.writing -= write
 
-    async def _rig(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["path"] == COLLECTOR_PATH:
+    async def _rig(self, path: str, receive: Receive, send: Send) -> None:
+        if path == COLLECTOR_PATH:
             body = COLLECTOR.encode()
             kind = b"text/javascript; charset=utf-8"
             headers = [(b"content-type", kind), (b"content-length", str(len(body)).encode())]
@@ -467,7 +467,7 @@ class Switch:
             message = await receive()
             raw += bytes(message.get("body", b""))
             more = bool(message.get("more_body", False))
-        found = scope["path"] == REPORT_PATH
+        found = path == REPORT_PATH
         if found:
             with self._errors_lock:
                 self.errors.append(_REPORT.validate_json(raw))
