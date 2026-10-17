@@ -232,6 +232,12 @@ def decide_screen(prompt: BlockedPrompt) -> ScreenDecision:
     )
 
 
+def screen_asks(prompt: BlockedPrompt) -> bool:
+    """Whether a screen herdr calls stopped still holds a dialog waiting on a person."""
+    # Strict: recognised rows AND keys under them; a finished turn's numbered list has no keys.
+    return prompt.is_choice and prompt.corroborated and prompt.answerable
+
+
 def _within(inner: str, outer: str) -> bool:
     """Is *inner* the directory *outer* or one below it? Compared as paths, not as prefixes."""
     return inner == outer or inner.startswith(outer.rstrip("/") + "/")
@@ -269,6 +275,8 @@ class Overlay:
     unread: Mapping[str, bool] | None = None
     # Sessions whose conversation ends refused for a full context.
     stalled: frozenset[str] = frozenset()
+    # Sessions herdr calls stopped whose screen still holds a dialog: its rules can miss one.
+    asking: frozenset[str] = frozenset()
 
 
 NO_OVERLAY: Final = Overlay()
@@ -289,10 +297,36 @@ def reads_stall(status: AgentStatus, *, held: bool) -> bool:
     return status in _STOPS or (held and status is AgentStatus.WORKING)
 
 
+def reads_dialog(status: AgentStatus) -> bool:
+    """Whether a screen is worth reading for a question: herdr saw one, or says it stopped."""
+    return status is AgentStatus.BLOCKED or hides_dialog(status)
+
+
+def asks_now(status: AgentStatus, prompt: BlockedPrompt) -> bool:
+    """Whether a screen just read holds the question: herdr saw it, or a stop's screen asks."""
+    return status is AgentStatus.BLOCKED or (hides_dialog(status) and screen_asks(prompt))
+
+
+def shows_question(agent: Agent, overlay: Overlay) -> bool:
+    """Whether *agent*'s screen holds the question it waits on, as herdr or the app read it."""
+    return agent.status is AgentStatus.BLOCKED or _unflagged(agent.status, agent.session, overlay)
+
+
+def hides_dialog(status: AgentStatus) -> bool:
+    """Whether herdr's word may hide a dialog its rules missed: only a stop is read for one."""
+    return status in _STOPS
+
+
+def _unflagged(status: AgentStatus, session: str, overlay: Overlay) -> bool:
+    return session in overlay.asking and hides_dialog(status)
+
+
 def read_status(status: AgentStatus, session: str, overlay: Overlay) -> AgentStatus:
-    """The status every surface shows: a stall needs you, a finish already shown is idle again."""
+    """The status every surface shows: a stall or a dialog needs you, a finish shown is idle."""
     # A full context asks for the person as surely as a question does, and outranks a finish.
     if session in overlay.stalled and status in _STALLABLE:
+        return AgentStatus.BLOCKED
+    if _unflagged(status, session, overlay):
         return AgentStatus.BLOCKED
     # herdr keeps done until the desk focuses the pane; reading it on the phone is our own overlay.
     unread = overlay.unread

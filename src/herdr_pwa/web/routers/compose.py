@@ -6,7 +6,7 @@ from typing import Annotated, Final
 from fastapi import APIRouter, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
-from herdr_pwa.decisions import decide_screen, page_status
+from herdr_pwa.decisions import asks_now, decide_screen, page_status
 from herdr_pwa.engine import (
     INTERRUPT_KEY,
     VISIBLE_READ,
@@ -21,7 +21,7 @@ from herdr_pwa.engine import (
 )
 from herdr_pwa.web.deps import WebState, viewer_guard
 from herdr_pwa.web.failures import AgentGone, Redraw, refused
-from herdr_pwa.web.herd import find_agent, overlay_of
+from herdr_pwa.web.herd import asks, find_agent, overlay_of
 from herdr_pwa.web.writing import (
     Posted,
     WriteRoutes,
@@ -59,12 +59,14 @@ def _screen_now(web: WebState, agent: Agent) -> str:
 
 
 def _question(web: WebState, agent: Agent) -> BlockedPrompt | None:
-    if agent.status is not AgentStatus.BLOCKED:
+    if not asks(web, agent):
         return None
     try:
-        return web.client.blocked_prompt(agent.target, session=agent.session)
+        prompt = web.client.blocked_prompt(agent.target, session=agent.session)
     except EngineError:
         return None
+    # The same test the key's write makes, so no control is drawn that it would refuse.
+    return prompt if asks_now(agent.status, prompt) else None
 
 
 def shown_status(web: WebState, agent: Agent, sent: KeySent | None = None) -> str:

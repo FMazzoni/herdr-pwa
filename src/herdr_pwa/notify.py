@@ -5,11 +5,11 @@ herd notification says. Pure apart from the injected ledgers; the polling loop l
 import logging
 import time
 from collections.abc import Callable, Collection, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Protocol, Self
 
 from herdr_pwa.clock import Clock
-from herdr_pwa.decisions import Overlay, read_status
+from herdr_pwa.decisions import NO_OVERLAY, Overlay, read_status
 from herdr_pwa.engine import AgentStatus
 from herdr_pwa.notify_state import Interrupts, SeenLedger, StatusLedger
 from herdr_pwa.push import (
@@ -486,20 +486,20 @@ class Planner:
         agents: Sequence[AgentView],
         *,
         focused_pane: str = "",
-        stalled: frozenset[str] = frozenset(),
+        beside: Overlay = NO_OVERLAY,
     ) -> Step:
-        """Decide one tick against the herd as just read, and the sessions stalled in it."""
+        """Decide one tick against the herd as just read, and what the app read beside it."""
         # Observed every tick, priming included, so a finish has a "before" to be unread against.
         self._observe(agents)
-        # A stall already standing when watching began is primed as blocked, so it is not news.
-        stalls = Overlay(stalled=stalled)
-        prior = self._prior_for(statuses_of([_shown(one, stalls) for one in agents]))
+        # A stall or a dialog already standing when watching began is primed as blocked, not news.
+        standing = replace(beside, unread=None)
+        prior = self._prior_for(statuses_of([_shown(one, standing) for one in agents]))
         if prior is None:
             return Step(primed=True)
         unread = self._unread()
         # A finish read on the phone is idle here too, so the alert it raised is taken down.
         # A stall stays blocked through the retries that wake it, so it buzzes once per stop.
-        overlay = Overlay(_read_map(agents, unread), stalled)
+        overlay = replace(beside, unread=_read_map(agents, unread))
         agents = [_shown(one, overlay) for one in agents]
         current = statuses_of(agents)
         self._restore(prior, agents)

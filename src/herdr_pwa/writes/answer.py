@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Final
 
 from herdr_pwa.audit import KEYS, Write
+from herdr_pwa.decisions import asks_now, reads_dialog
 from herdr_pwa.engine import (
     INTERRUPT_KEY,
     Agent,
@@ -50,13 +51,17 @@ class KeySent:
 
 
 def _question_now(client: HerdrClient, agent: Agent) -> BlockedPrompt | Refused | None:
-    if agent.status is not AgentStatus.BLOCKED:
+    if not reads_dialog(agent.status):
         return None
     try:
-        return client.blocked_prompt(agent.target, session=agent.session)
+        prompt = client.blocked_prompt(agent.target, session=agent.session)
     except EngineError as exc:
+        if agent.status is not AgentStatus.BLOCKED:
+            # Read only for a dialog herdr may have missed; failing that, it is the stop it said.
+            return None
         log.warning("key refused: %s could not be read first: %s", agent.target, exc)
         return Refused(Refusal.UNREADABLE, _VERB, detail=str(exc))
+    return prompt if asks_now(agent.status, prompt) else None
 
 
 def _check(
@@ -77,12 +82,14 @@ def _check(
 def _reader(client: HerdrClient, target: PaneId, session: SessionId) -> Poll:
     try:
         now = client.agent(target)
-        if now.session != session or now.status is not AgentStatus.BLOCKED:
+        if now.session != session or not reads_dialog(now.status):
             return None
         prompt = client.blocked_prompt(target, session=session)
     except EngineError as exc:
         log.warning("could not watch the key land at %s: %s", target, exc)
         return UNREADABLE
+    if not asks_now(now.status, prompt):
+        return None
     # Still blocked and nothing parsed is an unreadable screen, not an answered question.
     return prompt if prompt.identity else UNREADABLE
 

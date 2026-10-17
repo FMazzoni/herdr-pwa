@@ -187,7 +187,11 @@ def build_rig(
     **overrides: object,
 ) -> Rig:
     """An app whose every destination is under ``tmp_path`` and whose runner is fake."""
-    wire = FakeWire(dict(replies) if replies is not None else {SNAPSHOT: snapshot_frame()})
+    given = dict(replies) if replies is not None else {SNAPSHOT: snapshot_frame()}
+    # A stopped agent's screen is read for a dialog herdr missed; unless a test says otherwise,
+    # every pane shows an empty prompt, as a real runner would answer.
+    _ = given.setdefault(READ, read_frame("> "))
+    wire = FakeWire(given)
     clock = Clock()
     fields: dict[str, object] = {
         "socket_path": tmp_path / "no-runner.sock",

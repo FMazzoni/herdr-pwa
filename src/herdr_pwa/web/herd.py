@@ -11,7 +11,7 @@ from herdr_pwa.decisions import (
     agent_row,
     decide_herd,
     effective_status,
-    needs_you,
+    shows_question,
 )
 from herdr_pwa.engine import (
     Agent,
@@ -59,10 +59,19 @@ def unread_of(web: WebState, agents: Iterable[Agent]) -> Mapping[str, bool] | No
     return seen.unread_map()
 
 
+def _asking(web: WebState, agents: Iterable[Agent]) -> frozenset[str]:
+    return web.stalls.asking(agents, lambda agent: _prompt(web, agent))
+
+
 def overlay_of(web: WebState, agents: Iterable[Agent]) -> Overlay:
-    """What the app read beside herdr's status for *agents*: what the phone showed, who stalled."""
+    """What the app read beside herdr's status: what the phone showed, who stalled, who asks."""
     herd = tuple(agents)
-    return Overlay(unread_of(web, herd), web.stalls.of(herd))
+    return Overlay(unread_of(web, herd), web.stalls.of(herd), _asking(web, herd))
+
+
+def asks(web: WebState, agent: Agent) -> bool:
+    """Whether *agent*'s screen holds the question it waits on, by herdr's word or the app's read."""
+    return shows_question(agent, Overlay(asking=_asking(web, (agent,))))
 
 
 def agent_status(web: WebState, agent: Agent) -> AgentStatus:
@@ -72,7 +81,7 @@ def agent_status(web: WebState, agent: Agent) -> AgentStatus:
 
 def asked_by(web: WebState, agent: Agent) -> str:
     """What *agent*'s feed card says it is asking, from the same cached read; ``""`` for none."""
-    blocked = needs_you(agent.status) and bool(agent.session)
+    blocked = bool(agent.session) and asks(web, agent)
     prompt = _prompt(web, agent) if blocked else None
     return card_question(agent_row(agent, overlay_of(web, (agent,)), prompt))
 
@@ -96,7 +105,8 @@ def load_herd(web: WebState) -> Herd:
     """The shared snapshot, decided; raises only when no snapshot was ever read."""
     entry = web.snapshot()
     snapshot = entry.value
-    blocked = (a for a in snapshot.agents if a.status is AgentStatus.BLOCKED and a.session)
+    overlay = overlay_of(web, snapshot.agents)
+    blocked = (a for a in snapshot.agents if a.session and shows_question(a, overlay))
     prompts: dict[str, BlockedPrompt] = {
         a.session: p for a in blocked if (p := _prompt(web, a)) is not None
     }
@@ -105,7 +115,7 @@ def load_herd(web: WebState) -> Herd:
     decision = decide_herd(
         snapshot.agents,
         prompts=prompts,
-        overlay=overlay_of(web, snapshot.agents),
+        overlay=overlay,
         fetched=Fetched(now, now - entry.age, failure),
     )
     return Herd(snapshot, decision)
