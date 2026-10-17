@@ -1,0 +1,19 @@
+⚙️  /new
+╭────────────────────────────────────────────────────────────────────────╮
+│ ⚠️  /new — destroys conversation state                                 │
+│                                                                        │
+│ This starts a fresh session.                                           │
+│ The current conversation history will be discarded.                    │
+│                                                                        │
+│ ❯ [1] Approve Once — proceed this time only                            │
+│   [2] Always Approve — proceed and silence this prompt permanently     │
+│   [3] Cancel — keep current conversation                               │
+│                                                                        │
+│ Type 1/2/3 or use ↑/↓ then Enter. ESC/Ctrl+C cancels.                  │
+╰────────────────────────────────────────────────────────────────────────╯
+
+  type 1/2/3, or ↑/↓ to select, Enter to confirm  (19s)
+ ⚕ GLM-5.3-Flash │ 14.9K/1M │ [░░░░░░░░░░] 1% │ ◎ 72.0% │ ◷ 1.3s │ ↑ 106 t/s │ 38m │ ⏲ 4s │ ✓ 3m                                               ─ Run rm -rf on scratchpad...
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+⚠ ❯ type 1/2/3, or use ↑/↓ then Enter
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

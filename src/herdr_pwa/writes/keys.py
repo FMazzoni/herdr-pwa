@@ -1,8 +1,9 @@
 """Which keys a screen offers, computed from the read made inside the request."""
 
+import re
 from typing import Final
 
-from herdr_pwa.engine import INTERRUPT_KEY, BlockedPrompt, MenuShape
+from herdr_pwa.engine import INTERRUPT_KEY, BlockedPrompt, MenuShape, screen_digest
 from herdr_pwa.panetext import printed_whole
 
 # The generic pad, with no digits: digits are earned per screen.
@@ -61,8 +62,13 @@ def key_ends_question(prompt: BlockedPrompt | None, key: str) -> bool:
     return key == "enter" or key in answer_digits(prompt)
 
 
+# A run of digits: what a countdown, a clock or a token counter changes on a screen that stays put.
+_NUMBERS: Final = re.compile(r"\d+")
+
+
 def control_token(prompt: BlockedPrompt) -> str:
     """What a control carries to prove which question it was drawn for."""
     # The question as posed, not the raw screen: a status line's clock flipped the raw digest
     # between drawing a control and tapping it, refusing taps on a question that never moved.
-    return prompt.identity or prompt.fingerprint
+    # Unparsed, the screen stands in, its numbers masked: hermes ticks a countdown every second.
+    return prompt.identity or screen_digest(_NUMBERS.sub("#", prompt.raw))

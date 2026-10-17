@@ -159,3 +159,35 @@ def test_it_pushes_needs_you(tmp_path: Path) -> None:
     _ = loop.notifier.tick()
     events = [payload["event"] for _, payload in loop.sender.sent]
     assert events == ["blocked"]
+
+
+# A countdown is not a new screen
+
+# hermes's slash-command confirm: herdr flags it blocked, its `[1]` rows are not parsed as
+# options, so its controls are drawn against the screen itself, countdown and clocks included.
+SLASH_CONFIRM = (FIXTURES / "hermes" / "blocked-slash-confirm.txt").read_text()
+
+
+def _ticked(screen: str) -> str:
+    """The same dialog a few seconds on: its countdown and the status bar's clock moved."""
+    return screen.replace("(19s)", "(13s)").replace("✓ 3m", "✓ 4m")
+
+
+def test_a_pad_key_drawn_before_the_countdown_ticked_is_still_taken(tmp_path: Path) -> None:
+    herd = FakeHerd()
+    herd.put(P3, S1, status="blocked")
+    herd.screens[P3] = [_ticked(SLASH_CONFIRM)]
+    drawn = control_token(BlockedPrompt.parse(SLASH_CONFIRM))
+    result = send_key(rig(tmp_path, herd).writer, KeyAsk(S1, "enter", drawn_from=drawn))
+    assert isinstance(result, KeySent), result
+    assert herd.writes(SEND_KEYS) == [{"target": "w1:p3", "keys": ["enter"]}]
+
+
+def test_a_pad_key_drawn_under_another_screen_is_still_refused(tmp_path: Path) -> None:
+    herd = FakeHerd()
+    herd.put(P3, S1, status="blocked")
+    herd.screens[P3] = [SLASH_CONFIRM.replace("/new", "/reset")]
+    drawn = control_token(BlockedPrompt.parse(SLASH_CONFIRM))
+    result = send_key(rig(tmp_path, herd).writer, KeyAsk(S1, "enter", drawn_from=drawn))
+    assert isinstance(result, Refused), result
+    assert result.refusal is Refusal.SCREEN_CHANGED
