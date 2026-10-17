@@ -15,6 +15,11 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         help="directory holding the pinned foreign capture clones "
         "(default $HP_FOREIGN_CAPTURES, else ~/.cache/herdr-pwa/foreign-captures)",
     )
+    parser.addoption(
+        "--browser-force",
+        action="store_true",
+        help="run the browser tests even where a receipt for this tree exists",
+    )
 
 
 @pytest.fixture(autouse=True)

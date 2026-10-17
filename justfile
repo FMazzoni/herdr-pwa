@@ -20,13 +20,16 @@ corpus:
 
 # Headless Firefox over the real templates at 390px, 430px and 320px: no sideways scroll, 44px tap
 # targets, content inside the viewport. Skips when a receipt for this exact tree exists in
-# ~/.cache/herdr-pwa-v2/geometry, which every worktree shares.
+# ~/.cache/herdr-pwa-v2/geometry, which every worktree shares. The walks already moved into
+# tests/browser skip the same way, one receipt per test.
 geometry:
     uv run python scripts/geometry_gate.py
+    uv run pytest -q -m browser tests/browser
 
 # The same checks with no receipt consulted, for when the fingerprint is not trusted.
 geometry-force:
     uv run python scripts/geometry_gate.py --force
+    uv run pytest -q -m browser tests/browser --browser-force
 
 # WebKit as an iPhone (390x844 at 3x, touch, Safari's UA), at 430x932 and at 320px: a first-viewport
 # and a full-page PNG per catalogue state under .agents/shots/. For eyes, not a gate; skips without

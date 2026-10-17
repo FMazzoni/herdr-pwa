@@ -46,3 +46,6 @@ exclude = ["src/herdr_pwa/engine/generated/**"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "browser: drives headless Firefox over the real app; skipped while a receipt for this tree exists",
+]
