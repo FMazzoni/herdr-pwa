@@ -1,0 +1,25 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  MCP server “elicit-probe” requests your input
+
+  Deploy the staging build now?
+
+    ✔ Confirm: ☒
+        Deploy now
+
+  ❯ Accept    Decline
+
+  Esc to cancel · ↑/↓ to navigate

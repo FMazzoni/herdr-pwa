@@ -38,6 +38,10 @@ MANIFEST_OVERRIDES: dict[str, str] = {
     "capture-blocked-opencode-question": "unknown",
     "capture-blocked-opencode-multiselect": "unknown",
     "capture-blocked-opencode-questions-tabs": "unknown",
+    "capture-blocked-mcp-elicitation-confirm": "2026.10.11.1",
+    "capture-blocked-mcp-elicitation-accept": "2026.10.11.1",
+    "capture-blocked-mcp-elicitation-form": "2026.10.11.1",
+    "capture-blocked-mcp-elicitation-form-enum": "2026.10.11.1",
 }
 
 # The same, for herdr version and protocol: recording 0.8.0/19 here would name a machine that never read the pane.
@@ -47,6 +51,10 @@ HERDR_OVERRIDES: dict[str, str] = {
     "capture-blocked-opencode-question": "0.9.0",
     "capture-blocked-opencode-multiselect": "0.9.0",
     "capture-blocked-opencode-questions-tabs": "0.9.0",
+    "capture-blocked-mcp-elicitation-confirm": "0.9.0",
+    "capture-blocked-mcp-elicitation-accept": "0.9.0",
+    "capture-blocked-mcp-elicitation-form": "0.9.0",
+    "capture-blocked-mcp-elicitation-form-enum": "0.9.0",
 }
 
 PROTOCOL_OVERRIDES: dict[str, int] = {
@@ -55,6 +63,10 @@ PROTOCOL_OVERRIDES: dict[str, int] = {
     "capture-blocked-opencode-question": 22,
     "capture-blocked-opencode-multiselect": 22,
     "capture-blocked-opencode-questions-tabs": 22,
+    "capture-blocked-mcp-elicitation-confirm": 22,
+    "capture-blocked-mcp-elicitation-accept": 22,
+    "capture-blocked-mcp-elicitation-form": 22,
+    "capture-blocked-mcp-elicitation-form-enum": 22,
 }
 
 
@@ -408,6 +420,10 @@ EXPECTED_STATUS: dict[str, AgentStatus] = {
     "capture-blocked-opencode-question": AgentStatus.BLOCKED,
     "capture-blocked-opencode-multiselect": AgentStatus.BLOCKED,
     "capture-blocked-opencode-questions-tabs": AgentStatus.BLOCKED,
+    "capture-blocked-mcp-elicitation-confirm": AgentStatus.BLOCKED,
+    "capture-blocked-mcp-elicitation-accept": AgentStatus.BLOCKED,
+    "capture-blocked-mcp-elicitation-form": AgentStatus.BLOCKED,
+    "capture-blocked-mcp-elicitation-form-enum": AgentStatus.BLOCKED,
     "capture-idle-claude-prompt": AgentStatus.IDLE,
     "capture-idle-numbered-recap": AgentStatus.IDLE,
     "capture-working-claude": AgentStatus.WORKING,
@@ -587,7 +603,11 @@ def test_context_is_verbatim_screen_text_and_never_the_question(name: str) -> No
         assert line not in prompt.context
 
 
-@pytest.mark.parametrize("name", BLOCKED_CAPTURES)
+# A form's context is its fields, one line each, so it is as long as the server's schema.
+FORMS = ("capture-blocked-mcp-elicitation-form", "capture-blocked-mcp-elicitation-form-enum")
+
+
+@pytest.mark.parametrize("name", [name for name in BLOCKED_CAPTURES if name not in FORMS])
 def test_context_is_short_enough_for_a_card(name: str) -> None:
     """The measurement behind card.html's six-line cap."""
     assert len(BlockedPrompt.parse(read(name, "detection")).context) <= 6
@@ -727,3 +747,40 @@ def test_the_one_read_parses_like_the_text_read(name: str) -> None:
     ansi = read_ansi(name)
     with_colour = BlockedPrompt.parse(as_text_read(ansi), ansi=ansi)
     assert with_colour.identity == BlockedPrompt.parse(read(name, "detection"), ansi=ansi).identity
+
+
+# An MCP server asking for input mid-tool-call (elicitation/create): a titled form of fields over
+# an Accept/Decline row, answered by moving a cursor, with no Enter hint and no numbered run.
+
+ELICITATIONS: dict[str, str] = {
+    # One boolean field, cursor on it.
+    "capture-blocked-mcp-elicitation-confirm": "Deploy the staging build now?",
+    # The same, ticked, cursor moved onto the Accept/Decline row.
+    "capture-blocked-mcp-elicitation-accept": "Deploy the staging build now?",
+    # Four fields; the message asks nothing with a question mark.
+    "capture-blocked-mcp-elicitation-form": "Fill in the release details",
+    # The same form with its enum field's radio list open.
+    "capture-blocked-mcp-elicitation-form-enum": "Fill in the release details",
+}
+
+
+@pytest.mark.parametrize("source", SOURCES)
+@pytest.mark.parametrize("name", sorted(ELICITATIONS))
+def test_an_elicitation_asks_the_servers_message_and_earns_no_rows(name: str, source: str) -> None:
+    """The question is the message under the dialog's title, never its button row or a field."""
+    prompt = BlockedPrompt.parse(read(name, source), ansi=read_ansi(name))
+    assert prompt.question == ELICITATIONS[name]
+    assert prompt.asked is True
+    # Fields and the Accept/Decline row are walked by a cursor: none of them is a numbered answer.
+    assert prompt.options == ()
+    assert prompt.shape is not MenuShape.SINGLE_CHOICE
+    assert answer_digits(prompt) == ()
+    assert "esc" in {hint.key for hint in prompt.hints}
+
+
+def test_an_elicitation_field_that_asks_does_not_take_the_question() -> None:
+    """The server's message is the question even when a field's description has a question mark."""
+    screen = read("capture-blocked-mcp-elicitation-form", "visible").replace(
+        "Short name", "What should it be called?"
+    )
+    assert BlockedPrompt.parse(screen).question == "Fill in the release details"

@@ -1,0 +1,14 @@
+{
+  "name": "blocked-mcp-elicitation-confirm",
+  "target": "w2:p27",
+  "captured_at": "2026-10-17T01:49:06-04:00",
+  "captured_by": "an agent, in the hp-test session, against a throwaway MCP server via --mcp-config",
+  "herdr_version": "0.9.0",
+  "protocol": 22,
+  "detection_manifest": {
+    "id": "claude",
+    "version": "2026.10.11.1"
+  },
+  "agent_status": "blocked",
+  "note": "Claude Code 2.1.302 (haiku) MCP elicitation dialog (elicitation/create) from a scratch stdio MCP server, one required boolean field; cursor on the field, nothing toggled yet. Footer has no Enter hint; Space toggles, the arrows walk fields then the Accept/Decline row, Enter on Accept submits."
+}
