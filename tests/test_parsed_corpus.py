@@ -12,15 +12,14 @@ import functools
 from collections.abc import Iterator
 from pathlib import Path
 
-import pytest
 from pydantic import JsonValue, TypeAdapter
 
 from herdr_pwa.engine import BlockedPrompt
 from herdr_pwa.panetext import as_text_read
 from herdr_pwa.writes.keys import control_token
-from tests import _foreign
 
-FIXTURES = _foreign.REPO / "tests" / "fixtures"
+REPO = Path(__file__).resolve().parents[1]
+FIXTURES = REPO / "tests" / "fixtures"
 GOLDEN = FIXTURES / "parsed-corpus.json"
 FOREIGN_PREFIX = "foreign/"
 COLOUR_SUFFIX = "#ansi"
@@ -28,6 +27,8 @@ ESCAPE = "\x1b"
 
 # The screens this repo captured, as text reads; the four sources of a capture each count.
 _TEXT_GLOBS = ("capture-*/*.txt", "hermes/*.txt")
+# collie's claude screens, vendored under MIT and filed by the id the ledger gives them.
+_VENDORED_GLOB = "foreign/collie/*.txt"
 # Colour reads, parsed as the app parses them: the text read of the same bytes, colour beside it.
 _ANSI_GLOBS = ("capture-*/*.ansi", "ansi/*.ansi", "rig/*.ansi")
 # herdr's explain output sits beside each capture and is a report, not a screen.
@@ -40,23 +41,20 @@ def _local() -> Iterator[tuple[str, Path]]:
     for pattern in _TEXT_GLOBS:
         for path in sorted(FIXTURES.glob(pattern)):
             if path.name not in _NOT_SCREENS:
-                yield str(path.relative_to(_foreign.REPO)), path
+                yield str(path.relative_to(REPO)), path
     for pattern in _ANSI_GLOBS:
         for path in sorted(FIXTURES.glob(pattern)):
-            yield str(path.relative_to(_foreign.REPO)) + COLOUR_SUFFIX, path
+            yield str(path.relative_to(REPO)) + COLOUR_SUFFIX, path
 
 
-def _foreign_screens(root: Path) -> Iterator[tuple[str, Path]]:
-    for clone, source in _foreign.sources().items():
-        folder = root / clone / source["captures"]
-        for path in sorted(folder.glob(source["glob"])):
-            suffix = COLOUR_SUFFIX if path.suffix == ".ansi" else ""
-            yield f"{FOREIGN_PREFIX}{clone}/{path.name}{suffix}", path
+def _vendored() -> Iterator[tuple[str, Path]]:
+    for path in sorted(FIXTURES.glob(_VENDORED_GLOB)):
+        yield str(path.relative_to(FIXTURES)), path
 
 
-def screens(root: Path) -> dict[str, Path]:
+def screens() -> dict[str, Path]:
     """Every screen the walk parses, by the id its golden entry is filed under."""
-    return dict([*_local(), *_foreign_screens(root)])
+    return dict([*_local(), *_vendored()])
 
 
 def parse(key: str, path: Path) -> BlockedPrompt:
@@ -87,9 +85,9 @@ def described(prompt: BlockedPrompt) -> dict[str, JsonValue]:
     }
 
 
-def snapshot(root: Path) -> dict[str, JsonValue]:
+def snapshot() -> dict[str, JsonValue]:
     """The whole corpus, parsed now."""
-    return {key: described(parse(key, path)) for key, path in screens(root).items()}
+    return {key: described(parse(key, path)) for key, path in screens().items()}
 
 
 @functools.cache
@@ -97,32 +95,22 @@ def _golden() -> dict[str, JsonValue]:
     return _DOCUMENT.validate_json(GOLDEN.read_bytes())
 
 
-@pytest.fixture(scope="module")
-def corpus_root(request: pytest.FixtureRequest) -> Path:
-    option: object = request.config.getoption("--foreign-root")
-    root = Path(option) if isinstance(option, str) and option else _foreign.DEFAULT_ROOT
-    # Never a skip: without the clones two thirds of the screens would drop out silently.
-    if found := _foreign.problems(root):
-        pytest.fail(_foreign.explain(root, found), pytrace=False)
-    return root
+def test_every_screen_is_pinned_and_nothing_pinned_has_gone() -> None:
+    assert set(screens()) == set(_golden())
 
 
-def test_every_screen_is_pinned_and_nothing_pinned_has_gone(corpus_root: Path) -> None:
-    assert set(screens(corpus_root)) == set(_golden())
-
-
-def test_no_screen_parses_to_anything_but_what_it_was_pinned_to(corpus_root: Path) -> None:
+def test_no_screen_parses_to_anything_but_what_it_was_pinned_to() -> None:
     golden = _golden()
     changed = {
         key: {"was": golden.get(key), "now": now}
-        for key, now in snapshot(corpus_root).items()
+        for key, now in snapshot().items()
         if golden.get(key) != now
     }
     assert not changed, changed
 
 
-def test_no_screen_reaches_the_grammar_with_its_escapes_in(corpus_root: Path) -> None:
-    raw = {key for key, path in screens(corpus_root).items() if ESCAPE in parse(key, path).raw}
+def test_no_screen_reaches_the_grammar_with_its_escapes_in() -> None:
+    raw = {key for key, path in screens().items() if ESCAPE in parse(key, path).raw}
     assert not raw, sorted(raw)
 
 
@@ -133,9 +121,9 @@ def _padded(text: str) -> str:
     return "\n".join(row.ljust(width) for row in rows)
 
 
-def test_padding_a_read_to_the_pane_width_changes_nothing_it_parses_to(corpus_root: Path) -> None:
+def test_padding_a_read_to_the_pane_width_changes_nothing_it_parses_to() -> None:
     moved: dict[str, list[str]] = {}
-    for key, path in screens(corpus_root).items():
+    for key, path in screens().items():
         raw = path.read_text(encoding="utf-8", errors="replace")
         text = raw if not key.endswith(COLOUR_SUFFIX) and ESCAPE not in raw else as_text_read(raw)
         trimmed = described(BlockedPrompt.parse(text))
@@ -147,13 +135,12 @@ def test_padding_a_read_to_the_pane_width_changes_nothing_it_parses_to(corpus_ro
     assert not moved, moved
 
 
-def test_the_walk_reaches_every_kind_of_capture(corpus_root: Path) -> None:
-    keys = set(screens(corpus_root))
+def test_the_walk_reaches_every_kind_of_capture() -> None:
+    keys = set(screens())
     for prefix in ("tests/fixtures/capture-", "tests/fixtures/hermes/", "tests/fixtures/rig/"):
         assert any(key.startswith(prefix) for key in keys), prefix
-    for clone in _foreign.sources():
-        assert any(key.startswith(f"{FOREIGN_PREFIX}{clone}/") for key in keys), clone
+    assert any(key.startswith(FOREIGN_PREFIX) for key in keys), FOREIGN_PREFIX
 
 
 if __name__ == "__main__":
-    _ = GOLDEN.write_bytes(_DOCUMENT.dump_json(snapshot(_foreign.default_root()), indent=2) + b"\n")
+    _ = GOLDEN.write_bytes(_DOCUMENT.dump_json(snapshot(), indent=2) + b"\n")

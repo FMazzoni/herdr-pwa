@@ -1,0 +1,36 @@
+[0m[38;2;80;80;80m[48;2;55;55;55m❯ [0m[38;2;255;255;255m[48;2;55;55;55mNow use the AskUserQuestion tool to ask me exactly ONE question: "Which widget design should we use?" with 3 options [0m[48;2;55;55;55m      [0m
+[0m[48;2;55;55;55m  [0m[38;2;255;255;255m[48;2;55;55;55m(Boxy, Rounded, Minimal), each having a short description AND a preview field containing a small ASCII mockup (plain [0m[48;2;55;55;55m      [0m
+[0m[48;2;55;55;55m  [0m[38;2;255;255;255m[48;2;55;55;55mtext). Not multiSelect. Do nothing else afterward.[0m[48;2;55;55;55m                                                                         [0m
+
+[0m[38;2;255;255;255m● [0mUser answered Claude's questions:
+[0m[38;2;153;153;153m  ⎿  · Which widget design should we use? → (notes only)[0m
+ 
+[0m[38;2;255;255;255m●[0m You didn't select any of the three options, but left a note: "prefer thicker borders." Stopping here as requested — let me
+  know if you'd like me to mock up a thick-bordered variant.
+
+[0m[38;2;153;153;153m✻[0m [0m[38;2;153;153;153mCooked for 13s[0m
+
+[0m[38;2;80;80;80m[48;2;55;55;55m❯ [0m[38;2;255;255;255m[48;2;55;55;55mAsk me the exact same AskUserQuestion again (same question, options, descriptions, previews). Do nothing else afterward.[0m[48;2;55;55;55m   [0m
+
+[0m[38;2;153;153;153m─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[0m
+[0m[38;2;0;0;0m[48;2;177;185;249m ☐ Design [0m
+
+[0m[1m[38;2;255;255;255mWhich widget design should we use?[0m
+
+[0m[38;2;177;185;249m❯[0m[38;2;153;153;153m 1.[0m[1m[38;2;177;185;249m Boxy[0m                         [0m[38;2;153;153;153m┌──────────────────────────────────────────┐[0m
+ [0m[38;2;153;153;153m 2. [0mRounded                      [0m[38;2;153;153;153m│ [0m+----------------------+[0m[38;2;153;153;153m                 │[0m
+ [0m[38;2;153;153;153m 3.[0m Minimal                      [0m[38;2;153;153;153m│ [0m| WIDGET           [X] |[0m[38;2;153;153;153m                 │[0m 
+                                  [0m[38;2;153;153;153m│ [0m+----------------------+[0m[38;2;153;153;153m                 │[0m
+                                  [0m[38;2;153;153;153m│ [0m| Status: OK           |[0m[38;2;153;153;153m                 │[0m
+                                  [0m[38;2;153;153;153m│ [0m| Value:  42           |[0m[38;2;153;153;153m                 │[0m
+                                  [0m[38;2;153;153;153m│ [0m+----------------------+[0m[38;2;153;153;153m                 │[0m
+                                  [0m[38;2;153;153;153m│ [0m| [ OK ]    [ CANCEL ] |[0m[38;2;153;153;153m                 │[0m
+                                  [0m[38;2;153;153;153m│ [0m+----------------------+[0m[38;2;153;153;153m                 │[0m
+                                  [0m[38;2;153;153;153m└──────────────────────────────────────────┘[0m
+
+                                  [0m[38;2;177;185;249mNotes:[0m [0m[3m[38;2;153;153;153mprefer subtle shadows[0m
+
+[0m[38;2;153;153;153m─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[0m
+  Chat about this
+
+[0m[38;2;153;153;153mEnter to select · ↑/↓ to navigate · n to add notes · Esc to cancel[0m
