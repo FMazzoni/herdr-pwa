@@ -4,7 +4,6 @@ import argparse
 import base64
 import html
 import os
-import subprocess
 import sys
 import time
 from dataclasses import dataclass
@@ -14,12 +13,13 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from shots import DEVICES, IPHONE, Device, missing_browser, shoot, shoot_files  # noqa: E402
+from geometry_gate import CACHE  # noqa: E402
+from shots import DEVICES, IPHONE, Device, missing_browser, shoot  # noqa: E402
 
-from tests.catalogue import LEGACY_KEYS, NOT_YET, STATES, V2_ONLY, pick  # noqa: E402
+from tests.catalogue import NOT_YET, STATES, V2_ONLY, pick  # noqa: E402
 
-# The frozen old app; read only, so everything it renders is written outside it.
-LEGACY = Path(os.environ.get("HP_LEGACY_CHECKOUT", "../herdr-pwa-v1"))
+# The old app's screens, shot once per device before its checkout was retired; never re-rendered.
+FROZEN = CACHE / "legacy-shots"
 SHEETS = ROOT / ".agents" / "sheets"
 TITLES = {s.name: s.title for s in STATES}
 
@@ -32,31 +32,6 @@ class Side:
     shots: Path
     missing: dict[str, str]
     device: Device = IPHONE
-
-
-def render_legacy(keys: list[str], into: Path) -> dict[str, Path]:
-    """Have the old app's preview write one page per key, into ``into`` and nowhere else."""
-    wanted = [k for k in keys if k in LEGACY_KEYS]
-    if not wanted:
-        return {}
-    into.mkdir(parents=True, exist_ok=True)
-    env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
-    command = [
-        "uv",
-        "run",
-        "--no-sync",
-        "--project",
-        str(LEGACY),
-        "python",
-        str(LEGACY / "scripts" / "preview.py"),
-        "--states",
-        *wanted,
-        "--states-dir",
-        str(into),
-    ]
-    # Run from the output folder, so nothing relative can land in the old tree.
-    subprocess.run(command, cwd=into, env=env, check=True, capture_output=True)
-    return {k: into / f"{k}.html" for k in wanted if (into / f"{k}.html").is_file()}
 
 
 def _image(path: Path, *, embed: bool, page: Path) -> str:
@@ -133,13 +108,11 @@ def write_sheet(keys: list[str], left: Side, right: Side, page: Path, *, embed: 
     return page
 
 
-def _left(args: argparse.Namespace, keys: list[str], work: Path, device: Device) -> Side:
+def _left(args: argparse.Namespace, device: Device) -> Side:
     if args.left is not None:
         return Side(args.left_label, args.left, {}, device)
-    pages = render_legacy(keys, work / "legacy-html")
-    shoot_files(pages, work / "legacy", device, css_pixels=args.embed)
     missing = dict.fromkeys(V2_ONLY, "the old app had no screen of this name")
-    return Side(f"legacy ({LEGACY.name})", work / "legacy", missing, device)
+    return Side("old app (frozen)", FROZEN, missing, device)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -168,7 +141,7 @@ def main(argv: list[str] | None = None) -> int:
     keys = list(args.keys) or [s.name for s in states]
     work = SHEETS / time.strftime("%Y%m%d-%H%M%S")
     device = next(d for d in DEVICES if d.name == args.device)
-    left = _left(args, keys, work, device)
+    left = _left(args, device)
     failed = shoot(states, work / "v2", (device,), css_pixels=args.embed)
     right = Side(args.right_label, work / "v2", NOT_YET, device)
     page = write_sheet(keys, left, right, args.out or work / "index.html", embed=args.embed)

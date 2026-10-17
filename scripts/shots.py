@@ -178,20 +178,6 @@ def shoot(
     return failed
 
 
-def shoot_files(
-    pages: dict[str, Path], out: Path, device: Device = IPHONE, *, css_pixels: bool = False
-) -> None:
-    """Shoot static pages already on disk, named by key, exactly as a state is shot."""
-    with webkit() as phone:
-        ctx = context(phone, device, css_pixels=css_pixels)
-        page = ctx.new_page()
-        for key, html in pages.items():
-            page.goto(html.resolve().as_uri())
-            snap(page, out / device.name / key)
-            print(f"  shot {device.name} {key} (file)", flush=True)
-        ctx.close()
-
-
 def main(argv: list[str] | None = None) -> int:
     """Shoot the named states, or all of them, and say where the pictures are."""
     parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
