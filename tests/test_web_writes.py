@@ -190,6 +190,26 @@ def test_the_answer_region_draws_only_keys_the_write_will_take(tmp_path: Path) -
     assert "Do you want to proceed?" in response.text
 
 
+def test_a_hand_off_key_is_not_a_control_and_the_page_says_to_use_the_terminal(
+    tmp_path: Path,
+) -> None:
+    herd = FakeHerd()
+    herd.put(P3, S1, status="blocked")
+    plan = capture("capture-blocked-plan-approval")
+    herd.screens[P3] = [plan]
+    w = web(tmp_path, herd)
+    response = w.http.get(f"/agent/{S1}/answer")
+    assert 'value="ctrl-g"' not in response.text
+    assert "Ctrl+G to edit in vim" in response.text
+    assert "at the terminal" in response.text
+    token = control_token(BlockedPrompt.parse(plan))
+    tapped = w.http.post(
+        f"/agent/{S1}/keys", data={"key": "ctrl-g", "screen": token}, headers=ORIGIN
+    )
+    assert tapped.status_code == 400
+    assert w.herd.writes("agent.send_keys") == []
+
+
 def test_a_tapped_digit_answers_and_the_controls_go_with_the_question(tmp_path: Path) -> None:
     w = blocked(tmp_path)
 

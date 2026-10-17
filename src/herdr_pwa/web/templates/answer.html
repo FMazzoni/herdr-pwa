@@ -100,6 +100,10 @@
       {% endfor %}
     </div>
     {% endif %}
+    {% if decision and decision.handoffs %}
+    {# Not a button: the key gives the pane to a program no key here can work or quit. #}
+    <p class="answer__note answer__note--line">The screen also offers {{ decision.handoffs|map(attribute="label")|join(" and ") }}. That opens another program in the pane, which these keys cannot work or leave, so do it at the terminal.</p>
+    {% endif %}
     {# Last, full width, under a rule: away from Enter, so a stray thumb on the pad never lands here. #}
     {% if not arming %}
     <div class="keys__stop">

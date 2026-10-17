@@ -44,7 +44,10 @@ def answer_digits(prompt: BlockedPrompt | None) -> tuple[str, ...]:
 def allowed_keys(prompt: BlockedPrompt | None) -> frozenset[str]:
     """Every key this app will send at the screen just read, and no others."""
     hinted = {hint.key for hint in prompt.hints} if prompt is not None else set[str]()
-    return frozenset({*pad_keys(prompt), INTERRUPT_KEY, *hinted, *answer_digits(prompt)}) - {""}
+    # A key the screen says gives the pane to another program is refused, a pad key included.
+    handed = {hint.key for hint in prompt.handoffs} if prompt is not None else set[str]()
+    offered = {*pad_keys(prompt), *hinted, *answer_digits(prompt)} - handed - {""}
+    return frozenset({*offered, INTERRUPT_KEY})
 
 
 def key_ends_question(prompt: BlockedPrompt | None, key: str) -> bool:
