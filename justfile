@@ -31,8 +31,8 @@ geometry-force:
 shots *KEYS:
     uv run python scripts/shots.py {{KEYS}}
 
-# The old app | this one, per state key, as an HTML contact sheet under .agents/sheets/.
-# --embed --out PATH writes one self-contained file; --left DIR compares against saved shots.
+# A before | after HTML contact sheet per state key under .agents/sheets/: --left DIR is a folder
+# saved earlier with `just shots --out DIR`; --embed --out PATH writes one self-contained file.
 sheet *ARGS:
     uv run python scripts/sheet.py {{ARGS}}
 

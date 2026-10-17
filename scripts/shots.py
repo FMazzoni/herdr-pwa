@@ -182,7 +182,7 @@ def main(argv: list[str] | None = None) -> int:
     """Shoot the named states, or all of them, and say where the pictures are."""
     parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     parser.add_argument("keys", nargs="*", help="catalogue keys (default: every state)")
-    parser.add_argument("--out", type=Path, default=OUT / "v2", help="where the PNGs go")
+    parser.add_argument("--out", type=Path, default=OUT / "current", help="where the PNGs go")
     args = parser.parse_args(argv)
     why = missing_browser()
     if why:
