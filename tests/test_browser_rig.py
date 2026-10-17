@@ -14,6 +14,12 @@ from types import ModuleType
 from typing import ClassVar
 
 import pytest
+from starlette.applications import Starlette
+from starlette.middleware.gzip import GZipMiddleware
+from starlette.requests import Request
+from starlette.responses import HTMLResponse
+from starlette.routing import Route
+from starlette.testclient import TestClient
 
 # The browser scripts import each other as top-level modules, as they do when run directly.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
@@ -274,3 +280,125 @@ def test_one_state_whose_browser_fails_reports_itself_and_the_rest_of_its_chunk_
     assert len(tally.problems) == 1
     assert f"390px {bad}" in tally.problems[0]
     assert "Argument 1 is not an object" in tally.problems[0]
+
+
+# Over the gzip floor, so the page comes back compressed as the real app sends it.
+_PAGE = (
+    '<!doctype html>\n<html><head><meta charset="utf-8">'
+    '<script src="/static/app.js" defer></script></head><body>' + "x" * 2000 + "</body></html>"
+)
+_FRAGMENT = '<div id="card">' + "y" * 2000 + "</div>"
+
+
+def _site() -> tuple[Starlette, list[str]]:
+    """A stand-in app that serves a whole page and a fragment, and says which paths it was asked."""
+    asked: list[str] = []
+
+    async def page(request: Request) -> HTMLResponse:
+        asked.append(request.url.path)
+        return HTMLResponse(_PAGE)
+
+    async def fragment(request: Request) -> HTMLResponse:
+        asked.append(request.url.path)
+        return HTMLResponse(_FRAGMENT)
+
+    app = Starlette(routes=[Route("/", page), Route("/fragment", fragment)])
+    app.add_middleware(GZipMiddleware, minimum_size=500)
+    return app, asked
+
+
+def _switched() -> tuple[geometry.Switch, TestClient, list[str]]:
+    switch = geometry.Switch()
+    app, asked = _site()
+    switch.mount(app)
+    return switch, TestClient(switch), asked
+
+
+def test_a_whole_page_runs_the_error_collector_before_any_script_of_its_own() -> None:
+    _, client, _ = _switched()
+    page = client.get("/", headers={"Accept-Encoding": "gzip"})
+    head = page.text.split("</head>")[0]
+    collector = head.find(f'<script src="{geometry.COLLECTOR_PATH}"></script>')
+    assert 0 <= collector < head.find("/static/app.js")
+    assert page.text.endswith("</body></html>")
+    script = client.get(geometry.COLLECTOR_PATH)
+    assert script.headers["content-type"].startswith("text/javascript")
+    assert "unhandledrejection" in script.text
+
+
+def test_a_fragment_is_passed_through_as_the_app_sent_it() -> None:
+    _, client, _ = _switched()
+    fragment = client.get("/fragment", headers={"Accept-Encoding": "gzip"})
+    assert fragment.headers["content-encoding"] == "gzip"
+    assert fragment.text == _FRAGMENT
+
+
+def test_a_reported_page_error_is_read_back_once_with_its_message_and_source() -> None:
+    switch, client, asked = _switched()
+    error = {
+        "kind": "error",
+        "message": "ReferenceError: armTimers is not defined",
+        "source": "http://x/static/chatend.js:253:5",
+        "page": "http://x/agent/1",
+    }
+    reply = client.post(geometry.REPORT_PATH, json=error)
+    assert reply.status_code == 204
+    assert asked == []
+    assert switch.writing == 0
+    (said,) = switch.drain()
+    assert "ReferenceError: armTimers is not defined" in said
+    assert "chatend.js:253:5" in said
+    assert "/agent/1" in said
+    assert switch.drain() == []
+
+
+def test_a_page_error_fails_the_state_and_the_walk_it_was_thrown_in(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    switch = geometry.Switch()
+    thrown = {"kind": "error", "message": "boom", "source": "s.js:1:1", "page": "http://x/"}
+
+    def run_state(*_args: object) -> None:
+        switch.errors.append(thrown)
+
+    def walk(*_args: object) -> list[str]:
+        switch.errors.append(thrown)
+        return []
+
+    def phone_window(*_args: object) -> str:
+        return "phone"
+
+    def install(*_args: object) -> list[str]:
+        return []
+
+    monkeypatch.setattr(geometry, "phone_window", phone_window)
+    monkeypatch.setattr(geometry, "install", install)
+    monkeypatch.setattr(geometry, "run_state", run_state)
+    monkeypatch.setattr(geometry.backnav, "run", walk)
+    name = STATES[0].name
+    states: geometry.Task = {"kind": "states", "width": 390, "scale": 1.0, "names": [name]}
+    tally = geometry._do(states, _Driver(), "http://x", switch, tmp_path)  # pyright: ignore[reportPrivateUsage]
+    assert len(tally.problems) == 1
+    assert f"390px {name}" in tally.problems[0]
+    assert "boom" in tally.problems[0]
+    walked: geometry.Task = {"kind": "walk", "module": geometry.HISTORY}
+    tally = geometry._do(walked, _Driver(), "http://x", switch, tmp_path)  # pyright: ignore[reportPrivateUsage]
+    assert len(tally.problems) == 1
+    assert f"walk {geometry.HISTORY}" in tally.problems[0]
+    assert "s.js:1:1" in tally.problems[0]
+
+
+def test_one_throw_on_many_page_loads_is_said_once_with_how_many() -> None:
+    switch = geometry.Switch()
+    for path in ("/", "/agent/1", "/files"):
+        switch.errors.append(
+            {"kind": "error", "message": "boom", "source": "s.js:1:1", "page": path}
+        )
+    switch.errors.append(
+        {"kind": "unhandledrejection", "message": "nope", "source": "?", "page": "/"}
+    )
+    said = switch.drain()
+    assert said == [
+        "uncaught error: boom at s.js:1:1, on / and 2 more page loads",
+        "uncaught unhandledrejection: nope at ?, on /",
+    ]
