@@ -9,7 +9,7 @@ import pytest
 from jinja2 import TemplateNotFound
 from pydantic import JsonValue
 
-from herdr_pwa import statedir
+from herdr_pwa import cli, statedir
 from herdr_pwa.cli import doctor
 from herdr_pwa.decisions import AgentRow, decide_screen
 from herdr_pwa.engine import (
@@ -35,7 +35,7 @@ from herdr_pwa.web.routers.compose import key_name, said
 from herdr_pwa.web.seams import Seams
 from herdr_pwa.web.started import STARTED_FILENAME, StartedTree, fingerprint, record_started
 from herdr_pwa.writes.answer import KeySent
-from herdr_pwa.writes.lifecycle import record_service_path
+from herdr_pwa.writes.lifecycle import declared_models, record_service_models, record_service_path
 from herdr_pwa.writes.outcome import Evidence, Outcome
 from tests.webfakes import (
     FIXTURES,
@@ -261,8 +261,12 @@ def test_no_template_or_script_writes_inline_style_or_markup() -> None:
     assert "innerHTML" not in client_scripts()
 
 
-def _doctor(tmp_path: Path, wire: FakeWire, now: float = 0.0) -> tuple[int, str]:
-    settings = Settings(socket_path=tmp_path / "x.sock", state_dir=tmp_path)
+def _doctor(
+    tmp_path: Path, wire: FakeWire, now: float = 0.0, *, opencode_models: tuple[str, ...] = ()
+) -> tuple[int, str]:
+    settings = Settings(
+        socket_path=tmp_path / "x.sock", state_dir=tmp_path, opencode_models=opencode_models
+    )
     out: list[str] = []
 
     def factory(engine: EngineSettings) -> HerdrClient:
@@ -418,3 +422,57 @@ def test_a_sent_key_is_said_in_the_screens_own_words() -> None:
         "Sent Enter, unconfirmed.",
         True,
     )
+
+
+PICKLE = "opencode/big-pickle"
+SONNET = "anthropic/claude-sonnet-4-5"
+
+
+def test_doctor_says_when_no_opencode_models_are_declared(tmp_path: Path) -> None:
+    code, out = _doctor(tmp_path, FakeWire({SNAPSHOT: _frame(EXPECTED_PROTOCOL)}))
+    assert code == 0
+    assert "models (the service never recorded its own, so this shell's settings):" in out
+    assert "  opencode: none declared (HP_OPENCODE_MODELS), so the form offers no model" in out
+
+
+def test_doctor_lists_the_declared_opencode_models(tmp_path: Path) -> None:
+    wire = FakeWire({SNAPSHOT: _frame(EXPECTED_PROTOCOL)})
+    _, out = _doctor(tmp_path, wire, opencode_models=(PICKLE, SONNET))
+    assert f"  opencode: {PICKLE}, {SONNET}" in out
+
+
+def test_doctor_lists_the_models_the_service_declared_not_its_own_shell(tmp_path: Path) -> None:
+    record_service_models(tmp_path, declared_models(Settings(opencode_models=(SONNET, PICKLE))))
+    # doctor's shell never sees the unit's environment file, so it declares nothing itself.
+    code, out = _doctor(tmp_path, FakeWire({SNAPSHOT: _frame(EXPECTED_PROTOCOL)}))
+    assert code == 0
+    assert "models, as the service declared them:" in out
+    assert f"  opencode: {SONNET}, {PICKLE}" in out
+    assert out.rstrip().endswith("doctor: OK")
+
+
+def test_doctor_says_the_service_declared_none(tmp_path: Path) -> None:
+    record_service_models(tmp_path, declared_models(Settings()))
+    wire = FakeWire({SNAPSHOT: _frame(EXPECTED_PROTOCOL)})
+    _, out = _doctor(tmp_path, wire, opencode_models=(PICKLE,))
+    assert "models, as the service declared them:" in out
+    assert "  opencode: none declared (HP_OPENCODE_MODELS), so the form offers no model" in out
+    assert PICKLE not in out
+
+
+def _never_serves(*_args: object, **_kwargs: object) -> None:
+    return None
+
+
+def test_doctor_from_a_bare_shell_says_what_serve_was_declared(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HP_STATE_DIR", str(tmp_path))
+    monkeypatch.setenv("HP_TAILSCALED_SOCKET", str(tmp_path / "none.sock"))
+    monkeypatch.setattr(cli.uvicorn, "run", _never_serves)
+    # The unit's environment file declares them; the shell doctor is run from does not.
+    monkeypatch.setenv("HP_OPENCODE_MODELS", f"{PICKLE},{SONNET}")
+    assert cli.main(["serve", "--port", "0"]) == 0
+    _, out = _doctor(tmp_path, FakeWire({SNAPSHOT: _frame(EXPECTED_PROTOCOL)}))
+    assert "models, as the service declared them:" in out
+    assert f"  opencode: {PICKLE}, {SONNET}" in out

@@ -3,8 +3,8 @@
 import logging
 import os
 import re
-from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+from collections.abc import Callable, Iterable, Mapping
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Final
 
@@ -25,6 +25,8 @@ from herdr_pwa.engine import (
     harness_kinds,
     harness_of,
 )
+from herdr_pwa.settings import Settings
+from herdr_pwa.validation import MODEL_ID
 from herdr_pwa.writes.guard import destructive_reason, unsendable
 from herdr_pwa.writes.outcome import Evidence, Outcome, Pacing, audit_result
 from herdr_pwa.writes.prompt import (
@@ -49,8 +51,6 @@ log = logging.getLogger(__name__)
 MAX_AGENT_NAME: Final = 32
 _AGENT_NAME: Final = re.compile(r"^[a-z][a-z0-9_-]*$")
 _NOT_NAME: Final = re.compile(r"[^a-z0-9_-]+")
-# The shape a model id must have before it goes anywhere near an argv.
-_MODEL_ID: Final = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,95}$")
 SESSION_WAIT: Final = 2.0
 SESSION_POLL: Final = 0.5
 
@@ -59,12 +59,40 @@ SESSION_POLL: Final = 0.5
 USER_BIN_DIRS: Final = ("~/.local/bin", "~/bin", "~/.bun/bin", "~/.npm-global/bin")
 # What `serve` records of its own PATH, so `doctor` run from a shell can judge the service's.
 SERVICE_PATH_FILENAME: Final = "service-path"
+# What `serve` records of the models it was declared, for the same reason.
+SERVICE_MODELS_FILENAME: Final = "service-models"
+
+# Each kind's models as the operator declared them, for a harness nothing here can ask.
+type Declared = Mapping[str, tuple[str, ...]]
 
 
-def launch_of(kind: str) -> StartRecipe | None:
-    """How *kind* is started from the phone, or ``None`` for a kind with no harness here."""
+def declared_models(settings: Settings) -> Declared:
+    """Each kind whose models the operator declares, and what *settings* declares for it."""
+    lists = settings.model_lists()
+    return {
+        kind: lists.get(launch.models_setting, ())
+        for kind in harness_kinds()
+        if (launch := launch_of(kind)) and launch.models_setting
+    }
+
+
+def models_env(kind: str) -> str:
+    """The environment variable *kind*'s models are declared in, or ``""`` for none."""
+    launch = launch_of(kind)
+    return f"HP_{launch.models_setting.upper()}" if launch and launch.models_setting else ""
+
+
+def launch_of(kind: str, declared: Declared | None = None) -> StartRecipe | None:
+    """How *kind* is started from the phone, or ``None`` for a kind with no harness here.
+
+    A kind in *declared* offers exactly the models declared for it, and none when that is empty.
+    """
     harness = harness_of(kind)
-    return harness.launch if harness is not None else None
+    if harness is None:
+        return None
+    if declared is None or kind not in declared:
+        return harness.launch
+    return replace(harness.launch, models=declared[kind])
 
 
 @dataclass(frozen=True, slots=True)
@@ -194,6 +222,31 @@ def service_path(state_dir: Path) -> str | None:
     return None if text is None else text.strip()
 
 
+def record_service_models(state_dir: Path, declared: Declared) -> None:
+    """Write the models this process was declared where ``doctor`` reads them; never raises."""
+    # One line per kind, its ids after it: an id holds no whitespace (``MODEL_ID``).
+    text = "".join(" ".join((kind, *models)) + "\n" for kind, models in declared.items())
+    try:
+        _ = statedir.ensure_dir(state_dir)
+        statedir.write_secret(state_dir / SERVICE_MODELS_FILENAME, text)
+    except OSError as exc:
+        log.warning("could not record the service's declared models for doctor: %s", exc)
+
+
+def service_models(state_dir: Path) -> Declared | None:
+    """The models the service last started declaring, or ``None`` when it never said."""
+    try:
+        text = statedir.read_text(state_dir / SERVICE_MODELS_FILENAME)
+    except OSError:
+        return None
+    if text is None:
+        return None
+    return {
+        kind: tuple(models)
+        for kind, *models in (line.split() for line in text.splitlines() if line.strip())
+    }
+
+
 def _unusable_cwd(cwd: str) -> bool:
     if not cwd.startswith("/"):
         return True
@@ -203,8 +256,10 @@ def _unusable_cwd(cwd: str) -> bool:
         return True
 
 
-def _form_refusal(request: StartRequest, kinds: tuple[str, ...]) -> Refusal | None:
-    harness = launch_of(request.kind) if request.kind in kinds else None
+def _form_refusal(
+    request: StartRequest, kinds: tuple[str, ...], declared: Declared
+) -> Refusal | None:
+    harness = launch_of(request.kind, declared) if request.kind in kinds else None
     checks = (
         (not agent_name(request.name), Refusal.BAD_NAME),
         (harness is None, Refusal.BAD_KIND),
@@ -213,7 +268,7 @@ def _form_refusal(request: StartRequest, kinds: tuple[str, ...]) -> Refusal | No
             and (
                 harness is None
                 or request.model not in harness.models
-                or not _MODEL_ID.match(request.model)
+                or not MODEL_ID.match(request.model)
             ),
             Refusal.BAD_MODEL,
         ),
@@ -318,7 +373,7 @@ def start_agent(
     which: Callable[[str], str | None] = on_path,
 ) -> AgentStarted | Refused:
     """Start one agent in a new tab of a workspace that exists now, or say why not."""
-    refusal = _form_refusal(request, offered_kinds(which))
+    refusal = _form_refusal(request, offered_kinds(which), writer.declared)
     held = Refused(refusal, "created") if refusal is not None else _prompt_refusal(request)
     if held is not None:
         return held

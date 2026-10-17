@@ -18,7 +18,17 @@ from herdr_pwa.settings import Settings
 from herdr_pwa.web.app import create_app
 from herdr_pwa.web.seams import Seams
 from herdr_pwa.web.started import check_tree, record_started
-from herdr_pwa.writes.lifecycle import Availability, availability, record_service_path, service_path
+from herdr_pwa.writes.lifecycle import (
+    Availability,
+    Declared,
+    availability,
+    declared_models,
+    models_env,
+    record_service_models,
+    record_service_path,
+    service_models,
+    service_path,
+)
 
 log = logging.getLogger(__name__)
 
@@ -51,6 +61,22 @@ def harness_lines(recorded: str | None) -> list[str]:
     return [head, *(_harness_line(availability(kind, path)) for kind in kinds)]
 
 
+def model_lines(recorded: Declared | None, settings: Settings) -> list[str]:
+    """Each kind's declared models as the service has them (*recorded*) or, without, this shell's."""
+    if recorded is None:
+        head = "models (the service never recorded its own, so this shell's settings):"
+        declared = declared_models(settings)
+    else:
+        head, declared = "models, as the service declared them:", recorded
+    return [head, *(_model_line(kind, models) for kind, models in declared.items())]
+
+
+def _model_line(kind: str, models: tuple[str, ...]) -> str:
+    if models:
+        return f"  {kind}: {', '.join(models)}"
+    return f"  {kind}: none declared ({models_env(kind)}), so the form offers no model"
+
+
 def doctor(settings: Settings, seams: Seams) -> int:
     """Check the runner's protocol against the pin and the service's code against the disk.
 
@@ -74,6 +100,8 @@ def doctor(settings: Settings, seams: Seams) -> int:
     lines.append(health_line(health, now=seams.wall()))
     # Informational too: a harness the service cannot see is one the form silently cannot offer.
     lines.extend(harness_lines(service_path(settings.state_dir.expanduser())))
+    # A declared list goes stale silently on the phone, so it is said where it can be checked.
+    lines.extend(model_lines(service_models(settings.state_dir.expanduser()), settings))
     tree = check_tree(settings.state_dir.expanduser())
     lines.append(tree.line)
     healthy = live == EXPECTED_PROTOCOL and not tree.stale
@@ -146,6 +174,7 @@ def serve(settings: Settings, port: int | None, seams: Seams) -> None:
     if warning:
         log.warning(warning)
     record_service_path(settings.state_dir.expanduser())
+    record_service_models(settings.state_dir.expanduser(), declared_models(settings))
     record_started(settings.state_dir.expanduser(), seams.wall())
     uvicorn.run(
         create_app(settings, seams),

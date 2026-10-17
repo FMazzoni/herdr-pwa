@@ -35,3 +35,35 @@ def test_logins_and_the_contact_are_trimmed(monkeypatch: pytest.MonkeyPatch) -> 
     settings = Settings()
     assert settings.tailnet_login == "you@example.com"
     assert settings.push_subject == "mailto:you@example.org"
+
+
+@pytest.mark.parametrize(
+    ("typed", "declared"),
+    [
+        ("", ()),
+        ("  ", ()),
+        ("opencode/big-pickle", ("opencode/big-pickle",)),
+        (
+            " opencode/big-pickle , anthropic/claude-sonnet-4-5,",
+            ("opencode/big-pickle", "anthropic/claude-sonnet-4-5"),
+        ),
+    ],
+)
+def test_opencode_models_are_a_comma_separated_list(
+    monkeypatch: pytest.MonkeyPatch, typed: str, declared: tuple[str, ...]
+) -> None:
+    monkeypatch.setenv("HP_OPENCODE_MODELS", typed)
+    assert Settings().opencode_models == declared
+
+
+def test_no_opencode_models_are_declared_unless_the_operator_says() -> None:
+    assert Settings().opencode_models == ()
+
+
+@pytest.mark.parametrize("typed", ["big pickle", "-v", "a;rm -rf /", '["a"]'])
+def test_an_opencode_model_that_could_never_be_launched_stops_the_start(
+    monkeypatch: pytest.MonkeyPatch, typed: str
+) -> None:
+    monkeypatch.setenv("HP_OPENCODE_MODELS", typed)
+    with pytest.raises(ValueError, match="opencode_models"):
+        _ = Settings()

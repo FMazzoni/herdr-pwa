@@ -1424,6 +1424,14 @@ ANSWERED: Final = (
 LIFECYCLE: Final = (
     State("new-agent", "/new", "main form", runner(snapshot_frame), title="New agent: the form"),
     State(
+        "new-agent-opencode-models",
+        "/new",
+        "main form",
+        runner(snapshot_frame),
+        title="New agent: the form, with opencode models declared",
+        settings={"opencode_models": ("opencode/big-pickle", "anthropic/claude-sonnet-4-5")},
+    ),
+    State(
         "new-agent-refused",
         "/new",
         "main [role=alert]",
@@ -1728,6 +1736,7 @@ V2_ONLY: Final = (
     "chat-slash-commands",
     "chat-compacted",
     "usage-opencode-models",
+    "new-agent-opencode-models",
     "chat-doubted-identity",
     "feed-herd",
     "agent-answer-sending",

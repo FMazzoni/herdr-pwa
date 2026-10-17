@@ -14,6 +14,7 @@ from herdr_pwa.audit import Origin, Recorder
 from herdr_pwa.engine import InvalidRequest, PaneId, SessionId, as_pane_id, as_session_id
 from herdr_pwa.web.deps import WebState
 from herdr_pwa.web.failures import AgentGone
+from herdr_pwa.writes.lifecycle import declared_models
 from herdr_pwa.writes.prompt import PromptSent
 from herdr_pwa.writes.refusal import FAILURES, Refusal, Refused
 from herdr_pwa.writes.resolve import Writer
@@ -66,7 +67,11 @@ def writer_for(web: WebState, request: Request, identity: auth.Identity) -> Writ
         forwarded_for=request.headers.get("x-forwarded-for", ""),
     )
     return Writer(
-        web.client, Recorder(web.audit, origin), web.pacing, web.settings.transcript_roots
+        web.client,
+        Recorder(web.audit, origin),
+        web.pacing,
+        web.settings.transcript_roots,
+        declared_models(web.settings),
     )
 
 

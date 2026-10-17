@@ -1320,6 +1320,9 @@ class StartRecipe:
     model_flag: str = "--model"
     # Empty means this box cannot enumerate them, so no model is ever put on the argv.
     models: tuple[str, ...] = ()
+    # The ``Settings`` field the operator declares the models in, for a harness nothing on this
+    # box can be asked for its own; empty means ``models`` is the whole list.
+    models_setting: str = ""
     env: Mapping[str, str] = field(default_factory=dict[str, str])
     # The flag that hands the TUI its first prompt at launch; empty means it is typed once it
     # listens. Only for a TUI on the alternate screen: the shell's own echo of the command line

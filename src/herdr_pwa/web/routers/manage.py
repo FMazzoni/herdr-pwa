@@ -22,6 +22,7 @@ from herdr_pwa.web.writing import (
 from herdr_pwa.writes.lifecycle import (
     AgentStarted,
     StartRequest,
+    declared_models,
     launch_of,
     offered_kinds,
     start_agent,
@@ -37,12 +38,18 @@ from herdr_pwa.writes.workspaces import (
 )
 
 
-def _new_context(snapshot: Snapshot, values: dict[str, str]) -> dict[str, object]:
+def _new_context(web: WebState, snapshot: Snapshot, values: dict[str, str]) -> dict[str, object]:
     kinds = offered_kinds()
+    declared = declared_models(web.settings)
     focused = next((w.workspace_id for w in snapshot.workspaces if w.focused), "")
     return {
         "kinds": kinds,
-        "models": {kind: launch.models for kind in kinds if (launch := launch_of(kind))},
+        # Only the kinds with a choice to make; none at all and the form has no model field.
+        "models": {
+            kind: launch.models
+            for kind in kinds
+            if (launch := launch_of(kind, declared)) and launch.models
+        },
         # Installed for the user but not on this service's PATH: said, not silently left out.
         "stranded": stranded_kinds(),
         "workspaces": snapshot.workspaces,
@@ -78,7 +85,7 @@ def _new_routes(router: APIRouter, writes: WriteRoutes) -> None:
 
     @router.get("/new")
     def new_form() -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
-        return web.pages.page("new.html", _new_context(web.client.snapshot(), {}))
+        return web.pages.page("new.html", _new_context(web, web.client.snapshot(), {}))
 
     @router.post("/new", response_model=None)
     def new(post: Annotated[Posted, Depends(writes.post)]) -> Response:  # pyright: ignore[reportUnusedFunction]
@@ -98,7 +105,7 @@ def _new(post: Posted) -> Response:
     )
     result = start_agent(post.writer, ask)
     if isinstance(result, Refused):
-        context = _new_context(web.client.snapshot(), values)
+        context = _new_context(web, web.client.snapshot(), values)
         return refused(web.pages, Redraw("new.html", context, as_page=True), result)
     return _started(post.request, result)
 

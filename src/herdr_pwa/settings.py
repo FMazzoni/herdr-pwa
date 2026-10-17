@@ -1,12 +1,14 @@
 """Where the app listens, keeps its state, and finds herdr; every field overridable by env."""
 
 from pathlib import Path
+from typing import Annotated
 
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from herdr_pwa.engine import EngineSettings
 from herdr_pwa.protocol import DEFAULT_SOCKET_PATH
+from herdr_pwa.validation import MODEL_ID
 
 
 def _default_state_dir() -> Path:
@@ -28,6 +30,10 @@ class Settings(BaseSettings):
     snapshot_cache_ttl: float = Field(default=2.0, gt=0)
     # Empty means each harness's own default location.
     transcript_roots: tuple[str, ...] = ()
+    # The models the new-agent form offers opencode, comma-separated; empty offers none. Declared,
+    # not read: every catalogue on disk named a dead model, and opencode silently runs its paid
+    # default in place of a dead one.
+    opencode_models: Annotated[tuple[str, ...], NoDecode] = ()
     # A page of chat counts messages (prompts and agent prose); tool calls ride along inside it.
     chat_messages: int = Field(default=20, gt=0)
     # On start, read and draw the most urgent Claude agents' chats in the background, so the first
@@ -75,6 +81,28 @@ class Settings(BaseSettings):
     @classmethod
     def _trimmed(cls, value: str) -> str:
         return value.strip()
+
+    @field_validator("opencode_models", mode="before")
+    @classmethod
+    def _model_list(cls, value: object) -> object:
+        return (
+            tuple(m.strip() for m in value.split(",") if m.strip())
+            if isinstance(value, str)
+            else value
+        )
+
+    @field_validator("opencode_models")
+    @classmethod
+    def _launchable(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        bad = [model for model in value if not MODEL_ID.match(model)]
+        if bad:
+            msg = f"not a model id that could go on a command line: {', '.join(bad)}"
+            raise ValueError(msg)
+        return value
+
+    def model_lists(self) -> dict[str, tuple[str, ...]]:
+        """Every model list the operator declares, by its field's name."""
+        return {"opencode_models": self.opencode_models}
 
     def engine(self) -> EngineSettings:
         """The engine's view of these settings."""
