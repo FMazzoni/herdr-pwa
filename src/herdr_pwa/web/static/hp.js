@@ -337,5 +337,14 @@
     return !!(detail.requestConfig && detail.requestConfig.verb === "get");
   }
 
-  window.hp = { logic: logic, bus: bus, refetch: refetch, isRead: isRead };
+  // The tab's or the device's storage, or null where reading it at all throws.
+  function storage(name) {
+    try {
+      return window[name];
+    } catch (err) {
+      return null;
+    }
+  }
+
+  window.hp = { logic: logic, bus: bus, refetch: refetch, isRead: isRead, storage: storage };
 })();

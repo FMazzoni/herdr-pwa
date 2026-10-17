@@ -36,6 +36,7 @@ from firefox import (  # noqa: E402
     phone_window,
 )
 
+from herdr_pwa.web.assets import SCRIPTS, STATIC_PREFIX  # noqa: E402
 from tests.catalogue import STATES, State, build, pick  # noqa: E402
 from tests.waiting import eventually  # noqa: E402
 from tests.webfakes import Hold  # noqa: E402
@@ -498,10 +499,12 @@ def _load_problems(seen: dict[str, object], ready: str, *, scripted: bool) -> li
         problems.append("--ground is unset: app.css did not apply (CSP, MIME or 404)")
     statics = seen.get("statics")
     fetched = {str(s) for s in statics} if isinstance(statics, list) else set()
-    wanted = ("/static/app.css", "/static/app.js", "/static/htmx.min.js")
+    # Every script the page runs, not only the first: one blocked section is a page half wired.
+    scripts = ("htmx.min.js", *SCRIPTS) if scripted else ()
+    wanted = [f"{STATIC_PREFIX}{name}" for name in ("app.css", *scripts)]
     problems += [
         f"{name} was never fetched: blocked before it loaded"
-        for name in wanted[: 3 if scripted else 1]
+        for name in wanted
         if name not in fetched
     ]
     if scripted and seen.get("htmx") != "object":
