@@ -144,6 +144,8 @@ def _is_wide_rule(text: str) -> bool:
 
 _STATUS_MAX_ROWS: Final = 8
 _INPUT_MAX_ROWS: Final = 12
+
+
 def _prompt_body(text: str) -> str | None:
     """The text after the prompt glyph, or ``None`` if this is not a prompt line."""
     stripped = text.lstrip(_WS)
