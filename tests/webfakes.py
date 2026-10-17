@@ -187,7 +187,7 @@ def build_rig(
     **overrides: object,
 ) -> Rig:
     """An app whose every destination is under ``tmp_path`` and whose runner is fake."""
-    given = dict(replies) if replies is not None else {SNAPSHOT: snapshot_frame()}
+    given: dict[str, Reply] = dict(replies) if replies is not None else {SNAPSHOT: snapshot_frame()}
     # A stopped agent's screen is read for a dialog herdr missed; unless a test says otherwise,
     # every pane shows an empty prompt, as a real runner would answer.
     _ = given.setdefault(READ, read_frame("> "))
