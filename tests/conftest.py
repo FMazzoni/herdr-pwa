@@ -4,17 +4,9 @@ from pathlib import Path
 import pytest
 
 from herdr_pwa.writes import prompt, resolve
-from tests._foreign import default_root
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
-    # Read at startup, before the isolation fixture below strips HP_* from every test.
-    parser.addoption(
-        "--foreign-root",
-        default=str(default_root()),
-        help="directory holding the pinned foreign capture clones "
-        "(default $HP_FOREIGN_CAPTURES, else ~/.cache/herdr-pwa/foreign-captures)",
-    )
     parser.addoption(
         "--browser-force",
         action="store_true",
