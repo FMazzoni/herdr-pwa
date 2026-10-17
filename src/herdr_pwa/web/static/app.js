@@ -29,26 +29,12 @@
 
   var columnsButton = document.querySelector("[data-hp-columns]");
   if (columnsButton) {
-    var kept = false;
-    try {
-      var device = hp.storage("localStorage");
-      kept = !!device && device.getItem(COLUMNS) === "1";
-    } catch (err) {
-      kept = false;
-    }
-    showColumns(columnsButton, kept);
+    showColumns(columnsButton, hp.kept(COLUMNS));
     columnsButton.parentNode.hidden = false;
     columnsButton.addEventListener("click", function () {
       var on = columnsButton.getAttribute("aria-pressed") !== "true";
       showColumns(columnsButton, on);
-      try {
-        var device = hp.storage("localStorage");
-        if (device) {
-          device.setItem(COLUMNS, on ? "1" : "0");
-        }
-      } catch (err) {
-        /* blocked storage: the choice lasts this page only. */
-      }
+      hp.keep(COLUMNS, on);
     });
   }
 

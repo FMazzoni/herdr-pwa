@@ -28,6 +28,10 @@
   {# app.js shows it and remembers the choice; without script the pane just wraps. #}
   {% set columns %}data-hp-columns aria-pressed="false"{% endset %}
   <p class="agent__columns" hidden>{{ ui.button("Keep the columns", "toggle", type="button", attrs=columns) }}</p>
+  {% elif tab == "chat" %}
+  {# bubble.js shows it and remembers the choice; without script nothing in the bubble moves. #}
+  {% set still %}data-hp-still aria-pressed="false"{% endset %}
+  <p class="agent__columns" hidden>{{ ui.button("Stop the animation", "toggle", type="button", attrs=still) }}</p>
   {% endif %}
   {# Drawn here, not fetched after the scripts run: the newest line comes with the page. Each region
      is the same markup its own route sends, so the stream's redraws replace it like for like. #}

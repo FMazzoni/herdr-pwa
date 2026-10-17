@@ -1736,6 +1736,49 @@ FILES: Final = (
     ),
 )
 
+# Taps Stop the animation, then watches the bubble frame by frame: its letters (where they stand,
+# their colour, any lift) must not change over STILL_FRAMES frames while its timer ticks on. Only
+# then is the proof drawn; a letter that moves, or a timer that stops, leaves it undrawn.
+STILL_FRAMES: Final = 60
+STILL_WATCH: Final = (
+    _click("[data-hp-still]")
+    + r"""
+const look = () => {
+  const words = document.querySelector("#chat-note .bubble__text");
+  if (!words) return "gone";
+  const parts = [words.childElementCount];
+  for (const node of [words, ...words.children]) {
+    const box = node.getBoundingClientRect();
+    const style = getComputedStyle(node);
+    parts.push(box.x, box.y, box.width, style.color, style.transform);
+  }
+  return parts.join("|");
+};
+const clock = () => (document.querySelector("#chat-note .bubble__time") || {}).textContent;
+const pressed = document.querySelector("[data-hp-still]").getAttribute("aria-pressed") === "true";
+let first = null;
+let started = null;
+let frames = 0;
+const watch = () => {
+  const seen = look();
+  if (first === null) {
+    first = seen;
+    started = clock();
+  } else if (seen !== first) {
+    document.body.dataset.probeMoved = "a letter moved";
+    return;
+  }
+  frames += 1;
+  if (frames >= FRAMES && clock() !== started) {
+    if (pressed && seen !== "gone") document.body.dataset.probeStill = "";
+    return;
+  }
+  requestAnimationFrame(watch);
+};
+requestAnimationFrame(watch);
+""".replace("FRAMES", str(STILL_FRAMES))
+)
+
 TURNS: Final = (
     State(
         "chat-working-tool",
@@ -1744,6 +1787,16 @@ TURNS: Final = (
         runner(_working_as("working")),
         prime=_turn_at("tool"),
         title="Chat while a tool runs: the bubble names the tool",
+    ),
+    State(
+        "chat-working-still",
+        f"{AGENT}?tab=chat",
+        "body[data-probe-still]",
+        runner(_working_as("working")),
+        prime=_turn_at("tool"),
+        title="Chat while a tool runs, Stop the animation on: the words stand still, the timer ticks",
+        armed="#chat-note .bubble__glyph",
+        act=STILL_WATCH,
     ),
     State(
         "chat-working-thinking",
