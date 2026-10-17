@@ -1,4 +1,4 @@
-"""The opencode adapter, against two sessions captured verbatim from a real store, in both layouts."""
+"""The opencode adapter, against two sessions from a real store (content synthetic), in both layouts."""
 
 import json
 import sqlite3
@@ -291,7 +291,7 @@ def test_a_byte_budget_makes_the_tally_a_floor_rather_than_a_lie(store: Path) ->
     assert tally.partial
 
 
-# opencode 1.x keeps live sessions in SQLite; schema.sql and db-rows.json are captured verbatim.
+# opencode 1.x keeps live sessions in SQLite; schema.sql is as captured, db-rows.json a probe's rows.
 SCHEMA = (STORE / "schema.sql").read_text()
 
 
@@ -546,7 +546,7 @@ def test_a_store_with_no_model_column_still_answers_its_title(tmp_path: Path) ->
 def test_the_frozen_store_answers_the_title_and_has_no_model() -> None:
     """The old layout keeps the title in its own file and never kept a model."""
     info = OpencodeAdapter().info(Source(SESSION, [STORE]))
-    assert info.title == ("Rewrite the testing notes as an opencode skill")
+    assert info.title == "Rewrite the testing notes as an opencode skill"
     assert info.model == ModelRef()
 
 
@@ -650,7 +650,7 @@ def test_info_never_raises_while_the_store_is_held(database: Path) -> None:
 
 # ---- spend per model -------------------------------------------------------------------------
 
-# Real rows from one session that switched models, paths anonymised, plus rows borrowed from two
+# Real rows from one session that switched models, paths replaced, plus rows borrowed from two
 # other sessions: a model whose provider records nothing, and a free one that records no cost.
 MIXED = "ses_0dfb24cf5ffemJcBmqyE29sVBi"
 MIXED_ROWS = TypeAdapter(dict[str, list[dict[str, JsonValue]]]).validate_json(
@@ -738,7 +738,7 @@ def test_cache_written_is_kept_apart_from_cache_read(tmp_path: Path) -> None:
 # real session that hit a provider's rate limit, then borrowed rows: two interrupts out of the
 # live store (one before anything was written, one mid tool call) and, out of the frozen store,
 # a prompt that outgrew the model, a request the provider refused, and an interrupt worded the
-# older way. Paths, prompts, a command and request ids anonymised.
+# older way. Paths, prompts, a command and request ids replaced by neutral ones.
 ERRORED = "ses_fdb61ad3cffeYvgWpZTc6KTDX2"
 ERROR_ROWS = TypeAdapter(dict[str, list[dict[str, JsonValue]]]).validate_json(
     (STORE / "error-rows.json").read_text()
