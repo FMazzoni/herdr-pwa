@@ -1,5 +1,6 @@
 {% from "md.html" import md %}
 {% import "_ui.html" as ui %}
+{% from "_agent.html" import pane_door %}
 {% set speakers = {"human": "You", "agent": "Agent", "system": "Note", "peer": "Agent message"} %}
 {% set base = "/agent/" ~ (agent.session|urlencode) ~ "/chat" %}
 {% set in_log = ("&log=" ~ (chat.log|urlencode)) if chat.log else "" %}
@@ -38,7 +39,7 @@
   {% set earlier %}data-hp-earlier hx-get="{{ base }}?before={{ chat.start }}{{ in_log }}" hx-target="#agent-view" hx-swap="outerHTML"{% endset %}
   <p class="chat__earlier">{{ ui.button("Load earlier messages", extra="chat__earlier-button", type="button", attrs=earlier) }}</p>
   {% endif %}
-  {% if chat.note %}<p class="empty">{{ chat.note }}</p>{% endif %}
+  {% if chat.note %}<p class="empty">{{ chat.note }}{% if chat.door %}{{ pane_door(agent, "Look at the Pane", "chat__go") }}{% endif %}</p>{% endif %}
   {% for item in chat.items %}
   {% if item.tools is defined %}
   {# Messages lead: tool calls are a quiet line between them, never a box of their own. #}

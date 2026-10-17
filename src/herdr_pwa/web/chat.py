@@ -23,8 +23,10 @@ _STATE_NOTES = {
     HistoryState.empty: "Nothing has been said yet.",
     HistoryState.absent: "No transcript was found for this session yet.",
     HistoryState.unreadable: "The transcript exists and could not be read.",
-    HistoryState.unsupported: "This harness keeps no transcript this app can read; see Pane.",
+    HistoryState.unsupported: "This harness keeps no transcript this app can read.",
 }
+# What it is doing can then be read only on its Pane, so the note offers the way there.
+_READ_ON_PANE: Final = frozenset({HistoryState.unsupported})
 
 
 # The turn's one word while the agent thinks between tools: decoration, which VoiceOver skips.
@@ -136,6 +138,8 @@ class ChatView:
     doubt: str = ""
     # The log could not be read under a drawing the reader already has, which then stands.
     held: bool = False
+    # The note sends the reader to the Pane tab, the only place this agent can be read.
+    door: bool = False
 
 
 def fold_tools(turns: tuple[ChatTurn, ...]) -> tuple[ChatTurn | ToolRun, ...]:
@@ -464,4 +468,5 @@ def chat_view(
         receipt=receipt,
         doubt=doubt,
         held=held,
+        door=not turns and page.state in _READ_ON_PANE,
     )

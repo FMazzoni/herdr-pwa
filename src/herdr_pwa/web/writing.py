@@ -149,6 +149,8 @@ class FirstNote:
     kind: str
     what: str
     why: str = ""
+    # Whether the page offers its Pane tab: what the pane shows is the only proof left.
+    door: bool = False
 
 
 def first_note(code: str) -> FirstNote | None:
@@ -159,7 +161,8 @@ def first_note(code: str) -> FirstNote | None:
         return FirstNote(
             "held",
             "Started. Your first prompt was sent, but the pane did not show it.",
-            "Read the Pane before sending it again.",
+            "Look before sending it again.",
+            door=True,
         )
     refusal = next((r for r in Refusal if r.value == code), None)
     if refusal is None:

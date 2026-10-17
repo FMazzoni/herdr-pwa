@@ -23,7 +23,7 @@
     </span>
     <a class="leave agent__end" href="{{ base }}/close" {{ replace() }}>End</a>
   </p>
-  {% if first %}{{ ui.banner(first.kind, first.what, first.why or none) }}{% endif %}
+  {% if first %}{% call ui.banner(first.kind, first.what, first.why or none) %}{% if first.door %}{{ agent_ui.pane_door(agent, "Look at the Pane", "banner__go") }}{% endif %}{% endcall %}{% endif %}
   {% if tab == "pane" %}
   {# app.js shows it and remembers the choice; without script the pane just wraps. #}
   {% set columns %}data-hp-columns aria-pressed="false"{% endset %}

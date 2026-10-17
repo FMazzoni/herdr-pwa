@@ -251,6 +251,8 @@ html { -webkit-tap-highlight-color: transparent; }
 .chat__notes { display: contents; }
 /* A note about the log itself rather than a turn in it: quiet, and centred apart from the turns. */
 .chat__note { color: var(--ink-3); font-size: var(--text-meta); text-align: center; padding: var(--space-6) var(--space-4); }
+/* The way to the Pane under an empty log's note, centred like the note it ends. */
+.chat__go { margin-inline: auto; }
 /* The status bubble sits where the agent's next message will land, shaped like one and at its
    size, as wide as its words; past the screen's width the words ellipsize, never the timer. */
 .bubble { justify-self: start; display: flex; align-items: baseline; gap: var(--space-5); min-width: 0; max-width: 100%; padding: var(--space-5) var(--space-6); border-radius: var(--radius-3); background: var(--surface); font-size: var(--text-body); color: var(--ink-2); white-space: nowrap; }
@@ -696,8 +698,8 @@ textarea { resize: vertical; min-height: 4.5em; }
 .answer__question { margin: 0; font-size: inherit; font-weight: 600; white-space: pre-wrap; }
 .answer__note { margin: 0; font-size: var(--text-meta); color: var(--ink-2); }
 /* A way to the Pane gets its own 44px line, never a gap torn into the sentence above it. */
-.answer__go, .banner__go { display: flex; width: fit-content; align-items: center; min-height: var(--tap); font-weight: 600; }
-.answer__go::after, .banner__go::after { content: "\00A0" var(--chevron); }
+.answer__go, .banner__go, .chat__go { display: flex; width: fit-content; align-items: center; min-height: var(--tap); font-weight: 600; }
+.answer__go::after, .banner__go::after, .chat__go::after { content: "\00A0" var(--chevron); }
 /* One sentence with the Pane link inline at its end: the link keeps a 44px box, and negative
    margins stop that box from stretching the line it sits on. */
 .answer__note--line .answer__go { display: inline-flex; vertical-align: middle; margin-block: calc((var(--tap) - 1.45em) / -2); margin-left: var(--space-2); }

@@ -1,4 +1,5 @@
 {% import "_ui.html" as ui %}
+{% from "_agent.html" import pane_door %}
 {% set base = "/agent/" ~ (agent.session|urlencode) %}
 {% set again = again is defined and again %}
 <form id="composer" class="composer" method="post" action="{{ base }}/prompt"
@@ -7,8 +8,9 @@
   {% include "_notice.html" %}
   {% if sent is defined %}
   {% call ui.banner("sent" if sent.verified else "held", sent=true) %}
-    {% if sent.verified %}Sent, and it is on the pane.{% else %}Sent, unverified: the pane did not show it. Read the Pane tab before sending it again.{% endif %}
+    {% if sent.verified %}Sent, and it is on the pane.{% else %}Sent, unverified: the pane did not show it. Look before sending it again.{% endif %}
     {% if sent.no_echo %}<span class="banner__why">{{ sent.no_echo }}</span>{% endif %}
+    {% if not sent.verified %}{{ pane_door(agent, "Look at the Pane", "banner__go") }}{% endif %}
   {% endcall %}
   {% endif %}
   <input type="hidden" name="target" value="{{ agent.target }}">

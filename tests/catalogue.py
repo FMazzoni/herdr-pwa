@@ -19,6 +19,7 @@ from tests.test_opencode import build as opencode_db
 from tests.webfakes import (
     AGENT_GET,
     FIXTURES,
+    PROMPT,
     READ,
     SEND_KEYS,
     SNAPSHOT,
@@ -857,6 +858,21 @@ def _keyed(screen: str) -> Replies:
     return replies
 
 
+def _prompted(screen: str) -> Replies:
+    """The working pane idle on ``screen``, with a runner that takes a prompt it never shows."""
+
+    def replies() -> dict[str, Reply]:
+        frame = herd(p4="idle")
+        return {
+            SNAPSHOT: frame,
+            READ: read_frame(screen),
+            AGENT_GET: _agent_info(frame),
+            PROMPT: {"id": "x", "result": {"type": "ok"}},
+        }
+
+    return replies
+
+
 def _lands(status: str, screen: str) -> Prime:
     """Once a key is taken, the herd says ``status`` and the pane shows ``screen``."""
 
@@ -1198,6 +1214,22 @@ AGENT_PAGE: Final = (
         title="Chat: no transcript was ever written",
     ),
     State(
+        "chat-unsupported",
+        f"{AGENT}?tab=chat",
+        # A harness this app cannot read is read on its Pane, so the note is the way there.
+        ".chat .empty .chat__go[data-hp-replace]",
+        runner(lambda: _set(snapshot_frame(), WORKING_PANE, agent="cursor"), capture(WORKING)),
+        title="Chat: a harness that keeps no transcript this app can read",
+    ),
+    State(
+        "agent-first-unverified",
+        f"{AGENT}?first=unverified",
+        # The first prompt's fate is on the pane, so the banner is a door to it.
+        ".banner--held .banner__go[data-hp-replace]",
+        runner(_stressed),
+        title="Agent page: opened on a first prompt the pane did not show",
+    ),
+    State(
         "agent-pane",
         f"{AGENT}?tab=pane",
         ".mirror .pane",
@@ -1325,6 +1357,16 @@ TAPPED: Final = (
         title="Destructive input: held for a second tap",
         armed="#composer textarea",
         act=_type_and_send("rm -rf build && git push --force"),
+    ),
+    State(
+        "agent-unverified",
+        AGENT,
+        # The idle screen never shows the prompt, so it is sent unverified: the door to look.
+        "#composer .banner--held .banner__go[data-hp-replace]",
+        _prompted(capture(IDLE)),
+        title="Agent page: a prompt sent, but the pane did not show it",
+        armed="#composer textarea",
+        act=_type_and_send("run the tests again"),
     ),
     State(
         "agent-interrupt",
@@ -1763,6 +1805,8 @@ V2_ONLY: Final = (
     "chat-notice-report",
     "chat-notice-command",
     "pane-long",
+    "chat-unsupported",
+    "agent-first-unverified",
     "usage-chat",
     "usage-long-turn",
     "usage-crowded",
@@ -1791,7 +1835,6 @@ NOT_YET: Final[dict[str, str]] = {
     "agent-answer-unread": _RIG,
     "agent-answer-partially-applied": _RIG,
     "starting-prompt-sent": _RIG,
-    "agent-unverified": _RIG,
     "agent-no-echo": _RIG,
     "agent-no-echo-refused": _RIG,
     "agent-at-the-desk": "no v2 feature yet: nothing knows which pane the desk has in front",
