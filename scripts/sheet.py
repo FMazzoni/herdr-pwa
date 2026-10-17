@@ -19,7 +19,7 @@ from shots import DEVICES, IPHONE, Device, missing_browser, shoot, shoot_files  
 from tests.catalogue import LEGACY_KEYS, NOT_YET, STATES, V2_ONLY, pick  # noqa: E402
 
 # The frozen old app; read only, so everything it renders is written outside it.
-LEGACY = Path(os.environ.get("HP_LEGACY_CHECKOUT", "../herdr-pwa"))
+LEGACY = Path(os.environ.get("HP_LEGACY_CHECKOUT", "../herdr-pwa-v1"))
 SHEETS = ROOT / ".agents" / "sheets"
 TITLES = {s.name: s.title for s in STATES}
 
