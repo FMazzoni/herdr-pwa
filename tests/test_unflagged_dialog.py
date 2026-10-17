@@ -184,6 +184,16 @@ def test_the_bracketed_rows_are_the_options_and_each_earns_its_digit() -> None:
     assert answer_digits(prompt) == ("1", "2", "3")
 
 
+def test_an_or_after_the_comma_still_offers_both_arrows() -> None:
+    # The footer reads "type 1/2/3, or ↑/↓ to select": the "or" joins a list, it is not a key.
+    hints = BlockedPrompt.parse(SLASH_CONFIRM).hints
+    assert [(h.key, h.verb) for h in hints] == [
+        ("up", "select"),
+        ("down", "select"),
+        ("enter", "confirm"),
+    ]
+
+
 def test_the_token_is_the_question_posed_and_the_countdown_is_not_in_it() -> None:
     drawn = BlockedPrompt.parse(SLASH_CONFIRM)
     assert drawn.identity

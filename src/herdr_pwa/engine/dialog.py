@@ -139,6 +139,8 @@ opencode puts two spaces between hint pairs on the same line (measured on its
 permission dialog, where the buttons share that line).
 """
 
+_LIST_OR = re.compile(r"(?i)^\s*or\s+")
+
 _TRAILING_PAREN_RE = re.compile(r"(?<=\S)\s*\([^()]*\)\s*$")
 
 
@@ -350,7 +352,9 @@ def _segments(line: str) -> list[str]:
         if _whole_hint(whole) or "," not in whole:
             pieces.append(segment)
             continue
-        pieces.extend(part for part in whole.split(",") if part.strip())
+        # "type 1/2/3, or ↑/↓ to select" (hermes): the "or" closes the list, it names no key.
+        parts = (_LIST_OR.sub("", part) for part in whole.split(","))
+        pieces.extend(part for part in parts if part.strip())
     return pieces
 
 
