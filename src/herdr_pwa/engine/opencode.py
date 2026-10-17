@@ -779,7 +779,6 @@ def _tally(store: _Store, *, max_bytes: int) -> SessionUsage:
         if budget < 0:
             tally.partial = True
             break
-        tally.logs += 1
         if record is not None:
             _take(tally, record)
     if not tally.models:

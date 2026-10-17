@@ -1769,7 +1769,6 @@ class SessionUsage(Spend):
     models: list[ModelRef] = Field(default_factory=list)
     # Only where the store says which model each answer came from; empty means not split.
     by_model: list[ModelSpend] = Field(default_factory=list)
-    logs: int = 0
     # A byte budget stopped the read, so the sums are floors.
     partial: bool = False
     state: HistoryState = HistoryState.absent
@@ -1997,7 +1996,6 @@ def tally_claude(path: Path, *, max_bytes: int = MAX_USAGE_BYTES) -> LiveTally:
     """Sum *path* and every log its thread was copied out of, ready to grow."""
     live = LiveTally(tally=SessionUsage(), budget=max_bytes)
     for index, log in enumerate([path, *_ancestors(path)]):
-        live.tally.logs += 1
         end = _tally_log(log, live, newest=index == 0)
         if index == 0:
             live.end = end
