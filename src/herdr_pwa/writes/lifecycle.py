@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Final
 
 from herdr_pwa import statedir
-from herdr_pwa.audit import CLOSE, START, Write
+from herdr_pwa.audit import CLOSE, PROMPT, START, Write
 from herdr_pwa.engine import (
     AgentStatus,
     EngineError,
@@ -26,8 +26,8 @@ from herdr_pwa.engine import (
     harness_of,
 )
 from herdr_pwa.writes.guard import destructive_reason, unsendable
-from herdr_pwa.writes.outcome import Pacing
-from herdr_pwa.writes.prompt import PromptSent, send_opening_prompt
+from herdr_pwa.writes.outcome import Evidence, Outcome, Pacing, audit_result
+from herdr_pwa.writes.prompt import PromptSent, read_back, send_opening_prompt
 from herdr_pwa.writes.refusal import Refusal, Refused, failed_result, refusal_for
 from herdr_pwa.writes.resolve import (
     Writer,
@@ -70,7 +70,7 @@ class StartRequest:
     workspace_id: str
     cwd: str
     model: str = ""
-    # Typed once the agent listens; blank sends nothing.
+    # On the command line for a harness that takes one there, else typed once it listens.
     prompt: str = ""
     # The destructive-prompt confirm, given against this form before anything was created.
     confirmed: bool = False
@@ -246,21 +246,61 @@ def _await_session(client: HerdrClient, started: StartedAgent, pacing: Pacing) -
     return started
 
 
-def _launch(client: HerdrClient, request: StartRequest, name: str) -> StartedAgent | Refused:
+@dataclass(frozen=True, slots=True)
+class _Launched:
+    agent: StartedAgent
+    # The first prompt, when it went on the command line rather than being typed.
+    first: PromptSent | None = None
+
+
+def _launch(writer: Writer, request: StartRequest, name: str) -> _Launched | Refused:
     harness = launch_of(request.kind)
     if harness is None:
         return Refused(Refusal.BAD_KIND, "created")
     try:
-        pane = client.create_tab(
+        pane = writer.client.create_tab(
             NewTab(request.workspace_id, request.cwd.strip(), name, env=harness.env)
         )
     except EngineError as exc:
         return Refused(refusal_for(exc), "created", detail=str(exc))
-    try:
-        return client.start_agent(Launch(name, request.kind, pane, harness.args(request.model)))
-    except EngineError as exc:
-        _abandon(client, pane)
-        return Refused(refusal_for(exc), "created", detail=str(exc))
+    prompt = request.prompt if harness.takes_prompt and request.prompt.strip() else ""
+    launch = Launch(name, request.kind, pane, harness.args(request.model, prompt))
+    launched = _spawn(writer, launch, prompt)
+    if isinstance(launched, Refused):
+        _abandon(writer.client, pane)
+    return launched
+
+
+def _spawn(writer: Writer, launch: Launch, prompt: str) -> _Launched | Refused:
+    if not prompt:
+        try:
+            return _Launched(writer.client.start_agent(launch))
+        except EngineError as exc:
+            return Refused(refusal_for(exc), "created", detail=str(exc))
+    # The pane's key, as a first prompt typed by the form or the starting page would take it.
+    key = f"pane:{launch.pane_id}"
+    return one_at_a_time(key, "created", lambda: _spawn_prompted(writer, launch, prompt))
+
+
+def _spawn_prompted(writer: Writer, launch: Launch, prompt: str) -> _Launched | Refused:
+    # Recorded before the process that carries it exists: an unrecordable prompt spawns nothing.
+    pane = as_pane_id(launch.pane_id)
+    entry = attempt(writer.audit, Write(PROMPT, pane, payload=prompt), verb="created")
+    if isinstance(entry, Refused):
+        return entry
+    with entry:
+        try:
+            started = writer.client.start_agent(launch)
+        except EngineError as exc:
+            entry.outcome(failed_result(exc))
+            return Refused(refusal_for(exc), "created", detail=str(exc))
+        settled = _await_session(writer.client, started, writer.pacing)
+        shown = read_back(writer.client, pane, prompt, "", writer.pacing)
+        outcome, evidence = (
+            (Outcome.CONFIRMED, Evidence.ECHO) if shown else (Outcome.ACCEPTED, Evidence.ARGV)
+        )
+        entry.outcome(audit_result(outcome, evidence))
+    return _Launched(settled, PromptSent(pane, outcome, evidence))
 
 
 def start_agent(
@@ -295,19 +335,20 @@ def _start_agent(writer: Writer, request: StartRequest) -> AgentStarted | Refuse
     if isinstance(entry, Refused):
         return entry
     with entry:
-        started = _launch(writer.client, request, name)
-        if isinstance(started, Refused):
-            entry.outcome(f"{'unknown' if started.unsure else 'refused'}:{started.refusal.value}")
-            return started
-        entry.outcome(f"started:{started.pane}")
-    return _opened(writer, started, request.prompt)
+        launched = _launch(writer, request, name)
+        if isinstance(launched, Refused):
+            entry.outcome(f"{'unknown' if launched.unsure else 'refused'}:{launched.refusal.value}")
+            return launched
+        entry.outcome(f"started:{launched.agent.pane}")
+    return _opened(writer, launched, request.prompt)
 
 
-def _opened(writer: Writer, started: StartedAgent, prompt: str) -> AgentStarted:
-    settled = _await_session(writer.client, started, writer.pacing)
-    first = None
-    if prompt.strip():
+def _opened(writer: Writer, launched: _Launched, prompt: str) -> AgentStarted:
+    settled = _await_session(writer.client, launched.agent, writer.pacing)
+    first: PromptSent | Refused | None = launched.first
+    if first is None and prompt.strip():
         first = send_opening_prompt(writer, as_pane_id(settled.pane), prompt)
+    if first is not None:
         # A late-identity harness opens its session on its first prompt, so look for it again.
         settled = _await_session(writer.client, settled, writer.pacing)
     return AgentStarted(

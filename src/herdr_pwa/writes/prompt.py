@@ -126,13 +126,14 @@ def _preflight(send: _Send, screen: str) -> Refused | None:
     return None
 
 
-def _landed(client: HerdrClient, send: _Send, before: str, pacing: Pacing) -> bool:
+def read_back(client: HerdrClient, target: PaneId, text: str, before: str, pacing: Pacing) -> bool:
+    """Whether the pane comes to show *text* more often than *before* did, within a second."""
     for _ in range(CONFIRM_ATTEMPTS):
         try:
-            after = client.read(send.target, VISIBLE_READ)
+            after = client.read(target, VISIBLE_READ)
         except EngineError:
             after = ""
-        if landed(send.text, before, after):
+        if landed(text, before, after):
             return True
         pacing.sleep(CONFIRM_INTERVAL)
     return False
@@ -158,7 +159,7 @@ def _type(writer: Writer, send: _Send) -> PromptSent | Refused:
         except EngineError as exc:
             entry.outcome(failed_result(exc))
             return _failed(client, send, exc)
-        ok = _landed(client, send, before, writer.pacing)
+        ok = read_back(client, send.target, send.text, before, writer.pacing)
         outcome, evidence = (
             (Outcome.CONFIRMED, Evidence.ECHO) if ok else (Outcome.ACCEPTED, Evidence.NOECHO)
         )

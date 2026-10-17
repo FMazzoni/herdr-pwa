@@ -791,8 +791,12 @@ class OpencodeAdapter(TranscriptAdapter):
 
     default_roots: ClassVar[tuple[str, ...]] = (OPENCODE_ROOT,)
     # OPENCODE_CONFIG_CONTENT is merged over the project's config: https://opencode.ai/docs/config/
+    # ``--prompt`` is in ``opencode --help`` (1.18.30), and it opens the session in half the time.
     harness: ClassVar[Harness] = Harness(
-        "opencode", StartRecipe("opencode", env={"OPENCODE_CONFIG_CONTENT": OPENCODE_ASK})
+        "opencode",
+        StartRecipe(
+            "opencode", env={"OPENCODE_CONFIG_CONTENT": OPENCODE_ASK}, prompt_flag="--prompt"
+        ),
     )
 
     @override

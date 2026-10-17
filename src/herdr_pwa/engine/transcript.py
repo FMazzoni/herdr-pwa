@@ -1321,10 +1321,22 @@ class StartRecipe:
     # Empty means this box cannot enumerate them, so no model is ever put on the argv.
     models: tuple[str, ...] = ()
     env: Mapping[str, str] = field(default_factory=dict[str, str])
+    # The flag that hands the TUI its first prompt at launch; empty means it is typed once it
+    # listens. Only for a TUI on the alternate screen: the shell's own echo of the command line
+    # would otherwise read back as the prompt having landed.
+    prompt_flag: str = ""
 
-    def args(self, model: str) -> tuple[str, ...]:
+    @property
+    def takes_prompt(self) -> bool:
+        """Whether the first prompt goes on the command line instead of being typed."""
+        return bool(self.prompt_flag)
+
+    def args(self, model: str, prompt: str = "") -> tuple[str, ...]:
         """What follows the bare ``--`` on the agent's command line."""
-        return (self.model_flag, model) if model else ()
+        chosen = (self.model_flag, model) if model else ()
+        # One element, ``flag=text``, so a prompt that starts with a dash is never an option.
+        opening = (f"{self.prompt_flag}={prompt}",) if prompt and self.prompt_flag else ()
+        return chosen + opening
 
 
 @dataclass(frozen=True, slots=True)

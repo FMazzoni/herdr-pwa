@@ -30,6 +30,8 @@ class Evidence(StrEnum):
     DELIVERED = "delivered"
     ECHO = "echo"
     NOECHO = "noecho"
+    # Passed on the harness's command line at launch, and not yet seen on the pane.
+    ARGV = "argv"
 
 
 class Unreadable(Enum):
