@@ -52,8 +52,8 @@ FEED_HOLD = "feed-hold"
 SEND_HOLD = "send-hold"
 # The --only name for the walks that listen as VoiceOver would.
 VOICEOVER = "voiceover"
-# 390 is the phone this app is designed on; 430 is the largest (a Pro Max size, run as a
-# Home Screen app); 320 is the narrowest one still sold (iPhone SE 1st gen).
+# 390 is the phone this app is designed on; 430 is the largest (a Pro Max size, run as a Home
+# Screen app); 320 is the narrowest one still sold (iPhone SE 1st gen).
 WIDTHS = (390, 430, 320)
 HEIGHT = 844
 # iPhone Text Size, as a multiple of the default root: 130% is a common setting, 200% is the
