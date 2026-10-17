@@ -37,6 +37,7 @@ SNAPSHOT = method_of(wire_request.SessionSnapshotRequest)
 READ = method_of(wire_request.AgentReadRequest)
 AGENT_GET = method_of(wire_request.AgentGetRequest)
 SEND_KEYS = method_of(wire_request.AgentSendKeysRequest)
+PROMPT = method_of(wire_request.AgentPromptRequest)
 
 # The fixture's working agent, and the first idle one.
 WORKING_SESSION = "6ae1e031-ddb4-4684-ab07-68073f7fec47"

@@ -28,6 +28,7 @@ from tests.webfakes import (
     IDLE_SESSION,
     READ,
     SNAPSHOT,
+    WORKING_PANE,
     WORKING_SESSION,
     Reply,
     Rig,
@@ -303,6 +304,20 @@ def test_chat_without_a_transcript_says_so(tmp_path: Path) -> None:
     rig = build_rig(tmp_path)
     body = rig.http.get(f"/agent/{IDLE_SESSION}/chat").text
     assert "No transcript was found" in body
+
+
+def test_chat_for_a_harness_with_no_transcript_offers_the_pane_door(tmp_path: Path) -> None:
+    frame = snapshot_frame()
+    working = next(a for a in agents_of(frame) if a.get("pane_id") == WORKING_PANE)
+    working["agent"] = "cursor"
+    rig = build_rig(tmp_path, {SNAPSHOT: frame, READ: read_frame("")})
+    body = rig.http.get(f"/agent/{WORKING_SESSION}/chat", headers=FRAGMENT).text
+    note = re.search(r'<p class="empty">.*?</p>', body, re.S)
+    assert note is not None, "an empty log says why"
+    assert "keeps no transcript this app can read" in note[0]
+    door = f'href="/agent/{WORKING_SESSION}?tab=pane#agent-view" data-hp-replace>'
+    assert f'<a class="chat__go" {door}Look at the Pane</a>' in note[0]
+    assert "see Pane" not in body, "a link, not a direction"
 
 
 def test_pane_mirror_keeps_colour_as_classes_and_text_escaped(tmp_path: Path) -> None:

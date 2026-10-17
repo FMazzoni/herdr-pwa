@@ -430,6 +430,27 @@ def test_a_multi_select_names_the_pane_as_the_same_door_every_other_state_uses(
     assert f'<a class="banner__go" {door}Look at the Pane</a>' in unread, "the door it matches"
 
 
+def test_an_unverified_prompt_offers_the_pane_door_not_a_direction(tmp_path: Path) -> None:
+    w = idle(tmp_path)
+    response = w.http.post(f"/agent/{S1}/prompt", data={"text": "hello there"}, headers=ORIGIN)
+    assert "Sent, unverified: the pane did not show it." in response.text
+    door = f'href="/agent/{S1}?tab=pane#agent-view" data-hp-replace>'
+    assert f'<a class="banner__go" {door}Look at the Pane</a>' in response.text
+    assert "Pane tab" not in response.text, "a link, not a direction"
+
+
+def test_an_unverified_first_prompt_offers_the_pane_door_on_the_agent_page(
+    tmp_path: Path,
+) -> None:
+    page = idle(tmp_path).http.get(f"/agent/{S1}?first=unverified").text
+    banner = re.search(r'<p class="banner banner--held">.*?</p>', page, re.S)
+    assert banner is not None, "the carried prompt's banner"
+    assert "Your first prompt was sent, but the pane did not show it." in banner[0]
+    door = f'href="/agent/{S1}?tab=pane#agent-view" data-hp-replace>'
+    assert f'<a class="banner__go" {door}Look at the Pane</a>' in banner[0]
+    assert "Read the Pane" not in page, "a link, not a direction"
+
+
 def test_a_question_that_cannot_be_read_says_so_with_a_way_to_the_pane(tmp_path: Path) -> None:
     w = _blocked_on(tmp_path, "")
     text = w.http.get(f"/agent/{S1}/answer").text
