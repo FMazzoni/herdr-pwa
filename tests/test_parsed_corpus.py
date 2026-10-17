@@ -126,6 +126,27 @@ def test_no_screen_reaches_the_grammar_with_its_escapes_in(corpus_root: Path) ->
     assert not raw, sorted(raw)
 
 
+def _padded(text: str) -> str:
+    """*text* as a read that keeps the padding to the pane's width, as tmux's capture does."""
+    rows = text.splitlines()
+    width = max((len(row) for row in rows), default=0)
+    return "\n".join(row.ljust(width) for row in rows)
+
+
+def test_padding_a_read_to_the_pane_width_changes_nothing_it_parses_to(corpus_root: Path) -> None:
+    moved: dict[str, list[str]] = {}
+    for key, path in screens(corpus_root).items():
+        raw = path.read_text(encoding="utf-8", errors="replace")
+        text = raw if not key.endswith(COLOUR_SUFFIX) and ESCAPE not in raw else as_text_read(raw)
+        trimmed = described(BlockedPrompt.parse(text))
+        padded = described(BlockedPrompt.parse(_padded(text)))
+        # The token digests the raw read when nothing was asked, and padding is in the raw read.
+        fields = [f for f in trimmed if f != "token" and trimmed[f] != padded[f]]
+        if fields:
+            moved[key] = fields
+    assert not moved, moved
+
+
 def test_the_walk_reaches_every_kind_of_capture(corpus_root: Path) -> None:
     keys = set(screens(corpus_root))
     for prefix in ("tests/fixtures/capture-", "tests/fixtures/hermes/", "tests/fixtures/rig/"):

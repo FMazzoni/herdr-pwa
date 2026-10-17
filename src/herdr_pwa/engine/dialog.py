@@ -760,7 +760,8 @@ def _prepared(text: str, ansi: str = "") -> _Screen:
     no longer marks any of them, and no colour is carried into it.
     """
     barred = [bool(_EDGE_RE.match(line)) for line in text.splitlines()]
-    lines = [_EDGE_RE.sub(r"\1", line) for line in text.splitlines()]
+    # Padded to the pane's width or not, a row reads the same: a blank row of spaces is no rule.
+    lines = [_EDGE_RE.sub(r"\1", line).rstrip() for line in text.splitlines()]
     if (panel := _panel_screen(lines)) is not None:
         return _Screen(panel, [False] * len(panel), "\n".join(panel), ("",) * len(panel))
     return _Screen(lines, barred, text, _dialog_colour(text, ansi, barred))

@@ -70,6 +70,16 @@ STRIP_SEEN = (
     "foreign/collie/claude--wizard-preview-wrapped-label.txt",
 )
 
+# Screens whose 'asked' the ledger recorded off a read padded to the pane's width, where a row of
+# spaces matched the rule pattern; trimmed, as herdr's text read and the colour read both are, it flips.
+UNPADDED: dict[str, bool] = {
+    "foreign/relay/codex-implement-plan.ansi": True,
+    "foreign/relay/codex-middle-question.ansi": True,
+    "foreign/relay/codex-single-question.ansi": True,
+    "foreign/relay/omp-note-question.ansi": False,
+    "foreign/relay/omp-partial-ask.ansi": False,
+}
+
 # Every deliberate divergence from the ledger, by entry id, with the reason it is better.
 DIVERGENCES: dict[str, str] = {
     **dict.fromkeys(
@@ -136,6 +146,26 @@ DIVERGENCES: dict[str, str] = {
         "this' row. The strip says the question is one step of two, which is what keeps a "
         "tap from claiming the whole set is answered. "
         "test_a_strip_seen_without_rows_is_all_that_leaves_the_ledger holds the rest.",
+    ),
+    **dict.fromkeys(
+        ("foreign/relay/codex-implement-plan.ansi", "foreign/relay/codex-middle-question.ansi"),
+        "codex asks 'Implement this plan?' / 'What should be in the file initially?' right "
+        "above its rows; the ledger said nothing was asked only because a padded blank row "
+        "read as a rule below the question. test_only_asked_leaves_the_ledger holds the rest.",
+    ),
+    "foreign/relay/codex-single-question.ansi": (
+        "codex's question box is up, so the screen does ask; the padded blank row the ledger "
+        "read as a rule hid it. The '?' found is the recap of the two answered questions "
+        "above the box, not 'Please confirm exact file spec now', which has none. "
+        "test_only_asked_leaves_the_ledger holds the rest."
+    ),
+    **dict.fromkeys(
+        ("foreign/relay/omp-note-question.ansi", "foreign/relay/omp-partial-ask.ansi"),
+        "WORSE, and already what the app reads: omp's Ask box is drawn with corners and "
+        "inner rules the grammar does not see as a box, so its question ('Who's going, and "
+        "when?') is outside the one-paragraph window. The ledger found it only because the "
+        "padded blank row above the box read as a rule. test_only_asked_leaves_the_ledger "
+        "holds the rest.",
     ),
     **dict.fromkeys(
         (
@@ -483,3 +513,12 @@ def test_herd_matches_the_ledger_but_for_its_age_wording(herd_id: str, foreign_r
     found, expected = _herd_found(herd_id, foreign_root)
     assert found != expected
     assert found == _reworded(expected)
+
+
+@pytest.mark.parametrize(("capture_id", "asked"), UNPADDED.items())
+def test_only_asked_leaves_the_ledger(capture_id: str, asked: bool, foreign_root: Path) -> None:
+    decision = decide_screen(BlockedPrompt.parse(_decoded(capture_id, foreign_root)))
+    expected = copy.deepcopy({k: v for k, v in _obj(SCREENS[capture_id]).items() if k != "input"})
+    assert _obj(expected["render"])["asked"] is not asked, "the premise: the ledger said otherwise"
+    _obj(expected["render"])["asked"] = asked
+    assert _screen_json(decision) == expected
