@@ -581,3 +581,50 @@ def test_the_chat_and_the_usage_move_when_the_chain_grows(project: Path) -> None
     moved = chat_window(held, ask=Ask(messages=5), tails=tails)
     assert (moved.log, moved.moved) == (second.stem, True)
     assert usage.read(source).last_at == "2026-08-23T01:08:00.000Z"
+
+
+# The named session still writing, in a smaller copy: what this box actually holds
+
+FORK_BOUNDARY = _fixture("fork-compact-boundary-2.1.289.json")
+FORK_CONTINUED = _fixture("fork-continued-2.1.289.json")
+
+
+def _continued(directory: Path, copy: _Copy, writer: str) -> Path:
+    """A compacted copy whose newest record *writer*'s session wrote."""
+    session = copy.session
+    boundary = dict(FORK_BOUNDARY)
+    boundary["sessionId"] = session
+    boundary["forkedFrom"] = {"sessionId": copy.parent, "messageUuid": str(boundary["uuid"])}
+    newest = dict(FORK_CONTINUED)
+    newest["sessionId"] = session
+    newest["session_id"] = writer
+    newest["timestamp"] = copy.last
+    lines = [json.dumps(boundary)]
+    lines += [json.dumps(_record(session, index, "2026-01-01T00:00:00.000Z")) for index in range(3)]
+    lines.append(json.dumps(newest))
+    path = directory / f"{session}.jsonl"
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
+
+
+def test_the_captured_copy_is_a_foreground_compaction_written_by_its_parent() -> None:
+    """The real pair: the copy's newest record carries the PARENT's runtime session id."""
+    assert FORK_BOUNDARY["subtype"] == "compact_boundary"
+    assert "sessionKind" not in FORK_BOUNDARY
+    assert _forked(FORK_BOUNDARY)["sessionId"] == FORK_CONTINUED["session_id"]
+    assert FORK_CONTINUED["sessionId"] == FORK_BOUNDARY["sessionId"]
+
+
+def test_a_smaller_copy_the_named_session_is_still_writing_is_followed(project: Path) -> None:
+    """Measured: 21.3 MB named and silent, 9.9 MB copy written by the same session a day on."""
+    named = _log(project, ROOT, last="2026-08-20T18:12:00.000Z", records=300, pad=4000)
+    copy = _continued(project, _Copy(COPY, ROOT, "2026-08-21T23:15:00.000Z"), ROOT)
+    assert copy.stat().st_size < named.stat().st_size
+    assert locate(ROOT, root=project.parent) == copy
+
+
+def test_a_smaller_copy_another_session_is_writing_is_still_refused(project: Path) -> None:
+    """The abandoned fork the floor exists for: talking, but not as the session herdr named."""
+    named = _log(project, ROOT, last="2026-08-20T18:12:00.000Z", records=300, pad=4000)
+    _continued(project, _Copy(COPY, ROOT, "2026-08-21T23:15:00.000Z"), COPY)
+    assert locate(ROOT, root=project.parent) == named
