@@ -596,6 +596,67 @@ def turn_chat(stage: str) -> list[dict[str, JsonValue]]:
     return records
 
 
+# Three workers dispatched in the background ten minutes ago; one has finished, and the turn's own
+# log has been still for three minutes since, as an orchestrator's is while it waits on them.
+SPAWNED_WORKERS: Final = (
+    ("a1", "Name the prompt group"),
+    ("a2", "Remove the foreign capture corpus, every clone and every reader of it"),
+    ("a3", "Show what spawned agents are doing"),
+)
+
+
+def _launch(n: int, agent: str, description: str, seconds_ago: float) -> list[dict[str, JsonValue]]:
+    """An Agent call started in the background, and the result that names its task id."""
+    args: dict[str, JsonValue] = {
+        "description": description,
+        "subagent_type": "general-purpose",
+        "run_in_background": True,
+        "prompt": "Your ticket.",
+    }
+    result = _result(n, "Async agent launched successfully.", seconds_ago)
+    result["toolUseResult"] = {
+        "isAsync": True,
+        "status": "async_launched",
+        "agentId": agent,
+        "description": description,
+    }
+    return [_call(n, "Agent", args, seconds_ago), result]
+
+
+def _finished(agent: str, description: str, seconds_ago: float) -> dict[str, JsonValue]:
+    """A background agent's notice as the harness delivers it mid-turn: an attachment only."""
+    prompt = (
+        f"<task-notification>\n<task-id>{agent}</task-id>\n<status>completed</status>\n"
+        f'<summary>Agent "{description}" finished</summary>\n</task-notification>'
+    )
+    attachment: dict[str, JsonValue] = {
+        "type": "queued_command",
+        "prompt": prompt,
+        "commandMode": "task-notification",
+        "origin": {"kind": "task-notification"},
+    }
+    record: dict[str, JsonValue] = {"type": "attachment", "uuid": f"sf-{agent}"}
+    record["attachment"] = attachment
+    return _at(record, seconds_ago)
+
+
+def spawned_chat() -> list[dict[str, JsonValue]]:
+    """An orchestrator's turn waiting on the workers it started (``SPAWNED_WORKERS``)."""
+    records = [_at(human_says("Dispatch the three tickets.", uuid="sh"), 600)]
+    for n, (agent, description) in enumerate(SPAWNED_WORKERS, start=1):
+        records.extend(_launch(n, agent, description, 590 - n))
+    first, said = SPAWNED_WORKERS[0]
+    records.append(_finished(first, said, 240))
+    records.append(
+        _at(assistant_says("One is done; waiting on the other two.", uuid="sa"), 180, "sm9")
+    )
+    return records
+
+
+def _spawned_at(rig: Rig) -> None:
+    write_transcript(rig.settings.state_dir.parent / "transcripts", WORKING_SESSION, spawned_chat())
+
+
 def _turn_at(stage: str) -> Prime:
     """Write the turn as the state is built, so its stamps are seconds old when shot."""
 
@@ -1813,6 +1874,14 @@ TURNS: Final = (
         runner(_working_as("working")),
         prime=_turn_at("quiet"),
         title="Chat with a working agent that has written nothing for three minutes",
+    ),
+    State(
+        "chat-working-spawned",
+        f"{AGENT}?tab=chat",
+        "#chat-note",
+        runner(_working_as("working")),
+        prime=_spawned_at,
+        title="Chat while the agent waits on agents it started in the background",
     ),
     State(
         "chat-needs-you",

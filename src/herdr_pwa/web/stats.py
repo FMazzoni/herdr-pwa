@@ -17,6 +17,7 @@ from herdr_pwa.engine import (
     ModelRef,
     ModelSpend,
     SessionUsage,
+    SpawnedAgent,
     harness_of,
 )
 
@@ -144,6 +145,39 @@ def turn_times(usage: SessionUsage, now: float) -> TurnTimes:
     quiet = _seconds_since(usage.last_at, now) if usage.last_at else None
     took = ran - quiet if ran is not None and quiet is not None and ran >= quiet else None
     return TurnTimes(ran=ran, quiet=quiet, took=took)
+
+
+@dataclass(frozen=True, slots=True)
+class SpawnedTime:
+    """A background agent the turn has on its hands, and how long it ran or has been running."""
+
+    description: str
+    running: bool
+    failed: bool = False
+    seconds: float | None = None
+
+
+def _spawned_time(agent: SpawnedAgent, now: float) -> SpawnedTime:
+    since = _seconds_since(agent.started, now)
+    if agent.done:
+        until = _seconds_since(agent.ended, now)
+        since = since - until if since is not None and until is not None else None
+    return SpawnedTime(agent.description, not agent.done, agent.failed, since)
+
+
+def _this_turn(agent: SpawnedAgent, turn_started: str) -> bool:
+    """Still running, or ended since the newest prompt; a launch never seen is not listed."""
+    if not agent.started:
+        return False
+    return not agent.done or (bool(turn_started) and agent.ended >= turn_started)
+
+
+def spawned_times(usage: SessionUsage, now: float) -> tuple[SpawnedTime, ...]:
+    """The tally's background agents still running, then those that ended this turn, each by
+    when it started."""
+    shown = [agent for agent in usage.agents if _this_turn(agent, usage.turn_started)]
+    shown.sort(key=lambda agent: (agent.done, agent.started))
+    return tuple(_spawned_time(agent, now) for agent in shown)
 
 
 @dataclass(frozen=True, slots=True)

@@ -271,6 +271,13 @@ html { -webkit-tap-highlight-color: transparent; }
 /* A motion that lifts the letters needs each one a box of its own to move. */
 .bubble.is-lifting .bubble__glyph { display: inline-block; white-space: pre; transform: translateY(calc(var(--glyph-wave, 0) * var(--working-rise) * -1)); }
 /* The finished turn's receipt: one quiet line under the answer, flush with its text. */
+/* The agents the turn started, under its bubble: one quiet line each, the name ellipsized. */
+.spawned { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); margin: 0; padding: 0 0 0 var(--space-6); border-left: var(--line-1) solid var(--rule); list-style: none; font-size: var(--text-meta); color: var(--ink-3); }
+.spawned__row { display: flex; align-items: baseline; gap: var(--space-3); min-width: 0; white-space: nowrap; }
+.spawned__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--ink-2); }
+.spawned__state, .spawned__time { flex: none; font-variant-numeric: tabular-nums; }
+.spawned__row--running .spawned__state { color: var(--ink-2); }
+.spawned__row--failed .spawned__state { color: var(--blocked); font-weight: 600; }
 .chat__receipt { margin: 0; padding: 0 var(--space-6); color: var(--ink-3); font-size: var(--text-meta); font-variant-numeric: tabular-nums; }
 /* Drawn as the bubble it replaces goes: it settles into place rather than appearing. */
 .chat__receipt.is-folding { animation: receipt-fold 240ms ease-out; }

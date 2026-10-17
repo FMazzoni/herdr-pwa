@@ -17,7 +17,7 @@ from herdr_pwa.engine import (
     is_slash_command,
 )
 from herdr_pwa.web.markdown import MdNode, render_tree
-from herdr_pwa.web.stats import NO_TIMES, TurnTimes
+from herdr_pwa.web.stats import NO_TIMES, SpawnedTime, TurnTimes
 
 _STATE_NOTES = {
     HistoryState.empty: "Nothing has been said yet.",
@@ -134,6 +134,8 @@ class ChatView:
     # is over, how long it worked.
     bubble: "Bubble | None" = None
     receipt: "Receipt | None" = None
+    # Under the bubble: the agents it started in the background, running first, as its pane lists.
+    agents: "tuple[AgentLine, ...]" = ()
     # Why the session the pane reports may not be the agent there; shown above everything.
     doubt: str = ""
     # The log could not be read under a drawing the reader already has, which then stands.
@@ -277,6 +279,7 @@ class Turning:
     stretch: str = ""
     asked: str = ""
     times: TurnTimes = NO_TIMES
+    spawned: tuple[SpawnedTime, ...] = ()
 
 
 # An agent whose status is not known: no bubble, and no receipt without a clock.
@@ -301,6 +304,29 @@ class Bubble:
     quiet_after: int = QUIET_AFTER
     palette: str = WORKING_PALETTE
     motion: str = WORKING_MOTION
+
+
+@dataclass(frozen=True, slots=True)
+class AgentLine:
+    """One background agent under the bubble: what it was asked, where it is, and for how long."""
+
+    description: str
+    state: str
+    time: str = ""
+
+
+def _agent_line(agent: SpawnedTime) -> AgentLine:
+    state = "running" if agent.running else "failed" if agent.failed else "finished"
+    time = elapsed(agent.seconds) if agent.seconds is not None else ""
+    return AgentLine(agent.description or "Agent", state, time)
+
+
+def _waiting_on(spawned: tuple[SpawnedTime, ...]) -> str:
+    """The bubble's words while the turn waits on agents it started; empty when none runs."""
+    running = sum(1 for agent in spawned if agent.running)
+    if not running:
+        return ""
+    return f"Waiting on {running} agent{'' if running == 1 else 's'}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -388,6 +414,12 @@ def _working(items: tuple[ChatTurn | ToolRun, ...], turning: Turning) -> Bubble:
     if call is not None:
         text = doing(call)
         return Bubble("working", text, "Working", f"Working: {text}", turning.stretch, ran, time)
+    # Its own log is still while agents it started work, which is not the turn gone quiet.
+    waiting = _waiting_on(turning.spawned)
+    if waiting:
+        return Bubble(
+            "working", waiting, "Working", f"Working: {waiting}", turning.stretch, ran, time
+        )
     if gone_quiet(times.quiet):
         quiet = int(times.quiet or 0)
         text = f"No activity for {elapsed(quiet // 60 * 60)}"
@@ -458,6 +490,8 @@ def chat_view(
     held = drawn and not turns and page.state is HistoryState.unreadable
     items = fold_tools(turns)
     bubble, receipt = _status(items, turning)
+    # Only while the turn is live: an agent killed with its session never says it ended.
+    agents = tuple(_agent_line(agent) for agent in turning.spawned) if bubble else ()
     return ChatView(
         items,
         note,
@@ -466,6 +500,7 @@ def chat_view(
         more=page.has_more,
         bubble=bubble,
         receipt=receipt,
+        agents=agents,
         doubt=doubt,
         held=held,
         door=not turns and page.state in _READ_ON_PANE,
