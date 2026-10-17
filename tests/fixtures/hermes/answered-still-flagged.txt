@@ -1,0 +1,49 @@
+⏱️ Rate limited. Waiting 4.4s (attempt 3/3)...
+⚠️  API call failed (attempt 3/3): APIConnectionError
+   🔌 Provider: custom  Model: zai-org/GLM-5.3-Flash
+   🌐 Endpoint: https://api.together.xyz/v1
+   📝 Error: Connection error.
+   ⏱️  Elapsed: 7.42s  Context: 2 msgs, ~7,685 tokens
+⚠️  API call failed (attempt 1/3): APIStatusError [HTTP 402]
+   🔌 Provider: custom  Model: zai-org/GLM-5.3-Flash
+   🌐 Endpoint: https://api.together.xyz/v1
+   📝 Error: HTTP 402: Credit limit exceeded, please [add credits](https://api.together.ai/settings/billing). If you've already made a payment, please wait up to 5 minutes f
+or balances to update and try again.
+   📋 Details: {'message': "Credit limit exceeded, please [add credits](https://api.together.ai/settings/billing). If you've already made a payment, please wait up to 5 minu
+tes for balances to update and try again.", 'type': 'credit_limit', 'param': None, 'code': None}
+   ⏱️  Elapsed: 13.56s  Context: 2 msgs, ~7,685 tokens
+⏱️ Rate limited. Waiting 2.3s (attempt 2/3)...
+⚠️  API call failed (attempt 2/3): APIStatusError [HTTP 402]
+   🔌 Provider: custom  Model: zai-org/GLM-5.3-Flash
+   🌐 Endpoint: https://api.together.xyz/v1
+   📝 Error: HTTP 402: Credit limit exceeded, please [add credits](https://api.together.ai/settings/billing). If you've already made a payment, please wait up to 5 minutes f
+or balances to update and try again.
+   📋 Details: {'message': "Credit limit exceeded, please [add credits](https://api.together.ai/settings/billing). If you've already made a payment, please wait up to 5 minu
+tes for balances to update and try again.", 'type': 'credit_limit', 'param': None, 'code': None}
+   ⏱️  Elapsed: 16.10s  Context: 2 msgs, ~7,685 tokens
+⏱️ Rate limited. Waiting 6.0s (attempt 3/3)...
+⚠️  API call failed (attempt 3/3): APIStatusError [HTTP 402]
+   🔌 Provider: custom  Model: zai-org/GLM-5.3-Flash
+   🌐 Endpoint: https://api.together.xyz/v1
+   📝 Error: HTTP 402: Credit limit exceeded, please [add credits](https://api.together.ai/settings/billing). If you've already made a payment, please wait up to 5 minutes f
+or balances to update and try again.
+   📋 Details: {'message': "Credit limit exceeded, please [add credits](https://api.together.ai/settings/billing). If you've already made a payment, please wait up to 5 minu
+tes for balances to update and try again.", 'type': 'credit_limit', 'param': None, 'code': None}
+   ⏱️  Elapsed: 22.24s  Context: 2 msgs, ~7,685 tokens
+❌ Rate limited after 3 retries — HTTP 402: Credit limit exceeded, please [add credits](https://api.together.ai/settings/billing). If you've already made a payment, please w
+ait up to 5 minutes for balances to update and try again.
+   💀 Final error: HTTP 402: Credit limit exceeded, please [add credits](https://api.together.ai/settings/billing). If you've already made a payment, please wait up to 5 min
+utes for balances to update and try again.
+ ─  ⚕ Hermes  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+ API call failed after 3 retries: HTTP 402: Credit limit exceeded, please add credits. If you've already made a payment, please wait up to 5 minutes for balances to update
+ and try again.
+
+ ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+⚙️  /new
+🟡 /new cancelled. Conversation unchanged.
+ ⚕ GLM-5.3-Flash │ 0/1M │ [░░░░░░░░░░] 0% │ 2m │ ⏲ 23s │ ✓ 5s                                                                                 ─ Reply with just the word ok.
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ Explain this error and how to fix it
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

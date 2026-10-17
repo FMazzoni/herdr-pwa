@@ -15,6 +15,7 @@ from herdr_pwa.writes.keys import (
     pad_keys,
 )
 from herdr_pwa.writes.outcome import (
+    ANSWER_BUDGET,
     ANSWER_INTERVAL,
     MOVE_INTERVAL,
     UNREADABLE,
@@ -360,10 +361,24 @@ def test_a_navigation_key_that_moves_on_is_confirmed_on_two_frames() -> None:
     assert clock.slept == [MOVE_INTERVAL]
 
 
-def test_an_unreadable_frame_still_settles_at_once_on_accepted() -> None:
-    # Kept on one read: accepted claims nothing and draws no controls, so a wrong one costs nothing.
+def test_a_dialog_herdr_lags_on_is_confirmed_once_herdr_catches_up() -> None:
+    # Measured on hermes: blocked with no dialog on screen for a few reads, then a stop.
+    seen, _ = _watch(UNREADABLE, UNREADABLE, UNREADABLE, None)
+    assert (seen.outcome, seen.evidence) == (Outcome.CONFIRMED, Evidence.GONE)
+    assert seen.polls == 5, "gone still takes two reads in a row"
+
+
+def test_a_dialog_back_after_an_unreadable_frame_is_not_confirmed() -> None:
     seen, _ = _watch(UNREADABLE, ASKED)
-    assert (seen.outcome, seen.evidence, seen.polls) == (Outcome.ACCEPTED, Evidence.UNREAD, 1)
+    assert (seen.outcome, seen.evidence) == (Outcome.UNCONFIRMED, Evidence.UNMOVED)
+    assert seen.prompt is not None
+    assert seen.prompt.identity == ASKED.identity
+
+
+def test_a_screen_that_stays_unreadable_is_accepted_at_the_budget_and_claims_nothing() -> None:
+    seen, clock = _watch(UNREADABLE)
+    assert (seen.outcome, seen.evidence, seen.prompt) == (Outcome.ACCEPTED, Evidence.UNREAD, None)
+    assert sum(clock.slept) >= ANSWER_BUDGET, "watched to the end of the budget"
 
 
 # The opencode permission dialog: buttons answered sideways, offered from what
