@@ -25,6 +25,7 @@ const PRECACHE = [
   "/static/sendhold.js",
   "/static/stream.js",
   "/static/geometry.js",
+  "/static/interrupt.js",
   "/static/chatend.js",
   "/static/app.js",
   "/static/htmx.min.js",
