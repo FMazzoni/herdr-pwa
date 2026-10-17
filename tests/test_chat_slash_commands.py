@@ -18,7 +18,7 @@ COMPACT = "/compact recall what we have built so far and keep any useful tooling
 COMPACTED = "Compacted (ctrl+o to see full summary)"
 MODEL_SET = "Set model to `Opus 5.5 (default)` and saved as your default for new sessions"
 COPIED = (
-    "Copied to clipboard (1782 characters, 51 lines)\nAlso written to /var/tmp/agent/copy.jsonc"
+    "Copied to clipboard (1782 characters, 51 lines)\nAlso written to /home/user/scratch/copy.jsonc"
 )
 
 

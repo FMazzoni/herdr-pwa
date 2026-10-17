@@ -185,7 +185,7 @@ def test_with_no_prompt_in_the_log_only_running_agents_are_listed() -> None:
 
 # ---- The bubble and the list under it ----
 
-SAID: Final = TranscriptTurn(uuid="s", speaker=Speaker.agent, text="Waiting on the workers.")
+SAID: Final = TranscriptTurn(uuid="s", speaker=Speaker.agent, text="Waiting on the agents.")
 TWO_RUN: Final = (
     SpawnedTime("Seams", running=True, seconds=300),
     SpawnedTime("Corpus", running=True, seconds=290),
