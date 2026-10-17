@@ -1244,7 +1244,8 @@ AGENT_PAGE: Final = (
     State(
         "agent-answer-multiselect",
         f"{AGENT}?tab=pane",
-        "#answer .answer__question",
+        # The note names the Pane as a link to it, not as a direction.
+        "#answer .answer__note .answer__go[data-hp-replace]",
         _blocked_on(CHECKLIST, _untick),
         title="Agent page: a multi-select, nothing ticked",
     ),

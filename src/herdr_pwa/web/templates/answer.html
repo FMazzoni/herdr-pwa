@@ -1,7 +1,6 @@
 {% import "_ui.html" as ui %}
-{% from "_nav.html" import replace %}
+{% from "_agent.html" import pane_door %}
 {% set base = "/agent/" ~ (agent.session|urlencode) %}
-{% set pane_link = base ~ "?tab=pane#agent-view" %}
 {% set asked = decision and (decision.question or decision.options) %}
 {% set blocked = agent.status.value == "blocked" %}
 {% set live = decision.options|selectattr("digit", "in", digits)|list if decision else [] %}
@@ -20,11 +19,11 @@
   {# What the last tap did comes first, where the eye lands after the thumb lifts. #}
   {% include "_notice.html" %}
   {% if sent is defined %}
-  {% call ui.banner(said.kind, said.what, said.why, sent=true, outcome=sent.outcome.value ~ ":" ~ sent.evidence.value) %}{% if said.unsure %}<a class="banner__go" href="{{ pane_link }}" {{ replace() }}>Look at the Pane</a>{% endif %}{% endcall %}
+  {% call ui.banner(said.kind, said.what, said.why, sent=true, outcome=sent.outcome.value ~ ":" ~ sent.evidence.value) %}{% if said.unsure %}{{ pane_door(agent, "Look at the Pane", "banner__go") }}{% endif %}{% endcall %}
   {% endif %}
   {# app.js shows this when a tap got no reply at all: a dropped link, not a refusal. #}
   {% set lost %}data-hp-lost hidden{% endset %}
-  {% call ui.banner("failure", "No reply came back.", "That tap may or may not have reached the agent. Look before tapping again.", role="alert", attrs=lost) %}<a class="banner__go" href="{{ pane_link }}" {{ replace() }}>Look at the Pane</a>{% endcall %}
+  {% call ui.banner("failure", "No reply came back.", "That tap may or may not have reached the agent. Look before tapping again.", role="alert", attrs=lost) %}{{ pane_door(agent, "Look at the Pane", "banner__go") }}{% endcall %}
   {% if arming %}
   {# The confirm sits under the banner that asks for it, where the thumb already is. #}
   {# The way out beside the way through. Keep going sends nothing: it redraws this region.
@@ -55,7 +54,7 @@
   {% endif %}
   {% endif %}
   {% if still %}
-  <p class="answer__note answer__note--line">Rows aren't buttons here. Use the keys below{% if multi %}; Submit is the last row{% endif %}. <a class="answer__go" href="{{ pane_link }}" {{ replace() }}>Pane</a></p>
+  <p class="answer__note answer__note--line">Rows aren't buttons here. Use the keys below{% if multi %}; Submit is the last row{% endif %}. {{ pane_door(agent, "Pane", "answer__go") }}</p>
   {% endif %}
   {% if not buttons %}
   <div class="options">
@@ -81,7 +80,7 @@
   {% endif %}
   {% endif %}
   {% elif blocked and sent is not defined and refused is not defined %}
-  {% call ui.banner("held", "It is waiting, and its question could not be read here.", "The keys below still reach it; look at the screen before you press one.") %}<a class="banner__go" href="{{ pane_link }}" {{ replace() }}>Look at the Pane</a>{% endcall %}
+  {% call ui.banner("held", "It is waiting, and its question could not be read here.", "The keys below still reach it; look at the screen before you press one.") %}{{ pane_door(agent, "Look at the Pane", "banner__go") }}{% endcall %}
   {% endif %}
   <div class="answer__keys">
     {% if not still %}
