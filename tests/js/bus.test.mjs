@@ -28,7 +28,7 @@ function load() {
 test("a swap's phases run in order, whatever order their handlers were added in", () => {
   const { hp, fire } = load();
   const ran = [];
-  for (const name of ["swapped:announce", "swapped:scroll", "swapped:settle", "swapped:restore"]) {
+  for (const name of ["swapped:announce", "swapped:scroll", "swapped:restore"]) {
     hp.bus.on(name, () => ran.push(name));
   }
   for (const name of ["swap:capture", "swap:veto", "swap:admit"]) {
@@ -42,7 +42,6 @@ test("a swap's phases run in order, whatever order their handlers were added in"
     "swap:capture",
     "swapped:restore",
     "swapped:scroll",
-    "swapped:settle",
     "swapped:announce",
   ]);
 });

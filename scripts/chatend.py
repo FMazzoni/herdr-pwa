@@ -1457,6 +1457,63 @@ def locked(driver: Marionette, base: str, tab: Tab, _rig: Rig, home: Path) -> li
     return problems + _kept(f"{tab.name}, healed", was, healed)
 
 
+# The stats sheet in the top bar: open it, and how tall it stands open over its line alone.
+OPEN_SHEET = r"""
+const sheet = document.querySelector("#agent-stats details");
+if (!sheet) return null;
+const line = sheet.querySelector("summary").getBoundingClientRect().height;
+if (!sheet.open) sheet.querySelector("summary").click();
+return { open: sheet.open, grew: sheet.getBoundingClientRect().height - line };
+"""
+# Safari has no scroll anchoring (MDN, overflow-anchor); Firefox's would hide a move under the bar.
+NO_ANCHORING = "document.documentElement.style.overflowAnchor = 'none';"
+# Mark the strip as drawn before, then have it redraw itself as the stream would.
+STATS_STALE = r"""
+document.getElementById("agent-stats").__hpOld = true;
+htmx.trigger(document.getElementById("agent-stats"), "hp:stale");
+"""
+STATS_REDRAWN = r"""
+const strip = document.getElementById("agent-stats");
+const sheet = strip && strip.querySelector("details");
+const busy = document.querySelector(".htmx-request, .htmx-swapping, .htmx-settling");
+return { fresh: !!strip && !strip.__hpOld, busy: !!busy, open: !!(sheet && sheet.open),
+  gap: document.documentElement.scrollHeight - innerHeight - scrollY,
+  pinned: window.hp.chatend.pinned() };
+"""
+
+
+def stats_open(driver: Marionette, base: str, tab: Tab, _rig: Rig, _home: Path) -> list[str]:
+    """A reader at the end with the stats sheet open stays at the end, the sheet still open, when
+    the strip redraws: the sheet sits in the sticky bar, so it is part of the page's height."""
+    driver.send("WebDriver:Navigate", {"url": base + tab.state.path})
+    if not _wait_for(driver, tab.newest):
+        return [f"{tab.name}: never drew its newest line"]
+    driver.script(NO_ANCHORING)
+    sheet = driver.script(OPEN_SHEET)
+    if not isinstance(sheet, dict) or not sheet.get("open") or _num(sheet, "grew") <= DRIFT:
+        return [f"{tab.name}: the stats sheet would not open taller than its line: {sheet}"]
+    # The reader brings the end back into view, which pins it.
+    driver.script("window.scrollTo(0, document.documentElement.scrollHeight);")
+    settle(driver, READER_STILL_MS)
+    was = driver.script(STATS_REDRAWN)
+    if not isinstance(was, dict) or not was.get("pinned") or _num(was, "gap") > DRIFT:
+        return [f"{tab.name}: the reader was not pinned at the end before the redraw: {was}"]
+    driver.script(STATS_STALE)
+    seen = _read_until(driver, STATS_REDRAWN, lambda s: bool(s.get("fresh")) and not s.get("busy"))
+    if not seen:
+        return [f"{tab.name}: the stats strip never redrew"]
+    settle(driver)
+    now = driver.script(STATS_REDRAWN)
+    now = now if isinstance(now, dict) else {}
+    problems = [] if now.get("open") else [f"{tab.name}: the stats sheet closed as it redrew"]
+    if _num(now, "gap") > DRIFT:
+        problems.append(
+            f"{tab.name}: a stats redraw left the pinned reader {_num(now, 'gap'):.0f}px above "
+            f"the end (the open sheet adds {_num(sheet, 'grew'):.0f}px)"
+        )
+    return problems
+
+
 def _tabs() -> tuple[tuple[Tab, Callable[[Marionette, str, Tab, Rig, Path], list[str]]], ...]:
     blocked = runner(lambda: herd(**BLOCKED), long_pane(LINES) + capture(MENU))
     chat = State("chat", f"{AGENT}?tab=chat", "", runner(snapshot_frame), long_chat(TURNS))
@@ -1496,6 +1553,7 @@ def _tabs() -> tuple[tuple[Tab, Callable[[Marionette, str, Tab, Rig, Path], list
         (Tab("pane end", pane, last_line, _print), follow),
         (Tab("pane cold", pane, last_line, _print), cold),
         (Tab("chat cold", chat, last_reply, _say), cold),
+        (Tab("chat stats open", chat, last_reply, _say), stats_open),
         (Tab("pane nudged up", pane, last_line, _scroll_pane), scrolling_up(0.4, 10)),
         (Tab("pane scrolled up", pane, last_line, _scroll_pane), scrolling_up(0.05, 40)),
         (Tab("chat nudged up", chat, last_reply, _reply), scrolling_up(0.4, 10)),
