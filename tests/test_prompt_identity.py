@@ -127,6 +127,14 @@ def test_nothing_read_off_the_screen_has_no_identity_at_all():
 DIALOG = "a dialog is on this screen"
 NO_DIALOG = "no dialog is on this screen"
 
+IDLE = (
+    Path(__file__).resolve().parent / "fixtures" / "capture-idle-claude-prompt" / "detection.txt"
+).read_text(encoding="utf-8")
+# The same capture's last two transcript paragraphs, read without the composer under them.
+SIGNED_OFF = "  Want me to fix the README and the gate, then commit?\n\n\u273b Baked for 53s\n"
+# A shell-style git segment: '?' marks untracked files, as the relay corpus's prompt line draws it.
+DIRTY_STATUS = IDLE.replace("herdr-pwa [main]", "herdr-pwa on main [!?]")
+
 DIALOG_OR_NOT = [
     (
         "numbered rows with the cursor on them and a footer under them",
@@ -167,6 +175,34 @@ DIALOG_OR_NOT = [
     ),
     ("finished transcript prose", "ran the tests\nthey passed\n", NO_DIALOG),
     ("a pane that read back as nothing at all", "", NO_DIALOG),
+    (
+        (
+            "an idle claude pane whose last reply ends in a question, above the composer -- "
+            "a '?' in agent prose, behind the rule the box would have to start after"
+        ),
+        IDLE,
+        NO_DIALOG,
+    ),
+    (
+        (
+            "agent prose that asked a question and then signed off, with no rule anywhere -- "
+            "only the paragraph right above the end may ask"
+        ),
+        SIGNED_OFF,
+        NO_DIALOG,
+    ),
+    pytest.param(
+        "an idle pane whose status line under the composer carries a '?'",
+        DIRTY_STATUS,
+        NO_DIALOG,
+        marks=pytest.mark.xfail(
+            strict=True,
+            reason=(
+                "the status line is the only paragraph after the composer's rule, so the "
+                "'?' in a git segment reads as the box asking, and the idle pane gets an identity"
+            ),
+        ),
+    ),
 ]
 
 

@@ -2,6 +2,7 @@
 
 import re
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Final, Self
@@ -9,7 +10,7 @@ from typing import Final, Self
 from pydantic import BaseModel, ConfigDict, field_validator
 
 from herdr_pwa.engine.model import PaneId, SessionId, as_pane_id, as_session_id, screen_digest
-from herdr_pwa.panetext import plain
+from herdr_pwa.panetext import as_text_read, plain
 
 _EDGE_RE = re.compile(r"^(\s*)[│┃║▏▍▎▊]")
 """A box-edge bar at line start, with the indent that owns it.
@@ -487,7 +488,7 @@ def _stepper(lines: list[str], stop: int) -> Stepper | None:
 
 
 def _asks(lines: list[str], stop: int) -> str:
-    """The question the DIALOG BOX asks, or ``""`` when it asks none."""
+    """The paragraph with a '?' just above *stop*, or ``""``: a dialog asking, not proof of a box."""
     start = _dialog_start(lines, stop)
     # With no rule above there is no box, so only the paragraph right above the run can ask.
     window = _MAX_CHROME_PARAGRAPHS + 1 if start else 1
@@ -688,6 +689,25 @@ class BlockedPrompt(BaseModel):
             handoffs=tuple(hint for hint in hints if hint.hands_off),
         )
         return _located(parsed, screen.colour, _option_lines(parsed, run, buttons_at))
+
+    @classmethod
+    def from_reads(
+        cls,
+        text: str,
+        colour: Callable[[], str | None],
+        *,
+        target: PaneId = _NO_PANE,
+        session: SessionId = _NO_SESSION,
+    ) -> Self:
+        """Parse a text read, and a colour read of the same screen only when colour could change it.
+
+        *colour* takes that colour read, or answers ``None`` when there is none to take.
+        """
+        prompt = cls.parse(text, target=target, session=session)
+        if not prompt.wants_colour or (ansi := colour()) is None:
+            return prompt
+        # Text and colour from this one read: beside an older text read, a cursor may sit on a moved row.
+        return cls.parse(as_text_read(ansi), target=target, session=session, ansi=ansi)
 
 
 def _option_lines(
