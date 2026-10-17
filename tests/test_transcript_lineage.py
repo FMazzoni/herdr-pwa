@@ -19,7 +19,7 @@ from herdr_pwa.engine import (
     chat_window,
     locate,
 )
-from tests.engine_seam import Window, history
+from tests.engine_seam import HEAD_BYTES, HEAD_FINISH, Window, history
 
 FIXTURES = Path(__file__).parent / "fixtures" / "transcript" / "lineage"
 
@@ -480,10 +480,10 @@ def test_a_three_deep_background_lineage_still_resolves(project: Path) -> None:
     assert locate(ROOT, root=project.parent) == last
 
 
-def test_an_edge_pushed_past_the_head_window_is_not_followed(project: Path) -> None:
-    """The constraint that actually binds is that the record ENDS inside 64 KiB."""
+def test_an_edge_that_starts_past_the_head_window_is_not_followed(project: Path) -> None:
+    """Only the record the 64 KiB window cuts through is finished; one past it is never read."""
     named = _log(project, ROOT, last="2026-08-20T18:12:00.000Z")
-    _handoff(
+    copy = _handoff(
         project,
         COPY,
         parent=ROOT,
@@ -491,6 +491,7 @@ def test_an_edge_pushed_past_the_head_window_is_not_followed(project: Path) -> N
         records=9,
         lead=60,
     )
+    assert copy.read_bytes().index(b'"compact_boundary"') > HEAD_BYTES
     assert locate(ROOT, root=project.parent) == named
 
 
@@ -628,3 +629,83 @@ def test_a_smaller_copy_another_session_is_writing_is_still_refused(project: Pat
     named = _log(project, ROOT, last="2026-08-20T18:12:00.000Z", records=300, pad=4000)
     _continued(project, _Copy(COPY, ROOT, "2026-08-21T23:15:00.000Z"), COPY)
     assert locate(ROOT, root=project.parent) == named
+
+
+# A stamp on the record the head window cuts through: the one real background handoff here
+
+BG_BOUNDARY_283 = _fixture("bg-compact-boundary-2.1.283.json")
+BG_SUMMARY_283 = _fixture("bg-compact-summary-2.1.283.json")
+
+# Measured on the real 2.1.283 handoff: the summary starts at byte 55572 and is 23383 bytes long.
+SUMMARY_AT = 55_572
+SUMMARY_BYTES = 23_383
+
+
+def _summarised(copy: _Copy, *, summary: int = SUMMARY_BYTES) -> bytes:
+    """A 2.1.283 background handoff laid out as the real one was, as the bytes of its log."""
+    session = copy.session
+    boundary = dict(BG_BOUNDARY_283)
+    boundary["sessionId"] = session
+    stamped = dict(BG_SUMMARY_283)
+    stamped["sessionId"] = session
+    stamped["session_id"] = copy.parent
+    stamped["message"] = {"role": "user", "content": ""}
+    stamped["message"] = {"role": "user", "content": "x" * (summary - len(json.dumps(stamped)) - 1)}
+    title = json.dumps({"sessionId": session, "type": "ai-title"})
+    snapshot: dict[str, JsonValue] = {"type": "file-history-snapshot", "snapshot": ""}
+    lead = SUMMARY_AT - len(title) - len(json.dumps(boundary)) - len(json.dumps(snapshot)) - 3
+    snapshot["snapshot"] = "s" * lead
+    preserved = dict(BG_PRESERVED)
+    preserved["sessionId"] = session
+    preserved["session_id"] = copy.parent
+    lines = [title, json.dumps(snapshot), json.dumps(boundary), json.dumps(stamped)]
+    lines.append(json.dumps(preserved))
+    lines += [json.dumps(_record(session, index, "2026-01-01T00:00:00.000Z")) for index in range(3)]
+    lines.append(json.dumps(_record(session, 999, copy.last)))
+    return ("\n".join(lines) + "\n").encode()
+
+
+def _named_and_copy(project: Path, *, summary: int = SUMMARY_BYTES) -> tuple[Path, bytes]:
+    """ROOT, larger than the handoff as the real parent was, and the handoff's bytes."""
+    # Many small records, so the named log's newest timestamp stays inside its tail window.
+    named = _log(project, ROOT, last="2026-08-20T18:12:00.000Z", records=400 + summary // 150)
+    body = _summarised(_Copy(COPY, ROOT, "2026-08-23T01:08:00.000Z"), summary=summary)
+    assert len(body) < named.stat().st_size
+    return named, body
+
+
+def test_the_captured_summary_is_the_stamp_and_its_boundary_the_compaction() -> None:
+    """The real pair: the boundary declares the kind, the summary after it names the parent."""
+    assert BG_BOUNDARY_283["subtype"] == "compact_boundary"
+    assert BG_BOUNDARY_283["sessionKind"] == "bg"
+    assert BG_SUMMARY_283["isCompactSummary"] is True
+    assert BG_SUMMARY_283["sessionKind"] == "bg"
+    assert BG_SUMMARY_283["session_id"] == BG_PRESERVED["session_id"]
+    assert BG_SUMMARY_283["parentUuid"] == BG_BOUNDARY_283["uuid"]
+
+
+def test_a_stamp_on_the_record_the_head_window_cuts_through_is_followed(project: Path) -> None:
+    """The real handoff: boundary inside 64 KiB, the stamped summary ending 13 KB past it."""
+    _, body = _named_and_copy(project)
+    start = body.index(b'"isCompactSummary"')
+    assert start < HEAD_BYTES < body.index(b"\n", start)
+    copy = project / f"{COPY}.jsonl"
+    copy.write_bytes(body)
+    assert locate(ROOT, root=project.parent) == copy
+
+
+def test_a_cut_record_longer_than_the_finish_is_not_followed(project: Path) -> None:
+    """The extra read is bounded: a record that runs past it is left unread, as before."""
+    named, body = _named_and_copy(project, summary=HEAD_FINISH + SUMMARY_BYTES)
+    (project / f"{COPY}.jsonl").write_bytes(body)
+    assert locate(ROOT, root=project.parent) == named
+
+
+def test_a_cut_record_still_being_written_is_read_again_once_it_ends(project: Path) -> None:
+    """The head is only fixed once the cut record ends, so the cache may not settle sooner."""
+    named, body = _named_and_copy(project)
+    copy = project / f"{COPY}.jsonl"
+    copy.write_bytes(body[: HEAD_BYTES + 4096])
+    assert locate(ROOT, root=project.parent) == named
+    copy.write_bytes(body)
+    assert locate(ROOT, root=project.parent) == copy

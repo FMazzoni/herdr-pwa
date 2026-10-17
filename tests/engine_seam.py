@@ -52,6 +52,8 @@ from herdr_pwa.engine.transport import (
 )
 
 # Private to their modules; a test pins each directly because no public call shows it.
+HEAD_BYTES = transcript._HEAD_BYTES  # pyright: ignore[reportPrivateUsage]
+HEAD_FINISH = transcript._HEAD_FINISH  # pyright: ignore[reportPrivateUsage]
 copied_from = transcript._copied_from  # pyright: ignore[reportPrivateUsage]
 head_records = transcript._head_records  # pyright: ignore[reportPrivateUsage]
 head_window = transcript._head_window  # pyright: ignore[reportPrivateUsage]
@@ -59,6 +61,8 @@ head_window = transcript._head_window  # pyright: ignore[reportPrivateUsage]
 __all__ = [
     "BACKOFF_CAP",
     "EVENT_SUBSCRIBE",
+    "HEAD_BYTES",
+    "HEAD_FINISH",
     "HERMES_DB",
     "HIDDEN",
     "MAX_FRAME_BYTES",
