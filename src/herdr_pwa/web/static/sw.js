@@ -30,6 +30,7 @@ const PRECACHE = [
   "/static/chatend.js",
   "/static/voice.js",
   "/static/status.js",
+  "/static/bubble.js",
   "/static/app.js",
   "/static/htmx.min.js",
   "/static/icon.svg",

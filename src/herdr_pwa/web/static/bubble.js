@@ -1,0 +1,225 @@
+/* herdr-pwa: the status bubble. A crest crosses its words while the agent works, its timer
+ * ticks between redraws, and it says when the log has gone quiet. */
+(function (hp) {
+  "use strict";
+
+  /* ---- The status bubble: a crest crosses its words while the agent works; its timer ticks ----
+   * The server draws the bubble's state, words and clocks on every redraw; between redraws this
+   * carries the timer on, says "No activity" once the log has been still too long (a log that
+   * does not move redraws nothing), and runs at most one frame loop, only while the bubble is
+   * working, on screen, in a visible page and allowed to move. Under Reduce Motion, or a motion
+   * style that is still, the words stand still and the timer still ticks. VoiceOver is told only
+   * when the state changes: working, quiet, needs you, done. */
+  var stillness = window.matchMedia("(prefers-reduced-motion: reduce)");
+  var bubble = {
+    node: null, stretch: "", start: 0, drawnAt: 0, ran: null, quiet: null, after: NaN,
+    motion: null, glyphs: [], frame: 0, tick: 0, seen: false, observer: null,
+  };
+  // The state last told to VoiceOver, so a redraw of the same state says nothing.
+  var bubbleState = null;
+
+  // A number the server wrote into an attribute, or null where it wrote none.
+  function attrNumber(raw) {
+    return raw === null || raw === "" ? null : Number(raw);
+  }
+
+  function motionOf(node) {
+    var name = node.getAttribute("data-working-motion") || "";
+    return Object.prototype.hasOwnProperty.call(hp.logic.MOTIONS, name) ? hp.logic.MOTIONS[name] : null;
+  }
+
+  // The words as one span per letter, which the crest colours one by one; VoiceOver skips them.
+  function layGlyphs(node, motion) {
+    var words = node.querySelector(".bubble__text");
+    if (!words) {
+      return [];
+    }
+    var glyphs = Array.from(words.textContent).map(function (letter) {
+      var glyph = document.createElement("span");
+      glyph.className = "bubble__glyph";
+      glyph.textContent = letter;
+      return glyph;
+    });
+    words.replaceChildren.apply(words, glyphs);
+    node.classList.toggle("is-lifting", motion.rise > 0);
+    node.style.setProperty("--working-rise", motion.rise + "em");
+    return glyphs;
+  }
+
+  function drawCrest(now) {
+    var b = bubble;
+    var count = b.glyphs.length;
+    var phase = ((now - b.start) % b.motion.period) / b.motion.period;
+    b.glyphs.forEach(function (glyph, i) {
+      var middle = i + 0.5;
+      var side = hp.logic.glow(middle, count, phase, b.motion.reach);
+      glyph.style.setProperty("--glyph-wave", hp.logic.wave(middle, count, phase, b.motion.reach).toFixed(3));
+      // Three stops as two blends: the first two, then that and the third.
+      glyph.style.setProperty("--glyph-near", Math.min(1, side * 2).toFixed(3));
+      glyph.style.setProperty("--glyph-far", Math.max(0, side * 2 - 1).toFixed(3));
+    });
+  }
+
+  function runCrest() {
+    var b = bubble;
+    var go = b.glyphs.length > 0 && b.seen && !document.hidden;
+    if (go && !b.frame) {
+      b.frame = window.requestAnimationFrame(function (now) {
+        b.frame = 0;
+        if (!b.node || !b.node.isConnected) {
+          stopBubble();
+          return;
+        }
+        drawCrest(now);
+        runCrest();
+      });
+    } else if (!go && b.frame) {
+      window.cancelAnimationFrame(b.frame);
+      b.frame = 0;
+    }
+  }
+
+  function stopCrest() {
+    var b = bubble;
+    if (b.frame) {
+      window.cancelAnimationFrame(b.frame);
+      b.frame = 0;
+    }
+    if (b.observer) {
+      b.observer.disconnect();
+      b.observer = null;
+    }
+    var words = b.node ? b.node.querySelector(".bubble__text") : null;
+    if (words && b.glyphs.length) {
+      // The letters' own text, back as one run of words.
+      var text = words.textContent;
+      words.textContent = text;
+    }
+    b.glyphs = [];
+  }
+
+  function stopBubble() {
+    stopCrest();
+    if (bubble.tick) {
+      window.clearTimeout(bubble.tick);
+      bubble.tick = 0;
+    }
+    bubble.node = null;
+  }
+
+  // The bubble's own words, and VoiceOver's, once this page has seen the log stay still too long.
+  function showQuiet(node, seconds) {
+    var words = node.querySelector(".bubble__text");
+    var described = node.querySelector(".sr-only");
+    if (words) {
+      words.textContent = hp.logic.quietFor(seconds);
+    }
+    if (described) {
+      described.textContent = "No recent activity";
+    }
+  }
+
+  function goQuiet(node, seconds) {
+    stopCrest();
+    node.classList.remove("bubble--working");
+    node.classList.add("bubble--quiet");
+    node.setAttribute("data-hp-bubble", "quiet");
+    node.setAttribute("data-hp-said", "No recent activity");
+    showQuiet(node, seconds);
+    tellBubble();
+  }
+
+  // Once a second, on the second: the timer, and whether the turn has gone quiet.
+  function tickBubble() {
+    var b = bubble;
+    b.tick = 0;
+    if (!b.node || !b.node.isConnected) {
+      stopBubble();
+      return;
+    }
+    var since = window.performance.now() - b.drawnAt;
+    var time = b.node.querySelector(".bubble__time");
+    if (time && b.ran !== null) {
+      time.textContent = hp.logic.elapsed(b.ran + since / 1000);
+    }
+    var state = b.node.getAttribute("data-hp-bubble");
+    if (b.quiet !== null && state === "working" && hp.logic.goneQuiet(b.quiet, since, b.after)) {
+      goQuiet(b.node, b.quiet + since / 1000);
+    } else if (b.quiet !== null && state === "quiet") {
+      showQuiet(b.node, b.quiet + since / 1000);
+    }
+    if (!document.hidden) {
+      b.tick = window.setTimeout(tickBubble, 1000 - (since % 1000));
+    }
+  }
+
+  /* Says the bubble's state when it is not the one last said: the first drawing is the page
+   * opening, not news. A finished turn's receipt settles in where the bubble was. */
+  function tellBubble() {
+    var shown = document.querySelector("#chat-note [data-hp-bubble]");
+    var state = shown ? shown.getAttribute("data-hp-bubble") : "";
+    if (bubbleState !== null && state !== bubbleState) {
+      if (shown) {
+        hp.voice.say(shown.getAttribute("data-hp-said") || "");
+      }
+      if (state === "done" && bubbleState !== "") {
+        shown.classList.add("is-folding");
+      }
+    }
+    bubbleState = state;
+  }
+
+  function startBubble() {
+    var node = document.querySelector("#chat-note .bubble[data-hp-bubble]");
+    if (node === bubble.node) {
+      return;
+    }
+    stopBubble();
+    if (!node) {
+      return;
+    }
+    var b = bubble;
+    var stretch = node.getAttribute("data-hp-stretch") || "";
+    b.drawnAt = window.performance.now();
+    // A redraw of the same stretch carries the crest on from where it was.
+    if (stretch !== b.stretch) {
+      b.stretch = stretch;
+      b.start = b.drawnAt;
+    }
+    b.node = node;
+    b.ran = attrNumber(node.getAttribute("data-hp-ran"));
+    b.quiet = attrNumber(node.getAttribute("data-hp-quiet"));
+    b.after = attrNumber(node.getAttribute("data-hp-quiet-after"));
+    b.motion = motionOf(node);
+    if (node.getAttribute("data-hp-bubble") === "working" && b.motion && !stillness.matches) {
+      b.glyphs = layGlyphs(node, b.motion);
+      drawCrest(b.drawnAt);
+      b.observer = new IntersectionObserver(function (entries) {
+        b.seen = entries[entries.length - 1].isIntersecting;
+        runCrest();
+      });
+      b.observer.observe(node);
+    }
+    tickBubble();
+  }
+
+  function wakeBubble() {
+    runCrest();
+    if (bubble.node && !bubble.tick && !document.hidden) {
+      tickBubble();
+    }
+  }
+
+  function showBubble() {
+    tellBubble();
+    startBubble();
+  }
+  hp.bus.on("ready:announce", showBubble);
+  hp.bus.on("swapped:announce", showBubble);
+  document.addEventListener("visibilitychange", wakeBubble);
+  window.addEventListener("pageshow", wakeBubble);
+  stillness.addEventListener("change", function () {
+    stopBubble();
+    startBubble();
+  });
+})(window.hp);
