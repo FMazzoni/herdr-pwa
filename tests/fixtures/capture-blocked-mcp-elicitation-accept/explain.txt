@@ -1,0 +1,5 @@
+agent: claude
+state: blocked
+manifest: remote:/home/user/.local/state/herdr/agent-detection/remote/claude.toml 2026.10.11.1
+rule: mcp_elicitation_prompt (region=whole_recent priority=980)
+evidence: "\n ▐▛███▛█   Claude Code v2.1.302\n▝▜██████▀  Haiku 5.5 · Claude API\n ▝▝   ▝▝   /home/user/scratch/elicit-proj\n\n..."

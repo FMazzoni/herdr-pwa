@@ -1,0 +1,25 @@
+
+
+
+
+
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  MCP server “elicit-probe” requests your input
+
+  Fill in the release details
+
+    * Release name: not set
+        Short name
+
+  ❯ * Channel: ▾
+        ❯ ◯ stable
+          ◯ beta
+          ◯ nightly
+
+      Replica count: not set
+
+      Notify team: not set
+
+    Accept    Decline
+
+  Esc to cancel · ↑/↓ to navigate · Backspace to unset · Space to select

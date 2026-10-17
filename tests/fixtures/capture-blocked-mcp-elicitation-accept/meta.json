@@ -1,0 +1,14 @@
+{
+  "name": "blocked-mcp-elicitation-accept",
+  "target": "w2:p27",
+  "captured_at": "2026-10-17T01:49:35-04:00",
+  "captured_by": "an agent, in the hp-test session, against a throwaway MCP server via --mcp-config",
+  "herdr_version": "0.9.0",
+  "protocol": 22,
+  "detection_manifest": {
+    "id": "claude",
+    "version": "2026.10.11.1"
+  },
+  "agent_status": "blocked",
+  "note": "The same dialog after Space (field ticked) and Down: the cursor now sits on the Accept/Decline row and the footer drops Space. Enter here submitted accept with confirm=true (verified on the server's side)."
+}

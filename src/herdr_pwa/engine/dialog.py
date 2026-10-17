@@ -487,9 +487,29 @@ def _stepper(lines: list[str], stop: int) -> Stepper | None:
     return None
 
 
+_REQUEST_TITLE_RE = re.compile(r"(?i)^MCP server [\"“].+[\"”] requests your input$")
+"""claude's title over an MCP server's request for input: the same line herdr's
+``mcp_elicitation_prompt`` rule calls blocked on."""
+
+
+def _titled_message(paragraphs: list[str]) -> str:
+    """The message under a request title, which is what the form asks, or ``""``."""
+    for at, paragraph in enumerate(paragraphs):
+        title, *rest = paragraph.split("\n")
+        if not _REQUEST_TITLE_RE.match(title):
+            continue
+        # Fields below it may carry a "?" of their own; the server's message is the question.
+        if rest:
+            return "\n".join(rest)
+        return paragraphs[at + 1] if at + 1 < len(paragraphs) else ""
+    return ""
+
+
 def _asks(lines: list[str], stop: int) -> str:
-    """The paragraph with a '?' just above *stop*, or ``""``: a dialog asking, not proof of a box."""
+    """A request title's message, else a '?' paragraph above *stop*: a dialog asking, not a box."""
     start = _dialog_start(lines, stop)
+    if start and (message := _titled_message(_askable(lines, start, stop))):
+        return message
     # With no rule above there is no box, so only the paragraph right above the run can ask.
     window = _MAX_CHROME_PARAGRAPHS + 1 if start else 1
     for paragraph in reversed(_askable(lines, start, stop)[-window:]):
