@@ -1,6 +1,7 @@
 """Drive headless Firefox over the real app at phone widths and hold its geometry to account."""
 
 import argparse
+import gzip
 import json
 import logging
 import os
@@ -16,7 +17,7 @@ from queue import Empty, Queue
 
 import uvicorn
 from pydantic import JsonValue, TypeAdapter
-from starlette.types import ASGIApp, Receive, Scope, Send
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -368,6 +369,63 @@ return { page: page, scrollers: scrollers, spills: spills, taps: taps, edges: ed
 """
 
 
+# The rig's own paths, answered by the switch and never seen by the app.
+RIG_PREFIX = "/__rig/"
+COLLECTOR_PATH = RIG_PREFIX + "page-errors.js"
+REPORT_PATH = RIG_PREFIX + "page-error"
+# The first thing in every whole page's head, so it runs before any script the app sends.
+COLLECTOR_TAG = f'<script src="{COLLECTOR_PATH}"></script>'.encode()
+# A browser reports an uncaught throw and the page carries on, so nothing else would notice it.
+# Posted synchronously: once the handler returns the rig has it, so a throw just before a
+# read-back or a navigation is never lost in flight, and the read-back needs no wait.
+COLLECTOR = r"""(function () {
+  "use strict";
+  function report(kind, message, source) {
+    try {
+      var post = new XMLHttpRequest();
+      post.open("POST", "REPORT_PATH", false);
+      post.setRequestHeader("Content-Type", "application/json");
+      post.send(JSON.stringify({ kind: kind, message: String(message), source: String(source),
+        page: location.href }));
+    } catch (e) {}
+  }
+  window.addEventListener("error", function (event) {
+    report("error", event.message, (event.filename || "?") + ":" + event.lineno + ":" + event.colno);
+  });
+  window.addEventListener("unhandledrejection", function (event) {
+    var reason = event.reason;
+    var said = reason instanceof Error ? reason.name + ": " + reason.message : String(reason);
+    var stack = reason && reason.stack ? String(reason.stack).split("\n")[0] : "?";
+    report("unhandledrejection", said, stack);
+  });
+})();
+""".replace("REPORT_PATH", REPORT_PATH)
+_REPORT = TypeAdapter(dict[str, str])
+
+
+def _header(message: Message, name: bytes) -> str:
+    headers: list[tuple[bytes, bytes]] = message.get("headers", [])
+    return next((v.decode("latin-1") for k, v in headers if k.lower() == name), "")
+
+
+def _with_collector(start: Message, body: bytes) -> tuple[Message, bytes]:
+    """A whole page with the collector first in its head; anything else exactly as sent."""
+    gzipped = _header(start, b"content-encoding") == "gzip"
+    plain = gzip.decompress(body) if gzipped else body
+    head = plain.find(b"<head>")
+    if not plain[:15].lower().startswith(b"<!doctype html") or head < 0:
+        return start, body
+    at = head + len(b"<head>")
+    page = plain[:at] + COLLECTOR_TAG + plain[at:]
+    kept: list[tuple[bytes, bytes]] = [
+        (k, v)
+        for k, v in start.get("headers", [])
+        if k.lower() not in (b"content-length", b"content-encoding")
+    ]
+    headers = [*kept, (b"content-length", str(len(page)).encode())]
+    return {**start, "headers": headers}, page
+
+
 class Switch:
     """An ASGI app that forwards to whichever state's app is current."""
 
@@ -377,17 +435,58 @@ class Switch:
         self.held: list[Hold] = []
         # Writes still being answered; a read's stream never ends, so only writes are counted.
         self.writing = 0
+        # Uncaught page errors the collector reported, until the next read-back.
+        self.errors: list[dict[str, str]] = []
+        self._errors_lock = threading.Lock()
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         """Forward one request."""
         if self.app is None:
             raise RuntimeError("no state is being served")
+        if scope["type"] == "http" and str(scope["path"]).startswith(RIG_PREFIX):
+            await self._rig(str(scope["path"]), receive, send)
+            return
         write = scope["type"] == "http" and scope["method"] != "GET"
         self.writing += write
         try:
-            await self.app(scope, receive, send)
+            await self.app(scope, receive, _collecting(send) if scope["type"] == "http" else send)
         finally:
             self.writing -= write
+
+    async def _rig(self, path: str, receive: Receive, send: Send) -> None:
+        if path == COLLECTOR_PATH:
+            body = COLLECTOR.encode()
+            kind = b"text/javascript; charset=utf-8"
+            headers = [(b"content-type", kind), (b"content-length", str(len(body)).encode())]
+            await send({"type": "http.response.start", "status": 200, "headers": headers})
+            await send({"type": "http.response.body", "body": body})
+            return
+        raw = b""
+        more = True
+        while more:
+            message = await receive()
+            raw += bytes(message.get("body", b""))
+            more = bool(message.get("more_body", False))
+        found = path == REPORT_PATH
+        if found:
+            with self._errors_lock:
+                self.errors.append(_REPORT.validate_json(raw))
+        await send({"type": "http.response.start", "status": 204 if found else 404, "headers": []})
+        await send({"type": "http.response.body", "body": b""})
+
+    def drain(self) -> list[str]:
+        """Every page error reported since the last read-back; one line per distinct throw."""
+        with self._errors_lock:
+            errors, self.errors = self.errors, []
+        pages: dict[tuple[str, str, str], list[str]] = {}
+        for e in errors:
+            thrown = (e.get("kind", "error"), e.get("message", "?"), e.get("source", "?"))
+            pages.setdefault(thrown, []).append(e.get("page", "?"))
+        return [
+            f"uncaught {kind}: {message} at {source}, on {seen[0]}"
+            + (f" and {len(seen) - 1} more page loads" if len(seen) > 1 else "")
+            for (kind, message, source), seen in pages.items()
+        ]
 
     def mount(self, app: ASGIApp) -> None:
         """Serve ``app`` from the next request on."""
@@ -412,6 +511,31 @@ class Switch:
                 "a write was still out when the next state mounted, so its tap may be refused"
             )
         return problems
+
+
+def _collecting(send: Send) -> Send:
+    """``send``, holding back an HTML response until it is whole so a page can get the collector."""
+    start: Message | None = None
+    body = b""
+
+    async def sending(message: Message) -> None:
+        nonlocal start, body
+        if message["type"] == "http.response.start" and _header(
+            message, b"content-type"
+        ).startswith("text/html"):
+            start = message
+            return
+        if start is None or message["type"] != "http.response.body":
+            await send(message)
+            return
+        body += bytes(message.get("body", b""))
+        if message.get("more_body", False):
+            return
+        head, page = _with_collector(start, body)
+        await send(head)
+        await send({"type": "http.response.body", "body": page})
+
+    return sending
 
 
 @contextmanager
@@ -793,6 +917,7 @@ def _do(task: Task, driver: Marionette, base: str, switch: Switch, scratch: Path
                 run_state(driver, state, base, size, tally)
             except BrowserError as exc:
                 tally.problems.append(f"{size.label(state.name)}: the browser failed: {exc}")
+            tally.problems += [f"{size.label(state.name)}: {e}" for e in switch.drain()]
         driver.send("WebDriver:CloseWindow", {})
         driver.send("WebDriver:SwitchToWindow", {"handle": driver.handles()[0]})
         return tally
@@ -802,6 +927,7 @@ def _do(task: Task, driver: Marionette, base: str, switch: Switch, scratch: Path
         tally.problems += chatend.run(driver, base, switch.mount, scratch, only)
     else:
         tally.problems += WALKS[module].run(driver, base, switch.mount, scratch)
+    tally.problems += [f"{_label(task)}: {e}" for e in switch.drain()]
     return tally
 
 

@@ -35,7 +35,8 @@
     var height = bar.offsetHeight;
     // A pinned reader stays at the end as the keyboard opens or the dock grows; a pan of the band
     // is the reader's own scroll (or nothing), so it never moves the page.
-    var wasEnd = (band !== dockedBand || height !== dockedH) && hp.chatend.pinned();
+    // A frame can land before chatend.js has run, when no reader has been put anywhere yet.
+    var wasEnd = (band !== dockedBand || height !== dockedH) && !!hp.chatend && hp.chatend.pinned();
     dockedBand = band;
     if (height !== dockedH) {
       root.style.setProperty("--dock-h", height + "px");

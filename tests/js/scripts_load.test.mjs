@@ -43,7 +43,13 @@ function page() {
       get: (target, key) => (key in target ? target[key] : any),
     });
   const document = own({ addEventListener: listen, hidden: false });
-  const window = own({ addEventListener: listen, document });
+  // Frames are kept, not run, so a test can run them where a browser could: between two scripts.
+  const frames = [];
+  const window = own({
+    addEventListener: listen,
+    document,
+    requestAnimationFrame: (fn) => frames.push(fn),
+  });
   window.window = window;
   // The global scope: the page's own names, the browser's as stand-ins, the language's for real,
   // and nothing else, so a name no script defines is a ReferenceError as it is on the phone.
@@ -64,7 +70,7 @@ function page() {
       return globalThis[key];
     },
   });
-  return { context: createContext(global), listeners, window, any };
+  return { context: createContext(global), listeners, window, any, frames };
 }
 
 test("the script list names files that exist, hp.js first and app.js last", () => {
@@ -101,4 +107,28 @@ test("every script loads, draws and swaps without naming what no script defines"
     reported.filter((line) => line.includes("ReferenceError")),
     [],
   );
+});
+
+// What a browser may do while the next deferred script is still on its way.
+const BETWEEN = ["resize", "focusin", "focusout"];
+
+test("an event or a frame between two scripts never reaches into a script not run yet", () => {
+  const { context, listeners, any, frames } = page();
+  const reported = [];
+  for (const name of SCRIPTS) {
+    runInContext(readFileSync(new URL(name, STATIC), "utf8"), context, { filename: name });
+    for (const event of BETWEEN) {
+      for (const fn of listeners[event] || []) {
+        fn({ target: any });
+      }
+    }
+    for (const fn of frames.splice(0)) {
+      try {
+        fn(0);
+      } catch (err) {
+        reported.push(`a frame after ${name}: ${err}`);
+      }
+    }
+  }
+  assert.deepEqual(reported, []);
 });
