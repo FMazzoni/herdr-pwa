@@ -1,7 +1,7 @@
 """Writes that shape the herd: starting an agent, and making, renaming or closing a workspace."""
 
 from typing import Annotated
-from urllib.parse import quote, urlencode
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, Response
@@ -18,6 +18,7 @@ from herdr_pwa.web.writing import (
     form,
     opened,
     ticked,
+    with_first,
 )
 from herdr_pwa.writes.lifecycle import (
     AgentStarted,
@@ -61,8 +62,7 @@ def _new_context(web: WebState, snapshot: Snapshot, values: dict[str, str]) -> d
 def _started(request: Request, result: AgentStarted) -> Response:
     # A late-identity harness has no session yet, so its page is the door at its address.
     where = agent_url(result.session) if result.session else f"/starting/{quote(result.pane)}"
-    code = first_code(result.first)
-    return opened(request, f"{where}?{urlencode({'first': code})}" if code else where)
+    return opened(request, with_first(where, first_code(result.first)))
 
 
 def _workspace_back(workspace_id: str) -> str:

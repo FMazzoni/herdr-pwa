@@ -4,7 +4,7 @@ import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Annotated, Final, Self
-from urllib.parse import parse_qs, quote
+from urllib.parse import parse_qs, quote, urlencode
 
 from fastapi import Body, Depends, Request
 from fastapi.responses import RedirectResponse, Response
@@ -142,6 +142,12 @@ def first_code(first: PromptSent | Refused | None) -> str:
     return FIRST_SENT if first.verified else FIRST_UNVERIFIED
 
 
+def with_first(where: str, code: str) -> str:
+    """``where`` carrying ``?first=code`` when the code is one this app writes, else bare."""
+    # Only a code first_note knows is carried, so no text from a URL is ever echoed into another.
+    return f"{where}?{urlencode({'first': code})}" if first_note(code) else where
+
+
 @dataclass(frozen=True, slots=True)
 class FirstNote:
     """The banner the opened page shows about the first prompt the create carried."""
@@ -153,16 +159,21 @@ class FirstNote:
     door: bool = False
 
 
-def first_note(code: str) -> FirstNote | None:
-    """What to say about a carried first prompt; an unknown code says nothing."""
+def first_note(code: str, *, pane_tab: bool = True) -> FirstNote | None:
+    """What to say about a carried first prompt; an unknown code says nothing.
+
+    *pane_tab* says the page has a Pane tab to offer; the starting page has none yet.
+    """
     if code == FIRST_SENT:
         return FirstNote("sent", "Started, and your first prompt is on the pane.")
     if code == FIRST_UNVERIFIED:
         return FirstNote(
             "held",
             "Started. Your first prompt was sent, but the pane did not show it.",
-            "Look before sending it again.",
-            door=True,
+            "Look before sending it again."
+            if pane_tab
+            else "Its Pane opens on the agent's page once it is up; look there before sending it again.",
+            door=pane_tab,
         )
     refusal = next((r for r in Refusal if r.value == code), None)
     if refusal is None:
