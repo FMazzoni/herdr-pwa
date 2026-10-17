@@ -468,13 +468,19 @@ def failed_notice_chat() -> list[dict[str, JsonValue]]:
 def report_chat() -> list[dict[str, JsonValue]]:
     """A prompt and a long hand-back report a subagent sent in answer, a bulleted list in it."""
     reports = notices_of("peer", report=True)
-    return [notices_of("human")[1], next(r for r in reports if "The scroll-anchor fix is merged" in json.dumps(r))]
+    return [
+        notices_of("human")[1],
+        next(r for r in reports if "The scroll-anchor fix is merged" in json.dumps(r)),
+    ]
 
 
 def report_table_chat() -> list[dict[str, JsonValue]]:
     """A prompt and a hand-back report whose table cells hold shas, paths and ticket refs."""
     reports = notices_of("peer", report=True)
-    return [notices_of("human")[1], next(r for r in reports if "f00d123/manifest-0101" in json.dumps(r))]
+    return [
+        notices_of("human")[1],
+        next(r for r in reports if "f00d123/manifest-0101" in json.dumps(r)),
+    ]
 
 
 def peer_message_chat() -> list[dict[str, JsonValue]]:

@@ -369,7 +369,7 @@ def test_an_agent_that_has_not_reported_says_so_in_plain_words(tmp_path: Path) -
     assert "has not reported yet" not in chat
     assert "SubagentHandback" not in chat
     assert "Output in" not in chat
-    assert '<span class="notice__text">Writes: send once</span>' in chat
+    assert '<span class="notice__text">Writes: no double sends</span>' in chat
     assert '<span aria-hidden="true">&middot; </span>finished</span>' in chat
     assert '<span aria-hidden="true">&middot; </span>29m</span>' in chat
 

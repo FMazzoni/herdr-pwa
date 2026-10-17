@@ -101,9 +101,7 @@ def test_a_short_cell_in_a_wide_table_stays_on_one_line() -> None:
 
 
 def test_a_sha_path_or_ref_in_a_prose_cell_is_kept_whole() -> None:
-    row = (
-        "| Evidence | x |\n|---|---|\n| Fired on (1234567, f00d123/manifest-0101) for **a-b** too | y |\n"
-    )
+    row = "| Evidence | x |\n|---|---|\n| Fired on (1234567, f00d123/manifest-0101) for **a-b** too | y |\n"
     nodes = _walk(render_tree(row))
     cell = next(n for n in nodes if n.tag == "td")
     assert _text(cell) == "Fired on (1234567, f00d123/manifest-0101) for a-b too"

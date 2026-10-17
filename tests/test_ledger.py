@@ -32,7 +32,7 @@ REPO = Path(__file__).resolve().parents[1]
 FIXTURES = REPO / "tests" / "fixtures"
 LEDGER_PATH = FIXTURES / "ledger.json"
 # Pinned so the golden file can only change by a reviewed edit to this line.
-LEDGER_SHA256 = "3889d0b4fbb8ce31e0ac73bf714d1a21ee59651c929299e7a4cede78296b2211"
+LEDGER_SHA256 = "a2030ae75b74b3c8b3b81328c8a5c01caa496a365e8812de6d55c07c792d0457"
 FOREIGN_PREFIX = "foreign/"
 # collie's claude screens ship under tests/fixtures/foreign (MIT); the rest of the outside corpus
 # was removed by the user, and its rows stay in the frozen ledger untested.
