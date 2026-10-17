@@ -3,6 +3,7 @@
 import fcntl
 import io
 import json
+import logging
 import subprocess
 import sys
 import threading
@@ -127,7 +128,13 @@ def test_a_direct_geometry_run_holds_the_lock_over_all_its_workers(
     def start() -> None:
         geometry.main()
 
-    _queues_behind(lock, launched, start)
+    # A direct run quietens the app's logger; it must not stay quiet for the next test's caplog.
+    logger = logging.getLogger("herdr_pwa")
+    level = logger.level
+    try:
+        _queues_behind(lock, launched, start)
+    finally:
+        logger.setLevel(level)
 
 
 def test_the_waiting_job_is_told_who_holds_the_lock(
