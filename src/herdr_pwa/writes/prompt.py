@@ -38,6 +38,8 @@ READY_WAIT: Final = 8.0
 READY_POLL: Final = 0.5
 # Three identical reads in a row mean the harness has finished drawing itself.
 SETTLED_LOOKS: Final = 3
+# A prompt passed at launch shows once the TUI has drawn itself, so it gets the settle's budget.
+LAUNCH_READS: Final = int(READY_WAIT / CONFIRM_INTERVAL)
 
 
 @dataclass
@@ -126,13 +128,25 @@ def _preflight(send: _Send, screen: str) -> Refused | None:
     return None
 
 
-def _landed(client: HerdrClient, send: _Send, before: str, pacing: Pacing) -> bool:
-    for _ in range(CONFIRM_ATTEMPTS):
+@dataclass(frozen=True, slots=True)
+class Echo:
+    """What a read-back looks for: the text sent, on which pane, against the screen before it."""
+
+    target: PaneId
+    text: str
+    before: str = ""
+
+
+def read_back(
+    client: HerdrClient, echo: Echo, pacing: Pacing, *, reads: int = CONFIRM_ATTEMPTS
+) -> bool:
+    """Whether the pane comes to show the text more often than before, within *reads* looks."""
+    for _ in range(reads):
         try:
-            after = client.read(send.target, VISIBLE_READ)
+            after = client.read(echo.target, VISIBLE_READ)
         except EngineError:
             after = ""
-        if landed(send.text, before, after):
+        if landed(echo.text, echo.before, after):
             return True
         pacing.sleep(CONFIRM_INTERVAL)
     return False
@@ -158,7 +172,7 @@ def _type(writer: Writer, send: _Send) -> PromptSent | Refused:
         except EngineError as exc:
             entry.outcome(failed_result(exc))
             return _failed(client, send, exc)
-        ok = _landed(client, send, before, writer.pacing)
+        ok = read_back(client, Echo(send.target, send.text, before), writer.pacing)
         outcome, evidence = (
             (Outcome.CONFIRMED, Evidence.ECHO) if ok else (Outcome.ACCEPTED, Evidence.NOECHO)
         )

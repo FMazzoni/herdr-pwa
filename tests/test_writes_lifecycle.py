@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from pydantic import JsonValue
 
+from herdr_pwa.audit import PROMPT, AuditUnavailableError, Entry, Write
 from herdr_pwa.engine import (
     EngineError,
     EngineMisconfigured,
@@ -17,6 +18,7 @@ from herdr_pwa.engine import (
     RequestTooLarge,
     TargetNotFound,
     as_pane_id,
+    harness_kinds,
 )
 from herdr_pwa.writes.guard import MAX_PROMPT_CHARS
 from herdr_pwa.writes.lifecycle import (
@@ -27,6 +29,7 @@ from herdr_pwa.writes.lifecycle import (
     agent_name,
     availability,
     end_agent,
+    launch_of,
     offered_kinds,
     start_agent,
     stranded_kinds,
@@ -39,6 +42,7 @@ from herdr_pwa.writes.prompt import (
     send_prompt,
 )
 from herdr_pwa.writes.refusal import FAILURES, Refusal, Refused, failed_result, refusal_for
+from herdr_pwa.writes.resolve import AuditTrail, Writer
 from herdr_pwa.writes.workspaces import (
     WorkspaceCloseAsk,
     WorkspaceDone,
@@ -513,3 +517,147 @@ def test_a_second_workspace_close_mid_close_is_refused(tmp_path: Path) -> None:
     in_flight(late)
     in_flight(renamed)
     assert len(r.herd.writes("workspace.close")) == 1
+
+
+# A harness that declares a launch prompt flag takes its first prompt on its command line.
+
+
+def test_only_harnesses_measured_to_take_a_launch_prompt_declare_it() -> None:
+    declared = [
+        kind for kind in harness_kinds() if (launch := launch_of(kind)) and launch.takes_prompt
+    ]
+    assert declared == ["opencode"]
+
+
+def argv_rig(tmp_path: Path) -> Rig:
+    r = listening_rig(tmp_path, session="")
+
+    def opened_on_its_prompt(herd: FakeHerd, params: dict[str, JsonValue]) -> None:
+        herd.agents[NEW_PANE].update(interactive_ready=True, launch_pending=False)
+        args = params.get("args")
+        if isinstance(args, list) and args:
+            herd.screens[NEW_PANE] = [echoed(f"> {str(args[-1]).partition('=')[2]}")]
+
+    r.herd.after["agent.start"] = opened_on_its_prompt
+    return r
+
+
+def test_opencode_takes_its_first_prompt_on_the_command_line(tmp_path: Path) -> None:
+    r = argv_rig(tmp_path)
+    attempts_at_spawn: list[list[str]] = []
+    started_hook = r.herd.after["agent.start"]
+
+    def spawned(herd: FakeHerd, params: dict[str, JsonValue]) -> None:
+        attempts_at_spawn.append([str(rec.get("endpoint")) for rec in r.audit_records])
+        started_hook(herd, params)
+
+    r.herd.after["agent.start"] = spawned
+    result = start_agent(r.writer, ask(tmp_path, "opencode", prompt="-v fix it"), which=everywhere)
+    assert isinstance(result, AgentStarted)
+    [start] = r.herd.writes("agent.start")
+    # One argv element, so a prompt that starts with a dash is never read as an option.
+    assert start["args"] == ["--prompt=-v fix it"]
+    assert r.herd.writes("agent.prompt") == []
+    assert isinstance(result.first, PromptSent)
+    assert result.first.verified
+    # The prompt was on disk before the process that carries it was spawned.
+    assert attempts_at_spawn == [["start", "prompt"]]
+    prompt_attempt = r.audit_records[1]
+    assert (prompt_attempt["phase"], prompt_attempt.get("target")) == ("attempt", NEW_PANE)
+    assert prompt_attempt.get("payload") == "-v fix it"
+    results = [rec.get("result") for rec in r.audit_records if rec["phase"] == "outcome"]
+    assert results == ["confirmed:echo", f"started:{NEW_PANE}"]
+
+
+def test_a_launch_prompt_the_pane_never_shows_is_sent_unverified(tmp_path: Path) -> None:
+    r = argv_rig(tmp_path)
+    r.herd.after["agent.start"] = lambda herd, _params: herd.agents[NEW_PANE].update(
+        interactive_ready=True, launch_pending=False
+    )
+    r.herd.screens[NEW_PANE] = [SETTLED]
+    result = start_agent(r.writer, ask(tmp_path, "opencode", prompt="fix it"), which=everywhere)
+    assert isinstance(result, AgentStarted)
+    assert isinstance(result.first, PromptSent)
+    assert not result.first.verified
+    assert "accepted:argv" in [rec.get("result") for rec in r.audit_records]
+
+
+class _PromptsUnrecordable:
+    def __init__(self, inner: AuditTrail) -> None:
+        self.inner = inner
+
+    def record(self, write: Write, /) -> Entry:
+        if write.endpoint == PROMPT:
+            raise AuditUnavailableError("disk full")
+        return self.inner.record(write)
+
+
+def test_a_launch_prompt_that_cannot_be_recorded_spawns_nothing(tmp_path: Path) -> None:
+    r = argv_rig(tmp_path)
+    writer = Writer(r.writer.client, _PromptsUnrecordable(r.writer.audit), r.writer.pacing)
+    result = refused(
+        start_agent(writer, ask(tmp_path, "opencode", prompt="fix it"), which=everywhere)
+    )
+    assert (result.refusal, result.status) == (Refusal.UNRECORDABLE, 503)
+    assert r.herd.writes("agent.start") == []
+    assert r.herd.writes("pane.close") == [{"pane_id": NEW_PANE}]
+    assert r.audit_records[-1].get("result") == "refused:unrecordable"
+
+
+def test_a_launch_prompt_holds_the_new_pane(tmp_path: Path) -> None:
+    r = argv_rig(tmp_path)
+    started_hook = r.herd.after["agent.start"]
+    late: list[object] = []
+
+    def other_tab(herd: FakeHerd, params: dict[str, JsonValue]) -> None:
+        started_hook(herd, params)
+        late.append(send_first_prompt(r.writer, as_pane_id(NEW_PANE), "x"))
+
+    r.herd.after["agent.start"] = other_tab
+    _ = start_agent(r.writer, ask(tmp_path, "opencode", prompt="go"), which=everywhere)
+    in_flight(late)
+    assert r.herd.writes("agent.prompt") == []
+
+
+def test_a_destructive_launch_prompt_is_held_before_anything_is_created(tmp_path: Path) -> None:
+    r = argv_rig(tmp_path)
+    held = refused(
+        start_agent(r.writer, ask(tmp_path, "opencode", prompt="rm -rf build"), which=everywhere)
+    )
+    assert held.refusal is Refusal.CONFIRM
+    assert r.herd.writes("tab.create") == []
+
+
+def test_a_launch_prompt_fills_in_after_a_model() -> None:
+    launch = launch_of("opencode")
+    assert launch is not None
+    assert launch.args("", "") == ()
+    assert launch.args("m", "hi") == ("--model", "m", "--prompt=hi")
+
+
+def test_a_launch_prompt_is_read_back_for_as_long_as_the_tui_takes_to_draw(tmp_path: Path) -> None:
+    r = argv_rig(tmp_path)
+    r.herd.after["agent.start"] = lambda herd, _params: herd.agents[NEW_PANE].update(
+        interactive_ready=True, launch_pending=False
+    )
+    # Measured: opencode draws a launch prompt seconds after agent.start returns, not within one.
+    r.herd.screens[NEW_PANE] = [""] * 8 + [echoed("> fix it")]
+    result = start_agent(r.writer, ask(tmp_path, "opencode", prompt="fix it"), which=everywhere)
+    assert isinstance(result, AgentStarted)
+    assert isinstance(result.first, PromptSent)
+    assert result.first.verified
+
+
+def test_only_a_tab_launched_with_its_prompt_keeps_no_shell_history(tmp_path: Path) -> None:
+    r = argv_rig(tmp_path)
+    _ = start_agent(r.writer, ask(tmp_path, "opencode", prompt="fix it"), which=everywhere)
+    [tab] = r.herd.writes("tab.create")
+    # bash saves no history when HISTFILE is null, so the command line herdr typed is not kept.
+    assert tab["env"] == {"OPENCODE_CONFIG_CONTENT": OPENCODE_ASK, "HISTFILE": ""}
+    for kind, prompt in (("opencode", ""), ("claude", "fix it")):
+        r = listening_rig(tmp_path)
+        _ = start_agent(r.writer, ask(tmp_path, kind, prompt=prompt), which=everywhere)
+        [tab] = r.herd.writes("tab.create")
+        env = tab.get("env") or {}
+        assert isinstance(env, dict)
+        assert "HISTFILE" not in env
