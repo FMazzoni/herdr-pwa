@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from pydantic import JsonValue
 
-from herdr_pwa.engine import BlockedPrompt, EngineUnavailable
+from herdr_pwa.engine import BlockedPrompt, EngineUnavailable, KeyHint
 from herdr_pwa.writes.answer import KeyAsk, KeySent, send_key, send_starting_key
 from herdr_pwa.writes.keys import (
     allowed_keys,
@@ -240,6 +240,16 @@ def test_the_allowed_set_is_the_pad_the_footer_and_earned_digits() -> None:
     assert allowed_keys(BlockedPrompt.parse(PERMISSION)) == {
         "esc", "up", "down", "enter", "ctrl-c", "tab", "ctrl-e", "1", "2", "3",
     }  # fmt: skip
+
+
+def test_a_key_that_hands_the_terminal_to_another_program_is_never_allowed() -> None:
+    """Ctrl+G on claude's plan approval opens Vim in the pane, which no key here can leave."""
+    plan = BlockedPrompt.parse(capture("capture-blocked-plan-approval"))
+    assert "ctrl-g" not in allowed_keys(plan)
+    assert "1" in allowed_keys(plan)
+    # A hand-off named on a pad key takes that key off the pad too: the screen said what it does.
+    vim_on_enter = plan.model_copy(update={"handoffs": (KeyHint(key="enter", verb="edit in vim"),)})
+    assert "enter" not in allowed_keys(vim_on_enter)
 
 
 def test_which_keys_end_a_question() -> None:

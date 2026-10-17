@@ -75,6 +75,7 @@ def described(prompt: BlockedPrompt) -> dict[str, JsonValue]:
         "body": prompt.body,
         "options": [[o.number, o.label, o.checked] for o in prompt.options],
         "hints": [[h.key, h.verb] for h in prompt.hints],
+        "handoffs": [[h.key, h.verb] for h in prompt.handoffs],
         "focus": prompt.focus,
         "stepper": None if step is None else [step.answered, *step.steps],
         "corroborated": prompt.corroborated,

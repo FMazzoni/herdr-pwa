@@ -77,6 +77,7 @@ class ScreenDecision:
     rows_toggle: bool
     hints: tuple[KeyHint, ...]
     answer_hints: tuple[KeyHint, ...]
+    handoffs: tuple[KeyHint, ...]
     steps: StepCount | None
     corroborated: bool
     drew_rows: bool
@@ -223,6 +224,7 @@ def decide_screen(prompt: BlockedPrompt) -> ScreenDecision:
         rows_toggle=rows_toggle(prompt),
         hints=prompt.hints,
         answer_hints=answer_hints(prompt, digits=digits),
+        handoffs=prompt.handoffs,
         steps=None if stepper is None else StepCount(stepper.answered, stepper.total),
         corroborated=prompt.corroborated,
         drew_rows=prompt.drew_rows,

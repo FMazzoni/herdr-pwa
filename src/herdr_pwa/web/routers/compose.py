@@ -89,7 +89,7 @@ def answer_context(agent: Agent, prompt: BlockedPrompt | None, status: str) -> d
         "digits": answer_digits(prompt),
         "fingerprint": control_token(prompt) if prompt is not None else "",
         "hints": hints,
-        "pad": [k for k in pad_keys(prompt) if k not in hinted],
+        "pad": [k for k in pad_keys(prompt) if k in allowed and k not in hinted],
         "interrupt": INTERRUPT_KEY,
         "cadence": ANSWER_CADENCE,
         "status": status,

@@ -1,5 +1,6 @@
 """The golden ledger: every recorded decision of the previous implementation, recomputed here."""
 
+import copy
 import functools
 import hashlib
 import re
@@ -36,8 +37,35 @@ LEDGER_SHA256 = "3889d0b4fbb8ce31e0ac73bf714d1a21ee59651c929299e7a4cede78296b221
 FOREIGN_CORPUS = REPO / "tests" / "foreign_corpus.json"
 FOREIGN_PREFIX = "foreign/"
 
+# Screens whose footer names a key that opens an editor in the pane: still read, never offered.
+HANDED_OFF = (
+    "foreign/collie/claude--plan-approval--feedback-focused.txt",
+    "foreign/collie/claude--plan-approval--feedback-typed.txt",
+    "foreign/collie/claude--plan-approval--feedback-wrapped.txt",
+    "foreign/collie/claude--plan-approval--numbered-body.txt",
+    "foreign/collie/claude--plan-approval--three-row-focused.txt",
+    "foreign/collie/claude--plan-approval--three-row-typed-focused.txt",
+    "foreign/collie/claude--plan-approval--three-row.txt",
+    "foreign/collie/claude--plan-approval.txt",
+    "foreign/collie/claude--select-preview-note-input.txt",
+    "foreign/relay/claude-multi-select-with-free-text.ansi",
+    "foreign/relay/claude-plan-one-question-notes.ansi",
+    "tests/fixtures/capture-blocked-plan-approval/detection.txt",
+    "tests/fixtures/capture-blocked-plan-approval/recent-unwrapped.txt",
+    "tests/fixtures/capture-blocked-plan-approval/recent.txt",
+    "tests/fixtures/capture-blocked-plan-approval/visible.txt",
+)
+
 # Every deliberate divergence from the ledger, by entry id, with the reason it is better.
 DIVERGENCES: dict[str, str] = {
+    **dict.fromkeys(
+        HANDED_OFF,
+        "claude's footer offers ctrl+g to edit the plan or note in $EDITOR, and the old app "
+        "drew it as a button: one tap put Vim in the pane, which no key the phone sends can "
+        "work or quit. The hint is still read, so the screen still asks, but its key is no "
+        "longer a hint or a control. test_a_hand_off_key_is_all_that_leaves_the_ledger holds "
+        "the rest of each entry.",
+    ),
     "foreign/relay/qodercli-single-question.ansi": (
         "qoder prints its footer verb-first ('Enter select'), a convention opencode "
         "shares and the verb-first grammar now reads; the Enter select pair is a real "
@@ -330,6 +358,21 @@ def test_foreign_corpus_index_agrees_with_the_ledger() -> None:
 def test_screen_matches_the_ledger(capture_id: str, foreign_root: Path) -> None:
     decision = decide_screen(BlockedPrompt.parse(_decoded(capture_id, foreign_root)))
     expected = {k: v for k, v in _obj(SCREENS[capture_id]).items() if k != "input"}
+    assert _screen_json(decision) == expected
+
+
+@pytest.mark.parametrize("capture_id", HANDED_OFF)
+def test_a_hand_off_key_is_all_that_leaves_the_ledger(capture_id: str, foreign_root: Path) -> None:
+    decision = decide_screen(BlockedPrompt.parse(_decoded(capture_id, foreign_root)))
+    handed = {hint.key for hint in decision.handoffs}
+    assert handed
+    # A copy: the ledger is shared by every test in the module.
+    expected = copy.deepcopy({k: v for k, v in _obj(SCREENS[capture_id]).items() if k != "input"})
+    for part, field in (("verdict", "hints"), ("render", "answer_hints")):
+        keys = _obj(expected[part])[field]
+        assert isinstance(keys, list)
+        assert handed <= set(keys)
+        _obj(expected[part])[field] = [key for key in keys if key not in handed]
     assert _screen_json(decision) == expected
 
 

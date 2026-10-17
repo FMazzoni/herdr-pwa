@@ -13,6 +13,7 @@ from herdr_pwa.engine import (
     Agent,
     AgentStatus,
     BlockedPrompt,
+    KeyHint,
     MenuShape,
     PaneId,
     Presence,
@@ -1447,7 +1448,10 @@ def test_the_plan_approval_screen_is_read_with_both_of_its_hint_lines() -> None:
     assert [o.number for o in p.options] == [1, 2, 3]
     assert p.question.endswith("Would you like to proceed?")
     # `shift+tab` has no send_keys spelling, so it must never reach a button.
-    assert [(h.key, h.verb) for h in p.hints] == [("ctrl-g", "edit in vim")]
+    assert p.hints == ()
+    # Ctrl+G opens Vim in the pane: still read, so the screen still asks, never offered.
+    assert [(h.key, h.verb) for h in p.handoffs] == [("ctrl-g", "edit in vim")]
+    assert p.answerable
 
 
 @pytest.mark.parametrize("line", [SUB_LINE, EDITOR_FOOTER])
@@ -1456,6 +1460,29 @@ def test_either_hint_line_alone_used_to_be_fatal_and_no_longer_is(line: str) -> 
     p = BlockedPrompt.parse(PLAN_APPROVAL.replace(line, ""))
     assert p.shape is MenuShape.SINGLE_CHOICE
     assert [o.number for o in p.options] == [1, 2, 3]
+
+
+@pytest.mark.parametrize(
+    ("verb", "hands_off"),
+    [
+        ("edit in vim", True),
+        ("edit in nano", True),
+        ("edit in vs code", True),
+        ("open editor", True),
+        ("open in external editor", True),
+        ("open shell", True),
+        ("suspend", True),
+        ("select", False),
+        ("amend", False),
+        ("add notes", False),
+        ("edit inline", False),
+        ("explain", False),
+    ],
+)
+def test_a_hint_that_hands_the_terminal_to_another_program_is_named_by_its_verb(
+    verb: str, hands_off: bool
+) -> None:
+    assert KeyHint(key="ctrl-g", verb=verb).hands_off is hands_off
 
 
 def test_reading_chrome_by_its_key_does_not_read_prose_as_chrome() -> None:

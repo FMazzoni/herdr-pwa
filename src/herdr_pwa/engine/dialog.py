@@ -277,6 +277,11 @@ class KeyHint(BaseModel):
         """``Enter to select`` -- the control's accessible name."""
         return f"{self.name} to {self.verb}"
 
+    @property
+    def hands_off(self) -> bool:
+        """True when the key gives the terminal to another program: see ``HANDOFF_VERBS``."""
+        return _HANDOFF_RE.search(self.verb) is not None
+
 
 def _key_label(key: str) -> str:
     """A key name as a human reads it on a button: ``ctrl-e`` -> ``Ctrl+E``."""
@@ -368,6 +373,19 @@ def _hints(footer: list[str]) -> tuple[KeyHint, ...]:
             found.append(hint)
     return tuple(found[:_MAX_HINTS])
 
+
+HANDOFF_VERBS: Final = ("edit in", "editor", "shell", "suspend")
+"""Words that, whole in a hint's verb, say its key hands the terminal to another program.
+
+claude prints ``ctrl+g to edit in Vim`` (or nano, or VS Code: whatever $EDITOR names) on its
+plan approval and its question notes; the editor then owns the pane, and no key this app sends
+can work it or quit it. A shell or a suspend leaves the pane the same way. Such a hint is still
+read, because it is still evidence that the screen asks, but it is never offered as a control.
+"""
+
+_HANDOFF_RE: Final = re.compile(
+    r"\b(?:" + "|".join(re.escape(verb) for verb in HANDOFF_VERBS) + r")\b", re.IGNORECASE
+)
 
 _OFFER_REFUSED: Final = frozenset({"fullscreen"})
 """Verbs the screen may print that this app will not offer: a pane-local
@@ -537,6 +555,9 @@ class BlockedPrompt(BaseModel):
     shape: MenuShape = MenuShape.NONE
     corroborated: bool = False
     hints: tuple[KeyHint, ...] = ()
+    """The hints a control may be drawn for: hand-offs are kept apart, in ``handoffs``."""
+    handoffs: tuple[KeyHint, ...] = ()
+    """The hints whose key gives the terminal to another program, so never a control."""
     stepper: Stepper | None = None
     body: str = ""
     drew_rows: bool = False
@@ -575,13 +596,13 @@ class BlockedPrompt(BaseModel):
         drawn only as colour, and a buttons row shows its focus only that way.
         """
         return self.shape is MenuShape.BUTTONS or (
-            self.drew_rows and bool(self.hints) and not self.options
+            self.drew_rows and bool(self.hints or self.handoffs) and not self.options
         )
 
     @property
     def answerable(self) -> bool:
-        """True when there is anything to answer with beyond the generic keypad."""
-        return bool(self.hints)
+        """True when the screen printed keys of its own, beyond the generic keypad."""
+        return bool(self.hints or self.handoffs)
 
     @property
     def fingerprint(self) -> str:
@@ -634,7 +655,6 @@ class BlockedPrompt(BaseModel):
         run = _trusted(found, screen)
         seen = _Seen(lines, run, hints)
         shape = _shape(seen, buttons)
-        corroborated = _corroborated(seen)
         stop = run[0][0] if run is not None else (buttons_at if buttons else len(lines))
         box = range(_box_start(lines, stop, barred), stop)
         parsed = cls(
@@ -648,8 +668,9 @@ class BlockedPrompt(BaseModel):
             asked=bool(_asks(lines, stop)),
             raw=screen.text,
             shape=shape,
-            corroborated=corroborated or bool(buttons),
-            hints=hints,
+            corroborated=_corroborated(seen) or bool(buttons),
+            hints=tuple(hint for hint in hints if not hint.hands_off),
+            handoffs=tuple(hint for hint in hints if hint.hands_off),
         )
         return _located(parsed, screen.colour, _option_lines(parsed, run, buttons_at))
 
