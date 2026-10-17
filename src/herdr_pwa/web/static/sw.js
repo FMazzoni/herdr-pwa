@@ -29,6 +29,7 @@ const PRECACHE = [
   "/static/folds.js",
   "/static/chatend.js",
   "/static/voice.js",
+  "/static/status.js",
   "/static/app.js",
   "/static/htmx.min.js",
   "/static/icon.svg",

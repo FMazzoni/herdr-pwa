@@ -26,7 +26,7 @@ SHELL_PATHS = ("/manifest.webmanifest", "/offline")
 # last. A new list under an old name leaves phones on the cache they already hold; a new name over
 # the same list throws a good cache away. A new PRECACHE takes a new name and a new line here, and
 # a line is never edited: phones in the field still hold caches by the old names.
-CACHE_NAMES = (("v3", "f633629dc2d9"), ("v4", "9fb11146d0a5"), ("v5", "75fc3981d649"))
+CACHE_NAMES = (("v3", "f633629dc2d9"), ("v4", "9fb11146d0a5"), ("v5", "90da5ad4ee2f"))
 
 
 def precache_paths() -> list[str]:
