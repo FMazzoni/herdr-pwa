@@ -23,6 +23,7 @@ from herdr_pwa.writes.lifecycle import (
     EndAsk,
     StartRequest,
     end_agent,
+    on_path,
     start_agent,
 )
 from herdr_pwa.writes.outcome import Outcome
@@ -81,7 +82,7 @@ def writer(tmp_path: Path) -> Writer:
 
 def _start(writer: Writer, workspace: str, kind: str, cwd: Path, model: str = "") -> AgentStarted:
     started = start_agent(
-        writer, StartRequest(f"hpw-{kind}", kind, workspace, str(cwd), model=model)
+        writer, StartRequest(f"hpw-{kind}", kind, workspace, str(cwd), model=model), which=on_path
     )
     say(f"start_agent {kind}", repr(started))
     assert isinstance(started, AgentStarted), started

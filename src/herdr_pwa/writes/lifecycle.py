@@ -150,12 +150,15 @@ def found_in(name: str, dirs: Iterable[str]) -> str | None:
     return None
 
 
+type Which = Callable[[str], str | None]
+
+
 def on_path(name: str) -> str | None:
     """The executable called ``name`` on this process's PATH, found without spawning anything."""
     return found_in(name, os.environ.get("PATH", os.defpath).split(os.pathsep))
 
 
-def offered_kinds(which: Callable[[str], str | None] = on_path) -> tuple[str, ...]:
+def offered_kinds(which: Which) -> tuple[str, ...]:
     """The harnesses this app knows how to launch that are on this machine's PATH."""
     return tuple(kind for kind in harness_kinds() if which(_binary(kind)))
 
@@ -370,7 +373,7 @@ def start_agent(
     writer: Writer,
     request: StartRequest,
     *,
-    which: Callable[[str], str | None] = on_path,
+    which: Which,
 ) -> AgentStarted | Refused:
     """Start one agent in a new tab of a workspace that exists now, or say why not."""
     refusal = _form_refusal(request, offered_kinds(which), writer.declared)

@@ -87,7 +87,7 @@ def _lifespan(
 
 def create_app(settings: Settings, seams: Seams) -> FastAPI:
     """Build the web application around one runner client, one snapshot cache and push."""
-    assets = Assets.load()
+    assets = Assets.load(seams.static)
     pages = Pages(
         assets,
         read_templates(TEMPLATES_DIR),
@@ -134,6 +134,7 @@ def _web_state(settings: Settings, seams: Seams, pages: Pages) -> tuple[WebState
         pacing=seams.pacing,
         wall=seams.wall,
         seen=pushing.stores.seen if pushing is not None else None,
+        which=seams.which,
     )
     return web, pushing
 

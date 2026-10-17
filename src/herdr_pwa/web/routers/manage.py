@@ -40,7 +40,7 @@ from herdr_pwa.writes.workspaces import (
 
 
 def _new_context(web: WebState, snapshot: Snapshot, values: dict[str, str]) -> dict[str, object]:
-    kinds = offered_kinds()
+    kinds = offered_kinds(web.which)
     declared = declared_models(web.settings)
     focused = next((w.workspace_id for w in snapshot.workspaces if w.focused), "")
     return {
@@ -103,7 +103,7 @@ def _new(post: Posted) -> Response:
         prompt=values.get("prompt", ""),
         confirmed=ticked(values, "confirm"),
     )
-    result = start_agent(post.writer, ask)
+    result = start_agent(post.writer, ask, which=web.which)
     if isinstance(result, Refused):
         context = _new_context(web, web.client.snapshot(), values)
         return refused(web.pages, Redraw("new.html", context, as_page=True), result)

@@ -168,7 +168,7 @@ class Notifier:
         self._config: LoopConfig = config
         clock = seams.wall
         self._clock: Clock = clock
-        self._managed: ManagedHerd = ManagedHerd(herd.reader)
+        self._managed: ManagedHerd = ManagedHerd(herd.reader, proc=seams.proc)
         ledger = StatusLedger(stores.state_dir, max_age=config.ledger_max_age, clock=clock)
         hooks = Hooks(
             seen=stores.seen,

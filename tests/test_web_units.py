@@ -220,7 +220,7 @@ def test_an_unlisted_exception_is_not_swallowed_by_the_table() -> None:
 
 
 def test_assets_hash_every_static_file() -> None:
-    assets = Assets.load()
+    assets = Assets.load(STATIC_DIR)
     names = {p.name for p in STATIC_DIR.iterdir() if p.is_file()}
     assert set(assets.files) == names
     assert {"app.css", "app.js", "htmx.min.js"} <= names
@@ -230,7 +230,7 @@ def test_assets_hash_every_static_file() -> None:
 def test_a_template_changed_on_disk_after_start_is_not_what_is_served(tmp_path: Path) -> None:
     # New markup under old view models is a 500 under StrictUndefined; a restart shows it instead.
     _ = (tmp_path / "t.html").write_text("old {{ x }}")
-    pages = Pages(Assets.load(), read_templates(tmp_path))
+    pages = Pages(Assets.load(STATIC_DIR), read_templates(tmp_path))
     assert pages.render("t.html", {"x": 1}) == "old 1"
     _ = (tmp_path / "t.html").write_text("new {{ y }}")
     _ = (tmp_path / "u.html").write_text("added")
