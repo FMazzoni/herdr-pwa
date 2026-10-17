@@ -10,7 +10,7 @@ from typing import Final, Self
 from pydantic import BaseModel, ConfigDict, field_validator
 
 from herdr_pwa.engine.model import PaneId, SessionId, as_pane_id, as_session_id, screen_digest
-from herdr_pwa.panetext import as_text_read, plain
+from herdr_pwa.panetext import as_text_read, composer_top, plain
 
 _EDGE_RE = re.compile(r"^(\s*)[│┃║▏▍▎▊]")
 """A box-edge bar at line start, with the indent that owns it.
@@ -507,6 +507,9 @@ def _titled_message(paragraphs: list[str]) -> str:
 
 def _asks(lines: list[str], stop: int) -> str:
     """A request title's message, else a '?' paragraph above *stop*: a dialog asking, not a box."""
+    # A dialog takes the input box's place; with the box drawn, only its status line follows.
+    if composer_top(lines) < stop:
+        return ""
     start = _dialog_start(lines, stop)
     if start and (message := _titled_message(_askable(lines, start, stop))):
         return message
@@ -757,7 +760,8 @@ def _prepared(text: str, ansi: str = "") -> _Screen:
     no longer marks any of them, and no colour is carried into it.
     """
     barred = [bool(_EDGE_RE.match(line)) for line in text.splitlines()]
-    lines = [_EDGE_RE.sub(r"\1", line) for line in text.splitlines()]
+    # Padded to the pane's width or not, a row reads the same: a blank row of spaces is no rule.
+    lines = [_EDGE_RE.sub(r"\1", line).rstrip() for line in text.splitlines()]
     if (panel := _panel_screen(lines)) is not None:
         return _Screen(panel, [False] * len(panel), "\n".join(panel), ("",) * len(panel))
     return _Screen(lines, barred, text, _dialog_colour(text, ansi, barred))
