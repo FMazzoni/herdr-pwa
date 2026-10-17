@@ -488,7 +488,7 @@ def _stepper(lines: list[str], stop: int) -> Stepper | None:
 
 
 def _asks(lines: list[str], stop: int) -> str:
-    """The question the DIALOG BOX asks, or ``""`` when it asks none."""
+    """The paragraph with a '?' just above *stop*, or ``""``: a dialog asking, not proof of a box."""
     start = _dialog_start(lines, stop)
     # With no rule above there is no box, so only the paragraph right above the run can ask.
     window = _MAX_CHROME_PARAGRAPHS + 1 if start else 1
