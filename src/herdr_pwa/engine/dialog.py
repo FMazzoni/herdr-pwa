@@ -82,6 +82,13 @@ _TOGGLE_VERBS = ("toggle", "check", "uncheck", "deselect", "select all")
 
 _MARKER_RE = re.compile(r"^\s*[>\u276f▸▶‣]\s")
 
+_PARKED_RE = re.compile(r"^[\u276f▸▶‣]\s+\S")
+"""The cursor parked on a menu's own unnumbered row, such as claude's checklist ``Next``.
+
+Only a glyph in the first column counts: ``>`` there is a markdown quote in a
+recap, and an indented glyph is body text under a row.
+"""
+
 _STEP_TOKEN_RE = re.compile(
     r"(?P<box>[\u2610\u2612\u2611\u2714\u2713])\s*(?P<label>[^\u2610\u2612\u2611\u2714\u2713\u2190\u2192]*)"
 )
@@ -429,7 +436,7 @@ def _corroborated(seen: _Seen) -> bool:
     """Is the trailing numbered run a LIVE menu?."""
     if seen.run is None:
         return False
-    return bool(seen.hints) or any(_MARKER_RE.match(seen.lines[i]) for i, _, _ in seen.run)
+    return bool(seen.hints) or _focused(seen.lines, seen.run)
 
 
 class Stepper(BaseModel):
@@ -466,8 +473,14 @@ def _steps(line: str) -> Stepper | None:
 
 
 def _stepper(lines: list[str], stop: int) -> Stepper | None:
-    """The stepper strip above the dialog in ``lines[:stop]``, or ``None``."""
-    for index in range(stop - 1, _dialog_start(lines, stop) - 1, -1):
+    """The nearest stepper strip above ``lines[:stop]``, or ``None``.
+
+    Not bounded by the nearest rule: with no run read, ``stop`` is the screen's
+    end, and the last box there is claude's ``Chat about this`` row, under the
+    box that asks. The strip's own shape, arrows at both ends around a step
+    box, is what keeps transcript text out.
+    """
+    for index in range(stop - 1, -1, -1):
         if _STEPPER_RE.match(lines[index].strip()):
             return _steps(lines[index].strip())
     return None
@@ -485,8 +498,10 @@ def _asks(lines: list[str], stop: int) -> str:
 
 
 def _focused(lines: list[str], run: list[tuple[int, int, str]]) -> bool:
-    """Is the terminal cursor parked on one of THESE rows?."""
-    return any(_MARKER_RE.match(lines[i]) for i, _, _ in run)
+    """Is the terminal cursor parked on one of THESE rows, or on an unnumbered row between them?."""
+    if any(_MARKER_RE.match(lines[i]) for i, _, _ in run):
+        return True
+    return any(_PARKED_RE.match(line) for line in lines[run[0][0] : run[-1][0]])
 
 
 def _colour_focused(run: list[tuple[int, int, str]], colour: tuple[str, ...]) -> bool:
@@ -979,8 +994,12 @@ def _is_inert(line: str) -> bool:
 
 
 def _is_interleave(line: str) -> bool:
-    """True for lines that may sit *between* two options of the same menu."""
-    return _is_inert(line) or line[:1].isspace()
+    """True for lines that may sit *between* two options of the same menu.
+
+    The cursor's glyph stands where the row's indent was, so parking it on an
+    unnumbered row does not turn that row into an interloper.
+    """
+    return _is_inert(line) or line[:1].isspace() or bool(_PARKED_RE.match(line))
 
 
 _PANEL_TOP_RE = re.compile(r"^\s*[╭┌╔]")

@@ -610,6 +610,7 @@
       "checkable": 0,
       "class": "wizard-strip-unseen",
       "digits": [],
+      "diverged": "Read now, on purpose against this row: the cursor parked on the unnumbered Next row no longer breaks the run, so the screen reads exactly as claude--wizard-multiselect-checked does (six rows, steps [1, 2]). The ledger divergence and the test holding the rest are in tests/test_ledger.py (PARKED).",
       "hints": [
         "enter",
         "tab",
@@ -621,8 +622,7 @@
       "screen_steps": 2,
       "shape": "unknown",
       "steps": null,
-      "ticked": [],
-      "xfail_steps": "The strip is on the screen and `_STEPPER_RE` matches it, but `_stepper` searches only from `_dialog_start` downwards and with no numbered run that anchor lands BELOW the strip (measured: strip at line 19, dialog start 37). So the steps are lost for a second reason, on the harness we do model."
+      "ticked": []
     },
     "collie/claude--wizard-multiselect-q1.txt": {
       "checkable": 5,
@@ -655,6 +655,7 @@
       "checkable": 0,
       "class": "wizard-strip-unseen",
       "digits": [],
+      "diverged": "Steps read now, on purpose against this row: `_stepper` looks above the last rule, so the strip over the question is found with no run read (steps [0, 2]). The rows are still unread: the preview panel beside them breaks the trailing run. The ledger divergence is in tests/test_ledger.py (STRIP_SEEN).",
       "hints": [
         "enter",
         "up",
@@ -666,13 +667,13 @@
       "screen_steps": 2,
       "shape": "unknown",
       "steps": null,
-      "ticked": [],
-      "xfail_steps": "The strip is on the screen and `_STEPPER_RE` matches it, but `_stepper` searches only from `_dialog_start` downwards and with no numbered run that anchor lands BELOW the strip (measured: strip at line 19, dialog start 37). So the steps are lost for a second reason, on the harness we do model."
+      "ticked": []
     },
     "collie/claude--wizard-preview-q1.txt": {
       "checkable": 0,
       "class": "wizard-strip-unseen",
       "digits": [],
+      "diverged": "Steps read now, on purpose against this row: `_stepper` looks above the last rule, so the strip over the question is found with no run read (steps [0, 2]). The rows are still unread: the preview panel beside them breaks the trailing run. The ledger divergence is in tests/test_ledger.py (STRIP_SEEN).",
       "hints": [
         "enter",
         "up",
@@ -684,13 +685,13 @@
       "screen_steps": 2,
       "shape": "unknown",
       "steps": null,
-      "ticked": [],
-      "xfail_steps": "The strip is on the screen and `_STEPPER_RE` matches it, but `_stepper` searches only from `_dialog_start` downwards and with no numbered run that anchor lands BELOW the strip (measured: strip at line 19, dialog start 37). So the steps are lost for a second reason, on the harness we do model."
+      "ticked": []
     },
     "collie/claude--wizard-preview-wrapped-label.txt": {
       "checkable": 0,
       "class": "wizard-strip-unseen",
       "digits": [],
+      "diverged": "Steps read now, on purpose against this row: `_stepper` looks above the last rule, so the strip over the question is found with no run read (steps [0, 2]). The rows are still unread: the preview panel beside them breaks the trailing run. The ledger divergence is in tests/test_ledger.py (STRIP_SEEN).",
       "hints": [
         "enter",
         "up",
@@ -702,8 +703,7 @@
       "screen_steps": 2,
       "shape": "unknown",
       "steps": null,
-      "ticked": [],
-      "xfail_steps": "The strip is on the screen and `_STEPPER_RE` matches it, but `_stepper` searches only from `_dialog_start` downwards and with no numbered run that anchor lands BELOW the strip (measured: strip at line 19, dialog start 37). So the steps are lost for a second reason, on the harness we do model."
+      "ticked": []
     },
     "collie/claude--wizard-q1-revisit.txt": {
       "checkable": 0,

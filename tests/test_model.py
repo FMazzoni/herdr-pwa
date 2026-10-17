@@ -1416,6 +1416,93 @@ def test_the_step_this_is_is_never_claimed() -> None:
     assert not hasattr(on_step_two.stepper, "index")
 
 
+# claude's wizard checklist: rows, an unnumbered Next row, then a numbered row under its own rule.
+WIZARD_CHECKLIST = (
+    "> earlier prompt\n"
+    "────────────────────────────────────────\n"
+    "←  ☐ Fruit  ☐ Size  ✔ Submit  →\n"
+    "\n"
+    "Which fruit should go in the basket?\n"
+    "\n"
+    "\u276f 1. [ ] Apples\n"
+    "     Crisp and sweet.\n"
+    "  2. [✔] Pears\n"
+    "     Soft when ripe.\n"
+    "  3. [ ] Type something\n"
+    "     Next\n"
+    "────────────────────────────────────────\n"
+    "  4. Chat about this\n"
+    "\n"
+    "Enter to select · Tab/Arrow keys to navigate · Esc to cancel\n"
+)
+
+PARKED_ON_NEXT = WIZARD_CHECKLIST.replace("\u276f 1. [ ]", "  1. [ ]").replace(
+    "     Next", "\u276f    Next"
+)
+
+
+def _steps(prompt: BlockedPrompt) -> tuple[int, tuple[str, ...]] | None:
+    step = prompt.stepper
+    return None if step is None else (step.answered, step.steps)
+
+
+def test_a_checklist_reads_the_same_wherever_the_cursor_is_parked() -> None:
+    """Arrowing to the Next row moves the cursor, not the question."""
+    on_a_row = BlockedPrompt.parse(WIZARD_CHECKLIST)
+    on_next = BlockedPrompt.parse(PARKED_ON_NEXT)
+    assert on_a_row.shape is MenuShape.MULTI_SELECT
+    assert on_next.shape is MenuShape.MULTI_SELECT
+    assert on_next.options == on_a_row.options
+    assert [(o.number, o.checked) for o in on_next.options] == [
+        (1, False),
+        (2, True),
+        (3, False),
+        (4, None),
+    ]
+    assert _steps(on_next) == _steps(on_a_row) == (0, ("Fruit", "Size"))
+    assert on_next.identity == on_a_row.identity, "a tap drawn before the move still lands"
+
+
+def test_a_glyph_outside_the_rows_is_still_not_a_cursor_on_the_menu() -> None:
+    """The control: claude marks the user's own prompt with the same glyph, above the box."""
+    unparked = WIZARD_CHECKLIST.replace("\u276f 1. [ ]", "  1. [ ]")
+    above = unparked.replace("> earlier prompt", "\u276f earlier prompt")
+    assert BlockedPrompt.parse(above).options == ()
+
+
+def test_a_quoted_line_inside_a_numbered_list_is_not_a_cursor() -> None:
+    """Only a cursor glyph counts as the cursor: ``>`` is a markdown quote in a recap."""
+    recap = "1. first\n> quoted aside\n2. second\n\nEnter to select · Esc to cancel\n"
+    assert BlockedPrompt.parse(recap).options == ()
+
+
+# The same wizard drawn with a preview panel beside the rows, so no trailing run is read.
+PREVIEW_STEP = (
+    "> earlier prompt\n"
+    "────────────────────────────────────────\n"
+    "←  ☐ Layout  ☐ Theme  ✔ Submit  →\n"
+    "\n"
+    "Which layout should we use?\n"
+    "\n"
+    "\u276f 1. Grid        ┌──────────┐\n"
+    "  2. List        │ [a] [b]  │\n"
+    "                 └──────────┘\n"
+    "\n"
+    "                 Notes: press n to add notes\n"
+    "────────────────────────────────────────\n"
+    "  Chat about this\n"
+    "\n"
+    "Enter to select · ↑/↓ to navigate · Tab to switch questions · Esc to cancel\n"
+)
+
+
+def test_the_strip_is_seen_when_the_rows_are_not() -> None:
+    """With no run to anchor on, the strip is still the asking box's top line."""
+    p = BlockedPrompt.parse(PREVIEW_STEP)
+    assert p.options == ()
+    assert _steps(p) == (0, ("Layout", "Theme"))
+
+
 def test_a_question_mark_in_the_transcript_is_not_the_dialog_asking() -> None:
     """The leak a LIVE probe found, and the reason the box has to be a box."""
     transcript = "How should I approach the work?\n\n● I will use the parser.\n\n"

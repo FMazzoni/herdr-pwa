@@ -56,6 +56,20 @@ HANDED_OFF = (
     "tests/fixtures/capture-blocked-plan-approval/visible.txt",
 )
 
+# A checklist with the cursor parked on its unnumbered Next row, and the same screen with it on a row.
+PARKED: dict[str, str] = {
+    "foreign/collie/claude--wizard-multiselect-pointer-next.txt": (
+        "foreign/collie/claude--wizard-multiselect-checked.txt"
+    ),
+}
+
+# claude wizard steps drawn with a preview panel: no run is read, and the strip above it now is.
+STRIP_SEEN = (
+    "foreign/collie/claude--wizard-preview-note-attached.txt",
+    "foreign/collie/claude--wizard-preview-q1.txt",
+    "foreign/collie/claude--wizard-preview-wrapped-label.txt",
+)
+
 # Every deliberate divergence from the ledger, by entry id, with the reason it is better.
 DIVERGENCES: dict[str, str] = {
     **dict.fromkeys(
@@ -106,6 +120,22 @@ DIVERGENCES: dict[str, str] = {
         "checkboxes and no toggle verb. The footer is verb-first ('Enter submit'), so "
         "the Enter submit pair lifts and a screen with hints but no live run reads "
         "unknown where the ledger said none, naming Enter as a hint."
+    ),
+    **dict.fromkeys(
+        PARKED,
+        "The old app read this checklist as unknown with no rows because the cursor sat on "
+        "its unnumbered Next row, which broke the run; with the cursor on row 1 the same "
+        "screen read as a six-row checklist. A cursor move is not a new question, and the "
+        "flip refused the next tap as a changed screen. "
+        "test_a_parked_cursor_reads_as_the_cursor_on_a_row holds the rest of each entry.",
+    ),
+    **dict.fromkeys(
+        STRIP_SEEN,
+        "The screen draws claude's step strip above its question, and the old app looked for "
+        "it only below the last rule, which on a screen with no run read is the 'Chat about "
+        "this' row. The strip says the question is one step of two, which is what keeps a "
+        "tap from claiming the whole set is answered. "
+        "test_a_strip_seen_without_rows_is_all_that_leaves_the_ledger holds the rest.",
     ),
     **dict.fromkeys(
         (
@@ -373,6 +403,29 @@ def test_a_hand_off_key_is_all_that_leaves_the_ledger(capture_id: str, foreign_r
         assert isinstance(keys, list)
         assert handed <= set(keys)
         _obj(expected[part])[field] = [key for key in keys if key not in handed]
+    assert _screen_json(decision) == expected
+
+
+@pytest.mark.parametrize(("capture_id", "twin"), PARKED.items())
+def test_a_parked_cursor_reads_as_the_cursor_on_a_row(
+    capture_id: str, twin: str, foreign_root: Path
+) -> None:
+    parked = BlockedPrompt.parse(_decoded(capture_id, foreign_root))
+    on_a_row = BlockedPrompt.parse(_decoded(twin, foreign_root))
+    expected = {k: v for k, v in _obj(SCREENS[twin]).items() if k != "input"}
+    assert _screen_json(decide_screen(parked)) == expected
+    # Identity is what a control carries; equal identity means a tap drawn before the move lands.
+    assert parked.identity == on_a_row.identity
+
+
+@pytest.mark.parametrize("capture_id", STRIP_SEEN)
+def test_a_strip_seen_without_rows_is_all_that_leaves_the_ledger(
+    capture_id: str, foreign_root: Path
+) -> None:
+    decision = decide_screen(BlockedPrompt.parse(_decoded(capture_id, foreign_root)))
+    expected = copy.deepcopy({k: v for k, v in _obj(SCREENS[capture_id]).items() if k != "input"})
+    assert _obj(expected["verdict"])["steps"] is None
+    _obj(expected["verdict"])["steps"] = [0, 2]
     assert _screen_json(decision) == expected
 
 
