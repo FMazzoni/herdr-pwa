@@ -132,7 +132,7 @@ IDLE = (
 ).read_text(encoding="utf-8")
 # The same capture's last two transcript paragraphs, read without the composer under them.
 SIGNED_OFF = "  Want me to fix the README and the gate, then commit?\n\n\u273b Baked for 53s\n"
-# A shell-style git segment: '?' marks untracked files, as the relay corpus's prompt line draws it.
+# A shell-style git segment: '?' marks untracked files, as a git-aware prompt line draws it.
 DIRTY_STATUS = IDLE.replace("herdr-pwa [main]", "herdr-pwa on main [!?]")
 
 DIALOG_OR_NOT = [
