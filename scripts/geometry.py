@@ -26,7 +26,15 @@ import chatend  # noqa: E402
 import feedhold  # noqa: E402
 import sendhold  # noqa: E402
 import voiceover  # noqa: E402
-from firefox import BrowserError, Marionette, browser, free_port, phone_window  # noqa: E402
+from firefox import (  # noqa: E402
+    BrowserError,
+    Marionette,
+    browser,
+    free_port,
+    held,
+    inherited,
+    phone_window,
+)
 
 from tests.catalogue import STATES, State, build, pick  # noqa: E402
 from tests.waiting import eventually  # noqa: E402
@@ -512,6 +520,8 @@ class Tally:
     """Every problem found, and how often each argued exception was needed."""
 
     problems: list[str] = field(default_factory=list[str])
+    # Tasks run a second time because their worker died; said in the report, never hidden.
+    retries: list[str] = field(default_factory=list[str])
     used: dict[str, int] = field(default_factory=dict[str, int])
     taps: int = 0
 
@@ -725,11 +735,15 @@ def report(tally: Tally, *, whole: bool, runs: int) -> int:
         for selector, why in table.items():
             print(f"  allowed {kind} {selector} ({tally.used.get(selector, 0)}x): {why}")
     problems = tally.problems + (stale(tally) if whole else [])
+    for task in tally.retries:
+        print(f"  RETRIED {task}: its worker died, so it ran once more in a fresh one")
     for problem in problems:
         print(f"  FAIL {problem}")
     verdict = "red" if problems else "green"
+    retried = f", {len(tally.retries)} retried" if tally.retries else ""
     print(
-        f"geometry: {runs} runs, {tally.taps} tap targets measured, {len(problems)} problems: {verdict}"
+        f"geometry: {runs} runs, {tally.taps} tap targets measured{retried}, "
+        f"{len(problems)} problems: {verdict}"
     )
     return 1 if problems else 0
 
@@ -764,15 +778,18 @@ def _strings(value: object) -> list[str]:
 
 
 def _do(task: Task, driver: Marionette, base: str, switch: Switch, scratch: Path) -> Tally:
-    """Run one task in this worker's browser."""
+    """Run one task in this worker's browser; one state's browser failure is that state's alone."""
     tally = Tally()
     if task["kind"] == "states":
         size = Size(int(str(task["width"])), float(str(task["scale"])))
         phone_window(driver, size.width, HEIGHT)
         for state in pick(_strings(task["names"])):
-            mounted = install(switch, state, scratch)
-            tally.problems += [f"{size.label(state.name)}: {p}" for p in mounted]
-            run_state(driver, state, base, size, tally)
+            try:
+                mounted = install(switch, state, scratch)
+                tally.problems += [f"{size.label(state.name)}: {p}" for p in mounted]
+                run_state(driver, state, base, size, tally)
+            except BrowserError as exc:
+                tally.problems.append(f"{size.label(state.name)}: the browser failed: {exc}")
         driver.send("WebDriver:CloseWindow", {})
         driver.send("WebDriver:SwitchToWindow", {"handle": driver.handles()[0]})
         return tally
@@ -841,52 +858,86 @@ def _merge(tally: Tally, answer: dict[str, object]) -> None:
     tally.taps += taps if isinstance(taps, int) else 0
 
 
+def _ask(process: subprocess.Popen[str], task: Task) -> str:
+    """Hand ``task`` to a worker and read its answer; empty when the worker died first."""
+    stdin, stdout = process.stdin, process.stdout
+    if stdin is None or stdout is None:
+        raise RuntimeError("a geometry worker has no pipes")
+    try:
+        stdin.write(json.dumps(task) + "\n")
+        stdin.flush()
+    except OSError:
+        return ""
+    return stdout.readline()
+
+
+def _bury(process: subprocess.Popen[str]) -> None:
+    if process.poll() is None:
+        process.kill()
+    process.wait()
+
+
 def drive(work: list[Task], jobs: int) -> Tally:
-    """Hand ``work`` to ``jobs`` workers, each with its own server and browser, and add up."""
+    """Hand ``work`` to ``jobs`` workers, each with its own server and browser, and add up.
+
+    A task whose worker dies goes back on the queue and runs once more, and the report says so;
+    a task whose worker dies twice fails. Fresh workers are started for what a death left over.
+    """
     queue: Queue[Task] = Queue()
     for task in work:
         queue.put(task)
     tally = Tally()
     lock = threading.Lock()
 
+    def died(task: Task) -> None:
+        label = _label(task)
+        with lock:
+            if task.get("retried"):
+                tally.problems.append(f"{label}: the worker died before it answered, twice")
+                return
+            tally.retries.append(label)
+        queue.put({**task, "retried": True})
+
     def feed(process: subprocess.Popen[str]) -> None:
-        stdin, stdout = process.stdin, process.stdout
-        if stdin is None or stdout is None:
-            raise RuntimeError("a geometry worker has no pipes")
         while True:
             try:
                 task = queue.get_nowait()
             except Empty:
                 break
-            stdin.write(json.dumps(task) + "\n")
-            stdin.flush()
-            line = stdout.readline()
+            line = _ask(process, task)
+            if not line:
+                _bury(process)
+                died(task)
+                return
             with lock:
-                if not line:
-                    tally.problems.append(f"{_label(task)}: the worker died before it answered")
-                    return
                 _merge(tally, dict(_LINE.validate_json(line)))
-        stdin.close()
+        if process.stdin is not None:
+            process.stdin.close()
         if process.wait() != 0:
             with lock:
                 tally.problems.append(f"a geometry worker exited {process.returncode}")
 
     command = [sys.executable, str(Path(__file__).resolve()), "--worker"]
-    processes = [
-        subprocess.Popen(
-            command, cwd=ROOT, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True
-        )
-        for _ in range(max(1, min(jobs, len(work))))
-    ]
-    threads = [threading.Thread(target=feed, args=(p,)) for p in processes]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join()
-    for process in processes:
-        if process.poll() is None:
-            process.kill()
-            process.wait()
+    while not queue.empty():
+        # Each worker inherits the run's lock descriptor, so it runs under the lock, not beside it.
+        processes = [
+            subprocess.Popen(
+                command,
+                cwd=ROOT,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                text=True,
+                pass_fds=inherited(),
+            )
+            for _ in range(max(1, min(jobs, queue.qsize())))
+        ]
+        threads = [threading.Thread(target=feed, args=(p,)) for p in processes]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        for process in processes:
+            _bury(process)
     return tally
 
 
@@ -902,7 +953,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.worker:
         return worker()
     work, runs, whole = tasks(args.only)
-    return report(drive(work, args.jobs), whole=whole, runs=runs)
+    # Every worker runs under this one hold, so a direct run queues with the gate and shots.
+    with held():
+        return report(drive(work, args.jobs), whole=whole, runs=runs)
 
 
 if __name__ == "__main__":
