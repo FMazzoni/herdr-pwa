@@ -40,7 +40,7 @@ class PaneProcesses(Protocol):
 class ManagedHerd:
     """Answers "is another agent watching this pane", cached on the pane's pid tuple."""
 
-    def __init__(self, panes: PaneProcesses, *, proc: Path = PROC) -> None:
+    def __init__(self, panes: PaneProcesses, *, proc: Path) -> None:
         self._panes: PaneProcesses = panes
         self._proc: Path = proc
         self._cache: dict[str, tuple[tuple[int, ...], bool]] = {}

@@ -33,6 +33,7 @@ from herdr_pwa.writes.lifecycle import (
     end_agent,
     launch_of,
     offered_kinds,
+    on_path,
     start_agent,
     stranded_kinds,
 )
@@ -121,7 +122,7 @@ def test_a_harness_installed_for_the_user_but_off_the_path_is_stranded_not_dropp
     service = tmp_path / "service-bin"
     _ = _stand_in(service, "opencode")
     monkeypatch.setenv("PATH", str(service))
-    assert offered_kinds() == ("opencode",)
+    assert offered_kinds(on_path) == ("opencode",)
     [stranded] = stranded_kinds()
     assert (stranded.kind, stranded.stranded, stranded.offered) == ("claude", str(mine), False)
     # Once the service can see it, it is offered and no longer stranded.

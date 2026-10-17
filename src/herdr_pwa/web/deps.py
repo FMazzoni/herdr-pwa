@@ -22,6 +22,7 @@ from herdr_pwa.settings import Settings
 from herdr_pwa.web.failures import PageHidden
 from herdr_pwa.web.render import Pages
 from herdr_pwa.web.stalls import Stalls
+from herdr_pwa.writes.lifecycle import Which
 from herdr_pwa.writes.outcome import Pacing
 
 HIDDEN_HEADER = "HP-Hidden"
@@ -38,6 +39,8 @@ class WebState:
     audit: AuditLog
     # Who stopped on a full context; shared with the notifier, so each log is read once a screen.
     stalls: Stalls
+    # Where a harness's executable is found, for what the new-agent form offers.
+    which: Which
     clock: Clock = field(default=time.monotonic)
     # What a write's read-back waits run on; injected so route tests never sleep.
     pacing: Pacing = field(default_factory=Pacing)

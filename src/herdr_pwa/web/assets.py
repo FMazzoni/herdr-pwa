@@ -45,7 +45,7 @@ class Assets:
     build: str
 
     @classmethod
-    def load(cls, directory: Path = STATIC_DIR) -> "Assets":
+    def load(cls, directory: Path) -> "Assets":
         """Read and hash every file under ``directory``; names are flat, never paths."""
         files: dict[str, Asset] = {}
         whole = hashlib.sha256()

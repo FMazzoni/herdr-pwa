@@ -1,6 +1,7 @@
 """Every write route over a fake herd: what it sends, what it refuses, and at which status."""
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -20,6 +21,7 @@ from herdr_pwa.settings import Settings
 from herdr_pwa.web.app import create_app
 from herdr_pwa.web.seams import Seams
 from herdr_pwa.writes.keys import control_token
+from herdr_pwa.writes.lifecycle import on_path
 from herdr_pwa.writes.outcome import Pacing
 from tests._fake_herd import P3, P5, S1, S2, SETTLED, FakeClock, FakeHerd, capture, echoed
 from tests.webfakes import IDENTITY
@@ -43,7 +45,13 @@ class Web:
         return records(self.state, limit=0)
 
 
-def web(tmp_path: Path, herd: FakeHerd, *, opencode_models: tuple[str, ...] = ()) -> Web:
+def web(
+    tmp_path: Path,
+    herd: FakeHerd,
+    *,
+    opencode_models: tuple[str, ...] = (),
+    which: Callable[[str], str | None] = on_path,
+) -> Web:
     clock = FakeClock()
     settings = Settings.model_validate(
         {
@@ -59,7 +67,8 @@ def web(tmp_path: Path, herd: FakeHerd, *, opencode_models: tuple[str, ...] = ()
         return HerdrClient(engine, transport=herd, clock=clock, sleep=clock.sleep)
 
     pacing = Pacing(sleep=clock.sleep, clock=clock)
-    app = create_app(settings, Seams(clock=clock, pacing=pacing, client_factory=factory))
+    seams = Seams(clock=clock, pacing=pacing, client_factory=factory, which=which)
+    app = create_app(settings, seams)
     return Web(herd, TestClient(app, headers=IDENTITY), tmp_path / "state")
 
 
@@ -549,6 +558,15 @@ def test_the_new_agent_form_says_which_installed_harness_this_service_cannot_see
     assert f"claude is installed at {mine / 'claude'} but isn't on this service's PATH" in page
     assert '<option value="claude"' not in page
     assert '<option value="opencode"' in page
+
+
+def test_the_new_agent_form_offers_what_the_seams_find_on_path(tmp_path: Path) -> None:
+    herd = FakeHerd()
+    herd.add_workspace("w1")
+    found = {"hermes": "/stand-in/hermes"}
+    page = web(tmp_path, herd, which=found.get).http.get("/new").text
+    assert '<option value="hermes"' in page
+    assert '<option value="claude"' not in page
 
 
 def test_the_new_agent_form_has_a_way_back_and_a_first_prompt(tmp_path: Path) -> None:
