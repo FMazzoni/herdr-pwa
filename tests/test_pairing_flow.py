@@ -17,7 +17,15 @@ from herdr_pwa.web.seams import Seams
 from tests.fakes import LOGIN, NODE, status_route, tailscaled
 from tests.test_push import raw_subscription
 from tests.waiting import eventually
-from tests.webfakes import SNAPSHOT, WORKING_PANE, FakeWire, agents_of, snapshot_frame
+from tests.webfakes import (
+    READ,
+    SNAPSHOT,
+    WORKING_PANE,
+    FakeWire,
+    agents_of,
+    read_frame,
+    snapshot_frame,
+)
 
 # Bounds a wait on the background loop; the loop itself runs every few milliseconds.
 DEADLINE = 10.0
@@ -52,7 +60,7 @@ def test_a_scripted_phone_pairs_installs_subscribes_and_is_pushed_to(tmp_path: P
     assert paired.url == f"https://{NODE}/"
     assert qr_text(paired.url)
 
-    wire = FakeWire({SNAPSHOT: snapshot_frame()})
+    wire = FakeWire({SNAPSHOT: snapshot_frame(), READ: read_frame("> ")})
 
     def factory(engine: EngineSettings) -> HerdrClient:
         return HerdrClient(engine, transport=wire)

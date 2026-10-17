@@ -165,7 +165,7 @@ def test_card_question_keeps_every_real_question(path: Path) -> None:
 
 def test_the_corpus_holds_every_blocked_capture() -> None:
     blocked = list(FIXTURES.glob("capture-blocked-*/"))
-    assert len(_ASKING_CAPTURES) == len(_READS) * len(blocked) + 2 + 2
+    assert len(_ASKING_CAPTURES) == len(_READS) * len(blocked) + 2 + 3
 
 
 @pytest.mark.parametrize("path", _SILENT_SCREENS, ids=_named)

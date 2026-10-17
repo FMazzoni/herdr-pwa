@@ -10,8 +10,10 @@ from pathlib import Path
 from typing import Final, Protocol, Self
 
 from herdr_pwa.clock import Clock
+from herdr_pwa.decisions import Overlay
 from herdr_pwa.engine import (
     CONTEXT_FULL,
+    Agent,
     BlockedPrompt,
     EngineError,
     PaneId,
@@ -192,11 +194,13 @@ class Notifier:
             snapshot = self._read()
             if snapshot is None:
                 return Tick(devices=len(devices), error=self.state.read_error)
-            self._stalled = self._stalls.of(snapshot.agents)
+            agents = snapshot.agents
+            self._stalled = self._stalls.of(agents)
+            asking = self._stalls.asking(agents, self._screen)
             step = self.planner.step(
-                snapshot.agents,
+                agents,
                 focused_pane=snapshot.focused_pane_id or "",
-                stalled=self._stalled,
+                beside=Overlay(stalled=self._stalled, asking=asking),
             )
             self._managed.forget([agent.target for agent in snapshot.agents])
             self.state.ticks += 1
@@ -272,6 +276,13 @@ class Notifier:
             return None
         self.state.read_error = ""
         return entry.value
+
+    def _screen(self, agent: Agent) -> BlockedPrompt | None:
+        try:
+            return self._reader.blocked_prompt(agent.target, session=agent.session)
+        except EngineError as exc:
+            log.info("no screen read for %s: %s", agent.session, type(exc).__name__)
+            return None
 
     def _question(self, agent: AgentView) -> str:
         if agent.session in self._stalled:

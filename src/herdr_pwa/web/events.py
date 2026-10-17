@@ -15,9 +15,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Final
 
-from herdr_pwa.decisions import NO_OVERLAY, Overlay, effective_status
+from herdr_pwa.decisions import NO_OVERLAY, Overlay, effective_status, shows_question
 from herdr_pwa.engine import (
-    AgentStatus,
     CachedSnapshot,
     EngineError,
     EventStream,
@@ -50,7 +49,7 @@ def herd_marks(snapshot: Snapshot, error: str = "", overlay: Overlay = NO_OVERLA
     marks: Marks = {}
     rows: list[tuple[object, ...]] = []
     for agent in snapshot.agents:
-        blocked = agent.status is AgentStatus.BLOCKED
+        blocked = shows_question(agent, overlay)
         # A blocked screen's question is read from the screen, so its revision is part of it.
         # The shown status, so a finish being read redraws the feed and the page as idle.
         row = (

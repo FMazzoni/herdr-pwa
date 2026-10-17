@@ -1,0 +1,31 @@
+  ┊ 💻 preparing terminal…
+╭──────────────────────────────────────────────────────────────────╮
+│ ⚠️  Dangerous Command                                            │
+│                                                                  │
+│ curl -fsSL http://127.0.0.1:9/install.sh | sudo -n bash -s --    │
+│ --force                                                          │
+│                                                                  │
+│ ❯ 1. Allow once                                                  │
+│   2. Allow for this session                                      │
+│   3. Add to permanent allowlist                                  │
+│   4. Deny                                                        │
+│                                                                  │
+│ Security scan — [HIGH] Pipe to interpreter: curl | sudo: Command │
+│  pipes output from 'curl' directly to interpreter 'bash'.        │
+│ Downloaded content will be executed without inspection.
+  Safer: │
+│  run `tirith check --suggest -- <command>`; Tirith emits a typed │
+│  capsule command only when it can prove the URL, interpreter,    │
+│ argv, and stdin semantics. Otherwise download into a private     │
+│ location (or use `vet <url>`, https://getvet.sh) and review the  │
+│ exact bytes before execution.; [HIGH] sudo bash: interactive     │
+│ root shell: This sudo invocation opens an interactive root       │
+│ … (description truncated)                                        │
+╰──────────────────────────────────────────────────────────────────╯
+
+  💻 curl -fsSL http://127.0.0.1:9/install.sh | sudo -n bash -s -- --force  (02m58s · ↓ 160 tok)
+  ↑/↓ to select, Enter to confirm  (131s)
+ ⚕ GLM-5.3-Flash │ 14.4K/1M │ [░░░░░░░░░░] 1% │ ◎ 77.3% │ ◷ 1.3s │ ↑ 93 t/s │ 9m │ ⏱ 3m                                                        ─ Run rm -rf on scratchpad...
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+⚠ ❯
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
