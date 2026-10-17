@@ -15,7 +15,7 @@ from herdr_pwa.engine import (
     PaneId,
     SessionId,
 )
-from herdr_pwa.writes.answer import KeyAsk, KeySent, send_key, send_starting_key
+from herdr_pwa.writes.answer import KeyAsk, KeySent, StartingKeyAsk, send_key, send_starting_key
 from herdr_pwa.writes.keys import control_token
 from herdr_pwa.writes.lifecycle import (
     AgentEnded,
@@ -26,7 +26,13 @@ from herdr_pwa.writes.lifecycle import (
     start_agent,
 )
 from herdr_pwa.writes.outcome import Outcome
-from herdr_pwa.writes.prompt import PromptAsk, PromptSent, send_first_prompt, send_prompt
+from herdr_pwa.writes.prompt import (
+    FirstPromptAsk,
+    PromptAsk,
+    PromptSent,
+    send_first_prompt,
+    send_prompt,
+)
 from herdr_pwa.writes.refusal import Refusal, Refused
 from herdr_pwa.writes.resolve import Writer
 from herdr_pwa.writes.workspaces import (
@@ -93,7 +99,7 @@ def _claude_session(writer: Writer, pane: PaneId) -> SessionId:
             return agent.session
         if agent.status is AgentStatus.BLOCKED:
             show(client, pane, "claude stopped at launch")
-            tapped = send_starting_key(writer, pane, "enter")
+            tapped = send_starting_key(writer, StartingKeyAsk(pane, "enter"))
             say("send_starting_key enter", repr(tapped))
         return None
 
@@ -178,7 +184,9 @@ def _late_identity_round(writer: Writer, workspace: str, cwd: Path) -> None:
     say("opencode environment", f"OPENCODE_CONFIG_CONTENT={OPENCODE_ASK} found in /proc")
     show(client, opencode.pane, "start_agent opencode")
     hermes = _start(writer, workspace, "hermes", cwd)
-    first = send_first_prompt(writer, hermes.pane, "Reply with exactly the word PONG.")
+    first = send_first_prompt(
+        writer, FirstPromptAsk(hermes.pane, "Reply with exactly the word PONG.")
+    )
     say("send_first_prompt hermes", repr(first))
     assert isinstance(first, PromptSent)
     _ = until(

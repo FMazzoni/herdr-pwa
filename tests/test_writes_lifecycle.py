@@ -38,6 +38,7 @@ from herdr_pwa.writes.lifecycle import (
 )
 from herdr_pwa.writes.prompt import (
     SETTLED_LOOKS,
+    FirstPromptAsk,
     PromptAsk,
     PromptSent,
     send_first_prompt,
@@ -486,7 +487,11 @@ def test_a_workspace_cannot_be_closed_while_an_agent_starts_in_it(tmp_path: Path
 
 def test_the_opening_prompt_holds_the_new_pane(tmp_path: Path) -> None:
     r = listening_rig(tmp_path, session="")
-    late = during(r, "agent.read", lambda: send_first_prompt(r.writer, as_pane_id(NEW_PANE), "x"))
+    late = during(
+        r,
+        "agent.read",
+        lambda: send_first_prompt(r.writer, FirstPromptAsk(as_pane_id(NEW_PANE), "x")),
+    )
     _ = start_agent(r.writer, ask(tmp_path, kind="hermes", prompt="go"), which=everywhere)
     in_flight(late)
     assert len(r.herd.writes("agent.prompt")) == 1
@@ -613,7 +618,7 @@ def test_a_launch_prompt_holds_the_new_pane(tmp_path: Path) -> None:
 
     def other_tab(herd: FakeHerd, params: dict[str, JsonValue]) -> None:
         started_hook(herd, params)
-        late.append(send_first_prompt(r.writer, as_pane_id(NEW_PANE), "x"))
+        late.append(send_first_prompt(r.writer, FirstPromptAsk(as_pane_id(NEW_PANE), "x")))
 
     r.herd.after["agent.start"] = other_tab
     _ = start_agent(r.writer, ask(tmp_path, "opencode", prompt="go"), which=everywhere)

@@ -6,7 +6,7 @@ import pytest
 from pydantic import JsonValue
 
 from herdr_pwa.engine import BlockedPrompt, EngineUnavailable, KeyHint
-from herdr_pwa.writes.answer import KeyAsk, KeySent, send_key, send_starting_key
+from herdr_pwa.writes.answer import KeyAsk, KeySent, StartingKeyAsk, send_key, send_starting_key
 from herdr_pwa.writes.keys import (
     allowed_keys,
     answer_digits,
@@ -207,23 +207,32 @@ def test_a_starting_agent_stopped_at_a_trust_dialog_takes_pad_keys_by_address(
     herd = FakeHerd()
     herd.put(P3, "", status="blocked", launch_pending=True)
     r = rig(tmp_path, herd)
-    _ = sent(send_starting_key(r.writer, P3, "enter"))
+    _ = sent(send_starting_key(r.writer, StartingKeyAsk(P3, "enter")))
     assert herd.writes(SEND_KEYS) == [{"target": "w1:p3", "keys": ["enter"]}]
-    assert refused(send_starting_key(r.writer, P3, "1")).refusal is Refusal.KEY_NOT_OFFERED
+    assert (
+        refused(send_starting_key(r.writer, StartingKeyAsk(P3, "1"))).refusal
+        is Refusal.KEY_NOT_OFFERED
+    )
 
 
 def test_a_starting_key_at_an_agent_that_has_a_session_goes_to_its_own_page(
     tmp_path: Path,
 ) -> None:
     r = blocked_rig(tmp_path)
-    assert refused(send_starting_key(r.writer, P3, "enter")).refusal is Refusal.HAS_IDENTITY
+    assert (
+        refused(send_starting_key(r.writer, StartingKeyAsk(P3, "enter"))).refusal
+        is Refusal.HAS_IDENTITY
+    )
 
 
 def test_a_starting_key_where_nothing_is_waiting_is_refused(tmp_path: Path) -> None:
     herd = FakeHerd()
     herd.put(P3, "", status="idle")
     r = rig(tmp_path, herd)
-    assert refused(send_starting_key(r.writer, P3, "enter")).refusal is Refusal.NOT_WAITING
+    assert (
+        refused(send_starting_key(r.writer, StartingKeyAsk(P3, "enter"))).refusal
+        is Refusal.NOT_WAITING
+    )
 
 
 def test_digits_are_offered_only_for_a_live_single_choice_menu_printed_whole() -> None:

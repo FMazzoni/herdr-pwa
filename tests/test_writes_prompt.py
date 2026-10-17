@@ -17,7 +17,13 @@ from herdr_pwa.writes.guard import (
     no_echo_notice,
 )
 from herdr_pwa.writes.outcome import Evidence, Outcome
-from herdr_pwa.writes.prompt import PromptAsk, PromptSent, send_first_prompt, send_prompt
+from herdr_pwa.writes.prompt import (
+    FirstPromptAsk,
+    PromptAsk,
+    PromptSent,
+    send_first_prompt,
+    send_prompt,
+)
 from herdr_pwa.writes.refusal import Refusal, Refused
 from herdr_pwa.writes.resolve import InFlight, Writer
 from tests._fake_herd import (
@@ -258,7 +264,7 @@ def test_a_first_prompt_waits_for_a_settled_screen_and_asserts_no_session(
         echoed("\u276f hi hermes"),
     ]
     r = rig(tmp_path, herd)
-    result = sent(send_first_prompt(r.writer, P3, "hi hermes"))
+    result = sent(send_first_prompt(r.writer, FirstPromptAsk(P3, "hi hermes")))
     assert result.verified
     assert herd.writes(PROMPT) == [{"target": "w1:p3", "text": "hi hermes"}]
 
@@ -267,7 +273,10 @@ def test_a_first_prompt_at_an_agent_with_a_session_is_sent_to_its_own_page(
     tmp_path: Path,
 ) -> None:
     r = idle_rig(tmp_path)
-    assert refused(send_first_prompt(r.writer, P3, "hi")).refusal is Refusal.HAS_IDENTITY
+    assert (
+        refused(send_first_prompt(r.writer, FirstPromptAsk(P3, "hi"))).refusal
+        is Refusal.HAS_IDENTITY
+    )
 
 
 # The guard's own tables, lifted with their reasons.
