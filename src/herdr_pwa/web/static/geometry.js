@@ -103,5 +103,9 @@
 
   /* The page arrives with its view, the question and the composer already drawn, so it lands as
    * its first swap used to: the dock's room reserved first, which lands a pinned page at the end. */
-  hp.bus.on("ready:scroll", dock);
+  hp.bus.on("ready:scroll", function () {
+    // A frame before chatend.js ran may have measured the dock already, with no reader to land.
+    dockedBand = -1;
+    dock();
+  });
 })(window.hp);
