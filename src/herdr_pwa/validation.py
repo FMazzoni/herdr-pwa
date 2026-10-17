@@ -1,6 +1,7 @@
 """What every owned model shares: fields that fall back instead of failing, and one error line."""
 
-from typing import Annotated, cast
+import re
+from typing import Annotated, Final, cast
 
 from pydantic import (
     GetCoreSchemaHandler,
@@ -51,6 +52,10 @@ type Text = Annotated[StrictStr | None, OR_NONE]
 type Count = Annotated[StrictInt | None, OR_NONE]
 type Number = Annotated[StrictInt | StrictFloat | None, OR_NONE]
 type Flag = Annotated[StrictBool | None, OR_NONE]
+
+
+# The shape a model id must have before it goes anywhere near an argv.
+MODEL_ID: Final = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,95}$")
 
 
 def summary(exc: ValidationError) -> str:

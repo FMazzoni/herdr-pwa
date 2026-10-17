@@ -795,7 +795,10 @@ class OpencodeAdapter(TranscriptAdapter):
     harness: ClassVar[Harness] = Harness(
         "opencode",
         StartRecipe(
-            "opencode", env={"OPENCODE_CONFIG_CONTENT": OPENCODE_ASK}, prompt_flag="--prompt"
+            "opencode",
+            models_setting="opencode_models",
+            env={"OPENCODE_CONFIG_CONTENT": OPENCODE_ASK},
+            prompt_flag="--prompt",
         ),
     )
 

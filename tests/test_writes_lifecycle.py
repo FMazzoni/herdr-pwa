@@ -20,6 +20,7 @@ from herdr_pwa.engine import (
     as_pane_id,
     harness_kinds,
 )
+from herdr_pwa.settings import Settings
 from herdr_pwa.writes.guard import MAX_PROMPT_CHARS
 from herdr_pwa.writes.lifecycle import (
     AgentEnded,
@@ -28,6 +29,7 @@ from herdr_pwa.writes.lifecycle import (
     StartRequest,
     agent_name,
     availability,
+    declared_models,
     end_agent,
     launch_of,
     offered_kinds,
@@ -661,3 +663,82 @@ def test_only_a_tab_launched_with_its_prompt_keeps_no_shell_history(tmp_path: Pa
         env = tab.get("env") or {}
         assert isinstance(env, dict)
         assert "HISTFILE" not in env
+
+
+PICKLE = "opencode/big-pickle"
+
+
+def declaring(r: Rig, *models: str) -> Writer:
+    """The rig's writer, with the operator having declared *models* for opencode."""
+    declared = declared_models(Settings(opencode_models=models))
+    return dataclasses.replace(r.writer, declared=declared)
+
+
+def test_opencode_starts_on_a_model_the_operator_declared(tmp_path: Path) -> None:
+    r = start_rig(tmp_path)
+    writer = declaring(r, "anthropic/claude-sonnet-4-5", PICKLE)
+    result = start_agent(writer, ask(tmp_path, "opencode", model=PICKLE), which=everywhere)
+    assert isinstance(result, AgentStarted)
+    [start] = r.herd.writes("agent.start")
+    assert (start["kind"], start["args"]) == ("opencode", ["--model", PICKLE])
+
+
+@pytest.mark.parametrize(
+    "model", ["opencode/BIG-PICKLE", "opencode/big", "big-pickle", f"{PICKLE}-2", f" {PICKLE}x"]
+)
+def test_a_model_is_offered_only_when_it_is_a_declared_id_exactly(
+    tmp_path: Path, model: str
+) -> None:
+    r = start_rig(tmp_path)
+    writer = declaring(r, PICKLE)
+    result = refused(start_agent(writer, ask(tmp_path, "opencode", model=model), which=everywhere))
+    assert result.refusal is Refusal.BAD_MODEL
+    assert r.herd.writes("tab.create") == []
+
+
+def test_with_no_models_declared_a_posted_opencode_model_is_refused_not_dropped(
+    tmp_path: Path,
+) -> None:
+    r = start_rig(tmp_path)
+    writer = declaring(r)
+    result = refused(start_agent(writer, ask(tmp_path, "opencode", model=PICKLE), which=everywhere))
+    assert result.refusal is Refusal.BAD_MODEL
+    assert "not one offered for this kind" in result.says
+    assert r.herd.writes("tab.create") == []
+
+
+def test_a_declared_list_is_opencode_s_alone(tmp_path: Path) -> None:
+    r = start_rig(tmp_path)
+    writer = declaring(r, PICKLE)
+    result = refused(start_agent(writer, ask(tmp_path, model=PICKLE), which=everywhere))
+    assert result.refusal is Refusal.BAD_MODEL
+    claude = launch_of("claude", writer.declared)
+    assert claude is not None
+    assert claude.models == ("fable", "opus", "sonnet", "haiku")
+
+
+def test_a_declared_model_and_a_launch_prompt_are_each_their_own_argv_element(
+    tmp_path: Path,
+) -> None:
+    r = argv_rig(tmp_path)
+    writer = declaring(r, PICKLE)
+    prompt = "-v fix it --model other"
+    result = start_agent(
+        writer, ask(tmp_path, "opencode", model=PICKLE, prompt=prompt), which=everywhere
+    )
+    assert isinstance(result, AgentStarted)
+    [start] = r.herd.writes("agent.start")
+    assert start["args"] == ["--model", PICKLE, f"--prompt={prompt}"]
+    assert isinstance(result.first, PromptSent)
+
+
+def test_every_declared_model_list_names_a_setting_that_exists() -> None:
+    lists = Settings().model_lists()
+    named = [
+        launch.models_setting
+        for kind in harness_kinds()
+        if (launch := launch_of(kind)) and launch.models_setting
+    ]
+    assert named
+    assert all(name in lists for name in named), named
+    assert declared_models(Settings()) == {"opencode": ()}

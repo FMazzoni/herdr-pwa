@@ -2,7 +2,7 @@
 
 import logging
 import threading
-from collections.abc import Callable, Generator
+from collections.abc import Callable, Generator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Final, Protocol
@@ -36,14 +36,16 @@ class AuditTrail(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class Writer:
-    """What every write needs: the runner, the audit trail, the clock its waits run on, and
-    the transcript roots a session's own store is looked up in (empty: each harness's default).
+    """What every write needs: the runner, the audit trail, the clock its waits run on, the
+    transcript roots a session's own store is looked up in (empty: each harness's default), and
+    the models the operator declared per kind.
     """
 
     client: HerdrClient
     audit: AuditTrail
     pacing: Pacing = Pacing()  # noqa: RUF009 - frozen, so one shared default is safe
     stores: tuple[str, ...] = ()
+    declared: Mapping[str, tuple[str, ...]] = field(default_factory=dict[str, tuple[str, ...]])
 
 
 def snapshot_now(client: HerdrClient, *, verb: str) -> Snapshot | Refused:

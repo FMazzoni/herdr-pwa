@@ -43,7 +43,7 @@ class Web:
         return records(self.state, limit=0)
 
 
-def web(tmp_path: Path, herd: FakeHerd) -> Web:
+def web(tmp_path: Path, herd: FakeHerd, *, opencode_models: tuple[str, ...] = ()) -> Web:
     clock = FakeClock()
     settings = Settings.model_validate(
         {
@@ -51,6 +51,7 @@ def web(tmp_path: Path, herd: FakeHerd) -> Web:
             "state_dir": tmp_path / "state",
             "tailscaled_socket": tmp_path / "no-tailscaled.sock",
             "snapshot_cache_ttl": 0.001,
+            "opencode_models": opencode_models,
         }
     )
 
@@ -661,3 +662,74 @@ def test_the_first_prompt_after_answering_a_question_is_not_refused_as_moved(
     sent = w.http.post(f"/agent/{S1}/prompt", data={**drawn, "text": "hello there"}, headers=ORIGIN)
     assert sent.status_code == 200
     assert "Sent, and it is on the pane." in sent.text
+
+
+PICKLE = "opencode/big-pickle"
+
+
+def _new_form(tmp_path: Path, *, opencode_models: tuple[str, ...] = ()) -> str:
+    herd = FakeHerd()
+    herd.add_workspace("w1")
+    return web(tmp_path, herd, opencode_models=opencode_models).http.get("/new").text
+
+
+def test_the_new_agent_form_offers_opencode_the_models_the_operator_declared(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _on_path(tmp_path, monkeypatch, "opencode")
+    page = _new_form(tmp_path, opencode_models=(PICKLE, "anthropic/claude-sonnet-4-5"))
+    assert 'name="model"' in page
+    assert f'<option value="{PICKLE}">opencode</option>' in page
+    assert '<option value="anthropic/claude-sonnet-4-5">opencode</option>' in page
+    assert "A model can be chosen for opencode;" in page
+
+
+def test_with_no_models_declared_opencode_gets_no_model_field(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _on_path(tmp_path, monkeypatch, "opencode")
+    page = _new_form(tmp_path)
+    assert 'name="model"' not in page
+    assert "model choice" not in page
+    assert "can be chosen" not in page
+
+
+def test_the_model_note_names_only_the_kinds_that_offer_a_choice(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _on_path(tmp_path, monkeypatch, "claude", "opencode")
+    page = _new_form(tmp_path)
+    assert '<option value="haiku">claude</option>' in page
+    assert ">opencode</option></datalist>" not in page
+    assert "A model can be chosen for claude;" in page
+
+
+def test_a_model_posted_for_opencode_with_none_declared_is_refused_and_said(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _on_path(tmp_path, monkeypatch, "opencode")
+    herd = FakeHerd()
+    herd.add_workspace("w1")
+    w = web(tmp_path, herd)
+    data = {"name": "probe", "kind": "opencode", "workspace": "w1", "cwd": str(tmp_path)}
+    response = w.http.post("/new", data={**data, "model": PICKLE}, headers=ORIGIN)
+    assert response.status_code == 400
+    assert "that model is not one offered for this kind here" in response.text
+    assert herd.writes("tab.create") == []
+
+
+def test_a_model_posted_for_opencode_starts_it_when_declared(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _on_path(tmp_path, monkeypatch, "opencode")
+    herd = FakeHerd()
+    herd.add_workspace("w1")
+    herd.started_session = S1
+    w = web(tmp_path, herd, opencode_models=(PICKLE,))
+    data = {"name": "probe", "kind": "opencode", "workspace": "w1", "cwd": str(tmp_path)}
+    response = w.http.post(
+        "/new", data={**data, "model": PICKLE}, headers=ORIGIN, follow_redirects=False
+    )
+    assert response.status_code == 303
+    [start] = herd.writes("agent.start")
+    assert start["args"] == ["--model", PICKLE]
