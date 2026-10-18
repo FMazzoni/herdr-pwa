@@ -129,6 +129,11 @@ def capture(name: str) -> str:
     return (FIXTURES / name / "detection.txt").read_text()
 
 
+def rig_screen(name: str) -> str:
+    """One of the screens written for the rig, in colour."""
+    return (FIXTURES / "rig" / name).read_text()
+
+
 PERMISSION: Final = "capture-blocked-permission-prompt"
 PERMISSION_WRAPPED: Final = "capture-blocked-permission-prompt-wrapped"
 MENU: Final = "capture-blocked-askuserquestion-menu"
@@ -1696,6 +1701,22 @@ STATS: Final = (
         runner(_stressed),
         prime=_crowded_transcript,
         title="A strip with more facts than a narrow line holds: the last ones wait in the sheet",
+    ),
+    State(
+        "usage-statusline",
+        f"{AGENT}?tab=chat",
+        "#agent-stats .stats__status",
+        runner(_stressed, rig_screen("claude-statusline.ansi")),
+        prime=_usage_transcript,
+        title="The strip is the pane's own statusline: its rows wrapped between their pieces",
+    ),
+    State(
+        "usage-statusline-narrow",
+        f"{AGENT}?tab=chat",
+        "#agent-stats .stats__status",
+        runner(_stressed, rig_screen("claude-statusline-narrow.ansi")),
+        prime=_usage_transcript,
+        title="The statusline a 58-column pane cut short: the strip shows what the screen shows",
     ),
     State(
         "usage-open",

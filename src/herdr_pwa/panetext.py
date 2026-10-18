@@ -3,7 +3,7 @@
 import re
 import unicodedata
 from collections.abc import Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Final
 
 
@@ -28,6 +28,9 @@ class PaneView:
     """One pane read: the viewport, with the agent's input box and statusline split off."""
 
     lines: list[Line]
+    # The rows the harness draws under its input box, in order: a statusline is arbitrary
+    # command output and is routinely more than one row. Empty when no box was found.
+    status: list[list[Run]] = field(default_factory=list[list[Run]])
 
 
 MAX_RUNS_PER_LINE: Final = 96
@@ -189,6 +192,37 @@ def _split_chrome(
     if prompt < 1 or not is_box_border(plain_text(lines[prompt - 1])):
         return None
     return lines[: prompt - 1], lines[bottom + 1 : end], lines[prompt:bottom]
+
+
+# A statusline's segments: text between `|` separators, or across the padding a script uses to
+# right-align its last field. The separators stay, as the person printed them; the padding is
+# the terminal's width, not a word, so it goes.
+_SEGMENT_BREAK: Final = re.compile(
+    f"(?P<pad>[{re.escape(_WS)}]{{2,}})|(?:^|(?<=[{re.escape(_WS)}]))\\|(?:$|(?=[{re.escape(_WS)}]))"
+)
+
+
+def _trimmed(flat: str, start: int, end: int) -> tuple[int, int]:
+    """``[start, end)`` of ``flat`` with the whitespace at either edge left out."""
+    while start < end and flat[start] in _WS:
+        start += 1
+    while end > start and flat[end - 1] in _WS:
+        end -= 1
+    return start, end
+
+
+def segments(runs: list[Run]) -> list[list[Run]]:
+    """One statusline row as the pieces a phone may wrap between, styles kept, nothing reworded."""
+    flat = plain_text(runs)
+    pieces: list[tuple[int, int]] = []
+    at = 0
+    for found in _SEGMENT_BREAK.finditer(flat):
+        pieces.append(_trimmed(flat, at, found.start()))
+        if found.group("pad") is None:
+            pieces.append((found.start(), found.end()))
+        at = found.end()
+    pieces.append(_trimmed(flat, at, len(flat)))
+    return [_slice_runs(runs, start, end) for start, end in pieces if end > start]
 
 
 def composer_top(rows: list[str]) -> int:
@@ -578,14 +612,16 @@ def pane_view(text: str, *, strip: bool = True) -> PaneView:
     lines = _tokenise(text)
     split = _split_chrome(lines)
     # The input box is cut: its text may not be the person's, so it is never drawn as theirs.
-    # The statusline under it goes too; the stats strip says what it said.
+    # The statusline under it leaves the viewport too, and the stats strip draws it instead.
     body = split[0] if split is not None else lines
     body = _strip_decoration(body) if strip else [_rstrip_line(line) for line in body]
+    status = [] if split is None else [_rstrip_line(line) for line in split[1]]
     return PaneView(
         lines=[
             Line(runs, clip=strip and _is_wide_rule(plain_text(runs)))
             for runs in _trim_blank_edges(body)
         ],
+        status=[line for line in status if plain_text(line).strip()],
     )
 
 

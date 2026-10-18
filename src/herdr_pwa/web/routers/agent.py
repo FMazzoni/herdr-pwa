@@ -26,7 +26,14 @@ from herdr_pwa.web.deps import WebState, hidden_tick, viewer_guard
 from herdr_pwa.web.herd import agent_status, asked_by, find_agent
 from herdr_pwa.web.naming import page_title
 from herdr_pwa.web.routers.compose import answer_region, composer_region
-from herdr_pwa.web.stats import Reading, Stats, spawned_times, stats_for, turn_times
+from herdr_pwa.web.stats import (
+    Reading,
+    Stats,
+    spawned_times,
+    stats_for,
+    turn_times,
+    with_statusline,
+)
 from herdr_pwa.web.writing import first_note
 from herdr_pwa.writes.resolve import doubt
 
@@ -44,10 +51,20 @@ def _usage(web: WebState, agent: Agent) -> SessionUsage:
 
 
 def read_stats(web: WebState, agent: Agent) -> Stats:
-    """The stats strip for *agent*, from its harness's own record."""
+    """The stats strip for *agent*: the statusline its pane shows, else its harness's own record."""
     usage = _usage(web, agent)
     status = agent_status(web, agent).value
-    return stats_for(Reading(agent.agent or "", status, usage, now=web.wall()))
+    stats = stats_for(Reading(agent.agent or "", status, usage, now=web.wall()))
+    return with_statusline(stats, _statusline(web, agent))
+
+
+def _statusline(web: WebState, agent: Agent) -> list[list[panetext.Run]]:
+    """The rows under the input box in this request's read of the pane; none if it cannot be read."""
+    try:
+        return read_pane(web, agent).status
+    except EngineError:
+        # The strip then says what the log says, as it did before the pane showed a statusline.
+        return []
 
 
 class ChatQuery(BaseModel):
