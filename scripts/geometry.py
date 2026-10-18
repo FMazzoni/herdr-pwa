@@ -73,6 +73,11 @@ READY_SECONDS = 15.0
 SERVE_SECONDS = 10.0
 
 SCROLL_ALLOWED: dict[str, str] = {
+    ".stats__status": (
+        "the harness's statusline in the stats strip: its rows wrap between their pieces, so "
+        "only one token wider than the phone (a path, an unbroken id) makes it scroll inside "
+        "the strip, which starts at the gutter, instead of cutting a number short"
+    ),
     ".prose pre": (
         "a code block in agent prose: indentation and columns are the meaning, so the block "
         "scrolls inside its own box instead of wrapping a line of code into a different shape"
