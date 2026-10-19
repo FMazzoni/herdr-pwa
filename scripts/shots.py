@@ -20,6 +20,7 @@ from playwright.sync_api import (  # noqa: E402
     BrowserContext,
     Page,
     Playwright,
+    Route,
     sync_playwright,
 )
 from playwright.sync_api import Error as BrowserError  # noqa: E402
@@ -82,15 +83,48 @@ def webkit() -> Iterator[Phone]:
             browser.close()
 
 
-def context(phone: Phone, device: Device, *, css_pixels: bool = False) -> BrowserContext:
+# The wireframe overlay: words become bars and colour goes grey, so only the layout reads.
+WIRE_CSS = Path(__file__).with_name("wire.css")
+
+
+@dataclass(frozen=True)
+class Look:
+    """How a shot is taken beyond the device: at CSS pixels, and with CSS laid over app.css."""
+
+    css_pixels: bool = False
+    # Appended to the served app.css, so a variant is drafted without touching the tree.
+    css: str = ""
+
+
+# The look every plain shot has: the device's own ratio, app.css as served.
+PLAIN = Look()
+
+
+def wire_css() -> str:
+    """The wireframe overlay's CSS."""
+    return WIRE_CSS.read_text(encoding="utf-8")
+
+
+def context(phone: Phone, device: Device, look: Look = PLAIN) -> BrowserContext:
     """A browser context that is ``device``: Safari on iOS, touch, its viewport and ratio."""
     options = dict(phone.playwright.devices[DESCRIPTOR])
     options.update(
         viewport={"width": device.width, "height": device.height},
         screen={"width": device.width, "height": device.height},
-        device_scale_factor=1 if css_pixels else device.scale,
+        device_scale_factor=1 if look.css_pixels else device.scale,
     )
-    return phone.browser.new_context(**options)
+    # A request a service worker answers never reaches a route, so an overlay needs it gone.
+    if look.css:
+        options.update(service_workers="block")
+    ctx = phone.browser.new_context(**options)
+    if look.css:
+        ctx.route("**/static/app.css*", lambda route: _overlay(route, look.css))
+    return ctx
+
+
+def _overlay(route: Route, css: str) -> None:
+    served = route.fetch()
+    route.fulfill(response=served, body=served.text() + "\n" + css)
 
 
 def snap(page: Page, target: Path) -> list[Path]:
@@ -134,12 +168,12 @@ class Stage:
     phone: Phone
     switch: Switch
     base: str
-    css_pixels: bool = False
+    look: Look = PLAIN
 
 
 def _shoot_device(stage: Stage, device: Device, states: list[State], out: Path) -> list[str]:
     failed: list[str] = []
-    ctx = context(stage.phone, device, css_pixels=stage.css_pixels)
+    ctx = context(stage.phone, device, stage.look)
     page = ctx.new_page()
     with tempfile.TemporaryDirectory(prefix="hp-shots-") as scratch:
         for state in states:
@@ -164,8 +198,7 @@ def shoot(
     states: list[State],
     out: Path,
     devices: tuple[Device, ...] = DEVICES,
-    *,
-    css_pixels: bool = False,
+    look: Look = PLAIN,
 ) -> list[str]:
     """Shoot every state on every device into ``out/<device>/``; returns what failed."""
     logging.getLogger("herdr_pwa").setLevel(logging.ERROR)
@@ -173,7 +206,7 @@ def shoot(
     failed: list[str] = []
     with serve(switch) as base, webkit() as phone:
         for device in devices:
-            stage = Stage(phone, switch, base, css_pixels=css_pixels)
+            stage = Stage(phone, switch, base, look)
             failed += _shoot_device(stage, device, states, out)
     return failed
 
@@ -183,13 +216,18 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     parser.add_argument("keys", nargs="*", help="catalogue keys (default: every state)")
     parser.add_argument("--out", type=Path, default=OUT / "current", help="where the PNGs go")
+    parser.add_argument(
+        "--css", type=Path, action="append", default=[], help="CSS laid over app.css (repeatable)"
+    )
+    parser.add_argument("--wire", action="store_true", help="wireframe: words as bars, no colour")
     args = parser.parse_args(argv)
     why = missing_browser()
     if why:
         print(f"shots: skipped, {why}")
         return 0
     states = pick(args.keys)
-    failed = shoot(states, args.out)
+    layers = [p.read_text(encoding="utf-8") for p in args.css] + ([wire_css()] if args.wire else [])
+    failed = shoot(states, args.out, look=Look(css="\n".join(layers)))
     for line in failed:
         print(f"  FAIL {line}")
     print(f"shots: {len(states)} states x {len(DEVICES)} devices in {args.out}")

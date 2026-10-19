@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from shots import DEVICES, IPHONE, Device, missing_browser, shoot  # noqa: E402
+from shots import DEVICES, IPHONE, Device, Look, missing_browser, shoot  # noqa: E402
 
 from tests.catalogue import STATES, pick  # noqa: E402
 
@@ -138,7 +138,7 @@ def main(argv: list[str] | None = None) -> int:
     work = SHEETS / time.strftime("%Y%m%d-%H%M%S")
     device = next(d for d in DEVICES if d.name == args.device)
     left = Side(args.left_label, args.left, device)
-    failed = shoot(states, work / "after", (device,), css_pixels=args.embed)
+    failed = shoot(states, work / "after", (device,), Look(css_pixels=args.embed))
     right = Side(args.right_label, work / "after", device)
     page = write_sheet(keys, left, right, Page(args.out or work / "index.html", args.embed))
     for line in failed:
