@@ -16,7 +16,7 @@ from herdr_pwa.engine import (
     is_compact_summary,
     is_slash_command,
 )
-from herdr_pwa.web.markdown import MdNode, render_tree
+from herdr_pwa.render.markdown import MdNode, render_tree
 from herdr_pwa.web.stats import NO_TIMES, SpawnedTime, TurnTimes
 
 _STATE_NOTES = {

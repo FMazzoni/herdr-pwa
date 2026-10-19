@@ -6,7 +6,7 @@ from typing import Final
 
 from latex2mathml.converter import convert
 
-from herdr_pwa.web.mdnode import MdNode
+from herdr_pwa.render.mdnode import MdNode
 
 # MathML Core, plus menclose, which WebKit draws and latex2mathml emits for \boxed and \cancel.
 MATH_TAGS: Final = frozenset(

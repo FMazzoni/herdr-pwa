@@ -23,8 +23,8 @@ from herdr_pwa.files.view import (
     Viewer,
     human_size,
 )
-from herdr_pwa.web.highlight import highlight
-from herdr_pwa.web.mdnode import MdNode
+from herdr_pwa.render.highlight import highlight
+from herdr_pwa.render.mdnode import MdNode
 from herdr_pwa.web.routers import files as files_router
 from tests.filefakes import booby_trap, git, make_repo, stand_in, trapped_submodule
 from tests.waiting import until
