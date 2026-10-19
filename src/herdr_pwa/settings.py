@@ -6,8 +6,6 @@ from typing import Annotated
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
-from herdr_pwa.engine import EngineSettings
-from herdr_pwa.protocol import DEFAULT_SOCKET_PATH
 from herdr_pwa.validation import MODEL_ID
 
 
@@ -102,8 +100,3 @@ class Settings(BaseSettings):
     def model_lists(self) -> dict[str, tuple[str, ...]]:
         """Every model list the operator declares, by its field's name."""
         return {"opencode_models": self.opencode_models}
-
-    def engine(self) -> EngineSettings:
-        """The engine's view of these settings."""
-        socket = self.socket_path or Path(DEFAULT_SOCKET_PATH).expanduser()
-        return EngineSettings(socket_path=socket, command_timeout=self.command_timeout)

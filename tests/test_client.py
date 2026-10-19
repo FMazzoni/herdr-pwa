@@ -37,7 +37,9 @@ from herdr_pwa.engine import (
     TargetNotFound,
     as_pane_id,
     as_session_id,
+    engine_settings,
 )
+from herdr_pwa.settings import Settings
 from tests._jsonpath import at, obj
 from tests._wire_support import FakeTransport, Reply, TickingClock, no_sleep
 from tests.engine_seam import (
@@ -1200,6 +1202,15 @@ def test_an_injected_settings_object_is_never_second_guessed(
     assert isinstance(eng.transport, SocketTransport)
     assert eng.transport.path == handed.socket_path
     assert eng.transport.timeout == handed.command_timeout
+
+
+def test_the_engine_reads_the_apps_settings_into_its_own(tmp_path: Path) -> None:
+    """The engine takes the socket and timeout from Settings, defaulting to herdr's own socket."""
+    named = engine_settings(Settings(socket_path=tmp_path / "named.sock", command_timeout=1.5))
+    assert named == EngineSettings(socket_path=tmp_path / "named.sock", command_timeout=1.5)
+    unnamed = engine_settings(Settings(socket_path=None))
+    assert unnamed.socket_path == Path(protocol.DEFAULT_SOCKET_PATH).expanduser()
+    assert unnamed.command_timeout == Settings().command_timeout
 
 
 def test_the_engine_declares_the_eight_fields_it_reads_and_no_more() -> None:

@@ -8,7 +8,13 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import JsonValue, TypeAdapter
 
-from herdr_pwa.engine import EngineSettings, EngineUnavailable, HerdrClient, SnapshotCache
+from herdr_pwa.engine import (
+    EngineSettings,
+    EngineUnavailable,
+    HerdrClient,
+    SnapshotCache,
+    engine_settings,
+)
 from herdr_pwa.notify import NotifyConfig
 from herdr_pwa.protocol import WRITE_METHODS
 from herdr_pwa.push import DeliveryError, Subscription
@@ -253,7 +259,7 @@ def test_the_loop_ticks_until_stopped_and_survives_a_bad_tick(
 
 def test_push_is_not_armed_without_a_contact_and_says_so(tmp_path: Path) -> None:
     settings = Settings(state_dir=tmp_path / "state", socket_path=tmp_path / "no.sock")
-    reader = HerdrClient(settings.engine(), transport=FakeWire())
+    reader = HerdrClient(engine_settings(settings), transport=FakeWire())
     state = open_push(
         settings, HerdSource(reader, SnapshotCache(ttl=1.0), Stalls(tmp_path)), Seams()
     )
