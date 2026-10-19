@@ -80,7 +80,7 @@ def api(session: str, method: str, params: Frame | None = None, *, check: bool =
     """One request on *this* session's socket, through the app's own transport."""
     link = SocketTransport(socket_path(session), timeout=CALL_SECONDS)
     try:
-        return link.call(method, params or {})
+        return link.call(method, params or {}).payload
     except EngineError:
         if check:
             raise

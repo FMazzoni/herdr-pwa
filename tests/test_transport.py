@@ -179,7 +179,7 @@ def test_the_request_is_one_newline_terminated_json_object(
     """The whole protocol, asserted on the bytes rather than on an intention."""
     wire = transport(sock_path)
     reply = wire.call("session.snapshot", {})
-    assert at(reply, "result", "echo") == "session.snapshot"
+    assert at(reply.payload, "result", "echo") == "session.snapshot"
     assert server.requests[0]["method"] == "session.snapshot"
     assert server.requests[0]["params"] == {}
     assert set(server.requests[0]) == {"id", "method", "params"}
@@ -218,7 +218,7 @@ def test_a_reply_is_matched_to_the_id_that_asked_for_it(
 
     serve(sock_path, handler, request)
     wire = transport(sock_path, timeout=0.3)
-    assert at(wire.call("session.snapshot", {}), "result", "echo") == "session.snapshot"
+    assert at(wire.call("session.snapshot", {}).payload, "result", "echo") == "session.snapshot"
     with pytest.raises(EngineError):  # never a reply, and never the wrong one
         wire.call("agent.list", {})  # answered under the first call's id
     wire.close()
@@ -280,7 +280,7 @@ def test_satisfies_the_transport_protocol(sock_path: Path) -> None:
 
     wire: Transport = transport(sock_path)
     reply = wire.call("session.snapshot", {}, timeout=FAST, idempotent=True)
-    assert at(reply, "result", "echo") == "session.snapshot"
+    assert at(reply.payload, "result", "echo") == "session.snapshot"
     wire.close()
     wire.close()  # "calling it twice must be harmless"
 
@@ -341,6 +341,39 @@ def test_an_unknown_error_code_stays_a_plain_engine_error(
         wire.call("agent.get", {"target": "w1:p3"})
     assert type(exc.value) is EngineError
     assert exc.value.code == "weird_new_code"
+    wire.close()
+
+
+def test_an_error_body_the_schema_does_not_describe_is_still_a_refusal(
+    sock_path: Path, request: pytest.FixtureRequest
+) -> None:
+    """Reported as a plain engine error, never obeyed and never mistaken for a reply."""
+
+    def handler(req: dict[str, JsonValue], _c: socket.socket) -> dict[str, JsonValue]:
+        return {"id": req["id"], "error": {"code": 7}}
+
+    serve(sock_path, handler, request)
+    wire = transport(sock_path)
+    with pytest.raises(EngineError) as exc:
+        wire.call("agent.get", {"target": "w1:p3"})
+    assert type(exc.value) is EngineError
+    assert exc.value.code == "engine_error"
+    assert exc.value.message == "the runner reported {'code': 7}"
+    wire.close()
+
+
+def test_an_error_that_is_not_an_object_is_left_to_the_reply_reader(
+    sock_path: Path, request: pytest.FixtureRequest
+) -> None:
+    """Only an object under ``error`` is a refusal; the client then refuses the reply's shape."""
+
+    def handler(req: dict[str, JsonValue], _c: socket.socket) -> dict[str, JsonValue]:
+        return {"id": req["id"], "error": "boom"}
+
+    serve(sock_path, handler, request)
+    wire = transport(sock_path)
+    reply = wire.call("agent.get", {"target": "w1:p3"})
+    assert at(reply.payload, "error") == "boom"
     wire.close()
 
 
@@ -620,7 +653,9 @@ def test_undecodable_pane_bytes_come_back_replaced_rather_than_raising(
 
     serve(sock_path, handler, request)
     wire = transport(sock_path)
-    assert "\ufffd" in str(at(wire.call("agent.read", {"target": "w1:p3"}), "result", "text"))
+    assert "\ufffd" in str(
+        at(wire.call("agent.read", {"target": "w1:p3"}).payload, "result", "text")
+    )
     wire.close()
 
 
@@ -730,7 +765,7 @@ def test_a_reply_for_an_id_nobody_awaits_is_skipped_with_a_warning(
     wire = transport(sock_path)
     with caplog.at_level(logging.WARNING):
         reply = wire.call("session.snapshot", {})
-    assert at(reply, "result", "echo") == "session.snapshot"
+    assert at(reply.payload, "result", "echo") == "session.snapshot"
     assert "somebody-else" in caplog.text
     wire.close()
 
@@ -765,7 +800,7 @@ def test_a_late_reply_left_in_the_pipe_is_never_returned_to_the_next_caller(
     serve(sock_path, handler, request)
     wire = transport(sock_path)
     wire.call("session.snapshot", {})
-    assert at(wire.call("agent.list", {}), "result", "echo") == "agent.list"
+    assert at(wire.call("agent.list", {}).payload, "result", "echo") == "agent.list"
     wire.close()
 
 
@@ -789,7 +824,7 @@ def test_a_dead_reused_connection_is_transparently_redialled(
     fake = serve(sock_path, handler, request)
     wire = transport(sock_path)
     wire.call("agent.list", {})
-    assert at(wire.call("agent.list", {}), "result", "echo") == "agent.list"
+    assert at(wire.call("agent.list", {}).payload, "result", "echo") == "agent.list"
     assert fake.connections == 2
     wire.close()
 
@@ -889,7 +924,7 @@ def test_concurrent_callers_each_get_their_own_reply(server: FakeHerdr, sock_pat
         method = f"agent.get.{n}"
         reply = wire.call(method, {"target": str(n)})
         with lock:
-            seen.append((method, at(reply, "result", "echo")))
+            seen.append((method, at(reply.payload, "result", "echo")))
 
     threads = [threading.Thread(target=ask, args=(n,)) for n in range(16)]
     for t in threads:
@@ -1241,6 +1276,34 @@ def test_an_error_frame_on_the_stream_maps_onto_the_taxonomy(
 
     serve(sock_path, handler, request)
     with pytest.raises(TargetNotFound, match="no such pane"):
+        list(stream(sock_path))
+
+
+def test_an_error_body_the_schema_does_not_describe_refuses_the_subscription(
+    sock_path: Path, request: pytest.FixtureRequest
+) -> None:
+    def handler(req: dict[str, JsonValue], _conn: socket.socket) -> dict[str, JsonValue]:
+        return {"id": req["id"], "error": {"message": 3}}
+
+    serve(sock_path, handler, request)
+    with pytest.raises(EngineError) as exc:
+        list(stream(sock_path))
+    assert type(exc.value) is EngineError
+    assert exc.value.code == "engine_error"
+    assert exc.value.message.startswith("the runner reported ")
+
+
+def test_a_reply_the_schema_rejects_never_confirms_the_subscription(
+    sock_path: Path, request: pytest.FixtureRequest
+) -> None:
+    """Only a frame herdr's schema reads as ``subscription_started`` opens the stream."""
+
+    def handler(req: dict[str, JsonValue], conn: socket.socket) -> None:
+        for _ in range(MAX_STRAY_FRAMES):
+            conn.sendall(_line({"id": req["id"], "result": {"type": "no_such_arm"}}))
+
+    serve(sock_path, handler, request)
+    with pytest.raises(InvalidResponse, match="never confirmed the subscription"):
         list(stream(sock_path))
 
 

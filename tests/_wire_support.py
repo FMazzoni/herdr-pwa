@@ -1,14 +1,23 @@
 """The wire seam the engine and write tests share: a fake transport and a clock that moves."""
 
+import json
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from pydantic import JsonValue
 
+from herdr_pwa.engine import WireReply
+from tests.engine_seam import decode_frame
+
 # A canned frame, a failure to raise, or a function of the request params.
 type Reply = (
     dict[str, JsonValue] | Exception | Callable[[dict[str, JsonValue]], dict[str, JsonValue]]
 )
+
+
+def as_reply(frame: dict[str, JsonValue]) -> WireReply:
+    """A canned frame read the way the real wire reads the bytes it arrives as."""
+    return decode_frame(json.dumps(frame).encode())
 
 
 class TickingClock:
@@ -45,12 +54,12 @@ class FakeTransport:
         *,
         timeout: float | None = None,
         idempotent: bool = True,
-    ) -> dict[str, JsonValue]:
+    ) -> WireReply:
         self.calls.append(Call(method, dict(params), timeout, idempotent))
         reply = self.replies.get(method, {"id": "x", "result": {"type": "ok"}})
         if isinstance(reply, Exception):
             raise reply
-        return reply(params) if callable(reply) else reply
+        return as_reply(reply(params) if callable(reply) else reply)
 
     def close(self) -> None:
         self.closed += 1

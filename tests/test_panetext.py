@@ -8,7 +8,7 @@ import pytest
 from pydantic import JsonValue, TypeAdapter
 
 from herdr_pwa import panetext
-from herdr_pwa.engine import BlockedPrompt, EngineSettings, HerdrClient, as_pane_id
+from herdr_pwa.engine import BlockedPrompt, EngineSettings, HerdrClient, WireReply, as_pane_id
 from herdr_pwa.panetext import (
     MAX_RUNS_PER_LINE,
     Run,
@@ -21,6 +21,7 @@ from herdr_pwa.panetext import (
     plain_text,
     printed_whole,
 )
+from tests._wire_support import as_reply
 
 ANSI_DIR = Path(__file__).parent / "fixtures" / "ansi"
 SNAPSHOT_FIXTURE = Path(__file__).parent / "fixtures" / "snapshot.example.json"
@@ -278,11 +279,11 @@ class _Recorder:
         *,
         timeout: float | None = None,
         idempotent: bool = True,
-    ) -> dict[str, JsonValue]:
+    ) -> WireReply:
         del timeout, idempotent
         self.calls.append((method, dict(params)))
         if method.endswith("snapshot"):
-            return _FRAME.validate_json(SNAPSHOT_FIXTURE.read_text(encoding="utf-8"))
+            return as_reply(_FRAME.validate_json(SNAPSHOT_FIXTURE.read_text(encoding="utf-8")))
         text = self.answers.pop(0) if self.answers else ""
         read: dict[str, JsonValue] = {
             "format": params.get("format", "text"),
@@ -294,7 +295,7 @@ class _Recorder:
             "truncated": False,
             "workspace_id": "w1",
         }
-        return {"id": "x", "result": {"type": "pane_read", "read": read}}
+        return as_reply({"id": "x", "result": {"type": "pane_read", "read": read}})
 
     def close(self) -> None:
         return None

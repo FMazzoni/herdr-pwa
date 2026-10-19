@@ -14,14 +14,34 @@ from pathlib import Path
 from secrets import token_hex
 from typing import Final, NamedTuple, Protocol, runtime_checkable
 
-from pydantic import JsonValue, TypeAdapter, ValidationError
+from pydantic import BaseModel, JsonValue, TypeAdapter, ValidationError
 
 from herdr_pwa.clock import Clock
 from herdr_pwa.engine.generated import ErrorBody, SuccessResponse
-from herdr_pwa.engine.generated.success_response import SubscriptionStartedResponseResult
+from herdr_pwa.engine.generated.success_response import (
+    ResponseResult,
+    SubscriptionStartedResponseResult,
+)
 
-# One herdr socket frame, decoded: the shape the generated models then validate.
+# One herdr socket frame, decoded: the object as the runner sent it.
 type Frame = dict[str, JsonValue]
+
+
+class _Refusal(BaseModel):
+    """A frame read as a refusal: its ``error`` object, whatever else it carries."""
+
+    error: ErrorBody
+
+
+class WireReply(NamedTuple):
+    """One decoded frame, read once against herdr's published schema."""
+
+    payload: Frame
+    # The success arm the schema reads, or why it reads none: an event, a refusal, a drift.
+    result: ResponseResult | ValidationError
+    # The refusal an ``error`` object reports, if the frame carries one.
+    error: ErrorBody | None
+
 
 log = logging.getLogger(__name__)
 
@@ -151,20 +171,11 @@ _UNAVAILABLE_CODES: Final = frozenset(
 )
 
 
-def _error_body(error: JsonValue) -> ErrorBody:
-    try:
-        return ErrorBody.model_validate(error)
-    except ValidationError:
-        # Still a refusal: an error the schema does not describe is reported, not obeyed.
-        return ErrorBody(code="engine_error", message=f"the runner reported {error!r:.200}")
-
-
-def raise_for_error_frame(payload: Frame) -> None:
+def raise_for_error_frame(reply: WireReply) -> None:
     """Map a peer-reported error frame onto the taxonomy, or return."""
-    error = payload.get("error")
-    if not isinstance(error, dict):
+    body = reply.error
+    if body is None:
         return
-    body = _error_body(error)
     code = body.code or "engine_error"
     message = body.message or code
     if code in _NOT_FOUND_CODES:
@@ -207,23 +218,35 @@ def _why_unreachable(path: Path, exc: OSError) -> str:
 _FRAME: TypeAdapter[JsonValue] = TypeAdapter(JsonValue)
 
 
-def _decode(line: bytes) -> Frame:
-    """Bytes to object, with both ways of not being one mapped."""
+def decode_frame(line: bytes) -> WireReply:
+    """Bytes to a typed reply, with both ways of not being an object mapped."""
     try:
         payload = _FRAME.validate_json(line.decode("utf-8", errors="replace"))
     except ValidationError as exc:
         raise InvalidResponse(f"the runner sent a frame that is not JSON: {line[:200]!r}") from exc
     if not isinstance(payload, dict):
         raise InvalidResponse(f"expected a JSON object, got {type(payload).__name__}")
-    return payload
-
-
-def _confirms_subscription(payload: Frame) -> bool:
+    result: ResponseResult | ValidationError
     try:
-        root = SuccessResponse.model_validate(payload).result.root
-    except ValidationError:
-        return False
-    return isinstance(root, SubscriptionStartedResponseResult)
+        result = SuccessResponse.model_validate(payload).result
+    except ValidationError as exc:
+        result = exc
+    error = payload.get("error")
+    body: ErrorBody | None = None
+    if isinstance(error, dict):
+        try:
+            body = _Refusal.model_validate(payload).error
+        except ValidationError:
+            # Still a refusal: an error the schema does not describe is reported, not obeyed.
+            body = ErrorBody(code="engine_error", message=f"the runner reported {error!r:.200}")
+    return WireReply(payload, result, body)
+
+
+def _confirms_subscription(reply: WireReply) -> bool:
+    result = reply.result
+    return isinstance(result, ResponseResult) and isinstance(
+        result.root, SubscriptionStartedResponseResult
+    )
 
 
 # --------------------------------------------------------------------------
@@ -255,8 +278,8 @@ class Transport(Protocol):
         *,
         timeout: float | None = None,
         idempotent: bool = True,
-    ) -> Frame:
-        """Issue one request and return its parsed reply object."""
+    ) -> WireReply:
+        """Issue one request and return its decoded reply."""
         ...
 
     def close(self) -> None:
@@ -316,15 +339,15 @@ class SocketTransport:
         *,
         timeout: float | None = None,
         idempotent: bool = True,
-    ) -> Frame:
-        """Issue one request, return its reply object, raise on anything else."""
+    ) -> WireReply:
+        """Issue one request, return its decoded reply, raise on anything else."""
         budget = self.timeout if timeout is None else timeout
         if self._pid != os.getpid():  # forked without the hook running
             self.adopt_fork()
         with self._lock:
-            payload = self._call_locked(method, params, budget, idempotent=idempotent)
-        raise_for_error_frame(payload)
-        return payload
+            reply = self._call_locked(method, params, budget, idempotent=idempotent)
+        raise_for_error_frame(reply)
+        return reply
 
     def close(self) -> None:
         """Drop the connection. Idempotent, and safe to call while healthy."""
@@ -333,7 +356,9 @@ class SocketTransport:
 
     # -- the exchange ------------------------------------------------------
 
-    def _call_locked(self, method: str, params: Frame, budget: float, *, idempotent: bool) -> Frame:
+    def _call_locked(
+        self, method: str, params: Frame, budget: float, *, idempotent: bool
+    ) -> WireReply:
         """One exchange; never retried, since one request per connection is what herdr speaks."""
         call = _Call(method, self._clock() + budget, budget, idempotent)
         try:
@@ -342,7 +367,7 @@ class SocketTransport:
             # One request per connection, because that is what herdr speaks.
             self._drop()
 
-    def _exchange(self, params: Frame, call: _Call) -> Frame:
+    def _exchange(self, params: Frame, call: _Call) -> WireReply:
         request_id = f"{self._prefix}:{next(self._ids)}"
         frame = json.dumps(
             {"id": request_id, "method": call.method, "params": params},
@@ -371,15 +396,15 @@ class SocketTransport:
             exc.after_send = not call.idempotent
             raise
 
-    def _receive(self, sock: socket.socket, request_id: str, call: _Call) -> Frame:
+    def _receive(self, sock: socket.socket, request_id: str, call: _Call) -> WireReply:
         """Read frames until the one addressed to ``request_id`` arrives."""
         for _ in range(MAX_STRAY_FRAMES):
-            payload = self._decode(self._read_frame(sock, call))
-            if payload.get("id") == request_id:
-                return payload
+            reply = self._decode(self._read_frame(sock, call))
+            if reply.payload.get("id") == request_id:
+                return reply
             log.warning(
                 "discarding a reply frame addressed to %r while waiting for %r",
-                payload.get("id"),
+                reply.payload.get("id"),
                 request_id,
             )
         raise InvalidResponse(
@@ -417,7 +442,7 @@ class SocketTransport:
             )
         return chunk
 
-    _decode = staticmethod(_decode)
+    _decode = staticmethod(decode_frame)
 
     # -- the connection ----------------------------------------------------
 
@@ -555,8 +580,9 @@ class EventStream:
         sock = self.open()
         try:
             while True:
-                payload = _decode(self._read_frame(sock))
-                raise_for_error_frame(payload)
+                reply = decode_frame(self._read_frame(sock))
+                raise_for_error_frame(reply)
+                payload = reply.payload
                 if payload.get("event"):
                     yield payload
                     continue
@@ -611,11 +637,11 @@ class EventStream:
     def _await_started(self, sock: socket.socket) -> None:
         """Read up to the confirmation, so a refusal is raised here, not later."""
         for _ in range(MAX_STRAY_FRAMES):
-            payload = _decode(self._read_frame(sock))
-            raise_for_error_frame(payload)
-            if _confirms_subscription(payload):
+            reply = decode_frame(self._read_frame(sock))
+            raise_for_error_frame(reply)
+            if _confirms_subscription(reply):
                 return
-            log.warning("discarding %r while waiting for the subscription", payload)
+            log.warning("discarding %r while waiting for the subscription", reply.payload)
         raise InvalidResponse(
             f"the runner never confirmed the subscription after {MAX_STRAY_FRAMES} frames"
         )

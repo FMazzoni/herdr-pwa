@@ -325,9 +325,9 @@ def decoded_frame(text: bytes) -> dict[str, JsonValue]:
     """A reply frame carrying ``text``, round-tripped through the real wire."""
     line = json.dumps(read_frame("\x00PLACEHOLDER\x00")).encode()
     framed = line.replace(b"\\u0000PLACEHOLDER\\u0000", text)
-    payload = SocketTransport._decode(framed)  # pyright: ignore[reportPrivateUsage]
-    raise_for_error_frame(payload)  # pane content is data, never an envelope
-    return payload
+    reply = SocketTransport._decode(framed)  # pyright: ignore[reportPrivateUsage]
+    raise_for_error_frame(reply)  # pane content is data, never an envelope
+    return reply.payload
 
 
 def test_pane_text_that_merely_looks_like_json_still_comes_back() -> None:
@@ -1034,6 +1034,27 @@ def process_info_frame(*, settled: bool = True) -> dict[str, JsonValue]:
             },
         },
     }
+
+
+def test_a_process_info_reply_the_schema_rejects_still_names_its_pids() -> None:
+    """The pids are salvaged from a frame whose envelope drifted, if that part still reads."""
+    frame = process_info_frame(settled=False)
+    del obj(frame, "result")["type"]
+    eng, _ = build({PROCESS_INFO: frame})
+    assert eng.pane_pids("w1:p9") == (4242, 4243)
+
+
+def test_a_process_info_the_schema_rejects_names_no_pids() -> None:
+    frame = process_info_frame()
+    obj(frame, "result", "process_info")["shell_pid"] = "not a pid"
+    eng, _ = build({PROCESS_INFO: frame})
+    assert eng.pane_pids("w1:p9") == ()
+
+
+def test_a_process_info_reply_with_no_process_info_is_invalid() -> None:
+    eng, _ = build({PROCESS_INFO: {"id": "x", "result": {"type": "pane_process_info"}}})
+    with pytest.raises(InvalidResponse, match="no 'process_info' object"):
+        eng.pane_pids("w1:p9")
 
 
 def started_frame(session: str | None = None) -> dict[str, JsonValue]:
