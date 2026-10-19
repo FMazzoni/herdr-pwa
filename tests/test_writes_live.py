@@ -1,6 +1,7 @@
 """Every write, driven end to end against the throwaway hp-test session; opt in with HP_LIVE=1."""
 
 import os
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -80,10 +81,18 @@ def writer(tmp_path: Path) -> Writer:
     return Writer(client, Recorder(log, Origin(actor="live-test", via="config")))
 
 
-def _start(writer: Writer, workspace: str, kind: str, cwd: Path, model: str = "") -> AgentStarted:
-    started = start_agent(
-        writer, StartRequest(f"hpw-{kind}", kind, workspace, str(cwd), model=model), which=on_path
-    )
+@dataclass(frozen=True)
+class _Bench:
+    """The throwaway workspace a round launches its agents into, and the writer driving them."""
+
+    writer: Writer
+    workspace: str
+    cwd: Path
+
+
+def _start(bench: _Bench, kind: str, model: str = "") -> AgentStarted:
+    request = StartRequest(f"hpw-{kind}", kind, bench.workspace, str(bench.cwd), model=model)
+    started = start_agent(bench.writer, request, which=on_path)
     say(f"start_agent {kind}", repr(started))
     assert isinstance(started, AgentStarted), started
     return started
@@ -144,12 +153,13 @@ def _answer_permission(writer: Writer, session: SessionId, pane: PaneId, probe: 
     assert probe.exists(), "the Yes the digit chose ran the command"
 
 
-def _claude_round(writer: Writer, workspace: str, cwd: Path) -> None:
+def _claude_round(bench: _Bench) -> None:
+    writer, cwd = bench.writer, bench.cwd
     client = writer.client
     # Project settings outrank the user's, so this agent asks before Bash whatever mode is global.
     (cwd / ".claude").mkdir()
     _ = (cwd / ".claude/settings.json").write_text('{"permissions": {"defaultMode": "default"}}')
-    started = _start(writer, workspace, "claude", cwd, model="haiku")
+    started = _start(bench, "claude", model="haiku")
     session = _claude_session(writer, started.pane)
     _ = _wait_status(client, started.pane, AgentStatus.IDLE, AgentStatus.DONE)
     prompted = send_prompt(writer, PromptAsk(session, "Reply with exactly the word PONG."))
@@ -178,13 +188,14 @@ def _environ_has(client: HerdrClient, pane: PaneId, needle: str) -> bool:
     return False
 
 
-def _late_identity_round(writer: Writer, workspace: str, cwd: Path) -> None:
+def _late_identity_round(bench: _Bench) -> None:
+    writer = bench.writer
     client = writer.client
-    opencode = _start(writer, workspace, "opencode", cwd)
+    opencode = _start(bench, "opencode")
     assert _environ_has(client, opencode.pane, OPENCODE_ASK)
     say("opencode environment", f"OPENCODE_CONFIG_CONTENT={OPENCODE_ASK} found in /proc")
     show(client, opencode.pane, "start_agent opencode")
-    hermes = _start(writer, workspace, "hermes", cwd)
+    hermes = _start(bench, "hermes")
     first = send_first_prompt(
         writer, FirstPromptAsk(hermes.pane, "Reply with exactly the word PONG.")
     )
@@ -210,8 +221,9 @@ def test_every_write_end_to_end(writer: Writer, tmp_path: Path) -> None:
         say("rename_workspace", repr(renamed))
         assert isinstance(renamed, WorkspaceDone)
         assert renamed.verified
-        _claude_round(writer, workspace, tmp_path)
-        _late_identity_round(writer, workspace, tmp_path)
+        bench = _Bench(writer, workspace, tmp_path)
+        _claude_round(bench)
+        _late_identity_round(bench)
     finally:
         cost = [a.target for a in client.snapshot().agents if a.workspace_id == workspace]
         say("closing the throwaway workspace, holding", repr(cost))
