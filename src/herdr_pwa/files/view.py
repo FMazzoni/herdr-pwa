@@ -11,9 +11,9 @@ from pydantic import BaseModel, BeforeValidator, ConfigDict
 
 from herdr_pwa.files.reader import Reader, Stat
 from herdr_pwa.files.roots import is_secret
-from herdr_pwa.web.highlight import highlight, language_for, split_lines
-from herdr_pwa.web.markdown import render_tree
-from herdr_pwa.web.mdnode import MdNode
+from herdr_pwa.render.highlight import highlight, language_for, split_lines
+from herdr_pwa.render.markdown import render_tree
+from herdr_pwa.render.mdnode import MdNode
 
 # Past either of these a file is paged plain text: lexing runs in Python, on this box, per miss.
 HIGHLIGHT_BYTES: Final = 256 * 1024

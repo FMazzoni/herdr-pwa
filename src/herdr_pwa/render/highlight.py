@@ -19,7 +19,7 @@ from pygments.token import (
 )
 from pygments.util import ClassNotFound
 
-from herdr_pwa.web.mdnode import MdNode
+from herdr_pwa.render.mdnode import MdNode
 
 # The most specific entry wins; a type with no entry up its chain stays plain text.
 _CLASSES: Final[dict[_TokenType, str]] = {

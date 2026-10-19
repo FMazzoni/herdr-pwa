@@ -5,10 +5,10 @@ from collections.abc import Callable
 
 import pytest
 
-from herdr_pwa.web import mathml
+from herdr_pwa.render import mathml
+from herdr_pwa.render.markdown import CLASSES, TAGS, MdNode, render_tree
+from herdr_pwa.render.mathml import MATH_ATTRS
 from herdr_pwa.web.assets import STATIC_DIR, Assets
-from herdr_pwa.web.markdown import CLASSES, TAGS, MdNode, render_tree
-from herdr_pwa.web.mathml import MATH_ATTRS
 from herdr_pwa.web.render import TEMPLATES_DIR, Pages, read_templates
 
 EVERYTHING = r"""# Title

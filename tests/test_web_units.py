@@ -24,11 +24,11 @@ from herdr_pwa.engine import (
 )
 from herdr_pwa.protocol import EXPECTED_PROTOCOL
 from herdr_pwa.push import DeliveryLog
+from herdr_pwa.render.markdown import TAGS, MdNode, render_tree
 from herdr_pwa.settings import Settings
 from herdr_pwa.web.assets import STATIC_DIR, Assets
 from herdr_pwa.web.chat import is_long
 from herdr_pwa.web.failures import FAILURES, failure_for
-from herdr_pwa.web.markdown import TAGS, MdNode, render_tree
 from herdr_pwa.web.naming import card_question, card_title, display_title, page_title
 from herdr_pwa.web.render import Pages, read_templates
 from herdr_pwa.web.routers.compose import key_name, said

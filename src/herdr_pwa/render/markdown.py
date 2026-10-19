@@ -14,9 +14,9 @@ from mdit_py_plugins.dollarmath import dollarmath_plugin
 from mdit_py_plugins.tasklists import tasklists_plugin
 from mdit_py_plugins.texmath import texmath_plugin
 
-from herdr_pwa.web.highlight import TOKEN_CLASSES, highlight, language_for
-from herdr_pwa.web.mathml import MATH_TAGS, math_node
-from herdr_pwa.web.mdnode import MdNode
+from herdr_pwa.render.highlight import TOKEN_CLASSES, highlight, language_for
+from herdr_pwa.render.mathml import MATH_TAGS, math_node
+from herdr_pwa.render.mdnode import MdNode
 
 __all__ = ["CLASSES", "TAGS", "VOID_TAGS", "MdNode", "render_tree"]
 
