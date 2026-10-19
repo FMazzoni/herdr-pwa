@@ -121,6 +121,11 @@ was seen on them:
 |---|---|
 | `rig/blocked-build-scrollback.ansi` | Coloured build steps with nothing asked. A card must say "Open to see what it's asking" over it. |
 | `rig/opencode-scrollback-list.ansi` | Written by hand in opencode's palette: a message ending on a numbered list whose second row is an inline code span drawn in the colour opencode gives a focused row. The colour cursor counts only inside the dialog that ends the screen, so this screen earns no digits. |
+| `rig/claude-statusline.ansi` | Written by hand on the layout of a Claude Code pane: the input box, a two-row statusline under it (a user script's `\|`-separated line in dim, green, yellow, red, cyan and bold magenta, then the harness's mode row). The stats strip draws these rows in place of its summed facts. |
+| `rig/claude-statusline-narrow.ansi` | The same statusline on a 58-column pane, where the terminal cut the row mid-field. The strip shows what the screen shows. |
+| `rig/claude-statusline-powerline.ansi` | Written by hand in a powerline style: truecolour foreground and background per segment, powerline arrows (U+E0B0) between them and Nerd Font icons (private use) in them. The strip keeps the words and foregrounds, draws no background, and the glyphs a phone cannot draw become the gaps between pieces. |
+| `rig/claude-statusline-bars.ansi` | Written by hand in a bar style: a block meter, `│` and `•` separators, emoji icons, 256-colour fills. Every glyph here renders on a phone, so every one is kept. |
+| `rig/claude-statusline-rows.ansi` | A statusline of three rows and the mode row, as a script printing several lines leaves it. The strip's line is the first row; the sheet has all four. |
 
 ## hermes (`hermes/`)
 

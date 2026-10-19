@@ -1,15 +1,26 @@
 {% set url = "/agent/" ~ (agent.session|urlencode) ~ "/stats" %}
 {# One quiet line under the bar on every tab; the event stream says when it is stale. VoiceOver
-   hears one sentence; the drawn facts beside it are hidden from it. #}
+   hears one sentence; the drawn facts beside it are hidden from it. A pane that shows the
+   harness's statusline has its first row drawn here instead, cut at the phone's width while the
+   sheet is closed and whole once it is open, with the rows after it whole in the sheet, in the
+   colours the terminal drew (run classes come from panetext's closed set), wrapped between
+   their pieces. #}
 <div id="agent-stats" class="stats" data-hp-poll="{{ url }}" hx-get="{{ url }}" hx-target="this" hx-swap="outerHTML" data-hp-topic="stats:{{ agent.session }}" hx-trigger="hp:stale, hp:poke from:body">
   <details class="stats__sheet">
-    <summary class="stats__line"><span class="sr-only">{{ stats.sentence }}</span><span class="stats__facts" aria-hidden="true">
+    <summary class="stats__line"><span class="sr-only">{{ stats.sentence }}</span>
+      {%- if stats.status %}<span class="stats__status" aria-hidden="true">{% for seg in stats.status[0].segments %}<span class="stats__seg">{% for run in seg %}<span class="{{ run.cls }}">{{ run.text }}</span>{% endfor %}</span>{% endfor %}</span>{% else %}<span class="stats__facts" aria-hidden="true">
       {%- if stats.note %}<span class="stats__fact stats__note">{{ stats.note }}</span>{% endif -%}
       {%- if stats.model %}<span class="stats__fact stats__model">{{ stats.model }}</span>{% endif -%}
       {%- if stats.context %}<span class="stats__fact stats__context">{% if stats.percent is not none %}<span class="meter{% if stats.meter >= 8 %} meter--full{% endif %}"><span class="meter__fill meter__fill--{{ stats.meter }}"></span></span>{% endif %}{{ stats.context }}</span>{% endif -%}
       {%- if stats.turn %}<span class="stats__fact">turn {{ stats.turn }}</span>{% endif -%}
       {%- if stats.spend %}<span class="stats__fact">{{ stats.spend }}</span>{% endif -%}
-    </span></summary>
+    </span>{% endif %}</summary>
+    {#- Open, the line's own row is shown whole, so the sheet lists only the rows after it. #}
+    {% if stats.status %}
+    <div class="stats__status-rows">
+      {%- for row in stats.status[1:] %}<span class="stats__status-row">{% for seg in row.segments %}<span class="stats__seg">{% for run in seg %}<span class="{{ run.cls }}">{{ run.text }}</span>{% endfor %}</span>{% endfor %}</span>{% endfor -%}
+    </div>
+    {% endif %}
     {% if stats.rows %}
     <dl class="stats__rows">
       {%- for row in stats.rows %}<div class="stats__row"><dt>{{ row.label }}</dt><dd>{{ row.value }}</dd></div>{% endfor -%}

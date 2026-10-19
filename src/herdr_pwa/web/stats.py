@@ -6,7 +6,7 @@ window is in ``WINDOWS``.
 """
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Final
 
@@ -20,6 +20,7 @@ from herdr_pwa.engine import (
     SpawnedAgent,
     harness_of,
 )
+from herdr_pwa.panetext import Run, plain_text, segments
 
 # Context windows published for models that have no larger variant, so a percentage of them is
 # true. A model not listed here shows its context in tokens, with no percentage and no bar.
@@ -57,9 +58,20 @@ class Row:
 
 
 @dataclass(frozen=True, slots=True)
+class StatusRow:
+    """One row of the statusline the terminal shows: its wrap pieces, and its text for VoiceOver."""
+
+    segments: tuple[tuple[Run, ...], ...]
+    text: str
+
+
+@dataclass(frozen=True, slots=True)
 class Stats:
     """The strip and its sheet, every field already worded; an empty field is not shown."""
 
+    # The harness's own statusline when the pane shows one: its first row is the line, cut at
+    # the phone's width; every row is in the sheet whole, in place of the facts below.
+    status: tuple[StatusRow, ...] = ()
     model: str = ""
     percent: int | None = None
     meter: int = 0
@@ -421,4 +433,23 @@ def stats_for(reading: Reading) -> Stats:
         rows=_rows(found),
         models=_models(reading),
         sentence=sentence,
+    )
+
+
+def _status_row(row: list[Run]) -> StatusRow:
+    pieces = tuple(tuple(piece) for piece in segments(row))
+    # Said from the pieces, so a glyph the phone does not draw is not read out either.
+    return StatusRow(
+        pieces, " ".join(" ".join(plain_text(list(piece)).split()) for piece in pieces)
+    )
+
+
+def with_statusline(stats: Stats, rows: list[list[Run]]) -> Stats:
+    """*stats* with the statusline the pane shows drawn in place of its facts; unchanged if none."""
+    if not rows:
+        return stats
+    status = tuple(_status_row(row) for row in rows)
+    # The strip says what the terminal says, so VoiceOver hears those words and not a tally's.
+    return replace(
+        stats, status=status, sentence="Statusline: " + "; ".join(r.text for r in status)
     )

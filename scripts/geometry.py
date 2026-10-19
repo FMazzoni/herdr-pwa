@@ -350,9 +350,10 @@ if (nav) {
     oneRow: !!back && box(back).top < box(nav).bottom && box(nav).top < box(back).bottom,
     name: back ? back.getAttribute("aria-label") : null,
     word: word ? getComputedStyle(word).display !== "none" : null,
-    // What is drawn: the toggle's box, less the reach its negative margin takes back.
+    // What is drawn: the toggle's box, less the reach its negative margin takes back. Open,
+    // the line is the sheet's first row shown whole, so the one-line cap is for closed only.
     strip: line ? { height: box(line).height + parseFloat(getComputedStyle(line).marginBottom),
-      top: box(line).top, under: box(nav).bottom } : null,
+      top: box(line).top, under: box(nav).bottom, open: !!line.closest("details[open]") } : null,
     meter: meter ? { width: box(meter).width, wants: parseFloat(getComputedStyle(meter).width),
       right: box(meter).right, edge: box(line).right } : null,
     // Cut: clipped with no ellipsis to say so, past the screen, or half under the one line.
@@ -757,7 +758,7 @@ def _judge_strip(bar: dict[str, object], where: str, size: "Size", tally: Tally)
         return
     if float(str(strip["top"])) < float(str(strip["under"])) - 0.5:
         tally.problems.append(f"{where}: the stats strip is not under the tabs")
-    if size.scale == 1.0 and float(str(strip["height"])) > STRIP_MAX:
+    if size.scale == 1.0 and not strip.get("open") and float(str(strip["height"])) > STRIP_MAX:
         tally.problems.append(
             f"{where}: the stats strip is {strip['height']:.1f}px tall, over {STRIP_MAX}px"
         )

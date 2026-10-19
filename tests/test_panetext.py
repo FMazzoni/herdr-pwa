@@ -11,6 +11,7 @@ from herdr_pwa import panetext
 from herdr_pwa.engine import BlockedPrompt, EngineSettings, HerdrClient, as_pane_id
 from herdr_pwa.panetext import (
     MAX_RUNS_PER_LINE,
+    Run,
     cells,
     composer_top,
     is_clean_prose,
@@ -708,3 +709,64 @@ def test_the_input_box_starts_at_its_top_border_and_a_dialog_has_none() -> None:
     assert idle[top + 1].startswith("\u276f")
     blocked = (fixtures / "capture-blocked-permission-prompt" / "detection.txt").read_text()
     assert composer_top(blocked.splitlines()) == len(blocked.splitlines())
+
+
+# --------------------------------------------------------------------------
+# The rows under the box are kept for the stats strip, in order, with their colours
+# --------------------------------------------------------------------------
+
+RIG_DIR = Path(__file__).parent / "fixtures" / "rig"
+STATUSLINE = (RIG_DIR / "claude-statusline.ansi").read_text()
+
+
+def test_the_rows_under_the_box_are_kept_in_order_and_off_the_viewport() -> None:
+    view = pane_view("out\n" + box(status=("ctx: 16% | Opus 5", "auto mode on", "x")))
+    assert [plain_text(line.runs) for line in view.lines] == ["out"]
+    assert [plain_text(row) for row in view.status] == ["ctx: 16% | Opus 5", "auto mode on", "x"]
+
+
+def test_a_pane_with_no_box_has_no_statusline() -> None:
+    assert pane_view("a\nb\nc").status == []
+    assert pane_view("out\n" + box()).status == []
+
+
+def test_the_statusline_keeps_every_colour_the_terminal_drew() -> None:
+    view = pane_view(STATUSLINE)
+    assert len(view.status) == 2
+    classes = {run.cls for row in view.status for run in row}
+    assert {"ansi-d", "ansi-green", "ansi-yellow", "ansi-red", "ansi-cyan"} <= classes
+    assert "ansi-magenta ansi-b" in classes
+
+
+def test_segments_split_at_the_separators_and_keep_them_as_the_person_printed_them() -> None:
+    view = pane_view(STATUSLINE)
+    pieces = [plain_text(seg) for seg in panetext.segments(view.status[0])]
+    assert pieces == [
+        "herdr-pwa [main]", "|", "ctx: 22%", "|", "5h: 46%(now)", "|", "7d: 91%(1d5h)", "|",
+        "6h34m", "|", "proj: 41%", "|", "+226/-0", "|", "Opus 5.5",
+    ]  # fmt: skip
+
+
+def test_segments_split_across_right_aligning_padding_and_drop_only_the_padding() -> None:
+    row = [Run("+1", "ansi-green"), Run(" " * 60), Run("Opus 5.5", "ansi-magenta ansi-b")]
+    pieces = panetext.segments(row)
+    assert [plain_text(seg) for seg in pieces] == ["+1", "Opus 5.5"]
+    assert pieces[1][0].cls == "ansi-magenta ansi-b"
+
+
+def test_segments_never_split_inside_a_word_or_on_a_bar_inside_one() -> None:
+    row = [Run("a|b  c | d")]
+    assert [plain_text(seg) for seg in panetext.segments(row)] == ["a|b", "c", "|", "d"]
+
+
+def test_segments_split_at_bar_and_bullet_separators_between_whitespace_too() -> None:
+    row = [Run("a │ b • c │d")]
+    assert [plain_text(seg) for seg in panetext.segments(row)] == ["a", "│", "b", "•", "c │d"]
+
+
+def test_a_private_use_glyph_is_a_break_between_pieces_and_is_not_kept() -> None:
+    """Nerd Font icons and powerline arrows draw as blank boxes on a phone: noise, not words."""
+    row = [Run(" main", "ansi-blue"), Run("", "ansi-red"), Run(" ctx 22% ")]
+    pieces = panetext.segments(row)
+    assert [plain_text(seg) for seg in pieces] == ["main", "ctx 22%"]
+    assert pieces[0][0].cls == "ansi-blue"

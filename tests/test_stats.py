@@ -1,6 +1,7 @@
 """The stats strip: each harness's own record mapped to fields, and nothing invented."""
 
 import json
+import re
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
@@ -9,6 +10,7 @@ import pytest
 from pydantic import JsonValue, TypeAdapter
 
 from herdr_pwa.engine import (
+    EngineUnavailable,
     HistoryState,
     ModelRef,
     ModelSpend,
@@ -499,3 +501,162 @@ def test_a_harness_that_does_not_price_itself_shows_no_money_per_model() -> None
         "Haiku 4.5": "2 answers: 0 in, 9 out; no cost recorded",
         "Opus 4.5": "1 answer: 0 in, 3 out; no cost recorded",
     }
+
+
+# ---- the statusline the terminal shows ---------------------------------------------------------
+
+RIG = Path(__file__).parent / "fixtures" / "rig"
+STATUSLINE_SCREEN = (RIG / "claude-statusline.ansi").read_text()
+NARROW_SCREEN = (RIG / "claude-statusline-narrow.ansi").read_text()
+
+
+def _with_screen(tmp_path: Path, screen: str) -> str:
+    _transcript(tmp_path)
+    rig = build_rig(tmp_path, {SNAPSHOT: snapshot_frame(), READ: read_frame(screen)})
+    return _strip(rig.http.get(f"/agent/{WORKING_SESSION}?tab=chat").text)
+
+
+def test_a_pane_with_a_statusline_draws_it_in_the_strip_in_place_of_the_summed_facts(
+    tmp_path: Path,
+) -> None:
+    strip = _with_screen(tmp_path, STATUSLINE_SCREEN)
+    assert 'class="stats__status"' in strip
+    # The numbers are the terminal's, in the colour it drew them, through the palette's tokens.
+    assert '<span class="ansi-green">22%</span>' in strip
+    assert "stats__model" not in strip
+    assert "meter__fill" not in strip
+    # VoiceOver hears the rows as printed, one sentence.
+    assert '<span class="sr-only">Statusline: herdr-pwa [main] | ctx: 22% | 5h: 46%(now)' in strip
+    # The sheet under the tap keeps the figures the log records.
+    assert "<dt>Turns</dt><dd>1</dd>" in strip
+
+
+def test_every_row_of_the_statusline_is_drawn_in_order(tmp_path: Path) -> None:
+    strip = _with_screen(tmp_path, STATUSLINE_SCREEN)
+    # The line has the first row; the sheet lists the one after it.
+    rows = re.findall(r'<span class="stats__status-row">', strip)
+    assert len(rows) == 1
+    assert strip.index("Opus 5.5") < strip.index("auto mode on")
+
+
+def test_every_colour_the_terminal_drew_reaches_the_strip_as_a_token_class(tmp_path: Path) -> None:
+    strip = _with_screen(tmp_path, STATUSLINE_SCREEN)
+    for cls in ("ansi-d", "ansi-green", "ansi-yellow", "ansi-red", "ansi-cyan"):
+        assert f'<span class="{cls}">' in strip, cls
+    assert '<span class="ansi-magenta ansi-b">Opus 5.5</span>' in strip
+
+
+def test_the_statusline_is_drawn_in_segments_the_phone_wraps_between(tmp_path: Path) -> None:
+    strip = _with_screen(tmp_path, STATUSLINE_SCREEN)
+    segments = re.findall(r'<span class="stats__seg">(.*?)</span></span>', strip)
+    assert len(segments) >= 15
+    assert '<span class="stats__seg"><span class="ansi-d">|</span></span>' in strip
+
+
+def test_a_pane_without_a_statusline_leaves_the_strip_as_it_was(tmp_path: Path) -> None:
+    strip = _with_screen(tmp_path, "$ ")
+    assert "stats__status" not in strip
+    assert "stats__model" in strip
+    assert "meter__fill--3" in strip
+
+
+def test_an_unreadable_pane_still_serves_the_strip_from_the_log(tmp_path: Path) -> None:
+    _transcript(tmp_path)
+    rig = build_rig(
+        tmp_path, {SNAPSHOT: snapshot_frame(), READ: EngineUnavailable("the runner is away")}
+    )
+    answer = rig.http.get(f"/agent/{WORKING_SESSION}/stats")
+    assert answer.status_code == 200
+    assert "stats__status" not in answer.text
+    assert "stats__model" in answer.text
+
+
+def test_a_read_that_is_not_a_pane_still_serves_the_strip_from_the_log(tmp_path: Path) -> None:
+    _transcript(tmp_path)
+    broken: dict[str, JsonValue] = {"id": "x", "result": {"type": "pane_read", "read": "no"}}
+    rig = build_rig(tmp_path, {SNAPSHOT: snapshot_frame(), READ: broken})
+    answer = rig.http.get(f"/agent/{WORKING_SESSION}/stats")
+    assert answer.status_code == 200
+    assert "stats__model" in answer.text
+
+
+def test_the_strips_own_route_carries_the_statusline(tmp_path: Path) -> None:
+    _transcript(tmp_path)
+    rig = build_rig(tmp_path, {SNAPSHOT: snapshot_frame(), READ: read_frame(STATUSLINE_SCREEN)})
+    answer = rig.http.get(f"/agent/{WORKING_SESSION}/stats")
+    assert 'class="stats__status"' in answer.text
+
+
+def test_a_narrow_pane_cuts_the_row_and_the_strip_shows_what_the_screen_shows(
+    tmp_path: Path,
+) -> None:
+    strip = _with_screen(tmp_path, NARROW_SCREEN)
+    assert '<span class="ansi-red">91</span>' in strip
+    assert "Opus 5.5" not in strip
+
+
+# ---- the shapes people run: powerline, bars and icons, several rows -------------------------
+
+POWERLINE_SCREEN = (RIG / "claude-statusline-powerline.ansi").read_text()
+BARS_SCREEN = (RIG / "claude-statusline-bars.ansi").read_text()
+ROWS_SCREEN = (RIG / "claude-statusline-rows.ansi").read_text()
+PRIVATE_USE = re.compile(r"[-]")
+
+
+def _summary_and_sheet(strip: str) -> tuple[str, str]:
+    line = strip[strip.index('<span class="stats__status"') : strip.index("</summary>")]
+    sheet = strip[strip.index('<div class="stats__status-rows">') : strip.index("</div>")]
+    return line, sheet
+
+
+def test_the_line_is_the_first_row_only_and_the_sheet_has_the_rows_after_it(
+    tmp_path: Path,
+) -> None:
+    strip = _with_screen(tmp_path, ROWS_SCREEN)
+    line, sheet = _summary_and_sheet(strip)
+    assert "Opus 5.5" in line
+    assert "ctx" not in line
+    assert "stats__status-row" not in line
+    assert len(re.findall(r'<span class="stats__status-row">', sheet)) == 3
+    assert sheet.index("22%") < sheet.index("6h34m") < sheet.index("auto mode")
+    assert "Statusline: Opus 5.5 | herdr-pwa [main]; ctx 22% | 5h 46%(now) | 7d 91%(1d5h);" in strip
+
+
+def test_a_powerline_statusline_keeps_its_words_and_colours_and_draws_no_private_use_glyph(
+    tmp_path: Path,
+) -> None:
+    strip = _with_screen(tmp_path, POWERLINE_SCREEN)
+    assert not PRIVATE_USE.search(strip)
+    line, sheet = _summary_and_sheet(strip)
+    for word in ("main", "Opus 5.5", "ctx 22%", "5h 46% · 7d 91%"):
+        assert word in line, word
+    assert "auto mode on" in sheet
+    # Truecolour foregrounds land on the nearest of the sixteen tokens; backgrounds are not drawn.
+    assert 'class="ansi-bright-white"' in line
+    assert "ansi-bg" not in strip
+    assert "Statusline: main Opus 5.5 ctx 22% 5h 46% · 7d 91%;" in strip
+
+
+def test_a_bar_statusline_splits_at_its_bars_and_bullets_and_keeps_its_blocks_and_emoji(
+    tmp_path: Path,
+) -> None:
+    strip = _with_screen(tmp_path, BARS_SCREEN)
+    line, _ = _summary_and_sheet(strip)
+    pieces: list[str] = re.findall(r'<span class="stats__seg">(.*?)</span></span>', line)
+    texts = [re.sub(r"<[^>]+>", "", piece) for piece in pieces]
+    assert texts == [
+        "█████░░░░░ 52%", "│", "⏱ 12m", "│", "💰 $1.20", "•", "🧠 Opus 5.5", "•", "\u276f main",
+    ]  # fmt: skip
+    assert '<span class="ansi-green">█████</span>' in line
+
+
+def test_the_first_row_is_drawn_once_in_the_line_and_the_sheet_lists_the_rows_after_it(
+    tmp_path: Path,
+) -> None:
+    """Open, the line's row is shown whole by CSS, so the sheet repeating it would draw it twice."""
+    strip = _with_screen(tmp_path, ROWS_SCREEN)
+    line, sheet = _summary_and_sheet(strip)
+    assert "Opus 5.5" in line
+    assert "Opus 5.5" not in sheet
+    assert len(re.findall(r'<span class="stats__status-row">', sheet)) == 3
+    assert sheet.index("22%") < sheet.index("6h34m") < sheet.index("auto mode")
