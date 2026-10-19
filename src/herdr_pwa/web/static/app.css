@@ -115,6 +115,10 @@
   --grabber-h: 4px;
   /* Stop… and the Keep going that replaces it share this width, so a second tap lands on it. */
   --arm-w: 7.5em;
+  /* Send's least width, in rem like its type: what stops a turn now stays left of this column. */
+  --send-w: 4.5rem;
+  /* Between the no-script confirm's way through and its way out, so the first stays 120px from Send. */
+  --confirm-gap: 3rem;
   /* How far the composer's colour runs below it while the keyboard is up, under iOS's translucent
      accessory pill. Fixed and tall, not --kb: --kb is 0 whenever iOS has panned the band to the
      layout viewport's bottom, and the pill then sits below that edge. */
@@ -791,15 +795,15 @@ textarea { resize: vertical; min-height: 4.5em; }
 /* The generic keys stay on one line even at 320px: equal columns, however many there are. */
 .answer__keys .keys--pad { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: var(--space-3); }
 .keys--pad .button { width: 100%; min-width: var(--tap); padding-inline: var(--space-2); }
-/* The interrupt sits on its own row, away from Enter, drawn dashed so it never reads as a key. */
-.keys__stop { margin-top: var(--space-4); padding-top: var(--space-6); border-top: var(--line-1) solid var(--rule); }
-.keys__stop--armed { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); margin-top: 0; padding-top: 0; border-top: 0; }
-.keys__cancel { width: 100%; }
-.keys__stop .button--danger { width: 100%; background: transparent; border-style: dashed; }
+/* The confirm a page with no script gets: the way through on its own row, left, out of Send's
+   column; Keep going under it on the right, so the way through is two rows from Send. */
+.keys__stop--armed { display: grid; justify-items: start; gap: var(--confirm-gap); }
+.keys__stop--armed > form { max-width: calc(100% - var(--send-w) - var(--space-6)); }
+.keys__stop--armed .button--danger { background: transparent; border-style: dashed; overflow-wrap: anywhere; }
+.keys__cancel { justify-self: end; min-width: var(--arm-w); }
 /* In em, so the break moves with Text Size; a query cannot read a custom property. */
 @container (width < 14em) {
   .answer__keys .keys--pad, .keys--compact { grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .keys__stop--armed { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* The composer, docked above the home indicator, and above the keyboard when it is open.
@@ -983,7 +987,9 @@ summary.tray__row:not(:has(.tray__tail))::after { margin-left: auto; }
 .button--stop { background: var(--blocked); border-color: var(--blocked); color: var(--ground); }
 @container (width < 20em) {
   .tray__head { grid-template-columns: minmax(0, 1fr); }
-  .tray__lead { justify-items: stretch; }
+  .tray__go { max-width: calc(100% - var(--send-w) - var(--space-6)); }
+  /* At the largest sizes a word may break: the label is cut across lines before it reaches Send. */
+  .tray__go .button { min-width: 0; overflow-wrap: anywhere; }
 }
 /* What a stop costs, over the section below for the five seconds it is armed: it adds no height. */
 .tray__armed { position: absolute; top: 100%; left: 0; right: 0; z-index: 1; margin: 0; padding: var(--space-2) 0 var(--space-4); background: var(--surface); color: var(--ink-3); font-size: var(--text-small); }
@@ -1016,6 +1022,7 @@ body:has(#composer:focus-within) .stats { display: none; }
 /* The button drops under the field once both no longer fit, which only the largest Text Size does. */
 .composer__row { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: end; gap: var(--space-4); }
 .composer__row .field, .composer__row .button { margin: 0; }
+.composer__row .button { min-width: var(--send-w); }
 .composer__row .field { flex: 1 1 var(--composer-min); min-width: 0; }
 .composer textarea { display: block; width: 100%; min-height: var(--tap); resize: none; background: var(--ground); }
 .composer textarea:focus, .composer textarea:not(:placeholder-shown) { min-height: var(--composer-grow); }

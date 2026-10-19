@@ -1504,12 +1504,14 @@ TAPPED: Final = (
     ),
     State(
         "agent-interrupt",
-        f"{AGENT}?tab=pane",
+        f"{AGENT}?tab=chat",
         "#answer .keys__stop--armed",
-        _blocked_on(PERMISSION),
-        title="Agent page: ctrl-c, armed",
-        armed="#answer .button--danger",
-        act=_click("#answer .button--danger"),
+        runner(_working_as("working")),
+        prime=_turn_at("tool"),
+        title="Stop… from a stale page: the server holds it and asks in the answer region",
+        armed="#agent-tray .tray__slot--stop form",
+        # Submitted as a page whose script never armed it would: the form, not the tap.
+        act="document.querySelector('#agent-tray .tray__slot--stop form').requestSubmit();",
     ),
     State(
         "agent-pane-columns",

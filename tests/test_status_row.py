@@ -266,7 +266,7 @@ def test_a_stop_held_by_the_server_is_confirmed_in_the_answer_region(tmp_path: P
     for key, label in ((INTERRUPT_KEY, "Really interrupt"), ("esc", "Really send Esc")):
         posted = {**FRAGMENT, "Origin": "http://testserver"}
         held = rig.http.post(f"{PAGE}/keys", data={"key": key}, headers=posted).text
-        armed = _part(held, r'<div class="keys__stop keys__stop--armed".*?</form>\s*</div>')
+        armed = _part(held, r'<div class="keys__stop keys__stop--armed".*?</button>\s*</div>')
         assert "Keep going" in armed
         assert label in armed
         assert _keys(armed) == [key]
