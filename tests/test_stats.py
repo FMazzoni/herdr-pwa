@@ -533,8 +533,9 @@ def test_a_pane_with_a_statusline_draws_it_in_the_strip_in_place_of_the_summed_f
 
 def test_every_row_of_the_statusline_is_drawn_in_order(tmp_path: Path) -> None:
     strip = _with_screen(tmp_path, STATUSLINE_SCREEN)
+    # The line has the first row; the sheet lists the one after it.
     rows = re.findall(r'<span class="stats__status-row">', strip)
-    assert len(rows) == 2
+    assert len(rows) == 1
     assert strip.index("Opus 5.5") < strip.index("auto mode on")
 
 
@@ -608,19 +609,16 @@ def _summary_and_sheet(strip: str) -> tuple[str, str]:
     return line, sheet
 
 
-def test_the_line_is_the_first_row_only_and_the_sheet_has_every_row_whole(tmp_path: Path) -> None:
+def test_the_line_is_the_first_row_only_and_the_sheet_has_the_rows_after_it(
+    tmp_path: Path,
+) -> None:
     strip = _with_screen(tmp_path, ROWS_SCREEN)
     line, sheet = _summary_and_sheet(strip)
     assert "Opus 5.5" in line
     assert "ctx" not in line
     assert "stats__status-row" not in line
-    assert len(re.findall(r'<span class="stats__status-row">', sheet)) == 4
-    assert (
-        sheet.index("Opus 5.5")
-        < sheet.index("22%")
-        < sheet.index("6h34m")
-        < sheet.index("auto mode")
-    )
+    assert len(re.findall(r'<span class="stats__status-row">', sheet)) == 3
+    assert sheet.index("22%") < sheet.index("6h34m") < sheet.index("auto mode")
     assert "Statusline: Opus 5.5 | herdr-pwa [main]; ctx 22% | 5h 46%(now) | 7d 91%(1d5h);" in strip
 
 
@@ -632,7 +630,7 @@ def test_a_powerline_statusline_keeps_its_words_and_colours_and_draws_no_private
     line, sheet = _summary_and_sheet(strip)
     for word in ("main", "Opus 5.5", "ctx 22%", "5h 46% · 7d 91%"):
         assert word in line, word
-        assert word in sheet, word
+    assert "auto mode on" in sheet
     # Truecolour foregrounds land on the nearest of the sixteen tokens; backgrounds are not drawn.
     assert 'class="ansi-bright-white"' in line
     assert "ansi-bg" not in strip
@@ -650,3 +648,15 @@ def test_a_bar_statusline_splits_at_its_bars_and_bullets_and_keeps_its_blocks_an
         "█████░░░░░ 52%", "│", "⏱ 12m", "│", "💰 $1.20", "•", "🧠 Opus 5.5", "•", "\u276f main",
     ]  # fmt: skip
     assert '<span class="ansi-green">█████</span>' in line
+
+
+def test_the_first_row_is_drawn_once_in_the_line_and_the_sheet_lists_the_rows_after_it(
+    tmp_path: Path,
+) -> None:
+    """Open, the line's row is shown whole by CSS, so the sheet repeating it would draw it twice."""
+    strip = _with_screen(tmp_path, ROWS_SCREEN)
+    line, sheet = _summary_and_sheet(strip)
+    assert "Opus 5.5" in line
+    assert "Opus 5.5" not in sheet
+    assert len(re.findall(r'<span class="stats__status-row">', sheet)) == 3
+    assert sheet.index("22%") < sheet.index("6h34m") < sheet.index("auto mode")

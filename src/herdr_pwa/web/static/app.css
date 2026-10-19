@@ -902,6 +902,9 @@ html.is-keyboard { background: var(--surface); }
    sheet under the tap has every row whole. */
 .stats__status { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--ink); }
 .stats__status > .stats__seg + .stats__seg { margin-left: var(--space-3); }
+/* Open, the line's row is shown whole, wrapped like a sheet row, so the sheet need not repeat it. */
+.stats__sheet[open] > .stats__line > .stats__status { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-3); white-space: normal; overflow: visible; }
+.stats__sheet[open] > .stats__line > .stats__status > .stats__seg { margin-left: 0; min-width: 0; overflow-wrap: anywhere; }
 /* In the sheet, each row wraps between its pieces, as the terminal's columns never let it; a
    piece moves whole to the next line, and breaks at its own spaces only when it alone is wider
    than the row. One token wider than the phone breaks rather than scrolls or is cut. */
