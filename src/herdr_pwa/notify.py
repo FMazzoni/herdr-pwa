@@ -450,7 +450,6 @@ class Step:
     changes: tuple[Change, ...] = ()
     slot: Slot | None = None
     primed: bool = False
-    held_back: int = 0
 
 
 class Planner:
@@ -511,7 +510,7 @@ class Planner:
         self.slot.note_desk(_focused_session(agents, focused_pane))
         self.slot.forget(current)
         self._ledger.save(current)
-        return Step(tuple(changes), self.slot.update(changes), held_back=len(found) - len(changes))
+        return Step(tuple(changes), self.slot.update(changes))
 
     def retract(self) -> None:
         """Forget whatever is showing so a snooze acts at once; the caller sends the clear."""

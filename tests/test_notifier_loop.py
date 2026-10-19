@@ -166,7 +166,10 @@ def test_a_finish_is_quiet_by_default_because_done_is_off(tmp_path: Path) -> Non
     loop.set_status("done")
     tick = loop.notifier.tick()
     assert tick.step is not None
-    assert tick.step.held_back == 1
+    assert tick.step.changes == ()
+    health = loop.stores.health.load()
+    assert health is not None
+    assert health.quieted == 1
     assert loop.sender.sent == []
 
 
