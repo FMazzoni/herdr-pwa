@@ -1859,6 +1859,8 @@ class SessionUsage(Spend):
     # The newest message's whole prompt: how full the window is now, not a total.
     context_tokens: int = 0
     models: list[ModelRef] = Field(default_factory=list)
+    # The model of the newest answer: a session that went A, B, A again is on A, not B.
+    latest: ModelRef = ModelRef()
     # Only where the store says which model each answer came from; empty means not split.
     by_model: list[ModelSpend] = Field(default_factory=list)
     # A byte budget stopped the read, so the sums are floors.
@@ -1909,8 +1911,11 @@ def _add_usage(tally: SessionUsage, usage: _Usage, model: str) -> None:
 
 
 def remember(tally: SessionUsage, ref: ModelRef) -> None:
-    """Record *ref* as having answered, once, keeping first-seen order."""
-    if ref.model and ref not in tally.models:
+    """Record *ref* as the newest to answer, and in *tally*'s models once, in first-seen order."""
+    if not ref.model:
+        return
+    tally.latest = ref
+    if ref not in tally.models:
         tally.models.append(ref)
 
 
@@ -2088,7 +2093,11 @@ def tally_claude(path: Path, *, max_bytes: int = MAX_USAGE_BYTES) -> LiveTally:
     """Sum *path* and every log its thread was copied out of, ready to grow."""
     live = LiveTally(tally=SessionUsage(), budget=max_bytes)
     for index, log in enumerate([path, *_ancestors(path)]):
+        latest = live.tally.latest
         end = _tally_log(log, live, newest=index == 0)
+        if latest.model:
+            # Logs are read newest first: an older one's answers never name the current model.
+            live.tally.latest = latest
         if index == 0:
             live.end = end
         if live.tally.partial:
