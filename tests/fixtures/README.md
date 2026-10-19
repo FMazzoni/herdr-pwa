@@ -148,6 +148,9 @@ command's confirm, a stopped approval, and an answered dialog herdr still flags.
 | `transcript/notices/system-commands.jsonl` | Slash commands Claude Code writes as `type: system` records. |
 | `transcript/notices/command-stderr.jsonl` | **Built, not captured**: no log held a failing command, so its stderr takes the stdout shape. |
 | `transcript/notices/spawned.jsonl` | A session starting background agents, and the notices they sent back. |
+| `transcript/notices/queued.jsonl` | **Built, not captured**, on the measured shapes of prompts sent while a turn ran: the queue's `enqueue`, then the `absorbed_mid_turn` removal and the `queued_command` attachment that is the only record of the prompt, or `dequeue` and a user record whose `promptSource` is `queued`, or `popAll` when the person pulls the queue back to edit; a paste in its `pasted_content` tags, a notice delivered the same way, and one prompt still waiting at the end. Field names, order and the reminder text are as Claude Code writes them; ids, times and every prompt are synthetic. |
+| `transcript/notices/queued-repeat.jsonl` | **Built**, the same way: one prompt's words sent three times (typed; queued and absorbed; queued and still waiting), so a match on the words is shown never to merge two prompts. |
+| `transcript/notices/shell-commands.jsonl` | **Built** on the measured shape of `!` commands: `<bash-input>` alone, then `<bash-stdout>` and `<bash-stderr>` in the next record, with output, with only stderr, and with the harness's no-output line; commands and output are synthetic. |
 
 ## The event stream (`events/`)
 

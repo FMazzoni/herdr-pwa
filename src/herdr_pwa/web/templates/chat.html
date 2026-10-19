@@ -70,6 +70,8 @@
     {# No script: the open details unfolds the text above it through CSS. #}
     {% if turn.long %}<details class="turn__more"><summary><span class="turn__all">Show all</span><span class="turn__less">Show less</span></summary></details>{% endif %}
     {% if turn.truncated %}<p class="turn__clip">clipped</p>{% endif %}
+    {#- A `!` command the person ran opens on what it printed, as a slash command's line does. #}
+    {% if turn.result %}<details class="tool turn__output{% if turn.failed %} tool--failed{% endif %}" data-hp-key="output"><summary class="tool__line"><span class="tool__name">Output</span>{% if turn.failed %} <span class="tool__failed"><span aria-hidden="true">&#x2715; </span>failed</span>{% endif %}</summary><pre class="tool__result">{{ turn.result }}</pre></details>{% endif %}
   </article>
   {% endif %}
   {% endfor %}

@@ -495,6 +495,19 @@ html { -webkit-tap-highlight-color: transparent; }
 .peer__head { margin: 0 0 var(--space-3); color: var(--ink-3); font-size: var(--text-meta); }
 .peer__name { color: var(--ink-2); font-weight: 600; }
 .turn__clip { margin: var(--space-2) 0 0; color: var(--ink-3); font-size: var(--text-small); }
+/* A `!` command's output opens under the person's line, a tool result's box inside their turn. */
+.turn__output { margin-top: var(--space-3); color: var(--ink-3); font-size: var(--text-meta); }
+.turn__output > .tool__result { white-space: pre-wrap; overflow-wrap: anywhere; }
+/* Under large type a failed command's ending wraps to a second row rather than leaving the screen. */
+.turn__output > .tool__line { flex-wrap: wrap; }
+/* Prompts the harness holds: one quiet line under the bubble that opens on them, in the person's ink. */
+.queued { justify-self: start; min-width: 0; max-width: 100%; color: var(--ink-3); font-size: var(--text-meta); }
+.queued__head { display: flex; align-items: center; gap: var(--space-4); min-height: var(--tap); list-style: none; cursor: pointer; }
+.queued__head::-webkit-details-marker { display: none; }
+.queued__head::after { content: var(--chevron); flex: none; color: var(--ink-3); }
+.queued[open] > .queued__head::after { transform: rotate(90deg); }
+.queued__list { display: grid; gap: var(--space-3); margin: 0; padding: 0 0 var(--space-3) var(--space-6); border-left: var(--line-1) solid var(--accent); list-style: none; }
+.queued__text { color: var(--ink); font-size: var(--text-body); white-space: pre-wrap; overflow-wrap: anywhere; }
 /* A long turn folds to a few lines; the open details below it unfolds it, with or without script. */
 .turn__fold { max-height: calc(var(--fold-lines) * 1.45em); overflow: hidden; }
 .turn:has(> .turn__more[open]) > .turn__fold { max-height: none; }
