@@ -389,6 +389,21 @@ def test_the_strip_refreshes_through_its_own_route(tmp_path: Path) -> None:
     assert hidden.status_code == 286
 
 
+@pytest.mark.parametrize("tab", ["chat", "pane"])
+def test_the_page_reads_the_pane_once_for_the_strip_and_the_tab_together(
+    tmp_path: Path, tab: str
+) -> None:
+    rig = build_rig(tmp_path, {SNAPSHOT: snapshot_frame(), READ: read_frame("$ ")})
+    assert rig.http.get(f"/agent/{WORKING_SESSION}?tab={tab}").status_code == 200
+    assert rig.wire.calls.count(READ) == 1, rig.wire.calls
+
+
+def test_the_strip_route_reads_the_pane_once_on_its_own(tmp_path: Path) -> None:
+    rig = build_rig(tmp_path, {SNAPSHOT: snapshot_frame(), READ: read_frame("$ ")})
+    assert rig.http.get(f"/agent/{WORKING_SESSION}/stats").status_code == 200
+    assert rig.wire.calls.count(READ) == 1, rig.wire.calls
+
+
 def test_the_files_tab_is_a_redirect_into_the_agents_files(tmp_path: Path) -> None:
     rig = build_rig(tmp_path)
     found = rig.http.get(f"/agent/{WORKING_SESSION}?tab=files", follow_redirects=False)
