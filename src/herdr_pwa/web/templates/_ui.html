@@ -31,9 +31,10 @@
 {# One key sent to a pane from the answer panel; `screen` pins the screen it was drawn against.
    A tap disables every control in the region until the answer lands, and replaces a poll in
    flight, which would otherwise swap the region away and drop this answer on the floor.
-   A call block draws the button's inside instead of `label`. #}
-{% macro key_form(base, target, key, label, screen=none, kind=none, confirm=false, extra=none) -%}
-<form method="post" action="{{ base }}/keys" hx-post="{{ base }}/keys" hx-target="#answer" hx-swap="outerHTML" hx-disabled-elt="#answer button" hx-sync="closest .answer:replace">
+   A call block draws the button's inside instead of `label`. `docked` is a key in the status row,
+   outside the region: it syncs with the region by id, and every key waits while one is out. #}
+{% macro key_form(base, target, key, label, screen=none, kind=none, confirm=false, extra=none, docked=false) -%}
+<form method="post" action="{{ base }}/keys" hx-post="{{ base }}/keys" hx-target="#answer" hx-swap="outerHTML" hx-disabled-elt="{{ '#answer button, #agent-tray button' if docked else '#answer button' }}" hx-sync="{{ '#answer:replace' if docked else 'closest .answer:replace' }}">
       <input type="hidden" name="key" value="{{ key }}">{% if screen is not none %}<input type="hidden" name="screen" value="{{ screen }}">{% endif %}<input type="hidden" name="target" value="{{ target }}">
       {% if confirm %}<input type="hidden" name="confirm" value="1">
       {% endif %}{% if caller is defined %}<button class="button{% if kind %} button--{{ kind }}{% endif %}{% if extra %} {{ extra }}{% endif %}" type="submit">{{ caller() }}</button>{% else %}{{ button(label, kind, extra) }}{% endif %}

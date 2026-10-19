@@ -231,10 +231,10 @@ def test_the_list_is_drawn_only_beside_a_live_bubble() -> None:
     assert view.agents == ()
 
 
-def test_the_chat_route_lists_the_agents_an_orchestrator_waits_on(tmp_path: Path) -> None:
+def test_the_row_lists_the_agents_an_orchestrator_waits_on(tmp_path: Path) -> None:
     rig = build_rig(tmp_path)
     write_transcript(rig.settings.state_dir.parent / "transcripts", WORKING_SESSION, spawned_chat())
-    body = rig.http.get(f"/agent/{WORKING_SESSION}/chat", headers={"HX-Request": "true"}).text
+    body = rig.http.get(f"/agent/{WORKING_SESSION}/tray", headers={"HX-Request": "true"}).text
     assert 'aria-hidden="true">Waiting on 2 agents</span>' in body
     assert body.count('class="spawned__row spawned__row--running"') == 2
     assert body.count('class="spawned__row spawned__row--finished"') == 1

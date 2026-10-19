@@ -63,9 +63,14 @@
   /* The end, unless a waiting question is taller than the room between the bar and the dock:
    * then its top, just under the bar, so the question and its first options show and Interrupt
    * waits below. The bar is measured, since what it holds varies by page. */
+  // The top of what is fixed at the bottom: the status row over the composer, else the composer.
+  function dockTop() {
+    var bar = document.getElementById("agent-tray") || document.getElementById("composer");
+    return bar ? bar.getBoundingClientRect().top : window.innerHeight;
+  }
+
   function endY() {
     var region = document.getElementById("answer");
-    var bar = document.getElementById("composer");
     var waiting = !!region && asking();
     return hp.logic.landing({
       scrollHeight: root.scrollHeight,
@@ -74,7 +79,7 @@
       asking: waiting,
       regionHeight: waiting ? region.getBoundingClientRect().height : 0,
       askedTop: waiting ? askedIn(region).getBoundingClientRect().top : 0,
-      dockTop: bar ? bar.getBoundingClientRect().top : window.innerHeight,
+      dockTop: dockTop(),
       barBottom: barBottom(),
     });
   }
@@ -288,10 +293,8 @@
     if (pin.pinned || !asking() || region.querySelector(".banner[data-hp-sent]")) {
       return false;
     }
-    var bar = document.getElementById("composer");
-    var dockTop = bar ? bar.getBoundingClientRect().top : window.innerHeight;
     // Waiting below until the question itself (else the region's first line) is wholly in view.
-    return askedIn(region).getBoundingClientRect().bottom > dockTop;
+    return askedIn(region).getBoundingClientRect().bottom > dockTop();
   }
 
   function showJump() {

@@ -70,7 +70,8 @@ PROBE = r"""
 const units = document.querySelectorAll(
   "#agent-view .turn, #agent-view > .pane > .pane__line");
 const last = units[units.length - 1];
-const bar = document.getElementById("composer");
+// The dock's top is the status row's, which sits fixed on the composer.
+const bar = document.getElementById("agent-tray") || document.getElementById("composer");
 const answer = document.getElementById("answer");
 const busy = document.querySelector(".htmx-request, .htmx-swapping, .htmx-settling");
 if (!last || !bar || !answer || busy || document.readyState !== "complete") return null;
@@ -451,7 +452,8 @@ const question = document.querySelector("#answer .answer__question");
 const region = document.getElementById("answer");
 if (busy || !question || !region) return null;
 const under = document.querySelector(".topbar").getBoundingClientRect().bottom;
-const dock = document.getElementById("composer").getBoundingClientRect().top;
+const dock = (document.getElementById("agent-tray") || document.getElementById("composer"))
+  .getBoundingClientRect().top;
 const line = parseFloat(getComputedStyle(question).lineHeight) || 24;
 return { top: question.getBoundingClientRect().top, line: line, under: under, dock: dock,
   tall: region.getBoundingClientRect().height > dock - under };
@@ -926,7 +928,8 @@ const [key] = arguments;
 const held = key ? all.find((a) => a.getAttribute("data-hp-key") === key) : first;
 const units = document.querySelectorAll("#agent-view .turn");
 const last = units[units.length - 1];
-const dock = document.getElementById("composer").getBoundingClientRect().top;
+const dock = (document.getElementById("agent-tray") || document.getElementById("composer"))
+  .getBoundingClientRect().top;
 return {
   count: all.length,
   key: held ? held.getAttribute("data-hp-key") : null,
@@ -1397,7 +1400,7 @@ const bar = document.getElementById("composer");
 const colour = getComputedStyle(bar).backgroundColor;
 const frames = (n, then) => (n ? requestAnimationFrame(() => frames(n - 1, then)) : then());
 const painted = () => [...document.querySelectorAll("body *")].filter((el) => {
-  if (el.closest("#composer, .topbar")) return false;
+  if (el.closest("#composer, #agent-tray, .topbar")) return false;
   const style = getComputedStyle(el);
   if (style.backgroundColor !== colour || style.display === "none") return false;
   const box = el.getBoundingClientRect();

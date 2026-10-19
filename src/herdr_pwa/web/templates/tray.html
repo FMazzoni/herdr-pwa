@@ -1,0 +1,45 @@
+{% import "_ui.html" as ui %}
+{% set base = "/agent/" ~ (agent.session|urlencode) %}
+{% set url = base ~ "/tray" %}
+{% set b = chat.bubble %}
+{% set state = b.state if b else "done" if chat.receipt else "still" %}
+{# One row over the composer: what the agent is doing and for how long, the agents it started and
+   the prompts that wait. VoiceOver hears one sentence; the drawn words beside it are hidden from
+   it, and bubble.js says the state aloud only when it changes, through the page's live region.
+   The row opens a sheet above it with those agents, those prompts and the key pad. #}
+<div id="agent-tray" class="tray" data-hp-poll="{{ url }}" hx-get="{{ url }}" hx-target="this" hx-swap="outerHTML" data-hp-topic="chat:{{ agent.session }}" hx-trigger="hp:stale, hp:poke from:body">
+  <details class="tray__sheet">
+    <summary class="tray__row tray__row--{{ state }}" id="agent-tray-row"><span class="sr-only"><span class="tray__said">{{ row.lead }}</span>{{ row.sentence[row.lead|length:] }}</span>
+      {%- if b %}<span class="bubble bubble--{{ b.state }}" data-hp-bubble="{{ b.state }}" data-hp-said="{{ b.said }}" data-hp-stretch="{{ b.stretch }}"{% if b.ran is not none %} data-hp-ran="{{ b.ran }}"{% endif %}{% if b.quiet is not none %} data-hp-quiet="{{ b.quiet }}"{% endif %} data-hp-quiet-after="{{ b.quiet_after }}" data-working-palette="{{ b.palette }}" data-working-motion="{{ b.motion }}"><span class="bubble__text" aria-hidden="true">{{ b.text }}</span>{% if b.time %}<span class="bubble__time" aria-hidden="true">{{ b.time }}</span>{% endif %}</span>
+      {%- elif chat.receipt %}<span class="tray__words chat__receipt" data-hp-bubble="done" data-hp-said="{{ chat.receipt.said }}" aria-hidden="true">{{ chat.receipt.text }}</span>
+      {%- else %}<span class="tray__words" aria-hidden="true">{{ row.lead }}</span>{% endif %}
+      {%- if row.running %}<span class="tray__count" aria-hidden="true">&middot; {{ row.running }} agent{{ "" if row.running == 1 else "s" }}</span>{% endif %}
+      {%- if row.queued %}<span class="tray__count" aria-hidden="true">&middot; {{ row.queued }} queued</span>{% endif -%}
+    </summary>
+    <div class="tray__body">
+      {#- The agents it started in the background, as its pane lists them: running first, then those
+          done this turn. Only beside a live bubble, since a session that dies never says they ended. #}
+      {%- if chat.agents %}<ul class="spawned" aria-label="Agents it started">{% for a in chat.agents %}<li class="spawned__row spawned__row--{{ a.state }}"><span class="spawned__name">{{ a.description }}</span> <span class="spawned__state"><span aria-hidden="true">&middot; </span>{{ a.state }}</span>{% if a.time %} <span class="spawned__time"><span aria-hidden="true">&middot; </span>{{ a.time }}</span>{% endif %}</li>{% endfor %}</ul>{% endif %}
+      {#- Sent while the agent was busy and not taken yet: never a message in the log, so nothing is
+          drawn twice once the turn takes it. #}
+      {%- if chat.queued %}{% set n = chat.queued|length %}<div class="queued"><p class="queued__head">{{ n }} message{{ "" if n == 1 else "s" }} queued</p><ul class="queued__list">{% for text in chat.queued %}<li class="queued__text">{{ text }}</li>{% endfor %}</ul></div>{% endif %}
+      {%- if pad %}
+      <div class="keys keys--pad tray__pad">
+        {%- for key in pad %}
+        {{ ui.key_form(base, agent.target, key, key|capitalize, screen=fingerprint, docked=true) }}
+        {%- endfor %}
+      </div>
+      {%- else %}
+      <p class="tray__note">The keys are with the question.</p>
+      {%- endif %}
+      {#- bubble.js shows it and remembers the choice; without script nothing in the row moves. #}
+      {% set still %}data-hp-still aria-pressed="false"{% endset %}
+      <p class="tray__still" hidden>{{ ui.button("Stop the animation", "toggle", type="button", attrs=still) }}</p>
+    </div>
+  </details>
+  {#- Its own target at the row's edge, only while the agent works; dashed and in the danger
+      colour, apart from Send below it. The second tap it needs is asked in the answer region. #}
+  {%- if stop %}
+  <div class="tray__stop">{{ ui.key_form(base, agent.target, interrupt, "Interrupt", kind="danger", docked=true) }}</div>
+  {%- endif %}
+</div>

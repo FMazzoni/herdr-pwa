@@ -7,7 +7,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
-from herdr_pwa.decisions import asks_now, decide_screen, page_status
+from herdr_pwa.decisions import asks_now, decide_screen, page_status, still_talking
 from herdr_pwa.engine import (
     INTERRUPT_KEY,
     Agent,
@@ -20,7 +20,7 @@ from herdr_pwa.engine import (
 )
 from herdr_pwa.web.deps import WebState, viewer_guard
 from herdr_pwa.web.failures import AgentGone, Redraw, refused
-from herdr_pwa.web.herd import asks, find_agent, overlay_of, prompt_of
+from herdr_pwa.web.herd import agent_status, asks, find_agent, overlay_of, prompt_of
 from herdr_pwa.web.writing import (
     Posted,
     WriteRoutes,
@@ -83,6 +83,13 @@ def shown_status(web: WebState, agent: Agent, sent: KeySent | None = None) -> st
     return page_status(agent, overlay_of(web, (agent,)), answered=answered)
 
 
+def _keyed(agent: Agent, prompt: BlockedPrompt | None) -> bool:
+    """Whether the keys belong with a question: one is asked, or the agent is stopped on one."""
+    decision = decide_screen(prompt) if prompt is not None else None
+    asked = decision is not None and bool(decision.question or decision.options)
+    return asked or agent.status is AgentStatus.BLOCKED
+
+
 def answer_context(agent: Agent, prompt: BlockedPrompt | None, status: str) -> dict[str, object]:
     """What the answer region draws; its digits come from the function the write checks with."""
     allowed = allowed_keys(prompt)
@@ -95,6 +102,8 @@ def answer_context(agent: Agent, prompt: BlockedPrompt | None, status: str) -> d
         "digits": answer_digits(prompt),
         "fingerprint": control_token(prompt) if prompt is not None else "",
         "hints": hints,
+        # Otherwise the pad and Interrupt are the status row's, above the composer.
+        "keyed": _keyed(agent, prompt),
         "pad": [k for k in pad_keys(prompt) if k in allowed and k not in hinted],
         "interrupt": INTERRUPT_KEY,
         "cadence": ANSWER_CADENCE,
@@ -113,6 +122,20 @@ def _asked_about(prompt: BlockedPrompt | None) -> tuple[str, ...]:
 def answer_region(web: WebState, agent: Agent) -> dict[str, object]:
     """The answer region as it stands now, for its own route and for the page that opens with it."""
     return answer_context(agent, _question(web, agent), shown_status(web, agent))
+
+
+def row_keys(web: WebState, agent: Agent) -> dict[str, object]:
+    """The keys the status row offers: the pad while no question holds the keys, and Interrupt
+    while the agent works; the same allowed set the write checks with."""
+    prompt = _question(web, agent)
+    keyed = _keyed(agent, prompt)
+    allowed = allowed_keys(prompt)
+    return {
+        "pad": [] if keyed else [k for k in pad_keys(prompt) if k in allowed],
+        "fingerprint": control_token(prompt) if prompt is not None else "",
+        "interrupt": INTERRUPT_KEY,
+        "stop": not keyed and still_talking(agent_status(web, agent)),
+    }
 
 
 def composer_region(agent: Agent, screen: str | None) -> dict[str, object]:

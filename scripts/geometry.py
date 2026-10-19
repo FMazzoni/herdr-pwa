@@ -184,7 +184,9 @@ const root = document.documentElement;
 root.style.fontSize = parseFloat(getComputedStyle(root).fontSize) * scale + "px";
 const kept = () => {
   const bar = document.getElementById("composer");
-  return !bar || root.style.getPropertyValue("--dock-h").trim() === bar.offsetHeight + "px";
+  const tray = document.getElementById("agent-tray");
+  const trayKept = !tray || root.style.getPropertyValue("--tray-h").trim() === tray.offsetHeight + "px";
+  return !bar || (trayKept && root.style.getPropertyValue("--dock-h").trim() === bar.offsetHeight + "px");
 };
 const started = performance.now();
 const frame = () => {
@@ -224,7 +226,9 @@ const done = arguments[arguments.length - 1];
 const root = document.documentElement;
 const kept = () => {
   const bar = document.getElementById("composer");
-  return !bar || root.style.getPropertyValue("--dock-h").trim() === bar.offsetHeight + "px";
+  const tray = document.getElementById("agent-tray");
+  const trayKept = !tray || root.style.getPropertyValue("--tray-h").trim() === tray.offsetHeight + "px";
+  return !bar || (trayKept && root.style.getPropertyValue("--dock-h").trim() === bar.offsetHeight + "px");
 };
 const started = performance.now();
 const frame = () => {
@@ -276,14 +280,17 @@ for (const el of document.body.querySelectorAll("*")) {
     }
   }
 }
-// A bar fixed to the bottom covers that band of the page at every scroll, even at its end.
+// A bar fixed to the bottom covers that band of the page at every scroll, even at its end, and so
+// does a bar fixed on top of it (the status row on the composer).
 const vh = root.clientHeight;
 const docked = [];
 let covered = 0;
-for (const el of document.body.querySelectorAll("*")) {
-  if (getComputedStyle(el).position !== "fixed") continue;
-  const r = el.getBoundingClientRect();
-  if (r.height > 0 && r.bottom >= vh - 0.5) {
+const fixed = [...document.body.querySelectorAll("*")]
+  .filter((el) => getComputedStyle(el).position === "fixed")
+  .map((el) => [el, el.getBoundingClientRect()])
+  .sort((a, b) => b[1].bottom - a[1].bottom);
+for (const [el, r] of fixed) {
+  if (r.height > 0 && r.bottom >= vh - covered - 0.5) {
     docked.push(el);
     covered = Math.max(covered, vh - r.top);
   }

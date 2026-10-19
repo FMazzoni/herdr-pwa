@@ -103,6 +103,12 @@
      overwrites the two px values; these are what the page reserves without script. */
   --dock-h: 88px;
   --kb: 0px;
+  /* The status row over the dock, measured and overwritten the same way: one 44px row and its rule. */
+  --tray-h: 45px;
+  /* The tallest the row's sheet gets before it scrolls, so the chat still shows above it. */
+  --tray-sheet-max: 55vh;
+  /* The least of the row's words kept before the counts beside them would be cut. */
+  --tray-words-min: 6em;
   /* How far the composer's colour runs below it while the keyboard is up, under iOS's translucent
      accessory pill. Fixed and tall, not --kb: --kb is 0 whenever iOS has panned the band to the
      layout viewport's bottom, and the pill then sits below that edge. */
@@ -253,14 +259,15 @@ html { -webkit-tap-highlight-color: transparent; }
 .chat__note { color: var(--ink-3); font-size: var(--text-meta); text-align: center; padding: var(--space-6) var(--space-4); }
 /* The way to the Pane under an empty log's note, centred like the note it ends. */
 .chat__go { margin-inline: auto; }
-/* The status bubble sits where the agent's next message will land, shaped like one and at its
-   size, as wide as its words; past the screen's width the words ellipsize, never the timer. */
-.bubble { justify-self: start; display: flex; align-items: baseline; gap: var(--space-5); min-width: 0; max-width: 100%; padding: var(--space-5) var(--space-6); border-radius: var(--radius-3); background: var(--surface); font-size: var(--text-body); color: var(--ink-2); white-space: nowrap; }
-.bubble__text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* The status bubble's words lead the status row, as wide as they are; past the row's width they
+   ellipsize, never the timer. */
+.bubble { display: flex; flex: 0 1 auto; align-items: baseline; gap: var(--space-4); min-width: 0; color: var(--ink-2); white-space: nowrap; }
+/* The words give way first, but never past the first few letters. */
+.bubble__text { min-width: min(var(--tray-words-min), 100%); overflow: hidden; text-overflow: ellipsis; }
 .bubble__time { flex: none; color: var(--ink-3); font-size: var(--text-small); font-variant-numeric: tabular-nums; }
 /* Gone quiet: the sweep stops and the words grey. */
 .bubble--quiet { color: var(--ink-3); }
-.bubble--blocked { background: var(--needs-ground); color: var(--needs-ink); }
+.bubble--blocked { color: var(--needs-ink); font-weight: 600; }
 /* Each letter app.js lays out takes the crest's colour where it stands in it, up to the palette's
    peak, and rests in the bubble's ink either side of it. */
 .bubble__glyph {
@@ -270,15 +277,15 @@ html { -webkit-tap-highlight-color: transparent; }
 }
 /* A motion that lifts the letters needs each one a box of its own to move. */
 .bubble.is-lifting .bubble__glyph { display: inline-block; white-space: pre; transform: translateY(calc(var(--glyph-wave, 0) * var(--working-rise) * -1)); }
-/* The finished turn's receipt: one quiet line under the answer, flush with its text. */
-/* The agents the turn started, under its bubble: one quiet line each, the name ellipsized. */
+/* The agents the turn started, in the row's sheet: one quiet line each, the name ellipsized. */
 .spawned { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); margin: 0; padding: 0 0 0 var(--space-6); border-left: var(--line-1) solid var(--rule); list-style: none; font-size: var(--text-meta); color: var(--ink-3); }
 .spawned__row { display: flex; align-items: baseline; gap: var(--space-3); min-width: 0; white-space: nowrap; }
 .spawned__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--ink-2); }
 .spawned__state, .spawned__time { flex: none; font-variant-numeric: tabular-nums; }
 .spawned__row--running .spawned__state { color: var(--ink-2); }
 .spawned__row--failed .spawned__state { color: var(--blocked); font-weight: 600; }
-.chat__receipt { margin: 0; padding: 0 var(--space-6); color: var(--ink-3); font-size: var(--text-meta); font-variant-numeric: tabular-nums; }
+/* The finished turn's receipt, in the row where the bubble was. */
+.chat__receipt { color: var(--ink-3); font-variant-numeric: tabular-nums; }
 /* Drawn as the bubble it replaces goes: it settles into place rather than appearing. */
 .chat__receipt.is-folding { animation: receipt-fold 240ms ease-out; }
 @keyframes receipt-fold { from { opacity: 0; transform: translateY(-0.5em); } }
@@ -421,7 +428,9 @@ html { -webkit-tap-highlight-color: transparent; }
 
 /* The agent page is one column. The composer is docked to the bottom, so the page reserves
    its height; the answer region, asked or quiet, follows the view, next to the dock. */
-.agent--docked { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-5); padding-top: var(--space-5); padding-bottom: calc(var(--dock-h) + var(--space-8)); }
+.agent--docked { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-5); padding-top: var(--space-5); padding-bottom: calc(var(--dock-h) + var(--tray-h) + var(--space-8)); }
+/* With no question and no outcome the region draws nothing, so it keeps no gap in the column. */
+.agent--docked > .answer--quiet { display: contents; }
 .agent--docked > *, .agent--docked > .answer { margin: 0; }
 .agent__meta--line { flex-wrap: nowrap; overflow-wrap: normal; }
 .agent__facts { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -500,12 +509,9 @@ html { -webkit-tap-highlight-color: transparent; }
 .turn__output > .tool__result { white-space: pre-wrap; overflow-wrap: anywhere; }
 /* Under large type a failed command's ending wraps to a second row rather than leaving the screen. */
 .turn__output > .tool__line { flex-wrap: wrap; }
-/* Prompts the harness holds: one quiet line under the bubble that opens on them, in the person's ink. */
-.queued { justify-self: start; min-width: 0; max-width: 100%; color: var(--ink-3); font-size: var(--text-meta); }
-.queued__head { display: flex; align-items: center; gap: var(--space-4); min-height: var(--tap); list-style: none; cursor: pointer; }
-.queued__head::-webkit-details-marker { display: none; }
-.queued__head::after { content: var(--chevron); flex: none; color: var(--ink-3); }
-.queued[open] > .queued__head::after { transform: rotate(90deg); }
+/* Prompts the harness holds, in the row's sheet: a quiet head, then each in the person's ink. */
+.queued { display: grid; gap: var(--space-3); min-width: 0; color: var(--ink-3); font-size: var(--text-meta); }
+.queued__head { margin: 0; }
 .queued__list { display: grid; gap: var(--space-3); margin: 0; padding: 0 0 var(--space-3) var(--space-6); border-left: var(--line-1) solid var(--accent); list-style: none; }
 .queued__text { color: var(--ink); font-size: var(--text-body); white-space: pre-wrap; overflow-wrap: anywhere; }
 /* A long turn folds to a few lines; the open details below it unfolds it, with or without script. */
@@ -846,7 +852,7 @@ html.is-keyboard { background: var(--surface); }
 .jump {
   position: fixed;
   left: 50%;
-  bottom: calc(var(--kb) + var(--dock-h) + var(--space-4));
+  bottom: calc(var(--kb) + var(--dock-h) + var(--tray-h) + var(--space-4));
   z-index: 2;
   transform: translateX(-50%);
   min-height: var(--tap);
@@ -857,6 +863,63 @@ html.is-keyboard { background: var(--surface); }
   white-space: nowrap;
 }
 .jump[hidden] { display: none; }
+
+/* The status row, fixed on the composer's top edge and riding the keyboard with it: what the agent
+   is doing, then Interrupt at the far edge while it works. Its column is the composer's. */
+.tray {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--kb) + var(--dock-h));
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  padding:
+    0
+    calc((100% - min(100%, var(--page-max))) / 2 + var(--gutter-right))
+    0
+    calc((100% - min(100%, var(--page-max))) / 2 + var(--gutter-left));
+  background: var(--surface);
+  border-top: var(--line-1) solid var(--rule);
+  font-size: var(--text-meta);
+}
+.tray__sheet { flex: 1; min-width: 0; }
+/* The whole row is the sheet's 44px handle; the chevron points the way the sheet opens. */
+.tray__row { display: flex; align-items: center; gap: var(--space-3); min-height: var(--tap); list-style: none; cursor: pointer; white-space: nowrap; overflow: hidden; color: var(--ink-2); }
+.tray__row::-webkit-details-marker { display: none; }
+.tray__row::after { content: var(--chevron); flex: none; margin-left: auto; padding-left: var(--space-4); color: var(--ink-3); transform: rotate(-90deg); }
+.tray__sheet[open] > .tray__row::after { transform: rotate(90deg); }
+.tray__row--blocked { color: var(--needs-ink); }
+.tray__words { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.tray__count { flex: none; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+/* The sheet opens upward over the chat, so the row and the composer never move. */
+.tray__body {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  display: grid;
+  gap: var(--space-6);
+  max-height: var(--tray-sheet-max);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding:
+    var(--space-6)
+    calc((100% - min(100%, var(--page-max))) / 2 + var(--gutter-right))
+    var(--space-6)
+    calc((100% - min(100%, var(--page-max))) / 2 + var(--gutter-left));
+  background: var(--surface);
+  border-top: var(--line-1) solid var(--rule);
+}
+.tray__note { margin: 0; color: var(--ink-3); }
+.tray__still { display: flex; justify-content: flex-end; margin: 0; }
+.tray__still[hidden] { display: none; }
+/* The generic keys stay on one line even at 320px: equal columns, however many there are. */
+.tray__pad { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: var(--space-3); }
+/* Drawn dashed in the danger colour, at the row's far edge, so it never reads as Send below it. */
+.tray__stop { flex: none; }
+.tray__stop .button--danger { min-height: var(--tap); padding-inline: var(--space-4); background: transparent; border-style: dashed; font-size: var(--text-meta); }
 .composer .banner { margin: 0; }
 /* The button drops under the field once both no longer fit, which only the largest Text Size does. */
 .composer__row { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: end; gap: var(--space-4); }

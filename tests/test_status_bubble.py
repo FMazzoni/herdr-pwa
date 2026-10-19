@@ -252,11 +252,11 @@ def _status(status: str) -> dict[str, JsonValue]:
 def _chat(tmp_path: Path, stage: str, status: str, screen: str = "") -> str:
     write_transcript(tmp_path / "transcripts", WORKING_SESSION, turn_chat(stage))
     rig = build_rig(tmp_path, {SNAPSHOT: _status(status), READ: read_frame(screen)})
-    return rig.http.get(f"/agent/{WORKING_SESSION}/chat", headers=FRAGMENT).text
+    return rig.http.get(f"/agent/{WORKING_SESSION}/tray", headers=FRAGMENT).text
 
 
 def _bubble(body: str) -> str:
-    found = re.search(r'<div class="bubble[^"]*"[^>]*>.*?</div>', body, re.DOTALL)
+    found = re.search(r'<summary class="tray__row.*?</summary>', body, re.DOTALL)
     assert found is not None, body[-2000:]
     return found.group(0)
 
@@ -269,7 +269,7 @@ def test_the_route_draws_the_running_tool_and_its_timer(tmp_path: Path) -> None:
     assert re.search(r'data-hp-ran="15\d"', bubble)
     assert f'data-working-palette="{WORKING_PALETTE}"' in bubble
     assert '<span class="bubble__text" aria-hidden="true">' in bubble
-    assert '<span class="sr-only">Working: Running pytest' in bubble
+    assert '<span class="tray__said">Working: Running pytest' in bubble
     assert 'data-hp-said="Working"' in bubble
 
 
@@ -293,23 +293,13 @@ def test_the_route_draws_the_question_the_card_reads(tmp_path: Path) -> None:
 
 def test_the_route_draws_the_receipt_once_the_turn_is_done(tmp_path: Path) -> None:
     body = _chat(tmp_path, "done", "done")
-    assert '<div class="bubble' not in body
-    found = re.search(r'<p class="chat__receipt" data-hp-bubble="done"[^>]*>(.*?)</p>', body)
+    assert '<span class="bubble' not in body
+    found = re.search(
+        r'<span class="tray__words chat__receipt" data-hp-bubble="done"[^>]*>(.*?)</span>', body
+    )
     assert found is not None, body[-1500:]
     assert "Worked 4m 1" in found.group(1)
     assert "3 tool calls" in found.group(1)
-
-
-def test_the_chat_tab_alone_carries_the_switch_that_stops_the_animation(tmp_path: Path) -> None:
-    write_transcript(tmp_path / "transcripts", WORKING_SESSION, turn_chat("tool"))
-    rig = build_rig(tmp_path, {SNAPSHOT: _status("working"), READ: read_frame("")})
-    chat = rig.http.get(f"/agent/{WORKING_SESSION}?tab=chat").text
-    switch = 'data-hp-still aria-pressed="false">Stop the animation</button>'
-    # Hidden until bubble.js shows it with the choice this device remembers.
-    assert re.search(rf'<p class="agent__columns" hidden><button [^>]*{switch}</p>', chat)
-    pane = rig.http.get(f"/agent/{WORKING_SESSION}?tab=pane").text
-    assert "data-hp-still" not in pane
-    assert "data-hp-columns" in pane
 
 
 def test_the_old_working_line_is_gone(tmp_path: Path) -> None:
@@ -359,7 +349,7 @@ def test_the_route_keeps_an_open_tool_working_past_the_threshold(tmp_path: Path)
         record["timestamp"] = (stamp - timedelta(minutes=5)).isoformat()
     write_transcript(tmp_path / "transcripts", WORKING_SESSION, records)
     rig = build_rig(tmp_path, {SNAPSHOT: _status("working")})
-    bubble = _bubble(rig.http.get(f"/agent/{WORKING_SESSION}/chat", headers=FRAGMENT).text)
+    bubble = _bubble(rig.http.get(f"/agent/{WORKING_SESSION}/tray", headers=FRAGMENT).text)
     assert 'data-hp-bubble="working"' in bubble
     assert "data-hp-quiet=" not in bubble.replace("data-hp-quiet-after", "")
 
@@ -369,7 +359,7 @@ def _verb_at_seq(tmp_path: Path, seq: int) -> str:
     for agent in agents_of(frame):
         agent["state_change_seq"] = seq
     rig = build_rig(tmp_path, {SNAPSHOT: frame})
-    body = rig.http.get(f"/agent/{WORKING_SESSION}/chat", headers=FRAGMENT).text
+    body = rig.http.get(f"/agent/{WORKING_SESSION}/tray", headers=FRAGMENT).text
     found = re.search(r'class="bubble__text" aria-hidden="true">(\w+)…<', body)
     assert found is not None, body[-1500:]
     return found.group(1)

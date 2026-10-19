@@ -82,6 +82,8 @@
   {% elif blocked and sent is not defined and refused is not defined %}
   {% call ui.banner("held", "It is waiting, and its question could not be read here.", "The keys below still reach it; look at the screen before you press one.") %}{{ pane_door(agent, "Look at the Pane", "banner__go") }}{% endcall %}
   {% endif %}
+  {# Only beside a question: otherwise the pad is in the status row's sheet, Interrupt at its edge. #}
+  {% if keyed %}
   <div class="answer__keys">
     {% if not still %}
     {% if hints %}
@@ -111,6 +113,7 @@
     </div>
     {% endif %}
   </div>
+  {% endif %}
 </section>
 {# The page's status, redrawn with a sent key so it never says blocked under "Answered". Only
    then: htmx fires afterSwap once per swapped element, and on a poll the extra two would

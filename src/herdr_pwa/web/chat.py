@@ -306,6 +306,8 @@ class Bubble:
     quiet_after: int = QUIET_AFTER
     palette: str = WORKING_PALETTE
     motion: str = WORKING_MOTION
+    # Its words already count the agents it started, so the row does not count them again.
+    counts_agents: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -419,8 +421,9 @@ def _working(items: tuple[ChatTurn | ToolRun, ...], turning: Turning) -> Bubble:
     # Its own log is still while agents it started work, which is not the turn gone quiet.
     waiting = _waiting_on(turning.spawned)
     if waiting:
+        said = f"Working: {waiting}"
         return Bubble(
-            "working", waiting, "Working", f"Working: {waiting}", turning.stretch, ran, time
+            "working", waiting, "Working", said, turning.stretch, ran, time, counts_agents=True
         )
     if gone_quiet(times.quiet):
         quiet = int(times.quiet or 0)
@@ -508,3 +511,35 @@ def chat_view(
         door=not turns and page.state in _READ_ON_PANE,
         queued=tuple(page.queued),
     )
+
+
+@dataclass(frozen=True, slots=True)
+class Row:
+    """The status row above the composer: how many started agents still run, how many prompts
+    wait, and the one sentence VoiceOver hears for it."""
+
+    running: int
+    queued: int
+    lead: str
+    sentence: str
+
+
+def _counted(n: int, one: str, many: str, tail: str) -> str:
+    return f"{n} {one if n == 1 else many} {tail}" if n else ""
+
+
+def status_row(view: ChatView, status: str) -> Row:
+    """The row for *view*: its bubble's words, else the finished turn's, else the status word."""
+    counted = view.bubble is not None and view.bubble.counts_agents
+    running = 0 if counted else sum(1 for agent in view.agents if agent.state == "running")
+    queued = len(view.queued)
+    if view.bubble is not None:
+        lead = view.bubble.describe
+    else:
+        lead = view.receipt.said if view.receipt is not None else status.capitalize()
+    counts = (
+        _counted(running, "agent", "agents", "running"),
+        _counted(queued, "message", "messages", "queued"),
+    )
+    sentence = "".join(f"{part}. " for part in (lead, *counts) if part).strip()
+    return Row(running, queued, lead, sentence)

@@ -689,6 +689,21 @@ def _spawned_at(rig: Rig) -> None:
     write_transcript(rig.settings.state_dir.parent / "transcripts", WORKING_SESSION, spawned_chat())
 
 
+# What the person typed while the orchestrator waited on its workers, still in the queue.
+CROWDED_QUEUED: Final = "When the workers are done, merge the first branch and run the gate."
+
+
+def crowded_chat() -> list[dict[str, JsonValue]]:
+    """The orchestrator waiting on two running workers, with one prompt queued behind them."""
+    queued: dict[str, JsonValue] = {"type": "queue-operation", "operation": "enqueue"}
+    queued["content"] = CROWDED_QUEUED
+    return [*spawned_chat(), _at(queued, 60)]
+
+
+def _crowded_at(rig: Rig) -> None:
+    write_transcript(rig.settings.state_dir.parent / "transcripts", WORKING_SESSION, crowded_chat())
+
+
 def _turn_at(stage: str) -> Prime:
     """Write the turn as the state is built, so its stamps are seconds old when shot."""
 
@@ -1259,12 +1274,12 @@ AGENT_PAGE: Final = (
     State(
         "chat-queued-open",
         f"{AGENT}?tab=chat",
-        ".chat .queued[open] .queued__text",
+        "#agent-tray details[open] .queued__text",
         runner(_stressed),
         queued_records(),
-        title="Chat: the queued line opened on the prompt that waits",
-        armed=".chat .queued__head",
-        act=_click(".chat .queued__head"),
+        title="Chat: the status row's sheet opened on the prompt that waits",
+        armed="#agent-tray .tray__row",
+        act=_click("#agent-tray .tray__row"),
     ),
     State(
         "chat-bash-command",
@@ -1919,7 +1934,7 @@ STILL_WATCH: Final = (
     _click("[data-hp-still]")
     + r"""
 const look = () => {
-  const words = document.querySelector("#chat-note .bubble__text");
+  const words = document.querySelector("#agent-tray .bubble__text");
   if (!words) return "gone";
   const parts = [words.childElementCount];
   for (const node of [words, ...words.children]) {
@@ -1929,7 +1944,7 @@ const look = () => {
   }
   return parts.join("|");
 };
-const clock = () => (document.querySelector("#chat-note .bubble__time") || {}).textContent;
+const clock = () => (document.querySelector("#agent-tray .bubble__time") || {}).textContent;
 const pressed = document.querySelector("[data-hp-still]").getAttribute("aria-pressed") === "true";
 let first = null;
 let started = null;
@@ -1958,7 +1973,7 @@ TURNS: Final = (
     State(
         "chat-working-tool",
         f"{AGENT}?tab=chat",
-        "#chat-note",
+        "#agent-tray",
         runner(_working_as("working")),
         prime=_turn_at("tool"),
         title="Chat while a tool runs: the bubble names the tool",
@@ -1970,13 +1985,13 @@ TURNS: Final = (
         runner(_working_as("working")),
         prime=_turn_at("tool"),
         title="Chat while a tool runs, Stop the animation on: the words stand still, the timer ticks",
-        armed="#chat-note .bubble__glyph",
+        armed="#agent-tray .bubble__glyph",
         act=STILL_WATCH,
     ),
     State(
         "chat-working-thinking",
         f"{AGENT}?tab=chat",
-        "#chat-note",
+        "#agent-tray",
         runner(_working_as("working")),
         prime=_turn_at("thinking"),
         title="Chat while the agent thinks between tools: the turn's one verb",
@@ -1984,7 +1999,7 @@ TURNS: Final = (
     State(
         "chat-working-quiet",
         f"{AGENT}?tab=chat",
-        "#chat-note",
+        "#agent-tray",
         runner(_working_as("working")),
         prime=_turn_at("quiet"),
         title="Chat with a working agent that has written nothing for three minutes",
@@ -1992,10 +2007,46 @@ TURNS: Final = (
     State(
         "chat-working-spawned",
         f"{AGENT}?tab=chat",
-        "#chat-note",
+        "#agent-tray",
         runner(_working_as("working")),
         prime=_spawned_at,
         title="Chat while the agent waits on agents it started in the background",
+    ),
+    State(
+        "chat-working-crowded",
+        f"{AGENT}?tab=chat",
+        "#agent-tray",
+        runner(_working_as("working")),
+        prime=_crowded_at,
+        title="Chat while the agent waits on two agents it started, one prompt queued",
+    ),
+    State(
+        "chat-working-sheet",
+        f"{AGENT}?tab=chat",
+        "#agent-tray details[open] .tray__pad",
+        runner(_working_as("working")),
+        prime=_crowded_at,
+        title="The status row's sheet open: the agents, the prompt that waits, and the key pad",
+        armed="#agent-tray .tray__row",
+        act=_click("#agent-tray .tray__row"),
+    ),
+    State(
+        "chat-needs-you-sheet",
+        f"{AGENT}?tab=chat",
+        "#agent-tray details[open] .tray__note",
+        runner(_working_as("blocked"), capture(PERMISSION)),
+        prime=_turn_at("asking"),
+        title="The status row's sheet over a question: the keys stay with the question",
+        armed="#agent-tray .tray__row",
+        act=_click("#agent-tray .tray__row"),
+    ),
+    State(
+        "chat-idle",
+        f"{AGENT}?tab=chat",
+        ".chat .turn--agent",
+        runner(_working_as("idle")),
+        prime=_turn_at("done"),
+        title="Chat with an idle agent whose last turn is over",
     ),
     State(
         "chat-needs-you",

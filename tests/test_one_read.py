@@ -91,12 +91,13 @@ def test_the_agent_page_finds_the_log_once(tmp_path: Path, tab: str, lookups: li
     assert lookups == [WORKING_SESSION], len(lookups)
 
 
-def test_the_chat_route_finds_the_log_once(tmp_path: Path, lookups: list[str]) -> None:
+@pytest.mark.parametrize("route", ["chat", "tray"])
+def test_a_route_from_the_log_finds_it_once(tmp_path: Path, route: str, lookups: list[str]) -> None:
     rig = build_rig(tmp_path, {SNAPSHOT: snapshot_frame(), READ: read_frame("$ ")})
     write_transcript(
         tmp_path / "transcripts", WORKING_SESSION, [human_says("go"), assistant_says("done")]
     )
-    page = rig.http.get(f"/agent/{WORKING_SESSION}/chat")
+    page = rig.http.get(f"/agent/{WORKING_SESSION}/{route}")
     assert page.status_code == 200
-    assert "done" in page.text
+    assert route == "tray" or "done" in page.text
     assert lookups == [WORKING_SESSION], len(lookups)

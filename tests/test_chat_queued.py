@@ -41,6 +41,12 @@ def _chat(tmp_path: Path, records: list[dict[str, JsonValue]]) -> str:
     return rig.http.get(f"/agent/{WORKING_SESSION}/chat", headers={"HX-Request": "true"}).text
 
 
+def _row(tmp_path: Path, records: list[dict[str, JsonValue]]) -> str:
+    write_transcript(tmp_path / "transcripts", WORKING_SESSION, records)
+    rig = build_rig(tmp_path)
+    return rig.http.get(f"/agent/{WORKING_SESSION}/tray", headers={"HX-Request": "true"}).text
+
+
 def test_the_fixture_holds_each_queue_shape() -> None:
     records = queued_records()
     operations = [r.get("operation") for r in records if r.get("type") == "queue-operation"]
@@ -108,24 +114,26 @@ def test_the_chat_draws_each_prompt_exactly_once(tmp_path: Path) -> None:
     assert "pasted_content" not in chat
 
 
-def test_the_chat_says_how_many_wait_and_opens_on_them(tmp_path: Path) -> None:
-    chat = _chat(tmp_path, queued_records())
-    assert '<summary class="queued__head">1 message queued</summary>' in chat
-    assert f'<li class="queued__text">{WAITING}</li>' in chat
-    assert chat.count(WAITING) == 1
+def test_the_row_says_how_many_wait_and_its_sheet_lists_them(tmp_path: Path) -> None:
+    row = _row(tmp_path, queued_records())
+    assert '<span class="tray__count" aria-hidden="true">&middot; 1 queued</span>' in row
+    assert '<p class="queued__head">1 message queued</p>' in row
+    assert f'<li class="queued__text">{WAITING}</li>' in row
+    assert row.count(WAITING) == 1
+    assert WAITING not in _chat(tmp_path / "log", queued_records())
     later = {**queued_records()[-1], "content": "And push the branch.", "timestamp": "later"}
     two = [*queued_records(), later]
-    assert ">2 messages queued<" in _chat(tmp_path / "two", two)
+    assert ">2 messages queued<" in _row(tmp_path / "two", two)
 
 
 def test_nothing_waiting_draws_no_line(tmp_path: Path) -> None:
     records = [r for r in queued_records() if r.get("content") != WAITING]
-    assert 'class="queued"' not in _chat(tmp_path, records)
+    assert 'class="queued"' not in _row(tmp_path, records)
 
 
 def test_a_waiting_prompt_is_escaped_text(tmp_path: Path) -> None:
     records = [*queued_records()]
     records[-1] = {**records[-1], "content": "<b>bold</b> & <script>x</script>"}
-    chat = _chat(tmp_path, records)
-    assert "&lt;b&gt;bold&lt;/b&gt; &amp; &lt;script&gt;x&lt;/script&gt;" in chat
-    assert "<script>x" not in chat
+    row = _row(tmp_path, records)
+    assert "&lt;b&gt;bold&lt;/b&gt; &amp; &lt;script&gt;x&lt;/script&gt;" in row
+    assert "<script>x" not in row

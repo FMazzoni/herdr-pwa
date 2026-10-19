@@ -1,17 +1,6 @@
-{# The notes under the log, a slot of their own: a refresh that cannot read the log redraws only
-   this, so the turns the reader has stay drawn and in place. While the turn is the agent's, a status
-   bubble under the newest turn says what it is doing, how long for, and when it needs you; once
-   the turn is over it folds into one quiet line of how long it worked. #}
+{# The note under the log, a slot of its own: a refresh that cannot read the log redraws only
+   this, so the turns the reader has stay drawn and in place. What the agent is doing now is the
+   status row's, above the composer (tray.html). #}
 <div id="chat-note" class="chat__notes">
-  {%- if chat.held %}<p class="chat__note">The transcript could not be read just now; what is shown is from the last read.</p>{% endif %}
-  {#- VoiceOver reads the description; app.js says data-hp-said aloud only when the state changes,
-      and animates and ticks the hidden words and timer. #}
-  {%- if chat.bubble %}{% set b = chat.bubble %}<div class="bubble bubble--{{ b.state }}" data-hp-bubble="{{ b.state }}" data-hp-said="{{ b.said }}" data-hp-stretch="{{ b.stretch }}"{% if b.ran is not none %} data-hp-ran="{{ b.ran }}"{% endif %}{% if b.quiet is not none %} data-hp-quiet="{{ b.quiet }}"{% endif %} data-hp-quiet-after="{{ b.quiet_after }}" data-working-palette="{{ b.palette }}" data-working-motion="{{ b.motion }}"><span class="sr-only">{{ b.describe }}</span><span class="bubble__text" aria-hidden="true">{{ b.text }}</span>{% if b.time %}<span class="bubble__time" aria-hidden="true">{{ b.time }}</span>{% endif %}</div>
-  {#- The agents it started in the background, as its pane lists them: running first, then those
-      done this turn. Only beside a live bubble, since a session that dies never says they ended. #}
-  {%- if chat.agents %}<ul class="spawned" aria-label="Agents it started">{% for a in chat.agents %}<li class="spawned__row spawned__row--{{ a.state }}"><span class="spawned__name">{{ a.description }}</span> <span class="spawned__state"><span aria-hidden="true">&middot; </span>{{ a.state }}</span>{% if a.time %} <span class="spawned__time"><span aria-hidden="true">&middot; </span>{{ a.time }}</span>{% endif %}</li>{% endfor %}</ul>{% endif %}
-  {%- elif chat.receipt %}<p class="chat__receipt" data-hp-bubble="done" data-hp-said="{{ chat.receipt.said }}"><span aria-hidden="true">{{ chat.receipt.text }}</span><span class="sr-only">{{ chat.receipt.said }}</span></p>{% endif -%}
-  {#- Sent while the agent was busy and not taken yet: one thin line, never a message in the log,
-      so nothing is drawn twice once the turn takes it. #}
-  {%- if chat.queued %}{% set n = chat.queued|length %}<details class="queued" data-hp-key="queued"><summary class="queued__head">{{ n }} message{{ "" if n == 1 else "s" }} queued</summary><ul class="queued__list">{% for text in chat.queued %}<li class="queued__text">{{ text }}</li>{% endfor %}</ul></details>{% endif -%}
+  {%- if chat.held %}<p class="chat__note">The transcript could not be read just now; what is shown is from the last read.</p>{% endif -%}
 </div>
