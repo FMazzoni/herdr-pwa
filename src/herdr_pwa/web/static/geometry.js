@@ -20,6 +20,23 @@
   var watched = { composer: null, tray: null };
   // The dock grows with iPhone Text Size and with any banner in it; nothing else says so.
   var sizes = typeof window.ResizeObserver === "function" ? new window.ResizeObserver(redock) : null;
+  /* WebKit runs these scripts before a stylesheet still loading has applied: a landing then is
+   * against the unstyled page, the sheet's arrival moves it, and that move reads as the reader's
+   * scroll. The page lands once every sheet has loaded or failed. */
+  var unstyled = Array.prototype.filter.call(document.querySelectorAll('link[rel="stylesheet"]'), function (link) {
+    return !link.sheet;
+  });
+  unstyled.forEach(function (link) {
+    function arrived() {
+      unstyled = unstyled.filter(function (other) {
+        return other !== link;
+      });
+      dockedBand = -1;
+      redock();
+    }
+    link.addEventListener("load", arrived);
+    link.addEventListener("error", arrived);
+  });
 
   function watch(id) {
     var node = document.getElementById(id);
@@ -60,7 +77,7 @@
     // is the reader's own scroll (or nothing), so it never moves the page.
     // A frame can land before chatend.js has run, when no reader has been put anywhere yet.
     var moved = band !== dockedBand || height !== dockedH || trayMoved;
-    var wasEnd = moved && !!hp.chatend && hp.chatend.pinned();
+    var wasEnd = moved && !unstyled.length && !!hp.chatend && hp.chatend.pinned();
     dockedBand = band;
     if (height !== dockedH) {
       root.style.setProperty("--dock-h", height + "px");

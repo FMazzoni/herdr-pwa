@@ -13,7 +13,8 @@ one refresh, and a lost stream falls back to polling and then recovers.
 A reader who scrolls up from the end in small steps while the agent works is never pulled back
 to it, and the line they are reading stays where it was across every redraw, even one that lands
 before their scroll is heard. On a slow link, where a frame runs before the page's last script
-arrives, the chat still opens on its newest line."""
+arrives, the chat still opens on its newest line, and a question still lands at the end when the
+stylesheet applies after the page's scripts have run."""
 
 import asyncio
 import contextlib
@@ -272,6 +273,12 @@ def pane_tab(name: str) -> Tab:
     return Tab(name, _pane(), LAST_LINE, _print)
 
 
+def asking_pane_tab(name: str) -> Tab:
+    """The Pane tab of an agent asking a question under a terminal taller than the screen."""
+    blocked = runner(lambda: herd(**BLOCKED), long_pane(LINES) + capture(MENU))
+    return Tab(name, State("asking pane", _pane().path, "", blocked), "", _print)
+
+
 def _scrolled_up_stays(ctx: WalkCtx) -> list[str]:
     driver, tab = ctx.driver, ctx.tab
     driver.script("window.scrollTo(0, 200);")
@@ -355,17 +362,23 @@ def _late_page(page: bytes) -> bytes:
     return AFTER_GEOMETRY.sub(lambda m: m[0] + tag, page)
 
 
-def _rewriting(send: Send) -> Send:
+def _rewriting(send: Send, rewrite: Callable[[bytes], bytes]) -> Send:
     async def sending(message: Message) -> None:
         if message["type"] == "http.response.start":
             # The page grows by a tag; the rig's own collector sets the length again.
             kept = [(k, v) for k, v in message["headers"] if k.lower() != b"content-length"]
             message = {**message, "headers": kept}
         elif message["type"] == "http.response.body":
-            message = {**message, "body": _late_page(bytes(message.get("body", b"")))}
+            message = {**message, "body": rewrite(bytes(message.get("body", b"")))}
         await send(message)
 
     return sending
+
+
+def _unzipped(scope: Scope) -> Scope:
+    """``scope`` asking for its answer unzipped, so the page's tags can be rewritten."""
+    headers = [(k, v) for k, v in scope["headers"] if k.lower() != b"accept-encoding"]
+    return {**scope, "headers": headers}
 
 
 class SlowLink:
@@ -393,9 +406,7 @@ class SlowLink:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
-        # Unzipped, so the page's script tags can be rewritten.
-        headers = [(k, v) for k, v in scope["headers"] if k.lower() != b"accept-encoding"]
-        await self.app({**scope, "headers": headers}, receive, _rewriting(send))
+        await self.app(_unzipped(scope), receive, _rewriting(send, _late_page))
 
 
 def slow_link(
@@ -411,6 +422,79 @@ def slow_link(
         problems = cold(ctx)
         if not (link.held and link.framed.is_set()):
             return [*problems, f"{tab.name}: no frame ran before chatend.js, so it proves nothing"]
+        return problems
+
+    return walk
+
+
+# WebKit runs a page's deferred scripts before a stylesheet still loading has applied, and Firefox
+# does not, so the walk links the sheet by script for print, holds it past the first frame and
+# applies it on arrival. WebKit moves a page landed unstyled as the sheet applies, and that move
+# reads as the reader's scroll, so the page must not have moved before then.
+STYLE_JS = "/walk/style.js"
+STYLE_GO = "/walk/style-go"
+APP_CSS = re.compile(rb'<link rel="stylesheet" href="/static/app\.css\?v=[0-9a-f]+">')
+# Under a digest the server does not know, app.css is never cached, so every load fetches it.
+LATE_CSS = "/static/app.css?v=0"
+STYLE = (
+    'const link = document.createElement("link"); link.rel = "stylesheet"; link.media = "print"; '
+    'link.addEventListener("load", () => { window.hpStyledAt = scrollY; link.media = "all"; }); '
+    f'link.href = "{LATE_CSS}"; document.head.append(link); '
+    'document.addEventListener("DOMContentLoaded", '
+    f'() => requestAnimationFrame(() => fetch("{STYLE_GO}")));'
+)
+
+
+def _late_style(page: bytes) -> bytes:
+    return APP_CSS.sub(f'<script src="{STYLE_JS}"></script>'.encode(), page)
+
+
+class LateStyle:
+    """``app`` with its stylesheet linked by a script and held past the page's first frame."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+        self.landed = asyncio.Event()
+        self.held = False
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        """Serve the linking script and its signal, hold the stylesheet for it, pass the rest."""
+        path = str(scope["path"]) if scope["type"] == "http" else ""
+        if path == STYLE_JS:
+            await _serve(send, STYLE.encode(), b"text/javascript")
+            return
+        if path == STYLE_GO:
+            self.landed.set()
+            await _serve(send, b"", b"text/plain")
+            return
+        if path == "/static/app.css":
+            self.held = True
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(self.landed.wait(), WAIT_SECONDS)
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        await self.app(_unzipped(scope), receive, _rewriting(send, _late_style))
+
+
+def late_style(
+    mount: Callable[[ASGIApp], None],
+) -> Walk:
+    """The question walk with the stylesheet arriving after the page's scripts ran."""
+
+    def walk(ctx: WalkCtx) -> list[str]:
+        """A page whose style applies after its scripts lands at its question once styled."""
+        tab = ctx.tab
+        link = LateStyle(ctx.rig.http.app)
+        mount(link)
+        problems = asked(ctx)
+        styled_at = ctx.driver.script("return window.hpStyledAt;")
+        if styled_at != 0:
+            problems.append(f"{tab.name}: stood at {styled_at}px before its stylesheet applied")
+        if _jump(ctx.driver).get("shown"):
+            problems.append(f"{tab.name}: offers the way to the question it should have landed on")
+        if not (link.held and link.landed.is_set()):
+            return [*problems, f"{tab.name}: the stylesheet was not held past the landing"]
         return problems
 
     return walk
