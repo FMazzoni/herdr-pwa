@@ -26,6 +26,7 @@ from herdr_pwa.engine.notices import (
     API_ERROR_KINDS,
     COMPACT_COMMAND,
     OUTPUT,
+    SHELL,
     SLASH,
     SLASH_KINDS,
     SUMMARY,
@@ -35,10 +36,12 @@ from herdr_pwa.engine.notices import (
     Hidden,
     PeerMessage,
     RecordOrigin,
+    ShellCommand,
     SlashCommand,
     TaskNotice,
     api_error,
     injected,
+    without_paste_tags,
     without_reminders,
 )
 from herdr_pwa.validation import OR_NONE, Count, Flag, Text
@@ -116,6 +119,9 @@ class Speaker(StrEnum):
 
     # Another agent's message or hand-back report, written into this log by the harness.
     peer = "peer"
+
+    # What the harness's prompt queue did: never drawn, only read for what is still waiting.
+    queue = "queue"
 
 
 class TranscriptTurn(BaseModel):
@@ -257,6 +263,8 @@ class TranscriptPage(BaseModel):
     moved: bool = False
     # Absent is the only thing true of a page nobody read.
     state: HistoryState = HistoryState.absent
+    # Prompts the person sent that the harness holds and the agent has not taken yet.
+    queued: list[str] = Field(default_factory=list)
     # The file actually read, which is not the named session once a fork was followed.
     log: str = ""
 
@@ -442,6 +450,8 @@ class ClaudeRecord(BaseModel):
     # Measured: the harness writes a refused turn as an assistant record from model "<synthetic>".
     is_api_error: Flag = Field(default=None, validation_alias="isApiErrorMessage")
     error: Text = None
+    # A queue-operation record's verb; what it queued rides in `content`.
+    operation: Text = None
     attachment: Annotated[_Queued | None, OR_NONE] = None
     tool_use_result: Annotated[_Launch | None, OR_NONE] = Field(
         default=None, validation_alias="toolUseResult"
@@ -994,7 +1004,6 @@ _SKIP_TYPES: Final = frozenset(
         "last-prompt",
         "mode",
         "permission-mode",
-        "queue-operation",
         "system",
     }
 )
@@ -1002,10 +1011,13 @@ _SKIP_TYPES: Final = frozenset(
 _HUMAN_SOURCES: Final = frozenset({"typed", "queued", "pasted"})
 
 
-def _is_human(record: ClaudeRecord) -> bool:
+def _source(record: ClaudeRecord) -> str | None:
     source = record.prompt_source
-    said = source.kind if isinstance(source, _Kind) else source
-    if said in _HUMAN_SOURCES:
+    return source.kind if isinstance(source, _Kind) else source
+
+
+def _is_human(record: ClaudeRecord) -> bool:
+    if _source(record) in _HUMAN_SOURCES:
         return True
     return record.origin is not None and record.origin.kind == "human"
 
@@ -1071,31 +1083,42 @@ def _slash_turn(found: SlashCommand | CommandOutput, uuid: str) -> TranscriptTur
     )
 
 
+def _notice_turn(found: TaskNotice, uuid: str) -> TranscriptTurn:
+    """A background task that stopped, as one quiet line that opens on what it said or ran."""
+    detail, _ = one_line(found.detail)
+    # A command opens on the whole of what was run; anything else on what it said.
+    shown = found.detail if found.kind == "Command" else found.said
+    result, cut = clip(shown, MAX_RESULT_CHARS)
+    return TranscriptTurn(
+        uuid=uuid,
+        speaker=Speaker.notice,
+        text=detail,
+        tool=found.kind,
+        result=result,
+        result_truncated=cut,
+        failed=found.failed,
+        status=found.ended,
+        elapsed_ms=found.elapsed_ms,
+        task=found.task,
+        outcome=found.outcome,
+        # Only a command's spool is its output; an agent's is its whole transcript.
+        output=found.output if found.kind == "Command" else "",
+    )
+
+
 def _injected_turn(
-    found: TaskNotice | PeerMessage | SlashCommand | CommandOutput, uuid: str
+    found: TaskNotice | PeerMessage | SlashCommand | ShellCommand | CommandOutput, uuid: str
 ) -> TranscriptTurn:
     if isinstance(found, SlashCommand | CommandOutput):
         return _slash_turn(found, uuid)
-    if isinstance(found, TaskNotice):
-        detail, _ = one_line(found.detail)
-        # A command opens on the whole of what was run; anything else on what it said.
-        shown = found.detail if found.kind == "Command" else found.said
-        result, cut = clip(shown, MAX_RESULT_CHARS)
+    if isinstance(found, ShellCommand):
+        # The person typed it at the agent's prompt: theirs, with what it printed opening below.
+        text, cut = clip(found.line, MAX_PROSE_CHARS)
         return TranscriptTurn(
-            uuid=uuid,
-            speaker=Speaker.notice,
-            text=detail,
-            tool=found.kind,
-            result=result,
-            result_truncated=cut,
-            failed=found.failed,
-            status=found.ended,
-            elapsed_ms=found.elapsed_ms,
-            task=found.task,
-            outcome=found.outcome,
-            # Only a command's spool is its output; an agent's is its whole transcript.
-            output=found.output if found.kind == "Command" else "",
+            uuid=uuid, speaker=Speaker.human, text=text, tool=SHELL, truncated=cut
         )
+    if isinstance(found, TaskNotice):
+        return _notice_turn(found, uuid)
     body, cut = clip(found.body, MAX_PROSE_CHARS)
     return TranscriptTurn(
         uuid=uuid,
@@ -1121,6 +1144,11 @@ def _summary_turn(content: str, uuid: str) -> TranscriptTurn:
     )
 
 
+def _prompt(content: str) -> tuple[str, bool]:
+    """A prompt the person sent as the chat shows it, clipped, with whether it was clipped."""
+    return clip(without_paste_tags(without_reminders(content)), MAX_PROSE_CHARS)
+
+
 def _user_text(record: ClaudeRecord, content: str, uuid: str) -> TranscriptTurn | None:
     """A user record whose content is one string: a prompt, or something the harness wrote."""
     if record.is_compact_summary is True:
@@ -1132,16 +1160,14 @@ def _user_text(record: ClaudeRecord, content: str, uuid: str) -> TranscriptTurn 
     if found is not None:
         return _injected_turn(found, uuid)
     if record.is_meta:
-        return None
+        # Measured: a scheduled prompt is queued, then delivered hidden; only the queue reads it.
+        return _queue_mark(_TAKEN, content, uuid) if _source(record) else None
     # The cap follows the speaker: injected machinery gets the note cap, as the view shows three lines.
-    text, cut = clip(without_reminders(content), MAX_PROSE_CHARS if human else MAX_NOTE_CHARS)
+    text, cut = _prompt(content) if human else clip(without_reminders(content), MAX_NOTE_CHARS)
     if not text:
         return None
     return TranscriptTurn(
-        uuid=uuid,
-        speaker=Speaker.human if human else Speaker.system,
-        text=text,
-        truncated=cut,
+        uuid=uuid, speaker=Speaker.human if human else Speaker.system, text=text, truncated=cut
     )
 
 
@@ -1268,14 +1294,54 @@ def _delivered(record: ClaudeRecord) -> TaskNotice | PeerMessage | None:
     return found if isinstance(found, TaskNotice | PeerMessage) else None
 
 
+def _queued_prompt(queued: _Queued, uuid: str) -> TranscriptTurn | None:
+    """A prompt the person typed mid-turn, which the harness writes only as this attachment."""
+    if queued.type != _QUEUED or queued.origin is None or queued.origin.kind != "human":
+        return None
+    text, cut = _prompt(queued.prompt or "")
+    if not text:
+        return None
+    return TranscriptTurn(uuid=uuid, speaker=Speaker.human, text=text, truncated=cut)
+
+
 def _queued_turn(record: ClaudeRecord, uuid: str) -> TranscriptTurn | None:
     found = _delivered(record)
-    return _injected_turn(found, uuid) if found is not None else None
+    if found is not None:
+        return _injected_turn(found, uuid)
+    return _queued_prompt(record.attachment, uuid) if record.attachment is not None else None
+
+
+# Measured verbs: "enqueue" when a prompt is sent while the agent is busy, "remove" when a turn
+# absorbs it (or the person takes it back), "popAll" when the person pulls the queue back to edit,
+# and "dequeue", which names nothing and is followed by the record that delivers it.
+_ENQUEUE: Final = "enqueue"
+_REMOVE: Final = "remove"
+_POP_ALL: Final = "popAll"
+_TAKEN: Final = "taken"
+
+
+def _queue_mark(verb: str, content: str, uuid: str) -> TranscriptTurn | None:
+    text, _ = _prompt(content)
+    if verb != _POP_ALL and not text:
+        return None
+    return TranscriptTurn(uuid=uuid, speaker=Speaker.queue, text=text, tool=verb)
+
+
+def _queue_turn(record: ClaudeRecord) -> TranscriptTurn | None:
+    """A queue operation as a mark the fold reads; the harness's own deliveries are left out."""
+    verb, content = record.operation or "", record.content or ""
+    if verb not in (_ENQUEUE, _REMOVE, _POP_ALL):
+        return None
+    if verb == _ENQUEUE and injected(None, content, human=False) is not None:
+        return None
+    return _queue_mark(verb, content, f"queue:{verb}:{record.timestamp}")
 
 
 def _claude_turn(record: ClaudeRecord) -> TranscriptTurn | None:
     """One Claude Code JSONL record as a chat turn, or ``None`` to drop it."""
     kind = record.type
+    if kind == "queue-operation":
+        return _queue_turn(record)
     uuid = record.uuid
     if not uuid:
         return None
@@ -1303,18 +1369,58 @@ def _message_turn(record: ClaudeRecord, uuid: str) -> TranscriptTurn | None:
 def fold_turns(turns: Iterable[TranscriptTurn]) -> list[TranscriptTurn]:
     """Fold tool results onto calls, command output and a compaction onto its command, and
     repeated API errors."""
-    return _fold_repeats(_fold_compaction(_fold_outputs(_fold_results(turns))))
+    said = (turn for turn in turns if turn.speaker is not Speaker.queue)
+    return _fold_repeats(_fold_compaction(_fold_outputs(_fold_results(said))))
+
+
+def fold_page(page: TranscriptPage) -> TranscriptPage:
+    """*page* with its turns folded and the prompts still waiting in the queue taken out of them."""
+    return page.model_copy(update={"turns": fold_turns(page.turns), "queued": waiting(page.turns)})
+
+
+# Compared on the words up to the shortest cap a delivery is clipped to.
+_SAME_PROMPT: Final = MAX_NOTE_CHARS
+
+
+def _delivers(turn: TranscriptTurn) -> bool:
+    """Whether *turn* is a prompt reaching the agent, which is what ends its wait in the queue."""
+    if turn.speaker is Speaker.queue:
+        return turn.tool in (_REMOVE, _TAKEN)
+    return turn.speaker in (Speaker.human, Speaker.system) or (
+        is_slash_command(turn) and turn.tool == SLASH
+    )
+
+
+def waiting(turns: Iterable[TranscriptTurn]) -> list[str]:
+    """The prompts enqueued in *turns* that nothing after them delivered, removed or pulled back.
+
+    Matched on the words: the queue's records carry no id the delivery repeats.
+    """
+    held: list[str] = []
+    for turn in turns:
+        if turn.speaker is Speaker.queue and turn.tool == _ENQUEUE:
+            held.append(turn.text)
+        elif turn.speaker is Speaker.queue and turn.tool == _POP_ALL:
+            held.clear()
+        elif _delivers(turn):
+            _take_first(held, turn.text)
+    return held
+
+
+def _take_first(held: list[str], said: str) -> None:
+    """Drop the oldest of *held* that *said* delivers, if any does."""
+    key = said[:_SAME_PROMPT]
+    match = next((i for i, text in enumerate(held) if text[:_SAME_PROMPT] == key), None)
+    if match is not None:
+        del held[match]
 
 
 def _prints_for(output: TranscriptTurn, command: TranscriptTurn) -> bool:
     """Whether *output* is what *command* printed: measured, it is the very next record."""
-    return (
-        is_slash_command(output)
-        and output.tool == OUTPUT
-        and is_slash_command(command)
-        and command.tool == SLASH
-        and not command.result
+    ran = (is_slash_command(command) and command.tool == SLASH) or (
+        command.speaker is Speaker.human and command.tool == SHELL
     )
+    return is_slash_command(output) and output.tool == OUTPUT and ran and not command.result
 
 
 def _fold_outputs(turns: list[TranscriptTurn]) -> list[TranscriptTurn]:
@@ -1666,7 +1772,7 @@ def history(source: Source, window: Window = NEWEST) -> TranscriptPage:
     except OSError:
         # Found and then unreadable is not "there is none"; the view must not show a quiet chat.
         return TranscriptPage(state=HistoryState.unreadable)
-    return page.model_copy(update={"turns": fold_turns(page.turns)})
+    return fold_page(page)
 
 
 def session_origin(agent: Agent, *, root: TranscriptRoots = None) -> str:

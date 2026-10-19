@@ -11,4 +11,7 @@
       done this turn. Only beside a live bubble, since a session that dies never says they ended. #}
   {%- if chat.agents %}<ul class="spawned" aria-label="Agents it started">{% for a in chat.agents %}<li class="spawned__row spawned__row--{{ a.state }}"><span class="spawned__name">{{ a.description }}</span> <span class="spawned__state"><span aria-hidden="true">&middot; </span>{{ a.state }}</span>{% if a.time %} <span class="spawned__time"><span aria-hidden="true">&middot; </span>{{ a.time }}</span>{% endif %}</li>{% endfor %}</ul>{% endif %}
   {%- elif chat.receipt %}<p class="chat__receipt" data-hp-bubble="done" data-hp-said="{{ chat.receipt.said }}"><span aria-hidden="true">{{ chat.receipt.text }}</span><span class="sr-only">{{ chat.receipt.said }}</span></p>{% endif -%}
+  {#- Sent while the agent was busy and not taken yet: one thin line, never a message in the log,
+      so nothing is drawn twice once the turn takes it. #}
+  {%- if chat.queued %}{% set n = chat.queued|length %}<details class="queued" data-hp-key="queued"><summary class="queued__head">{{ n }} message{{ "" if n == 1 else "s" }} queued</summary><ul class="queued__list">{% for text in chat.queued %}<li class="queued__text">{{ text }}</li>{% endfor %}</ul></details>{% endif -%}
 </div>

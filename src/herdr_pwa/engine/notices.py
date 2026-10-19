@@ -149,6 +149,15 @@ _NO_CONTENT: Final = "(no content)"
 SLASH: Final = "Ran"
 OUTPUT: Final = "Output"
 SLASH_KINDS: Final = frozenset({SLASH, OUTPUT})
+# Measured: a `!` command the person ran is `<bash-input>` alone; what it printed is the next
+# record, its `<bash-stdout>` then its `<bash-stderr>`.
+_BASH_INPUT: Final = "bash-input"
+_BASH_STDOUT: Final = "bash-stdout"
+_BASH_STDERR: Final = "bash-stderr"
+# Measured: what the harness writes for a `!` command that printed nothing.
+_NO_OUTPUT: Final = "(Bash completed with no output)"
+# What a `!` command leads with, as the person typed it, and the tool its line carries.
+SHELL: Final = "!"
 # The command whose run the harness's compact summary belongs to.
 COMPACT_COMMAND: Final = "/compact"
 # A compact summary's label, and its line in Claude Code's words on the boundary written before it.
@@ -177,7 +186,19 @@ class CommandOutput:
     failed: bool = False
 
 
-type Injected = TaskNotice | PeerMessage | SlashCommand | CommandOutput | Hidden
+@dataclass(frozen=True, slots=True)
+class ShellCommand:
+    """A ``!`` command the person ran in the harness's shell mode."""
+
+    command: str
+
+    @property
+    def line(self) -> str:
+        """The command as the person typed it: ``! git status``."""
+        return f"{SHELL} {self.command}"
+
+
+type Injected = TaskNotice | PeerMessage | SlashCommand | ShellCommand | CommandOutput | Hidden
 
 
 # Measured: the text Claude Code writes when a turn no longer fits, with `error: invalid_request`.
@@ -239,6 +260,15 @@ def _limit(said: str) -> ApiError:
         # A provider's own rate limit, which names no reset this reader could trust.
         return ApiError(LIMIT, "Rate limited · wait, then send it again", said)
     return ApiError(LIMIT, f"{found.group(1).capitalize()} limit · {found.group(2)}", said)
+
+
+# Measured: Claude Code writes a paste inside a prompt between these, a tag the person never typed.
+_PASTE_TAG: Final = re.compile(r'\n?</pasted_content id="[^"]*">|<pasted_content id="[^"]*">\n?')
+
+
+def without_paste_tags(text: str) -> str:
+    """*text* with the tags the harness wraps a paste in taken out, the paste kept."""
+    return _PASTE_TAG.sub("", text)
 
 
 def without_reminders(text: str) -> str:
@@ -314,6 +344,21 @@ def _output(text: str, stream: str) -> CommandOutput | Hidden:
     return CommandOutput(said, failed) if said and said != _NO_CONTENT else HIDDEN
 
 
+def _shell_output(text: str) -> CommandOutput | Hidden:
+    out = plain(_tag(text, _BASH_STDOUT)).strip()
+    err = plain(_tag(text, _BASH_STDERR)).strip()
+    said = "\n".join(part for part in (out, err) if part and part != _NO_OUTPUT)
+    return CommandOutput(said, failed=bool(err) and not out) if said else HIDDEN
+
+
+def _shell(text: str) -> Injected | None:
+    if text.startswith(f"<{_BASH_INPUT}>"):
+        return ShellCommand(_tag(text, _BASH_INPUT))
+    if text.startswith(f"<{_BASH_STDOUT}>"):
+        return _shell_output(text)
+    return None
+
+
 def _by_tag(text: str) -> Injected | None:
     if not text:
         return HIDDEN
@@ -324,7 +369,7 @@ def _by_tag(text: str) -> Injected | None:
     for stream in (_STDOUT, _STDERR):
         if text.startswith(f"<{stream}>"):
             return _output(text, stream)
-    return _peer_from_tag(text)
+    return _shell(text) or _peer_from_tag(text)
 
 
 def injected(origin: RecordOrigin | None, content: str, *, human: bool) -> Injected | None:

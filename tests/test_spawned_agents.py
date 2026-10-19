@@ -90,7 +90,7 @@ def test_a_notice_and_a_hand_back_delivered_mid_turn_are_in_the_chat(tmp_path: P
     assert "Done; the gate passed." in carried[0].result
 
 
-def test_a_prompt_the_person_queued_is_not_read_as_an_attachment(tmp_path: Path) -> None:
+def test_a_prompt_the_person_queued_is_theirs_not_a_notice(tmp_path: Path) -> None:
     record: dict[str, JsonValue] = {
         "type": "attachment",
         "uuid": "q1",
@@ -102,7 +102,8 @@ def test_a_prompt_the_person_queued_is_not_read_as_an_attachment(tmp_path: Path)
             "origin": {"kind": "human"},
         },
     }
-    assert _turns(tmp_path, [record]) == []
+    turns = _turns(tmp_path, [record])
+    assert [(t.speaker, t.text) for t in turns] == [(Speaker.human, "also fix the docs")]
 
 
 # ---- The tally joins launches to endings ----

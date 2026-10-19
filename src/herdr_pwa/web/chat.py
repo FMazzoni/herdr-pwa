@@ -142,6 +142,8 @@ class ChatView:
     held: bool = False
     # The note sends the reader to the Pane tab, the only place this agent can be read.
     door: bool = False
+    # What the person sent that waits in the harness's queue, not yet in the log as said.
+    queued: tuple[str, ...] = ()
 
 
 def fold_tools(turns: tuple[ChatTurn, ...]) -> tuple[ChatTurn | ToolRun, ...]:
@@ -504,4 +506,5 @@ def chat_view(
         doubt=doubt,
         held=held,
         door=not turns and page.state in _READ_ON_PANE,
+        queued=tuple(page.queued),
     )

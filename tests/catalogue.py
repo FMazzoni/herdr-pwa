@@ -349,6 +349,12 @@ COMPACTION: Final = FIXTURES / "transcript" / "notices" / "compaction.jsonl"
 SYSTEM_COMMANDS: Final = FIXTURES / "transcript" / "notices" / "system-commands.jsonl"
 # Built, not captured: no local log has a failing command, so its stderr takes the stdout shape.
 COMMAND_STDERR: Final = FIXTURES / "transcript" / "notices" / "command-stderr.jsonl"
+# Built on the measured shapes: prompts the person queued while a turn ran, taken or waiting.
+QUEUED: Final = FIXTURES / "transcript" / "notices" / "queued.jsonl"
+# The same words sent three times, typed, queued and taken, and queued and waiting.
+QUEUED_REPEAT: Final = FIXTURES / "transcript" / "notices" / "queued-repeat.jsonl"
+# Built on the measured shapes: `!` commands the person ran, each followed by what it printed.
+SHELL_COMMANDS: Final = FIXTURES / "transcript" / "notices" / "shell-commands.jsonl"
 
 
 def notice_records() -> list[dict[str, JsonValue]]:
@@ -379,6 +385,21 @@ def system_command_records() -> list[dict[str, JsonValue]]:
 def command_stderr_records() -> list[dict[str, JsonValue]]:
     """Two failing slash commands, a user record's and a system record's, in fixture order."""
     return _records(COMMAND_STDERR)
+
+
+def queued_records() -> list[dict[str, JsonValue]]:
+    """Prompts queued mid-turn with the queue's own records around them, in fixture order."""
+    return _records(QUEUED)
+
+
+def queued_repeat_records() -> list[dict[str, JsonValue]]:
+    """One prompt's words sent three times, two of them through the queue, in fixture order."""
+    return _records(QUEUED_REPEAT)
+
+
+def shell_command_records() -> list[dict[str, JsonValue]]:
+    """Three `!` commands between two prompts, in fixture order."""
+    return _records(SHELL_COMMANDS)
 
 
 def origin_of(record: dict[str, JsonValue]) -> dict[str, JsonValue]:
@@ -1226,6 +1247,32 @@ AGENT_PAGE: Final = (
         title="Chat: /compact once, opened on its summary; system-record and failing commands",
         armed=".chat .notice--ran > summary",
         act=_click(".chat .notice--ran > summary"),
+    ),
+    State(
+        "chat-queued",
+        f"{AGENT}?tab=chat",
+        ".chat .turn--agent",
+        runner(_stressed),
+        queued_records(),
+        title="Chat: prompts sent while the agent worked, each once where it took them; one waits",
+    ),
+    State(
+        "chat-queued-open",
+        f"{AGENT}?tab=chat",
+        ".chat .queued[open] .queued__text",
+        runner(_stressed),
+        queued_records(),
+        title="Chat: the queued line opened on the prompt that waits",
+        armed=".chat .queued__head",
+        act=_click(".chat .queued__head"),
+    ),
+    State(
+        "chat-bash-command",
+        f"{AGENT}?tab=chat",
+        ".chat .turn--agent",
+        runner(_stressed),
+        shell_command_records(),
+        title="Chat: `!` commands the person ran, each their line opening on what it printed",
     ),
     State(
         "chat-notices",
