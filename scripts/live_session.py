@@ -11,7 +11,9 @@ import socket
 import struct
 import subprocess
 import sys
+import tempfile
 import termios
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -20,25 +22,28 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from herdr_pwa.engine import EngineError, Frame, SocketTransport  # noqa: E402
+from herdr_pwa.engine import PANE_BUSY_CODE, EngineError, Frame, SocketTransport  # noqa: E402
 from tests.waiting import GaveUpError, eventually, until  # noqa: E402
 
 SESSION = "hp-test"  # anything but this name is a foot-gun
 
 COLS, ROWS = 200, 50  # wide enough that the TUI lays out real panes
 
-INHERITED = (
-    "HERDR_ENV",
-    "HERDR_SOCKET_PATH",
-    "HERDR_PANE_ID",
-    "HERDR_TAB_ID",
-    "HERDR_WORKSPACE_ID",
-)  # the variables that tell a process it is already inside a session
+# herdr's ids, HERDR_PWA_MANAGED (marks an agent watched), CLAUDE_CODE_CHILD_SESSION (no transcript).
+INHERITED_PREFIXES = ("HERDR_", "CLAUDE_CODE_")
+# "Inside Claude Code" markers, the calling harness's name and the launching session's effort.
+INHERITED_NAMES = frozenset({"CLAUDECODE", "CLAUDE_PID", "CLAUDE_EFFORT", "AI_AGENT"})
+
+# Claude Code's folder-trust menu lists "No, exit" first, under the cursor, so a bare Enter quits.
+TRUST_YES = "Yes, I trust this folder"
+CURSOR = "\u276f"
 
 # How long `agent.start` waits for the agent to be ready: the herdr CLI's own default.
 START_WAIT_MS = 30_000
 # Long enough for that wait and the reply after it.
 CALL_SECONDS = START_WAIT_MS / 1000 + 10
+# How long a freshly split pane's shell may take to finish its startup files.
+SHELL_SECONDS = 15.0
 # How long a stopped server may take to let go of its socket.
 STOP_SECONDS = 10.0
 # Each look at the socket or the agents is a herdr call, so look less often than at a page.
@@ -69,11 +74,13 @@ def listening(path: Path) -> bool:
     return True
 
 
-def clean_env() -> dict[str, str]:
-    """The ambient environment minus every trace of the current session."""
-    env = {k: v for k, v in os.environ.items() if k not in INHERITED}
-    env.pop("HERDR_SESSION", None)
-    return env
+def clean_env(ambient: Mapping[str, str]) -> dict[str, str]:
+    """The ambient environment minus every trace of the session it was launched from."""
+    return {
+        name: value
+        for name, value in ambient.items()
+        if name not in INHERITED_NAMES and not name.startswith(INHERITED_PREFIXES)
+    }
 
 
 def api(session: str, method: str, params: Frame | None = None, *, check: bool = True) -> Frame:
@@ -108,7 +115,7 @@ def supervise(session: str) -> int:
         stdin=slave,
         stdout=slave,
         stderr=slave,
-        env=clean_env(),
+        env=clean_env(os.environ),
         start_new_session=True,
         close_fds=True,
     )
@@ -148,7 +155,7 @@ def up(session: str, timeout: float = 30.0) -> int:
             stdout=handle,
             stderr=handle,
             start_new_session=True,
-            env=clean_env(),
+            env=clean_env(os.environ),
         )
     if eventually(lambda: listening(path), timeout, step=LOOK_STEP):
         print(f"session {session!r} listening at {path}")
@@ -200,17 +207,31 @@ def status(session: str) -> int:
 # ---------------------------------------------------------------------------
 
 
-def free_pane(session: str, cwd: str) -> str:
-    """A pane at a shell prompt, splitting one off if every pane is taken."""
-    panes = result(api(session, "pane.list")).get("panes", [])
-    for pane in panes:
-        if not pane.get("agent"):
-            return str(pane["pane_id"])
+def split_request(panes: Sequence[Frame], cwd: str) -> Frame:
+    """A new pane in ``cwd`` off the session's first, since agent.start takes no folder."""
     if not panes:
         raise SystemExit("the session has no panes at all; is it really up?")
-    split = {"target_pane_id": str(panes[0]["pane_id"]), "direction": "down", "cwd": cwd}
-    fresh = result(api(session, "pane.split", split))
+    return {"target_pane_id": str(panes[0]["pane_id"]), "direction": "down", "cwd": cwd}
+
+
+def fresh_pane(session: str, cwd: str) -> str:
+    """A pane of its own at a shell prompt in ``cwd``; an idle one sits in another folder."""
+    panes = result(api(session, "pane.list")).get("panes", [])
+    fresh = result(api(session, "pane.split", split_request(panes, cwd)))
     return str(fresh["pane"]["pane_id"])
+
+
+def trust_keys(text: str) -> list[str] | None:
+    """The keys that move the trust menu's cursor to "Yes" and confirm it; None with no menu."""
+    lines = text.splitlines()
+    yes = next((i for i, line in enumerate(lines) if TRUST_YES in line), None)
+    cursors = [i for i, line in enumerate(lines) if line.lstrip().startswith(CURSOR)]
+    if yes is None or not cursors:
+        return None
+    # The menu's cursor is the one nearest its options; the input box has one too.
+    at = min(cursors, key=lambda i: abs(i - yes))
+    step = "Down" if yes > at else "Up"
+    return [step] * abs(yes - at) + ["Enter"]
 
 
 def pane_text(session: str, target: str) -> str:
@@ -219,26 +240,47 @@ def pane_text(session: str, target: str) -> str:
     return str(read.get("text", ""))
 
 
+def session_uuid(session: str, target: str) -> str | None:
+    """The session UUID the agent on ``target`` has registered, if it has one yet."""
+    for agent in agents(session):
+        if agent["pane_id"] == target:
+            uuid = (agent.get("agent_session") or {}).get("value")
+            return str(uuid) if uuid else None
+    return None
+
+
 def settle(session: str, target: str, timeout: float = 60.0) -> str | None:
-    """Wait for a session UUID, answering the trust prompt if that is the hold-up."""
+    """Wait for a session UUID, answering the trust prompt once if that is the hold-up."""
     trusted = False
 
     def registered() -> str | None:
         nonlocal trusted
-        for agent in agents(session):
-            if agent["pane_id"] == target:
-                uuid = (agent.get("agent_session") or {}).get("value")
-                if uuid:
-                    return str(uuid)
-        if not trusted and "trust this folder" in pane_text(session, target):
-            api(session, "agent.send_keys", {"target": target, "keys": ["Enter"]}, check=False)
+        uuid = session_uuid(session, target)
+        keys = None if uuid or trusted else trust_keys(pane_text(session, target))
+        if keys is not None:
+            api(session, "agent.send_keys", {"target": target, "keys": keys}, check=False)
             trusted = True
-        return None
+        return uuid
 
     try:
         return until(registered, timeout, step=SETTLE_STEP)
     except GaveUpError:
         return None
+
+
+def start(session: str, launch: Frame) -> dict[str, Any]:
+    """agent.start, tried again while the new pane's shell is still starting up."""
+
+    def attempt() -> dict[str, Any] | None:
+        try:
+            return result(api(session, "agent.start", launch))
+        except EngineError as exc:
+            # herdr refuses a shell that has not reached its prompt yet.
+            if exc.code == PANE_BUSY_CODE:
+                return None
+            raise
+
+    return until(attempt, SHELL_SECONDS, step=SETTLE_STEP)
 
 
 @dataclass(frozen=True)
@@ -258,7 +300,7 @@ def agent(session: str, launch: Launch) -> int:
             uuid = (existing.get("agent_session") or {}).get("value")
             print(f"{name} already running on {existing['pane_id']} (session {uuid})")
             return 0
-    target = free_pane(session, cwd)
+    target = fresh_pane(session, cwd)
     print(f"starting {kind} {name!r} on {target} with --model {model} (cwd {cwd})")
     launch: Frame = {
         "name": name,
@@ -267,7 +309,7 @@ def agent(session: str, launch: Launch) -> int:
         "args": ["--model", model],
         "timeout_ms": START_WAIT_MS,
     }
-    started = result(api(session, "agent.start", launch))
+    started = start(session, launch)
     # herdr echoes the argv it actually ran, which is the only honest proof
     # that the model argument reached the agent binary.
     print(f"argv: {started.get('argv')}")
@@ -295,7 +337,9 @@ def main(argv: list[str] | None = None) -> int:
     started.add_argument("--name", default="probe-claude")
     started.add_argument("--kind", default="claude")
     started.add_argument("--model", default="haiku")
-    started.add_argument("--cwd", default=str(Path.cwd()))
+    started.add_argument(
+        "--cwd", help="folder the agent runs in (default: a fresh temporary folder, kept)"
+    )
     args = parser.parse_args(argv)
 
     if args.session in {"", "default"}:
@@ -309,7 +353,8 @@ def main(argv: list[str] | None = None) -> int:
         return status(args.session)
     if args.command == "supervise":
         return supervise(args.session)
-    return agent(args.session, Launch(args.name, args.kind, args.model, args.cwd))
+    cwd = args.cwd or tempfile.mkdtemp(prefix="hp-rig-")
+    return agent(args.session, Launch(args.name, args.kind, args.model, str(Path(cwd).resolve())))
 
 
 if __name__ == "__main__":

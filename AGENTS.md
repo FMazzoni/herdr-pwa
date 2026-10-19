@@ -53,9 +53,10 @@ and a row whose input is not in the repo is removed rather than kept untested.
 - Keep a harness's credentials where the harness put them: never copy them into a
   fixture, a log or a test home.
 - A harness started from inside an agent pane inherits `HERDR_PANE_ID`, and its
-  lifecycle hook then overwrites that pane's reported session. Strip herdr's
-  environment when spawning one: `env -u HERDR_PANE_ID -u HERDR_SOCKET_PATH -u
-  HERDR_ENV -u HERDR_TAB_ID -u HERDR_WORKSPACE_ID <harness> ...`.
+  lifecycle hook then overwrites that pane's reported session. Strip the launching
+  session's markers when spawning one: every `HERDR_*` and `CLAUDE_CODE_*` variable,
+  plus `CLAUDECODE`, `CLAUDE_PID`, `CLAUDE_EFFORT` and `AI_AGENT`, as
+  `scripts/live_session.py` does (`CLAUDE_CODE_CHILD_SESSION` turns transcripts off).
 - After a change to what a running service serves, restart it and run
   `herdr-pwa doctor`.
 
