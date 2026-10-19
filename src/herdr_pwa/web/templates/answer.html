@@ -1,6 +1,10 @@
 {% import "_ui.html" as ui %}
 {% from "_agent.html" import pane_door %}
 {% set base = "/agent/" ~ (agent.session|urlencode) %}
+{# A row of the screen's keys: the pad (the arrows, Enter, then Esc), or its other keys. #}
+{% macro key_row(row, cls) -%}
+{% if row %}<div class="keys {{ cls }}">{% for k in row %}{{ ui.key(base, agent.target, k, fingerprint) }}{% endfor %}</div>{% endif %}
+{%- endmacro %}
 {% set asked = decision and (decision.question or decision.options) %}
 {% set blocked = agent.status.value == "blocked" %}
 {% set live = decision.options|selectattr("digit", "in", digits)|list if decision else [] %}
@@ -11,7 +15,7 @@
 {% set multi = decision and decision.shape.value == "multi-select" %}
 {# An outcome keeps the region where the question was, so what a tap did is where the thumb is. #}
 {% set waiting = asked or blocked or sent is defined or refused is defined %}
-<section id="answer" class="answer{% if not waiting %} answer--quiet{% endif %}" data-hp-poll="{{ base }}/answer" hx-get="{{ base }}/answer" hx-target="this" hx-swap="outerHTML" data-hp-topic="agent:{{ agent.session }}" data-hp-status="{{ status }}"
+<section id="answer" class="answer{% if not waiting %} answer--quiet{% endif %}"{% if holds %} data-hp-holds{% endif %} data-hp-poll="{{ base }}/answer" hx-get="{{ base }}/answer" hx-target="this" hx-swap="outerHTML" data-hp-topic="agent:{{ agent.session }}" data-hp-status="{{ status }}"
          {#- A sent key's outcome stays up until its own timer, so the stream cannot wipe it the moment
              the screen moves; otherwise the stream says when to look. #}
          {% if sent is defined %}hx-trigger="every {{ cadence * 2 }}s, hp:poke from:body"{% elif refused is not defined %}hx-trigger="hp:stale, hp:poke from:body"{% else %}hx-trigger="hp:poke from:body"{% endif %}>
@@ -41,11 +45,12 @@
   {% if decision.steps and decision.steps.total > 1 %}
   <p class="answer__note">One of {{ decision.steps.total }} questions: a tap picks a row, and the next question follows.</p>
   {% endif %}
-  <h2 class="answer__question">{{ decision.question }}</h2>
-  {% if buttons %}
-  {% if about %}
-  <pre class="answer__about">{{ about|join("\n") }}</pre>
+  <h2 class="answer__question">{{ wording.heading }}</h2>
+  {# What the question is about, said under it for every shape: the command, the file, the step. #}
+  {% if wording.subject %}
+  <div class="answer__subject">{% for line in wording.subject %}<p class="answer__subject-line">{{ line }}</p>{% endfor %}</div>
   {% endif %}
+  {% if buttons %}
   <p class="answer__note answer__note--line">The screen marks the choice in play. Arrows move it; Enter takes it; Esc rejects.</p>
   <div class="options options--buttons">
     {% for row in decision.options %}
@@ -60,27 +65,11 @@
   <p class="answer__note answer__note--line">Rows aren't buttons here. Use the keys below{% if multi %}; Submit is the last row{% endif %}. {{ pane_door(agent, "Pane", "answer__go") }}</p>
   {% endif %}
   {% if not buttons %}
-  <div class="options">
+  <div class="options{% if live %} options--list{% endif %}">
     {% for row in decision.options %}
     {{ ui.option(base, agent.target, row, screen=fingerprint, tappable=row.digit and row.digit in digits, on=loop.index0 == decision.focus) }}
     {% endfor %}
   </div>
-  {% endif %}
-  {% if still %}
-  {# The rows are answered by moving a cursor, so the keys that move it sit right under them. #}
-  <div class="keys keys--compact">
-    {% for key, label in [("up", "Up"), ("down", "Down"), ("enter", "Tick / Enter" if multi else "Enter"), ("esc", "Esc")] %}
-    {{ ui.key_form(base, agent.target, key, label, screen=fingerprint) }}
-    {% endfor %}
-  </div>
-  {% set extra = hints|rejectattr("key", "in", ["up", "down", "enter", "esc"])|list %}
-  {% if extra %}
-  <div class="keys keys--extra">
-    {% for hint in extra %}
-    {{ ui.key_form(base, agent.target, hint.key, hint.label, screen=fingerprint) }}
-    {% endfor %}
-  </div>
-  {% endif %}
   {% endif %}
   {% elif blocked and sent is not defined and refused is not defined %}
   {% call ui.banner("held", "It is waiting, and its question could not be read here.", "The keys below still reach it; look at the screen before you press one.") %}{{ pane_door(agent, "Look at the Pane", "banner__go") }}{% endcall %}
@@ -89,22 +78,20 @@
      question's own No and Esc decline it, and Stop stays out of the band by Send. #}
   {% if keyed %}
   <div class="answer__keys">
-    {% if not still %}
-    {% if hints %}
-    {{ ui.section_head("What this screen says") }}
-    <div class="keys keys--hints">
-      {% for hint in hints %}
-      {{ ui.key_form(base, agent.target, hint.key, hint.label, screen=fingerprint) }}
-      {% endfor %}
-    </div>
+    {% if keys.folded %}
+    {# Rows a tap answers make the screen's other keys the odd case: one tap away, never gone.
+       Named, so folds.js keeps it open across this region's redraws. #}
+    <details class="answer__more" data-hp-key="more-keys">
+      <summary class="answer__more-head">More keys<span class="answer__more-names">{{ keys.names }}</span></summary>
+      <div class="answer__more-body">
+        {{ key_row(keys.extra, "keys--extra") }}
+        {{ key_row(keys.pad, "keys--pad") }}
+      </div>
+    </details>
     {% else %}
-    {{ ui.section_head("Keys") }}
-    {% endif %}
-    <div class="keys keys--pad">
-      {% for key in pad %}
-      {{ ui.key_form(base, agent.target, key, key|capitalize, screen=fingerprint) }}
-      {% endfor %}
-    </div>
+    {# The keys are the answer here: rows a cursor walks, buttons the arrows move between. #}
+    {{ key_row(keys.pad, "keys--compact") }}
+    {{ key_row(keys.extra, "keys--extra") }}
     {% endif %}
     {% if decision and decision.handoffs %}
     {# Not a button: the key gives the pane to a program no key here can work or quit. #}

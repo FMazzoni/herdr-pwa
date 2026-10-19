@@ -141,6 +141,13 @@
     if (details.open && details.closest && details.closest("#agent-view")) {
       pinOn("unfolded");
     }
+    // "More keys" opened under a question rises clear of the dock, so the keys it holds are in reach.
+    if (details.open && details.closest && details.closest("#answer")) {
+      var over = details.getBoundingClientRect().bottom - dockTop();
+      if (over > 0) {
+        window.scrollBy(0, over);
+      }
+    }
   }, true);
 
   // This listener is also what lets iOS Safari apply :active, which the press states in app.css need.

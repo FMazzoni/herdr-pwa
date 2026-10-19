@@ -42,6 +42,27 @@
     }
   }
 
+  /* While a question waits a prompt is refused, so the composer is held: greyed, Send off, and
+   * the draft left in the box, never sent. The answer region says when (data-hp-holds), and the
+   * composer follows it after every redraw of either. */
+  function follow() {
+    var form = document.getElementById("composer");
+    if (!form) {
+      return;
+    }
+    var held = !!document.querySelector("#answer[data-hp-holds]");
+    var box = form.querySelector("textarea[data-hp-draft]");
+    var send = form.querySelector("button[type=submit]");
+    form.classList.toggle("composer--held", held);
+    if (box) {
+      box.disabled = held;
+      box.placeholder = box.getAttribute(held ? "data-hp-shut" : "data-hp-open") || box.placeholder;
+    }
+    if (send) {
+      send.disabled = held;
+    }
+  }
+
   document.addEventListener("input", function (event) {
     var box = event.target;
     if (box && box.matches && box.matches("textarea[data-hp-draft]")) {
@@ -50,8 +71,10 @@
   });
   hp.bus.on("swapped:restore", function (detail) {
     settle(detail.elt.parentNode || document);
+    follow();
   });
   hp.bus.on("ready:restore", function () {
     settle(document);
+    follow();
   });
 })(window.hp);

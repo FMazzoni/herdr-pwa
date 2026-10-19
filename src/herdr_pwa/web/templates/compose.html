@@ -2,7 +2,11 @@
 {% from "_agent.html" import pane_door %}
 {% set base = "/agent/" ~ (agent.session|urlencode) %}
 {% set again = again is defined and again %}
-<form id="composer" class="composer" method="post" action="{{ base }}/prompt"
+{# While a question waits a prompt is refused (invariant 5), so the box is greyed and Send is off;
+   a draft stays in the box, is never sent, and drafts.js lets go when the question clears. #}
+{% set held = held is defined and held %}
+{% set open_words, shut_words = "Prompt", "Answer the question above first" %}
+<form id="composer" class="composer{% if held %} composer--held{% endif %}" method="post" action="{{ base }}/prompt"
       hx-post="{{ base }}/prompt" hx-target="this" hx-swap="outerHTML"
       hx-disabled-elt="find button">
   {% include "_notice.html" %}
@@ -19,9 +23,11 @@
   {% if again %}<input type="hidden" name="again" value="1">{% endif %}
   <div class="composer__row">
     {% call ui.field("Prompt", quiet=true) %}
-      <textarea name="text" rows="1" maxlength="4000" placeholder="Prompt" data-hp-draft="{{ agent.session }}"
+      <textarea name="text" rows="1" maxlength="4000" placeholder="{{ shut_words if held else open_words }}" data-hp-draft="{{ agent.session }}"
+                data-hp-open="{{ open_words }}" data-hp-shut="{{ shut_words }}"{% if held %} disabled{% endif %}
                 {% if sent is defined and sent.no_echo %}data-hp-forget{% endif %}>{{ text }}</textarea>
     {% endcall %}
-    {{ ui.button('Send again anyway' if again else 'Send it anyway' if refused is defined and refused.held else 'Send') }}
+    {% set off %}{% if held %}disabled{% endif %}{% endset %}
+    {{ ui.button('Send again anyway' if again else 'Send it anyway' if refused is defined and refused.held else 'Send', attrs=off) }}
   </div>
 </form>

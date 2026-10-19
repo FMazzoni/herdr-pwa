@@ -64,4 +64,41 @@
       }
     }
   });
+
+  /* ---- "More keys" under a question stays open across the redraws of the answer region ----
+   * The region is swapped whole by its poll, the stream and every key tapped in it, so a fold the
+   * reader opened is named by its data-hp-key and opened again in the new drawing. */
+  var answerOpen = [];
+
+  function isAnswer(detail) {
+    return !!(detail.target && detail.target.id === "answer");
+  }
+
+  hp.bus.on("swap:capture", function (detail) {
+    if (!isAnswer(detail)) {
+      return;
+    }
+    answerOpen = [];
+    var all = detail.target.querySelectorAll("details[data-hp-key]");
+    for (var i = 0; i < all.length; i++) {
+      if (all[i].open) {
+        answerOpen.push(all[i].getAttribute("data-hp-key"));
+      }
+    }
+  });
+
+  hp.bus.on("swapped:restore", function (detail) {
+    if (!isAnswer(detail) || !answerOpen.length) {
+      return;
+    }
+    var keys = answerOpen;
+    answerOpen = [];
+    var region = document.getElementById("answer");
+    var all = region ? region.querySelectorAll("details[data-hp-key]") : [];
+    for (var i = 0; i < all.length; i++) {
+      if (keys.indexOf(all[i].getAttribute("data-hp-key")) !== -1) {
+        all[i].open = true;
+      }
+    }
+  });
 })(window.hp);

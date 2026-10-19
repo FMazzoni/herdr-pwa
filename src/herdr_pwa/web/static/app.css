@@ -97,6 +97,8 @@
   --radius-pill: 999px;
   /* The glyph that says a card opens something. */
   --chevron: "\203A";
+  /* What separates a waiting card's options, run inline on two lines. */
+  --middot: "\00B7";
   --sheet-max: 640px;
 
   /* The agent page's composer dock. app.js measures the dock and the iOS keyboard and
@@ -133,7 +135,12 @@
   --fold-lines: 8;
   /* An option row's numeral column, and how many lines its label runs before it is cut. */
   --option-n: 1.65rem;
-  --option-lines: 3;
+  --option-lines: 2;
+  /* A waiting card's question and its options each stop at this many lines: the page has the rest. */
+  --card-lines: 2;
+  /* How many lines one line of what a question is about may wrap to; a command is never cut short
+     to one line, since its tail is what is being approved. */
+  --subject-lines: 3;
   /* The least of a card's workspace that stays on the line before the line wraps instead. */
   --ws-min: 3ch;
   /* The stats strip's context meter, drawn at the size of the text beside it. */
@@ -420,11 +427,12 @@ html { -webkit-tap-highlight-color: transparent; }
 .card__ws { flex: 1 1 0; min-width: var(--ws-min); max-width: max-content; }
 .agent__meta > * { min-width: 0; }
 .card__pane { font-family: var(--mono); }
-.card__question { color: var(--ink); font-size: var(--text-meta); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; line-clamp: 4; overflow: hidden; }
+.card__question { color: var(--ink); font-size: var(--text-meta); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--card-lines); line-clamp: var(--card-lines); overflow: hidden; }
 .card__question--unread { color: var(--ink-2); font-style: italic; }
-.card__options { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-1); font-size: var(--text-meta); color: var(--ink-2); }
-/* The card is the overview; the whole question and every option are a tap away. */
-.card__option { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The card is the overview: its options run inline, a dot between them, cut at two lines; the
+   whole question and every option are a tap away. */
+.card__options { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--card-lines); line-clamp: var(--card-lines); overflow: hidden; font-size: var(--text-meta); color: var(--ink-2); overflow-wrap: anywhere; }
+.card__option + .card__option::before { content: var(--middot); margin-inline: var(--space-3); color: var(--ink-3); }
 
 .dot { width: var(--dot); height: var(--dot); border-radius: var(--radius-round); flex: none; background: var(--unknown); }
 .dot--blocked { background: var(--blocked); }
@@ -742,6 +750,9 @@ textarea { resize: vertical; min-height: 4.5em; }
 .keys { display: grid; gap: var(--space-3); }
 .keys--pad { display: flex; flex-wrap: wrap; gap: var(--space-3); }
 .answer__question { margin: 0; font-size: inherit; font-weight: 600; white-space: pre-wrap; }
+/* What the question is about, quiet under it: the command, the file, the step. */
+.answer__subject { display: grid; gap: var(--space-1); margin-top: calc(-1 * var(--space-3)); font: var(--text-small)/1.4 var(--mono); color: var(--ink-2); }
+.answer__subject-line { margin: 0; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--subject-lines); line-clamp: var(--subject-lines); overflow: hidden; overflow-wrap: anywhere; }
 .answer__note { margin: 0; font-size: var(--text-meta); color: var(--ink-2); }
 /* A way to the Pane gets its own 44px line, never a gap torn into the sentence above it. */
 .answer__go, .banner__go, .chat__go { display: flex; width: fit-content; align-items: center; min-height: var(--tap); font-weight: 600; }
@@ -769,7 +780,6 @@ textarea { resize: vertical; min-height: 4.5em; }
 .options--buttons { display: flex; flex-wrap: wrap; gap: var(--space-3); }
 .choice { padding: var(--space-3) var(--space-4); border: var(--line-1) solid var(--rule); border-radius: var(--radius-2); color: var(--ink-2); }
 .choice--on { border-color: var(--accent); box-shadow: inset 0 0 0 var(--line-1) var(--accent); background: var(--surface-2); color: var(--ink); font-weight: 600; }
-.answer__about { margin: 0; padding: var(--space-3) var(--space-4); overflow-x: auto; background: var(--ground); border-radius: var(--radius-1); font: var(--text-small)/1.4 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
 .option { display: grid; grid-template-columns: var(--option-n) minmax(0, 1fr); align-items: center; gap: var(--space-2) var(--space-5); width: 100%; margin: 0; text-align: left; line-height: 1.35; }
 .option--boxed { grid-template-columns: var(--check) minmax(0, 1fr); }
 .button.option { padding: var(--space-4) var(--space-5); }
@@ -790,11 +800,33 @@ textarea { resize: vertical; min-height: 4.5em; }
 .htmx-request > .button[disabled] { opacity: 1; border-color: var(--accent); color: var(--accent); }
 .htmx-request > .button .option__n { border-color: var(--accent); color: var(--accent); }
 .htmx-request .option__sending { display: block; }
+/* Rows a tap answers are one grouped list, a hairline between rows, as a native choice list:
+   the numeral in the accent, a chevron to say the row acts. */
+.options--list { gap: 0; background: var(--surface); border: var(--line-1) solid var(--rule); border-radius: var(--radius-3); overflow: hidden; }
+.options--list > * + * { border-top: var(--line-1) solid var(--rule); }
+.options--list .option { grid-template-columns: var(--option-n) minmax(0, 1fr) auto; }
+.options--list .button.option, .options--list .option--still { background: transparent; border: 0; border-radius: 0; font-weight: 500; padding: var(--space-5) var(--space-6); }
+.options--list .option__n { background: transparent; border: 0; color: var(--accent); font-weight: 600; }
+.options--list .option--still .option__n { color: var(--ink-3); }
+.options--list .button.option::after { content: var(--chevron); grid-column: 3; grid-row: 1; color: var(--ink-3); }
+.options--list .option__sending { grid-column: 2 / 3; }
 .answer__keys { display: grid; gap: var(--space-4); }
 /* A row of keys is one line only while four of them fit at the current Text Size. */
 .answer { container-type: inline-size; }
-.answer__keys .group__head { margin: 0; }
-.keys--hints { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+/* A key says its name, then the screen's verb for it, quieter: Esc cancel. */
+.key__verb { font-weight: 400; color: var(--ink-2); }
+/* Where four keys share a line the verb goes under the name, so neither is cut. */
+.keys--compact .key, .answer__keys .keys--pad .key { display: flex; flex-direction: column; justify-content: center; gap: var(--space-1); padding-block: var(--space-2); }
+.keys--compact .key__name, .keys--compact .key__verb, .keys--pad .key__name, .keys--pad .key__verb { overflow: hidden; text-overflow: ellipsis; }
+.keys--compact .key__verb, .keys--pad .key__verb { font-size: var(--text-small); }
+/* The screen's other keys, one tap away behind a quiet 44px row that names them. */
+.answer__more-head { display: flex; align-items: center; gap: var(--space-4); min-height: var(--tap); font-size: var(--text-meta); font-weight: 600; color: var(--ink-2); list-style: none; }
+.answer__more-head::-webkit-details-marker { display: none; }
+.answer__more-names { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 400; color: var(--ink-3); }
+.answer__more-head::after { content: var(--chevron); flex: none; color: var(--ink-3); }
+.answer__more[open] > .answer__more-head::after { transform: rotate(90deg); }
+.answer__more { min-width: 0; }
+.answer__more-body { display: grid; gap: var(--space-3); }
 /* The generic keys stay on one line even at 320px: equal columns, however many there are. */
 .answer__keys .keys--pad { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: var(--space-3); }
 .keys--pad .button { width: 100%; min-width: var(--tap); padding-inline: var(--space-2); }
@@ -1043,6 +1075,11 @@ body:has(#composer:focus-within) .stats { display: none; }
 .composer__row .field { flex: 1 1 var(--composer-min); min-width: 0; }
 .composer textarea { display: block; width: 100%; min-height: var(--tap); resize: none; background: var(--ground); }
 .composer textarea:focus, .composer textarea:not(:placeholder-shown) { min-height: var(--composer-grow); }
+/* Held while a question waits: the box greyed with its draft in it, and Send off. */
+.composer--held textarea { color: var(--ink-3); background: var(--surface); }
+.composer--held textarea:not(:placeholder-shown) { min-height: var(--tap); }
+.composer--held textarea::placeholder { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.composer--held textarea:placeholder-shown { font-size: var(--text-meta); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .field__label--quiet { position: absolute; width: var(--line-1); height: var(--line-1); overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .banner--held { border-left-color: var(--unknown); }
 .banner--sent { border-left-color: var(--done); }

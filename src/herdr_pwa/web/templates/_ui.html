@@ -44,6 +44,11 @@
     </form>
 {%- endmacro %}
 
+{# One of the screen's keys, said as its name then the screen's verb for it: Esc cancel. #}
+{% macro key(base, target, k, screen) -%}
+{% call key_form(base, target, k.key, k.name, screen=screen, extra="key") %}<span class="key__name">{{ k.name }}</span>{% if k.verb %} <span class="key__verb">{{ k.verb }}</span>{% endif %}{% endcall %}
+{%- endmacro %}
+
 {# The inside of an option row: the numeral in its own column, or the box where the screen draws
    one (a box row is never tapped, so its number says nothing), and the label, cut at a few lines;
    the Pane holds the whole of it. #}

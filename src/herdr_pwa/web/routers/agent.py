@@ -189,6 +189,9 @@ def _page_context(web: WebState, agent: Agent, tab: str, first: str) -> dict[str
     reads = _page_reads(web, agent)
     # The status row reads the same page of the log on either tab.
     chat = _chat_of(web, reads, _NEWEST)
+    answer = answer_region(web, agent)
+    # The composer is held by the question the answer region draws, never by a second read.
+    held = answer["holds"] is True
     return {
         "agent": agent,
         "agent_status": agent_status(web, agent),
@@ -199,9 +202,11 @@ def _page_context(web: WebState, agent: Agent, tab: str, first: str) -> dict[str
         "first": first_note(first),
         "stats": stats_of(web, reads),
         "view": first_view(web, chosen, reads, chat),
-        "answer": web.pages.piece("answer.html", answer_region(web, agent)),
+        "answer": web.pages.piece("answer.html", answer),
         "tray": web.pages.piece("tray.html", tray_region(web, agent, chat)),
-        "composer": web.pages.piece("compose.html", composer_region(agent, reads.screen)),
+        "composer": web.pages.piece(
+            "compose.html", composer_region(agent, reads.screen, held=held)
+        ),
     }
 
 

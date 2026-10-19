@@ -7,17 +7,23 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
-from herdr_pwa.decisions import asks_now, decide_screen, page_status, still_talking
+from herdr_pwa.decisions import (
+    ScreenDecision,
+    asks_now,
+    decide_screen,
+    page_status,
+    still_talking,
+)
 from herdr_pwa.engine import (
     INTERRUPT_KEY,
     Agent,
     AgentStatus,
     BlockedPrompt,
     EngineError,
-    MenuShape,
     PaneId,
     SessionId,
 )
+from herdr_pwa.web.asking import keys_for, wording
 from herdr_pwa.web.deps import WebState, viewer_guard
 from herdr_pwa.web.failures import AgentGone, Redraw, refused
 from herdr_pwa.web.herd import agent_status, asks, find_agent, overlay_of, prompt_of
@@ -54,7 +60,7 @@ from herdr_pwa.writes.prompt import (
     send_first_prompt,
     send_prompt,
 )
-from herdr_pwa.writes.refusal import Refused
+from herdr_pwa.writes.refusal import Refusal, Refused
 
 ANSWER_CADENCE: Final = 5
 DOOR_KEYS: Final = (*PAD_KEYS, INTERRUPT_KEY)
@@ -100,31 +106,34 @@ def _keyed(agent: Agent, prompt: BlockedPrompt | None) -> bool:
 
 def answer_context(agent: Agent, prompt: BlockedPrompt | None, status: str) -> dict[str, object]:
     """What the answer region draws; its digits come from the function the write checks with."""
-    allowed = allowed_keys(prompt)
     decision = decide_screen(prompt) if prompt is not None else None
-    hints = [h for h in decision.answer_hints if h.key in allowed] if decision else []
-    hinted = {h.key for h in hints}
     return {
         "agent": agent,
         "decision": decision,
+        "wording": wording(prompt) if prompt is not None else None,
         "digits": answer_digits(prompt),
         "fingerprint": control_token(prompt) if prompt is not None else "",
-        "hints": hints,
+        "keys": keys_for(prompt, decision),
         # Otherwise the pad and Interrupt are the status row's, above the composer.
         "keyed": _keyed(agent, prompt),
-        "pad": [k for k in pad_keys(prompt) if k in allowed and k not in hinted],
+        "holds": _holds(decision),
         "interrupt": INTERRUPT_KEY,
         "cadence": ANSWER_CADENCE,
         "status": status,
-        "about": _asked_about(prompt),
     }
 
 
-def _asked_about(prompt: BlockedPrompt | None) -> tuple[str, ...]:
-    # A buttons dialog asks about a command its heading does not name.
-    if prompt is None or prompt.shape is not MenuShape.BUTTONS:
-        return ()
-    return prompt.context
+def _holds(decision: ScreenDecision | None) -> bool:
+    # A question drawn above the composer: the prompt write refuses while the screen shows one.
+    return decision is not None and bool(decision.question or decision.options)
+
+
+def _held_over(agent: Agent, screen: str | None) -> bool:
+    # The composer's own route has only its screen read: the question is parsed from that.
+    if screen is None:
+        return False
+    prompt = BlockedPrompt.parse(screen)
+    return asks_now(agent.status, prompt) and _holds(decide_screen(prompt))
 
 
 def answer_region(web: WebState, agent: Agent) -> dict[str, object]:
@@ -152,9 +161,9 @@ def row_keys(web: WebState, agent: Agent) -> dict[str, object]:
     }
 
 
-def composer_region(agent: Agent, screen: str | None) -> dict[str, object]:
-    """An empty composer that claims *screen*, the visible screen as text it is drawn over."""
-    return {"agent": agent, "screen": _claim(agent, screen), "text": ""}
+def composer_region(agent: Agent, screen: str | None, *, held: bool) -> dict[str, object]:
+    """An empty composer that claims *screen*, held while a question waits above it."""
+    return {"agent": agent, "screen": _claim(agent, screen), "text": "", "held": held}
 
 
 @dataclass(frozen=True, slots=True)
@@ -285,6 +294,7 @@ def _prompt(session: SessionId, post: Posted) -> HTMLResponse:
             "screen": result.screen,
             # Kept through a later refusal, or a confirm after it would lose the word "again".
             "again": result.asks_again or ask.again,
+            "held": result.refusal is Refusal.QUESTION_SHOWING,
         }
         return refused(web.pages, Redraw("compose.html", context), result)
     return _composed(web, _after(web, session, prior), result)
@@ -330,7 +340,9 @@ def _composer_routes(router: APIRouter, writes: WriteRoutes) -> None:
     @router.get("/agent/{session}/compose")
     def composer(session: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
         agent = find_agent(web, identity_of(session))
-        return web.pages.fragment("compose.html", composer_region(agent, _screen_now(web, agent)))
+        screen = _screen_now(web, agent)
+        held = _held_over(agent, screen)
+        return web.pages.fragment("compose.html", composer_region(agent, screen, held=held))
 
     @router.post("/agent/{session}/prompt")
     def prompt(session: str, post: Annotated[Posted, Depends(writes.post)]) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
