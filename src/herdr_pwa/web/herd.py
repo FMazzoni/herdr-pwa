@@ -37,7 +37,8 @@ class Herd:
     decision: HerdDecision
 
 
-def _prompt(web: WebState, agent: Agent) -> BlockedPrompt | None:
+def prompt_of(web: WebState, agent: Agent) -> BlockedPrompt | None:
+    """What *agent*'s screen asks, from the read its feed card and its page share per screen."""
     # Keyed by revision, so concurrent polls share one detection read per screen.
     key = f"prompt:{agent.session}:{agent.revision}"
     try:
@@ -60,7 +61,7 @@ def unread_of(web: WebState, agents: Iterable[Agent]) -> Mapping[str, bool] | No
 
 
 def _asking(web: WebState, agents: Iterable[Agent]) -> frozenset[str]:
-    return web.stalls.asking(agents, lambda agent: _prompt(web, agent))
+    return web.stalls.asking(agents, lambda agent: prompt_of(web, agent))
 
 
 def overlay_of(web: WebState, agents: Iterable[Agent]) -> Overlay:
@@ -82,7 +83,7 @@ def agent_status(web: WebState, agent: Agent) -> AgentStatus:
 def asked_by(web: WebState, agent: Agent) -> str:
     """What *agent*'s feed card says it is asking, from the same cached read; ``""`` for none."""
     blocked = bool(agent.session) and asks(web, agent)
-    prompt = _prompt(web, agent) if blocked else None
+    prompt = prompt_of(web, agent) if blocked else None
     return card_question(agent_row(agent, overlay_of(web, (agent,)), prompt))
 
 
@@ -108,7 +109,7 @@ def load_herd(web: WebState) -> Herd:
     overlay = overlay_of(web, snapshot.agents)
     blocked = (a for a in snapshot.agents if a.session and shows_question(a, overlay))
     prompts: dict[str, BlockedPrompt] = {
-        a.session: p for a in blocked if (p := _prompt(web, a)) is not None
+        a.session: p for a in blocked if (p := prompt_of(web, a)) is not None
     }
     now = web.clock()
     failure = type(entry.error).__name__ if entry.error is not None else None

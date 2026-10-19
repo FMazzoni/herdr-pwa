@@ -17,6 +17,7 @@ from herdr_pwa.engine import (
     SessionUsage,
     Source,
     UsageCache,
+    locate_log,
 )
 from herdr_pwa.web.stats import (
     Reading,
@@ -244,14 +245,14 @@ def test_claude_maps_its_transcript_and_grows_by_what_is_appended(tmp_path: Path
         ],
     )
     cache = UsageCache()
-    first = cache.read(Source.of(WORKING_SESSION, agent_kind="claude", root=str(root)))
+    first = cache.read(locate_log(Source.of(WORKING_SESSION, agent_kind="claude", root=str(root))))
     assert (first.messages, first.prompts, first.context_tokens) == (1, 2, 40_000)
     assert first.turn_started == FOUR_MINUTES_AGO
     with _log(root).open("a") as log:
         log.write(json.dumps(answered("m2", "2026-10-11T11:58:00Z", prompt=50_000, out=2_000)))
         # Half a line is still being written: it is not read until it is whole.
         log.write("\n" + json.dumps(answered("m3", "2026-10-11T11:59:00Z", prompt=1, out=1))[:40])
-    grown = cache.read(Source.of(WORKING_SESSION, agent_kind="claude", root=str(root)))
+    grown = cache.read(locate_log(Source.of(WORKING_SESSION, agent_kind="claude", root=str(root))))
     assert (grown.messages, grown.output_tokens, grown.context_tokens) == (2, 3_000, 50_000)
     assert grown.last_at == "2026-10-11T11:58:00Z"
     stats = stats_for(Reading("claude", "working", grown, NOW))
@@ -265,12 +266,16 @@ def test_claude_reads_a_rewritten_log_afresh_rather_than_splicing(tmp_path: Path
     write_transcript(root, WORKING_SESSION, [answered("m1", FOUR_MINUTES_AGO, prompt=9, out=500)])
     cache = UsageCache()
     assert (
-        cache.read(Source.of(WORKING_SESSION, agent_kind="claude", root=str(root))).output_tokens
+        cache.read(
+            locate_log(Source.of(WORKING_SESSION, agent_kind="claude", root=str(root)))
+        ).output_tokens
         == 500
     )
     write_transcript(root, WORKING_SESSION, [answered("m9", FOUR_MINUTES_AGO, prompt=9, out=70)])
     assert (
-        cache.read(Source.of(WORKING_SESSION, agent_kind="claude", root=str(root))).output_tokens
+        cache.read(
+            locate_log(Source.of(WORKING_SESSION, agent_kind="claude", root=str(root)))
+        ).output_tokens
         == 70
     )
 
@@ -278,7 +283,9 @@ def test_claude_reads_a_rewritten_log_afresh_rather_than_splicing(tmp_path: Path
 def test_a_prompt_copied_into_a_fork_is_counted_once(tmp_path: Path) -> None:
     root = tmp_path / "transcripts"
     write_transcript(root, WORKING_SESSION, [said("u1", FOUR_MINUTES_AGO)] * 3)
-    found = UsageCache().read(Source.of(WORKING_SESSION, agent_kind="claude", root=str(root)))
+    found = UsageCache().read(
+        locate_log(Source.of(WORKING_SESSION, agent_kind="claude", root=str(root)))
+    )
     assert found.prompts == 1
 
 

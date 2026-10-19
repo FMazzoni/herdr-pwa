@@ -22,6 +22,7 @@ from herdr_pwa.engine.client import (
     VISIBLE_READ,
     HerdrClient,
     Launch,
+    Mirror,
     NewTab,
     ReadOptions,
     StartedAgent,
@@ -43,7 +44,14 @@ from herdr_pwa.engine.model import (
     screen_digest,
 )
 from herdr_pwa.engine.notices import CONTEXT, CONTEXT_FULL
-from herdr_pwa.engine.tail import MAX_TAIL_FILES, Ask, TailCache, chat_window
+from herdr_pwa.engine.tail import (
+    MAX_TAIL_FILES,
+    Ask,
+    Located,
+    TailCache,
+    chat_window,
+    locate_log,
+)
 from herdr_pwa.engine.transcript import (
     HERDR_KINDS,
     Harness,
@@ -116,7 +124,9 @@ __all__ = [
     "InvalidResponse",
     "KeyHint",
     "Launch",
+    "Located",
     "MenuShape",
+    "Mirror",
     "ModelRef",
     "ModelSpend",
     "NewTab",
@@ -157,6 +167,7 @@ __all__ = [
     "is_compact_summary",
     "is_slash_command",
     "locate",
+    "locate_log",
     "rank",
     "screen_digest",
     "session_origin",

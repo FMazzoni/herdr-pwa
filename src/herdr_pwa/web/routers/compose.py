@@ -10,7 +10,6 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from herdr_pwa.decisions import asks_now, decide_screen, page_status
 from herdr_pwa.engine import (
     INTERRUPT_KEY,
-    VISIBLE_READ,
     Agent,
     AgentStatus,
     BlockedPrompt,
@@ -18,11 +17,10 @@ from herdr_pwa.engine import (
     MenuShape,
     PaneId,
     SessionId,
-    screen_digest,
 )
 from herdr_pwa.web.deps import WebState, viewer_guard
 from herdr_pwa.web.failures import AgentGone, Redraw, refused
-from herdr_pwa.web.herd import asks, find_agent, overlay_of
+from herdr_pwa.web.herd import asks, find_agent, overlay_of, prompt_of
 from herdr_pwa.web.writing import (
     Posted,
     WriteRoutes,
@@ -37,7 +35,6 @@ from herdr_pwa.web.writing import (
     with_first,
 )
 from herdr_pwa.writes.answer import KeyAsk, KeySent, StartingKeyAsk, send_key, send_starting_key
-from herdr_pwa.writes.guard import asks_a_question
 from herdr_pwa.writes.keys import PAD_KEYS, allowed_keys, answer_digits, control_token, pad_keys
 from herdr_pwa.writes.lifecycle import EndAsk, end_agent
 from herdr_pwa.writes.outcome import Evidence, Outcome
@@ -45,6 +42,7 @@ from herdr_pwa.writes.prompt import (
     FirstPromptAsk,
     PromptAsk,
     PromptSent,
+    screen_claim,
     send_first_prompt,
     send_prompt,
 )
@@ -54,27 +52,29 @@ ANSWER_CADENCE: Final = 5
 DOOR_KEYS: Final = (*PAD_KEYS, INTERRUPT_KEY)
 
 
-def _screen_now(web: WebState, agent: Agent) -> str:
+def _screen_now(web: WebState, agent: Agent) -> str | None:
+    if agent.status is AgentStatus.WORKING:
+        return None
+    try:
+        return web.client.screen(agent.target)
+    except EngineError:
+        return None
+
+
+def _claim(agent: Agent, screen: str | None) -> str:
     # A working agent's screen moves, and a question's is gone once it is answered from the keys
     # (the composer is not redrawn then), so neither is a screen the composer claims.
-    if agent.status is AgentStatus.WORKING:
+    if agent.status is AgentStatus.WORKING or screen is None:
         return ""
-    try:
-        screen = web.client.read(agent.target, VISIBLE_READ)
-    except EngineError:
-        return ""
-    return "" if asks_a_question(screen) else screen_digest(screen)
+    return screen_claim(screen)
 
 
 def _question(web: WebState, agent: Agent) -> BlockedPrompt | None:
     if not asks(web, agent):
         return None
-    try:
-        prompt = web.client.blocked_prompt(agent.target, session=agent.session)
-    except EngineError:
-        return None
+    prompt = prompt_of(web, agent)
     # The same test the key's write makes, so no control is drawn that it would refuse.
-    return prompt if asks_now(agent.status, prompt) else None
+    return prompt if prompt is not None and asks_now(agent.status, prompt) else None
 
 
 def shown_status(web: WebState, agent: Agent, sent: KeySent | None = None) -> str:
@@ -115,9 +115,9 @@ def answer_region(web: WebState, agent: Agent) -> dict[str, object]:
     return answer_context(agent, _question(web, agent), shown_status(web, agent))
 
 
-def composer_region(web: WebState, agent: Agent) -> dict[str, object]:
-    """An empty composer that claims the screen it was drawn over."""
-    return {"agent": agent, "screen": _screen_now(web, agent), "text": ""}
+def composer_region(agent: Agent, screen: str | None) -> dict[str, object]:
+    """An empty composer that claims *screen*, the visible screen as text it is drawn over."""
+    return {"agent": agent, "screen": _claim(agent, screen), "text": ""}
 
 
 @dataclass(frozen=True, slots=True)
@@ -293,7 +293,7 @@ def _composer_routes(router: APIRouter, writes: WriteRoutes) -> None:
     @router.get("/agent/{session}/compose")
     def composer(session: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
         agent = find_agent(web, identity_of(session))
-        return web.pages.fragment("compose.html", composer_region(web, agent))
+        return web.pages.fragment("compose.html", composer_region(agent, _screen_now(web, agent)))
 
     @router.post("/agent/{session}/prompt")
     def prompt(session: str, post: Annotated[Posted, Depends(writes.post)]) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]

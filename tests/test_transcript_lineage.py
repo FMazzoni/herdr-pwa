@@ -18,6 +18,7 @@ from herdr_pwa.engine import (
     UsageCache,
     chat_window,
     locate,
+    locate_log,
 )
 from tests.engine_seam import HEAD_BYTES, HEAD_FINISH, Window, history
 
@@ -569,13 +570,13 @@ def test_the_chat_and_the_usage_move_when_the_chain_grows(project: Path) -> None
     )
     source = Source.of(ROOT, agent_kind="claude", root=project.parent)
     tails, usage = TailCache(), UsageCache()
-    assert chat_window(source, ask=Ask(messages=5), tails=tails).log == first.stem
-    assert usage.read(source).last_at == "2026-08-21T00:00:00.000Z"
+    assert chat_window(locate_log(source), ask=Ask(messages=5), tails=tails).log == first.stem
+    assert usage.read(locate_log(source)).last_at == "2026-08-21T00:00:00.000Z"
     second = _onward(project, _Log(LATER, "2026-08-23T01:08:00.000Z", parent=COPY), 20)
     held = Source.of(ROOT, agent_kind="claude", root=project.parent, log=first.stem)
-    moved = chat_window(held, ask=Ask(messages=5), tails=tails)
+    moved = chat_window(locate_log(held), ask=Ask(messages=5), tails=tails)
     assert (moved.log, moved.moved) == (second.stem, True)
-    assert usage.read(source).last_at == "2026-08-23T01:08:00.000Z"
+    assert usage.read(locate_log(source)).last_at == "2026-08-23T01:08:00.000Z"
 
 
 # The named session still writing, in a smaller copy: what this box actually holds

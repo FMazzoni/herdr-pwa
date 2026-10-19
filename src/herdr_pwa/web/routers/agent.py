@@ -4,6 +4,7 @@ The page itself carries the first drawing of the view, the answer region and the
 newest line arrives with the HTML instead of one fetch after the scripts have run.
 """
 
+from dataclasses import dataclass, replace
 from typing import Annotated, Final
 
 from fastapi import APIRouter, Depends, Query
@@ -17,9 +18,11 @@ from herdr_pwa.engine import (
     Agent,
     Ask,
     EngineError,
+    Located,
     SessionUsage,
     Source,
     chat_window,
+    locate_log,
 )
 from herdr_pwa.web.chat import ChatView, Turning, chat_view
 from herdr_pwa.web.deps import WebState, hidden_tick, viewer_guard
@@ -43,25 +46,39 @@ TABS: Final = ("chat", "pane")
 KEEP_DRAWN: Final = {"HX-Retarget": "#chat-note", "HX-Reswap": "outerHTML"}
 
 
-def _usage(web: WebState, agent: Agent) -> SessionUsage:
-    """*agent*'s tally, which the strip and the chat's status bubble both read."""
-    return web.usage.read(
-        Source.of(agent.session, agent_kind=agent.agent, root=web.settings.transcript_roots or None)
-    )
+@dataclass(frozen=True, slots=True)
+class Reads:
+    """One agent as this request read it, each source once, for every piece drawn from it."""
+
+    agent: Agent
+    log: Located
+    # The tally kept from that log, which the strip and the chat's status bubble both read.
+    usage: SessionUsage
+    # None when the pane could not be read.
+    pane: panetext.PaneView | None = None
+    # The visible screen as text, for the composer to claim; None when it was not read.
+    screen: str | None = None
+
+
+def _log_reads(web: WebState, agent: Agent, log: str = "") -> Reads:
+    roots = web.settings.transcript_roots or None
+    found = locate_log(Source.of(agent.session, agent_kind=agent.agent, root=roots, log=log))
+    return Reads(agent, found, web.usage.read(found))
 
 
 def read_stats(web: WebState, agent: Agent) -> Stats:
-    """The stats strip for *agent*, from its own read of the pane."""
-    return stats_of(web, agent, pane_or_none(web, agent))
+    """The stats strip for *agent*, from its own reads of the pane and the log."""
+    return stats_of(web, replace(_log_reads(web, agent), pane=pane_or_none(web, agent)))
 
 
-def stats_of(web: WebState, agent: Agent, pane: panetext.PaneView | None) -> Stats:
-    """The strip from *pane*, this request's one read of the terminal: the statusline it shows,
-    else the harness's own record; ``None`` when the pane could not be read."""
-    usage = _usage(web, agent)
+def stats_of(web: WebState, reads: Reads) -> Stats:
+    """The strip from this request's *reads*: the statusline the pane shows, else the harness's
+    own record when the pane could not be read."""
+    agent = reads.agent
     status = agent_status(web, agent).value
-    stats = stats_for(Reading(agent.agent or "", status, usage, now=web.wall()))
+    stats = stats_for(Reading(agent.agent or "", status, reads.usage, now=web.wall()))
     # Unreadable, the strip says what the log says, as it did before the pane showed a statusline.
+    pane = reads.pane
     return with_statusline(stats, pane.status if pane is not None else [])
 
 
@@ -83,20 +100,22 @@ _NEWEST: Final = ChatQuery()
 
 def read_chat(web: WebState, agent: Agent, query: ChatQuery = _NEWEST) -> ChatView:
     """The Chat tab's window: the newest page of messages, or the one the reader asked for."""
+    return _chat_of(web, _log_reads(web, agent, query.log), query)
+
+
+def _chat_of(web: WebState, reads: Reads, query: ChatQuery) -> ChatView:
+    agent = reads.agent
     ask = Ask(messages=web.settings.chat_messages, start=query.start, before=query.before)
-    roots = web.settings.transcript_roots
-    source = Source.of(agent.session, agent_kind=agent.agent, root=roots or None, log=query.log)
-    page = chat_window(source, ask=ask, tails=web.tails)
-    said = doubt(agent, roots)
+    page = chat_window(reads.log, ask=ask, tails=web.tails)
+    said = doubt(agent, web.settings.transcript_roots)
     drawn = query.start is not None or query.before is not None
     # Every page reaches the newest turn, an earlier one included, so each says what is on its way.
-    return chat_view(page, turning=_turning(web, agent), doubt=said, drawn=drawn)
+    return chat_view(page, turning=_turning(web, agent, reads.usage), doubt=said, drawn=drawn)
 
 
-def _turning(web: WebState, agent: Agent) -> Turning:
+def _turning(web: WebState, agent: Agent, usage: SessionUsage) -> Turning:
     """The turn as the agent's status, its card and its tally tell it, beside the log."""
     status = agent_status(web, agent)
-    usage = _usage(web, agent)
     # The prompt's stamp names the turn, so answering a question mid-turn keeps its verb; with
     # no tally, herdr's sequence, which it bumps on every status change, names the stretch.
     turn = usage.turn_started or str(agent.state_change_seq)
@@ -123,16 +142,26 @@ def pane_or_none(web: WebState, agent: Agent) -> panetext.PaneView | None:
         return None
 
 
-def first_view(
-    web: WebState, agent: Agent, tab: str, pane: panetext.PaneView | None
-) -> Markup | None:
-    """The view the page opens on, drawn into it from the page's read of the pane; ``None`` when
-    that read failed, so the region fetches itself and its own failure is drawn in its place."""
+def _page_reads(web: WebState, agent: Agent) -> Reads:
+    # Read once: the strip's statusline, the Pane tab's mirror and the composer's claim are one
+    # terminal, and the strip's tally and the Chat tab are one log.
+    reads = _log_reads(web, agent)
+    try:
+        look = web.client.mirror(agent.target, status=agent.status)
+    except EngineError:
+        return reads
+    return replace(reads, pane=panetext.pane_view(look.shown), screen=look.screen)
+
+
+def first_view(web: WebState, tab: str, reads: Reads) -> Markup | None:
+    """The view the page opens on, drawn into it from the page's *reads*; ``None`` when the pane
+    could not be read, so the region fetches itself and its own failure is drawn in its place."""
     if tab == "chat":
-        return web.pages.piece("chat.html", {"agent": agent, "chat": read_chat(web, agent)})
-    if pane is None:
+        chat = _chat_of(web, reads, _NEWEST)
+        return web.pages.piece("chat.html", {"agent": reads.agent, "chat": chat})
+    if reads.pane is None:
         return None
-    return web.pages.piece("pane.html", {"agent": agent, "view": pane})
+    return web.pages.piece("pane.html", {"agent": reads.agent, "view": reads.pane})
 
 
 def build(web: WebState) -> APIRouter:
@@ -146,8 +175,7 @@ def build(web: WebState) -> APIRouter:
 def _page_context(web: WebState, agent: Agent, tab: str, first: str) -> dict[str, object]:
     """The whole drill-in page: its bar, the chosen tab's first drawing, and the write regions."""
     chosen = tab if tab in TABS else TABS[0]
-    # Read once: the strip's statusline and the Pane tab's mirror are the same terminal.
-    pane = pane_or_none(web, agent)
+    reads = _page_reads(web, agent)
     return {
         "agent": agent,
         "agent_status": agent_status(web, agent),
@@ -155,10 +183,10 @@ def _page_context(web: WebState, agent: Agent, tab: str, first: str) -> dict[str
         "tabs": TABS,
         "heading": page_title(agent.title, agent.agent, agent.target),
         "first": first_note(first),
-        "stats": stats_of(web, agent, pane),
-        "view": first_view(web, agent, chosen, pane),
+        "stats": stats_of(web, reads),
+        "view": first_view(web, chosen, reads),
         "answer": web.pages.piece("answer.html", answer_region(web, agent)),
-        "composer": web.pages.piece("compose.html", composer_region(web, agent)),
+        "composer": web.pages.piece("compose.html", composer_region(agent, reads.screen)),
     }
 
 

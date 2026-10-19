@@ -8,6 +8,7 @@ from pydantic import JsonValue
 
 from herdr_pwa.audit import AuditUnavailableError, Entry, Write
 from herdr_pwa.engine import EngineUnavailable, as_session_id, screen_digest
+from herdr_pwa.panetext import as_text_read
 from herdr_pwa.writes.guard import (
     MAX_PROMPT_CHARS,
     NO_ECHO_MECHANISM,
@@ -184,7 +185,7 @@ def test_a_screen_digest_that_no_longer_matches_refuses_and_reissues(tmp_path: P
     r = idle_rig(tmp_path)
     result = refused(send_prompt(r.writer, PromptAsk(S1, "hello", drawn_against="stale")))
     assert result.refusal is Refusal.SCREEN_CHANGED
-    assert result.screen == screen_digest(SETTLED)
+    assert result.screen == screen_digest(as_text_read(SETTLED))
     retry = send_prompt(r.writer, PromptAsk(S1, "hello", drawn_against=result.screen))
     assert isinstance(retry, PromptSent)
 
@@ -436,7 +437,10 @@ def test_a_lost_answer_hands_back_a_fresh_digest_and_holds_the_same_text(tmp_pat
     r = idle_rig(tmp_path)
     r.herd.after[PROMPT] = _lost
     lost = refused(send_prompt(r.writer, PromptAsk(S1, "hello there")))
-    assert (lost.refusal, lost.screen) == (Refusal.ANSWER_LOST, screen_digest(SETTLED))
+    assert (lost.refusal, lost.screen) == (
+        Refusal.ANSWER_LOST,
+        screen_digest(as_text_read(SETTLED)),
+    )
     assert lost.asks_again
     del r.herd.after[PROMPT]
     held = refused(send_prompt(r.writer, PromptAsk(S1, "hello there", drawn_against=lost.screen)))

@@ -220,11 +220,26 @@ def _uncached(source: Source, ask: Ask) -> TranscriptPage:
     return page.model_copy(update={"cursor": start, "has_more": start > 0})
 
 
-def chat_window(source: Source, *, ask: Ask, tails: TailCache) -> TranscriptPage:
-    """What the Chat tab shows: the asked window of *source*'s conversation. Never raises."""
+@dataclass(frozen=True, slots=True)
+class Located:
+    """A session's source, and the log its conversation is in now when its store is a log."""
+
+    source: Source
+    # None for a store that is not a log appended to, or a log not found.
+    path: Path | None
+
+
+def locate_log(source: Source) -> Located:
+    """*source* with its log found, once, for every read of the request that draws from it."""
+    found = ClaudeAdapter.log(source) if transcript.has_byte_frontier(source.kind) else None
+    return Located(source, found)
+
+
+def chat_window(log: Located, *, ask: Ask, tails: TailCache) -> TranscriptPage:
+    """What the Chat tab shows: the asked window of *log*'s conversation. Never raises."""
+    source, path = log.source, log.path
     if not transcript.has_byte_frontier(source.kind):
         return _uncached(source, ask)
-    path = ClaudeAdapter.log(source)
     if path is None:
         return TranscriptPage(state=HistoryState.absent)
     moved = bool(source.expect) and source.expect != path.stem

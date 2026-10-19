@@ -7,13 +7,12 @@ from pathlib import Path
 from typing import Final
 
 from herdr_pwa.engine import transcript
+from herdr_pwa.engine.tail import Located
 from herdr_pwa.engine.transcript import (
     MAX_USAGE_BYTES,
-    ClaudeAdapter,
     HistoryState,
     LiveTally,
     SessionUsage,
-    Source,
     grow_claude,
     tally_claude,
 )
@@ -47,12 +46,12 @@ class UsageCache:
         self._max_bytes = max_bytes
         self._lock = threading.Lock()
 
-    def read(self, source: Source) -> SessionUsage:
-        """*source*'s tally. Never raises; a harness with no store answers ``unsupported``."""
+    def read(self, log: Located) -> SessionUsage:
+        """*log*'s tally. Never raises; a harness with no store answers ``unsupported``."""
+        source, path = log.source, log.path
         if not transcript.has_byte_frontier(source.kind):
             # A rollup or a table answers in one query, with nothing appended to grow by.
             return transcript.usage(source)
-        path = ClaudeAdapter.log(source)
         if path is None:
             return SessionUsage(state=HistoryState.absent)
         try:
