@@ -1,6 +1,9 @@
 {# The note under the log, a slot of its own: a refresh that cannot read the log redraws only
    this, so the turns the reader has stay drawn and in place. What the agent is doing now is the
-   status row's, above the composer (tray.html). #}
+   status row's, above the composer (tray.html); prompts still waiting are listed here. #}
 <div id="chat-note" class="chat__notes">
   {%- if chat.held %}<p class="chat__note">The transcript could not be read just now; what is shown is from the last read.</p>{% endif -%}
+  {#- Sent while the agent was busy and not taken yet: one thin line, never a message in the log,
+      so nothing is drawn twice once the turn takes it. The row above the composer counts them. #}
+  {%- if chat.queued %}{% set n = chat.queued|length %}<details class="queued" data-hp-key="queued"><summary class="queued__head">{{ n }} message{{ "" if n == 1 else "s" }} queued</summary><ul class="queued__list">{% for text in chat.queued %}<li class="queued__text">{{ text }}</li>{% endfor %}</ul></details>{% endif -%}
 </div>

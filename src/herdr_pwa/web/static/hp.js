@@ -198,9 +198,9 @@
       return Math.floor(whole / MINUTE) + "m" + (rest ? " " + rest + "s" : "");
     }
 
-    // A quiet stretch in whole minutes, as the server words it.
+    // A quiet stretch to its largest unit, as the server words it (web/chat.py quiet_words).
     function quietFor(seconds) {
-      return "No activity for " + elapsed(Math.floor(seconds / MINUTE) * MINUTE);
+      return "Quiet " + elapsed(Math.floor(seconds / MINUTE) * MINUTE).split(" ")[0];
     }
 
     /* Whether a bubble drawn `quiet` seconds after the log last moved has, `sinceMs` later, been

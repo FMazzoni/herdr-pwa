@@ -16,7 +16,7 @@
   <p class="agent__meta agent__meta--line">
     <span class="agent__facts">
       {#- No whitespace between facts: the separator's own margins space them evenly. -#}
-      <span class="agent__status" id="agent-status">{{ agent_status.value }}</span>
+      <span class="agent__status" id="agent-status">{{ status_word }}</span>
       {%- if agent.agent %}<span class="agent__fact">{{ agent.agent }}</span>{% endif %}
       {%- if agent.workspace %}<span class="agent__fact">{{ agent.workspace }}</span>{% endif -%}
       <span class="agent__fact">{{ agent.target }}</span>

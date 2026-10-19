@@ -1,8 +1,7 @@
-"""The status row above the composer: what the agent is doing, the agents it started, the prompts
-that wait, and a sheet holding them with the key pad; Interrupt at its edge while it works."""
+"""The status row above the composer: a state dot, what the agent is doing, the counts that are
+never cut, and a sheet holding the agents it started, Stop and the key pad."""
 
 import re
-from html.parser import HTMLParser
 from pathlib import Path
 
 from pydantic import JsonValue
@@ -62,7 +61,15 @@ def _tray(body: str) -> str:
 
 
 def _row(body: str) -> str:
-    return _part(_tray(body), r'<summary class="tray__row[^"]*"[^>]*>.*?</summary>')
+    return _part(_tray(body), r'<(summary|div) class="tray__row[^"]*"[^>]*>.*?</\1>')
+
+
+def _sheet(body: str) -> str:
+    return _part(_tray(body), r'<div class="tray__body">.*</details>')
+
+
+def _head(body: str) -> str:
+    return _part(_sheet(body), r'<div class="tray__head".*?(?=<section)')
 
 
 def _answer(body: str) -> str:
@@ -77,136 +84,39 @@ def _keys(markup: str) -> list[str]:
     return re.findall(r'<input type="hidden" name="key" value="([^"]+)">', markup)
 
 
+def _drawn(markup: str) -> str:
+    """The row's words as drawn, tags and the sentence for VoiceOver dropped."""
+    said = r'<span class="sr-only"><span class="tray__said">[^<]*</span>[^<]*</span>'
+    seen = re.sub(said, "", markup)
+    return " ".join(re.sub(r"<[^>]+>", "", seen).replace("&middot;", "·").split())
+
+
 def test_a_working_agent_is_one_row_above_the_composer(tmp_path: Path) -> None:
     body = _page(tmp_path, crowded_chat(), "working")
-    row = _row(body)
-    assert ">Waiting on 2 agents<" in row
-    # The words already count the agents, so the row does not count them twice.
-    assert row.count("tray__count") == 1
-    assert re.search(r'<span class="tray__count" aria-hidden="true">[^<]*1 queued</span>', row)
     # Directly above the composer: the tray follows it in the page, fixed over its top edge.
     assert body.index('id="composer"') < body.index('id="agent-tray"')
+    assert 'class="dot dot--working"' in _row(body)
 
 
-class _Heard(HTMLParser):
-    """The text VoiceOver reads in a fragment, and how many separate sentences it is told."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.stack: list[str] = []
-        self.heard: list[str] = []
-        self.sentences = 0
-
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        del tag
-        found = dict(attrs)
-        hidden = found.get("aria-hidden") == "true" or "hidden" in found
-        self.stack.append("hidden" if hidden else "sr" if found.get("class") == "sr-only" else "")
-        self.sentences += found.get("class") == "sr-only"
-
-    def handle_endtag(self, tag: str) -> None:
-        del tag
-        self.stack.pop()
-
-    def handle_data(self, data: str) -> None:
-        if data.strip() and "hidden" not in self.stack:
-            self.heard.append(data)
-
-
-def test_the_rows_sentence_is_read_once(tmp_path: Path) -> None:
-    heard = _Heard()
-    heard.feed(_row(_page(tmp_path, crowded_chat(), "working")))
-    assert heard.sentences == 1
-    # Everything drawn beside the sentence is hidden from VoiceOver, so nothing is read twice.
-    assert "".join(heard.heard) == ("Working: Waiting on 2 agents. 1 message queued.")
-
-
-def test_the_sheet_holds_the_agents_the_queue_and_the_pad(tmp_path: Path) -> None:
-    tray = _tray(_page(tmp_path, crowded_chat(), "working"))
-    body = _part(tray, r'<div class="tray__body">.*')
-    assert body.count('class="spawned__row spawned__row--running"') == 2
-    assert body.count('class="spawned__row spawned__row--finished"') == 1
-    assert f'<li class="queued__text">{CROWDED_QUEUED}</li>' in body
-    assert _keys(_part(body, r'<div class="keys keys--pad.*?</div>')) == [
-        "esc",
-        "up",
-        "down",
-        "enter",
-    ]
-
-
-def test_interrupt_sits_at_the_rows_edge_while_the_agent_works(tmp_path: Path) -> None:
-    tray = _tray(_page(tmp_path, crowded_chat(), "working"))
-    stop = _part(tray, r'<div class="tray__stop">.*?</form>')
-    assert _keys(stop) == [INTERRUPT_KEY]
-    assert "button--danger" in stop
-    # Its own target, outside the row's tap box and outside the sheet.
-    assert INTERRUPT_KEY not in _keys(_part(tray, r"<details.*?</details>"))
-    # The answer region still decides: a tap's outcome and the armed confirm land there.
-    assert 'hx-target="#answer"' in stop
-    assert 'hx-sync="#answer:replace"' in stop
-
-
-def test_the_page_flow_no_longer_carries_the_rows_pieces(tmp_path: Path) -> None:
-    body = _page(tmp_path, crowded_chat(), "working")
-    view, answer = _view(body), _answer(body)
-    for piece in ('class="bubble', 'class="spawned', 'class="queued', "chat__receipt"):
-        assert piece not in view, piece
-    assert _keys(answer) == []
-    assert ">Keys<" not in answer
-    assert "data-hp-still" not in body.split('id="agent-tray"')[0]
-
-
-def test_an_idle_agent_has_no_interrupt_and_its_row_says_how_long_it_worked(
+def test_the_counts_are_their_own_tokens_outside_the_words_the_script_redraws(
     tmp_path: Path,
 ) -> None:
-    body = _page(tmp_path, turn_chat("done"), "idle")
-    tray = _tray(body)
-    assert "Worked 4m" in _row(body)
-    assert 'class="tray__stop"' not in tray
-    assert _keys(tray) == ["esc", "up", "down", "enter"]
+    row = _row(_page(tmp_path, crowded_chat(), "working"))
+    words = _part(row, r'<span class="bubble__text"[^>]*>.*?</span>')
+    assert ">Waiting<" in words
+    assert "agent" not in words
+    counts = _part(
+        row, r'<span class="tray__counts">.*?</span></span>(?=<span class="tray__time|$)'
+    )
+    assert '<b class="count__n">2</b> agents</span>' in counts
+    assert '<b class="count__n">1</b> queued</span>' in counts
+    # Ranked: the dot, the words that take the ellipsis, the counts that never do, then the time.
+    order = [row.index(s) for s in ("dot--", "tray__words", "tray__counts", "tray__time")]
+    assert order == sorted(order)
+    assert _drawn(row).startswith("Waiting · 2 agents · 1 queued · ")
 
 
-def test_a_blocked_agent_keeps_its_answer_region_and_the_row_says_so(tmp_path: Path) -> None:
-    body = _page(tmp_path, turn_chat("asking"), "blocked", capture(PERMISSION))
-    answer, tray = _answer(body), _tray(body)
-    assert "answer__question" in answer
-    # The keys stay with the question, Interrupt included, as they always were.
-    assert INTERRUPT_KEY in _keys(answer)
-    assert _keys(tray) == []
-    assert ">Needs you · Do you want to proceed?<" in _row(body)
-    assert "tray__row--blocked" in _row(body)
-
-
-def test_the_tray_route_redraws_the_tray_alone(tmp_path: Path) -> None:
-    write_transcript(tmp_path / "transcripts", WORKING_SESSION, crowded_chat())
-    rig = build_rig(tmp_path, {SNAPSHOT: _status("working")})
-    fragment = rig.http.get(f"{PAGE}/tray", headers=FRAGMENT).text
-    assert fragment.lstrip().startswith('<div id="agent-tray"')
-    assert f'data-hp-topic="chat:{WORKING_SESSION}"' in fragment
-    assert 'hx-trigger="hp:stale, hp:poke from:body"' in fragment
-    assert ">Waiting on 2 agents<" in fragment
-
-
-def test_the_pane_tab_has_the_row_too(tmp_path: Path) -> None:
-    write_transcript(tmp_path / "transcripts", WORKING_SESSION, crowded_chat())
-    rig = build_rig(tmp_path, {SNAPSHOT: _status("working")})
-    pane = rig.http.get(f"{PAGE}?tab=pane").text
-    assert ">Waiting on 2 agents<" in _row(pane)
-    assert "data-hp-still" in _tray(pane)
-    # bubble.js voices the row on the Chat tab alone; the Pane tab said nothing of it before.
-    assert '<main class="agent agent--docked" data-hp-seen' in pane
-    assert 'data-hp-tab="pane"' in pane
-
-
-def test_the_switch_that_stops_the_animation_is_in_the_sheet(tmp_path: Path) -> None:
-    tray = _tray(_page(tmp_path, turn_chat("tool"), "working"))
-    switch = 'data-hp-still aria-pressed="false">Stop the animation</button>'
-    # Hidden until bubble.js shows it with the choice this device remembers.
-    assert re.search(rf'<p class="tray__still" hidden><button [^>]*{switch}</p>', tray)
-
-
-def test_agents_still_running_beside_an_open_tool_are_counted() -> None:
+def test_an_open_tool_and_its_running_agents_are_counted_apart() -> None:
     spawned = (
         SpawnedTime("Lint", running=True, seconds=30),
         SpawnedTime("Test", running=True, seconds=20),
@@ -218,5 +128,166 @@ def test_agents_still_running_beside_an_open_tool_are_counted() -> None:
     call = TranscriptTurn(uuid="t", speaker=Speaker.tool, text="just check", tool="Bash", call="c1")
     view = chat_view(TranscriptPage(turns=[asked, call], state=HistoryState.ok), turning=turning)
     row = status_row(view, "working")
-    assert (row.running, row.queued) == (2, 0)
-    assert row.sentence == "Working: Running just check. 2 agents running."
+    assert (row.state, row.running, row.queued) == ("working", 2, 0)
+    assert view.bubble is not None
+    assert view.bubble.text == "Running just check"
+
+
+def test_the_sheet_has_a_grabber_a_title_and_one_line_agent_rows(tmp_path: Path) -> None:
+    sheet = _sheet(_page(tmp_path, crowded_chat(), "working"))
+    assert '<button class="button tray__grab" type="button" aria-label="Close"' in sheet
+    assert '<h2 class="sheet__heading tray__title">Activity</h2>' in sheet
+    rows = re.findall(r'<li class="spawned__row spawned__row--(\w+)">(.*?)</li>', sheet)
+    assert [state for state, _ in rows] == ["running", "running", "finished"]
+    for state, row in rows:
+        dot = "working" if state == "running" else "done"
+        assert row.startswith(f'<span class="dot dot--{dot}"'), row
+        assert re.search(r'<span class="spawned__time">\d+m \d+s</span></span>$', row), row
+        # The dot says the state; only a failure is spelled out.
+        assert "spawned__state" not in row
+
+
+def test_queued_prompts_stay_in_the_chat_and_out_of_the_sheet(tmp_path: Path) -> None:
+    body = _page(tmp_path, crowded_chat(), "working")
+    assert CROWDED_QUEUED not in _tray(body)
+    assert f'<li class="queued__text">{CROWDED_QUEUED}</li>' in _view(body)
+
+
+def test_the_pad_is_up_down_enter_then_esc_set_apart(tmp_path: Path) -> None:
+    pad = _part(
+        _sheet(_page(tmp_path, turn_chat("done"), "idle")), r'<div class="keys tray__pad">.*'
+    )
+    assert _keys(pad) == ["up", "down", "enter", "esc"]
+    # Idle, Esc is a plain key: nothing it stops.
+    assert "button--danger" not in pad
+
+
+def test_while_working_esc_asks_first_and_shares_stops_confirm(tmp_path: Path) -> None:
+    sheet = _sheet(_page(tmp_path, turn_chat("tool"), "working"))
+    pad = _part(sheet, r'<div class="keys tray__pad">.*')
+    esc = _part(pad, r'<div class="tray__slot tray__slot--esc">.*?</div>')
+    assert _keys(esc) == ["esc"]
+    assert "button--danger tray__arm" in esc and ">Esc…</button>" in esc
+    # Without script the tap is held by the server for a second one; with it, it arms in place.
+    assert 'name="confirm"' not in esc
+    assert 'class="button tray__keep" type="button"' in esc
+    armed = _part(sheet, r'<div class="tray__armed" hidden>.*?(?=<section)')
+    assert _keys(armed) == [INTERRUPT_KEY, "esc"]
+    assert armed.count('<input type="hidden" name="confirm" value="1">') == 2
+    assert armed.count("button--stop") == 2
+
+
+def test_stop_is_in_the_sheets_header_and_never_in_the_row(tmp_path: Path) -> None:
+    body = _page(tmp_path, crowded_chat(), "working")
+    head = _head(body)
+    stop = _part(head, r'<div class="tray__slot tray__slot--stop">.*?</div>')
+    assert _keys(stop) == [INTERRUPT_KEY]
+    assert ">Stop…</button>" in stop and "button--danger tray__arm" in stop
+    # The first tap only arms: it carries no confirm, so the server holds it if no script ran.
+    assert 'name="confirm"' not in stop
+    # The safe option is drawn in the same slot, so the second tap of a double tap lands on it.
+    assert 'class="button tray__keep" type="button"' in stop
+    assert '<p class="tray__ask" hidden>Stop this turn?</p>' in head
+    armed = _part(head, r'<div class="tray__armed" hidden>.*')
+    assert "Sends Ctrl+C. Disarms in 5s." in armed
+    assert "Unsent work in this turn is lost." in armed
+    assert INTERRUPT_KEY not in _keys(_row(body))
+    assert 'class="tray__stop"' not in _tray(body)
+    # Its outcome and the no-script confirm land in the answer region, as every key's do.
+    assert 'hx-target="#answer"' in stop
+    assert 'hx-sync="#answer:replace"' in stop
+
+
+def test_the_page_flow_no_longer_carries_the_rows_pieces(tmp_path: Path) -> None:
+    body = _page(tmp_path, crowded_chat(), "working")
+    view, answer = _view(body), _answer(body)
+    for piece in ('class="bubble', 'class="spawned', "chat__receipt"):
+        assert piece not in view, piece
+    assert _keys(answer) == []
+    assert "data-hp-still" not in body
+
+
+def test_an_idle_agent_has_no_stop_and_its_row_says_how_long_it_worked_and_keys(
+    tmp_path: Path,
+) -> None:
+    body = _page(tmp_path, turn_chat("done"), "idle")
+    row = _row(body)
+    assert "Worked 4m" in row
+    assert '<span class="tray__tail" aria-hidden="true">Keys</span>' in row
+    assert "tray__slot--stop" not in _tray(body)
+    assert "tray__armed" not in _tray(body)
+
+
+def test_a_quiet_agent_says_quiet_once_in_neutral_ink_and_keeps_stop_in_the_sheet(
+    tmp_path: Path,
+) -> None:
+    body = _page(tmp_path, turn_chat("quiet"), "working")
+    row = _row(body)
+    assert "tray__row--quiet" in row
+    assert 'class="dot dot--updating"' in row
+    assert ">Quiet 3m<" in row
+    # One duration: the turn's own clock is not drawn beside the quiet one.
+    assert "tray__time" not in row
+    assert "tray__slot--stop" in _head(body)
+    assert "herdr still reports it working" in _sheet(body)
+
+
+def test_a_quiet_agents_page_does_not_say_working(tmp_path: Path) -> None:
+    body = _page(tmp_path, turn_chat("quiet"), "working")
+    assert '<span class="agent__status" id="agent-status">quiet</span>' in body
+
+
+def test_a_blocked_agent_keeps_its_question_and_the_row_only_says_needs_you(
+    tmp_path: Path,
+) -> None:
+    body = _page(tmp_path, turn_chat("asking"), "blocked", capture(PERMISSION))
+    answer, tray = _answer(body), _tray(body)
+    assert "answer__question" in answer
+    # The question's own No and Esc decline it; Ctrl+C is not drawn beside the options.
+    assert INTERRUPT_KEY not in _keys(answer)
+    assert "keys__stop" not in answer
+    row = _row(body)
+    assert row.startswith('<div class="tray__row tray__row--blocked"')
+    assert _drawn(row) == "Needs you"
+    # Not a way into a sheet: there is nothing in one while the keys are with the question.
+    assert "<details" not in tray
+    assert _keys(tray) == []
+
+
+def test_a_stop_held_by_the_server_is_confirmed_in_the_answer_region(tmp_path: Path) -> None:
+    write_transcript(tmp_path / "transcripts", WORKING_SESSION, turn_chat("tool"))
+    rig = build_rig(tmp_path, {SNAPSHOT: _status("working")})
+    for key, label in ((INTERRUPT_KEY, "Really interrupt"), ("esc", "Really send Esc")):
+        posted = {**FRAGMENT, "Origin": "http://testserver"}
+        held = rig.http.post(f"{PAGE}/keys", data={"key": key}, headers=posted).text
+        armed = _part(held, r'<div class="keys__stop keys__stop--armed".*?</form>\s*</div>')
+        assert "Keep going" in armed
+        assert label in armed
+        assert _keys(armed) == [key]
+        assert '<input type="hidden" name="confirm" value="1">' in armed
+
+
+def test_the_tray_route_redraws_the_tray_alone(tmp_path: Path) -> None:
+    write_transcript(tmp_path / "transcripts", WORKING_SESSION, crowded_chat())
+    rig = build_rig(tmp_path, {SNAPSHOT: _status("working")})
+    fragment = rig.http.get(f"{PAGE}/tray", headers=FRAGMENT).text
+    assert fragment.lstrip().startswith('<div id="agent-tray"')
+    assert f'data-hp-topic="chat:{WORKING_SESSION}"' in fragment
+    assert 'hx-trigger="hp:stale, hp:poke from:body"' in fragment
+    assert ">Waiting<" in fragment
+
+
+def test_the_pane_tab_has_the_row_too(tmp_path: Path) -> None:
+    write_transcript(tmp_path / "transcripts", WORKING_SESSION, crowded_chat())
+    rig = build_rig(tmp_path, {SNAPSHOT: _status("working")})
+    pane = rig.http.get(f"{PAGE}?tab=pane").text
+    assert ">Waiting<" in _row(pane)
+    assert 'data-hp-tab="pane"' in pane
+
+
+def test_the_switch_that_stops_the_animation_is_on_the_alerts_page(tmp_path: Path) -> None:
+    rig = build_rig(tmp_path)
+    alerts = rig.http.get("/push").text
+    switch = 'data-hp-still aria-pressed="false">Stop the animation</button>'
+    # Hidden until bubble.js shows it with the choice this device remembers.
+    assert re.search(rf"<button [^>]*{switch}", alerts)

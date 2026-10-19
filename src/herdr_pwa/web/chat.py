@@ -306,8 +306,6 @@ class Bubble:
     quiet_after: int = QUIET_AFTER
     palette: str = WORKING_PALETTE
     motion: str = WORKING_MOTION
-    # Its words already count the agents it started, so the row does not count them again.
-    counts_agents: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -325,12 +323,9 @@ def _agent_line(agent: SpawnedTime) -> AgentLine:
     return AgentLine(agent.description or "Agent", state, time)
 
 
-def _waiting_on(spawned: tuple[SpawnedTime, ...]) -> str:
-    """The bubble's words while the turn waits on agents it started; empty when none runs."""
-    running = sum(1 for agent in spawned if agent.running)
-    if not running:
-        return ""
-    return f"Waiting on {running} agent{'' if running == 1 else 's'}"
+def _waiting_on(spawned: tuple[SpawnedTime, ...]) -> bool:
+    """Whether the turn waits on agents it started; the row counts them beside the words."""
+    return any(agent.running for agent in spawned)
 
 
 @dataclass(frozen=True, slots=True)
@@ -404,6 +399,11 @@ def _running(items: tuple[ChatTurn | ToolRun, ...]) -> ChatTurn | None:
     return call if call is not None and not call.result and not call.failed else None
 
 
+def quiet_words(seconds: int) -> str:
+    """A quiet stretch as the row says it, to its largest unit: "Quiet 3m", "Quiet 9d"."""
+    return f"Quiet {elapsed(seconds // 60 * 60).split(' ')[0]}"
+
+
 def _whole(seconds: float | None) -> int | None:
     return None if seconds is None else int(seconds)
 
@@ -419,17 +419,15 @@ def _working(items: tuple[ChatTurn | ToolRun, ...], turning: Turning) -> Bubble:
         text = doing(call)
         return Bubble("working", text, "Working", f"Working: {text}", turning.stretch, ran, time)
     # Its own log is still while agents it started work, which is not the turn gone quiet.
-    waiting = _waiting_on(turning.spawned)
-    if waiting:
-        said = f"Working: {waiting}"
+    if _waiting_on(turning.spawned):
         return Bubble(
-            "working", waiting, "Working", said, turning.stretch, ran, time, counts_agents=True
+            "working", "Waiting", "Working", "Working: Waiting", turning.stretch, ran, time
         )
     if gone_quiet(times.quiet):
         quiet = int(times.quiet or 0)
-        text = f"No activity for {elapsed(quiet // 60 * 60)}"
         said = f"No activity for {duration_said(quiet)}"
-        return Bubble("quiet", text, said, said, turning.stretch, ran, time, quiet)
+        # One duration: the turn's own clock beside the quiet one said the same span twice.
+        return Bubble("quiet", quiet_words(quiet), said, said, turning.stretch, ran, "", quiet)
     text = f"{turn_verb(turning.stretch)}\u2026"
     quiet = _whole(times.quiet)
     return Bubble("working", text, "Working", "Working", turning.stretch, ran, time, quiet)
@@ -437,9 +435,9 @@ def _working(items: tuple[ChatTurn | ToolRun, ...], turning: Turning) -> Bubble:
 
 def _blocked(turning: Turning) -> Bubble:
     asked = " ".join(turning.asked.split())
-    text = f"Needs you \u00b7 {asked}" if asked else "Needs you"
     said = f"Needs you: {asked}" if asked else "Needs you"
-    return Bubble("blocked", text, said, said, turning.stretch)
+    # The question is drawn in full just above, so the row does not say it again.
+    return Bubble("blocked", "Needs you", said, said, turning.stretch)
 
 
 def _calls_since_prompt(items: tuple[ChatTurn | ToolRun, ...]) -> int | None:
@@ -515,9 +513,10 @@ def chat_view(
 
 @dataclass(frozen=True, slots=True)
 class Row:
-    """The status row above the composer: how many started agents still run, how many prompts
-    wait, and the one sentence VoiceOver hears for it."""
+    """The status row above the composer: its state, how many started agents still run, how many
+    prompts wait, and the one sentence VoiceOver hears for it."""
 
+    state: str
     running: int
     queued: int
     lead: str
@@ -530,16 +529,17 @@ def _counted(n: int, one: str, many: str, tail: str) -> str:
 
 def status_row(view: ChatView, status: str) -> Row:
     """The row for *view*: its bubble's words, else the finished turn's, else the status word."""
-    counted = view.bubble is not None and view.bubble.counts_agents
-    running = 0 if counted else sum(1 for agent in view.agents if agent.state == "running")
+    running = sum(1 for agent in view.agents if agent.state == "running")
     queued = len(view.queued)
     if view.bubble is not None:
-        lead = view.bubble.describe
+        state, lead = view.bubble.state, view.bubble.describe
+    elif view.receipt is not None:
+        state, lead = "done", view.receipt.said
     else:
-        lead = view.receipt.said if view.receipt is not None else status.capitalize()
+        state, lead = "still", status.capitalize()
     counts = (
         _counted(running, "agent", "agents", "running"),
         _counted(queued, "message", "messages", "queued"),
     )
     sentence = "".join(f"{part}. " for part in (lead, *counts) if part).strip()
-    return Row(running, queued, lead, sentence)
+    return Row(state, running, queued, lead, sentence)

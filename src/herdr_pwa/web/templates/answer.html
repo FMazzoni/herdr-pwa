@@ -15,7 +15,9 @@
          {#- A sent key's outcome stays up until its own timer, so the stream cannot wipe it the moment
              the screen moves; otherwise the stream says when to look. #}
          {% if sent is defined %}hx-trigger="every {{ cadence * 2 }}s, hp:poke from:body"{% elif refused is not defined %}hx-trigger="hp:stale, hp:poke from:body"{% else %}hx-trigger="hp:poke from:body"{% endif %}>
-  {% set arming = refused is defined and refused.held and key is defined and key == interrupt %}
+  {# A key that stops a turn, held by the server for a second tap: a page with no script, or a stale
+     one, asks here; a live page asks in the status row's sheet before it ever posts. #}
+  {% set arming = refused is defined and refused.held and key is defined and key in (interrupt, "esc") %}
   {# What the last tap did comes first, where the eye lands after the thumb lifts. #}
   {% include "_notice.html" %}
   {% if sent is defined %}
@@ -31,7 +33,7 @@
   <div class="keys__stop keys__stop--armed" data-hp-disarm="5">
     {% set redraw %}hx-get="{{ base }}/answer" hx-target="#answer" hx-swap="outerHTML" hx-sync="closest .answer:replace"{% endset %}
     {{ ui.button("Keep going", extra="keys__cancel", type="button", attrs=redraw) }}
-    {{ ui.key_form(base, agent.target, interrupt, "Really interrupt", kind="danger", confirm=true) }}
+    {{ ui.key_form(base, agent.target, key, "Really interrupt" if key == interrupt else "Really send Esc", kind="danger", confirm=true) }}
   </div>
   {% endif %}
   {% if asked %}
@@ -82,7 +84,8 @@
   {% elif blocked and sent is not defined and refused is not defined %}
   {% call ui.banner("held", "It is waiting, and its question could not be read here.", "The keys below still reach it; look at the screen before you press one.") %}{{ pane_door(agent, "Look at the Pane", "banner__go") }}{% endcall %}
   {% endif %}
-  {# Only beside a question: otherwise the pad is in the status row's sheet, Interrupt at its edge. #}
+  {# Only beside a question: otherwise the pad is in the status row's sheet. No Ctrl+C here: the
+     question's own No and Esc decline it, and Stop stays out of the band by Send. #}
   {% if keyed %}
   <div class="answer__keys">
     {% if not still %}
@@ -105,12 +108,6 @@
     {% if decision and decision.handoffs %}
     {# Not a button: the key gives the pane to a program no key here can work or quit. #}
     <p class="answer__note answer__note--line">The screen also offers {{ decision.handoffs|map(attribute="label")|join(" and ") }}. That opens another program in the pane, which these keys cannot work or leave, so do it at the terminal.</p>
-    {% endif %}
-    {# Last, full width, under a rule: away from Enter, so a stray thumb on the pad never lands here. #}
-    {% if not arming %}
-    <div class="keys__stop">
-      {{ ui.key_form(base, agent.target, interrupt, "Interrupt (Ctrl+C)", kind="danger") }}
-    </div>
     {% endif %}
   </div>
   {% endif %}

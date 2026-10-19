@@ -242,10 +242,11 @@ test("elapsed: a span in the words clock.elapsed gives it, from the one table bo
   }
 });
 
-test("quietFor: the words for a quiet stretch count whole minutes, as the server's do", () => {
-  assert.equal(logic.quietFor(95), "No activity for 1m");
-  assert.equal(logic.quietFor(185), "No activity for 3m");
-  assert.equal(logic.quietFor(3700), "No activity for 1h 1m");
+test("quietFor: the words for a quiet stretch keep its largest unit, as the server's do", () => {
+  assert.equal(logic.quietFor(95), "Quiet 1m");
+  assert.equal(logic.quietFor(185), "Quiet 3m");
+  assert.equal(logic.quietFor(3700), "Quiet 1h");
+  assert.equal(logic.quietFor(9 * 86400 + 7 * 3600), "Quiet 9d");
 });
 
 test("goneQuiet: the quiet the server drew, plus what passed since, against its threshold", () => {

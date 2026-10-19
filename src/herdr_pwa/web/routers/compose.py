@@ -34,7 +34,15 @@ from herdr_pwa.web.writing import (
     ticked,
     with_first,
 )
-from herdr_pwa.writes.answer import KeyAsk, KeySent, StartingKeyAsk, send_key, send_starting_key
+from herdr_pwa.writes.answer import (
+    ESC_KEY,
+    KeyAsk,
+    KeySent,
+    StartingKeyAsk,
+    send_key,
+    send_starting_key,
+    stops_turn,
+)
 from herdr_pwa.writes.keys import PAD_KEYS, allowed_keys, answer_digits, control_token, pad_keys
 from herdr_pwa.writes.lifecycle import EndAsk, end_agent
 from herdr_pwa.writes.outcome import Evidence, Outcome
@@ -124,17 +132,23 @@ def answer_region(web: WebState, agent: Agent) -> dict[str, object]:
     return answer_context(agent, _question(web, agent), shown_status(web, agent))
 
 
+# The sheet's pad: the arrows and Enter first, then Esc set apart, since while the agent works
+# Esc stops its turn.
+_ROW_PAD: Final = ("up", "down", "enter", ESC_KEY)
+
+
 def row_keys(web: WebState, agent: Agent) -> dict[str, object]:
-    """The keys the status row offers: the pad while no question holds the keys, and Interrupt
-    while the agent works; the same allowed set the write checks with."""
+    """The keys the status row offers: the pad while no question holds the keys, and Stop while
+    the agent works; the same allowed set, and the same confirm, the write checks with."""
     prompt = _question(web, agent)
     keyed = _keyed(agent, prompt)
-    allowed = allowed_keys(prompt)
+    offered = set(pad_keys(prompt)) & allowed_keys(prompt)
     return {
-        "pad": [] if keyed else [k for k in pad_keys(prompt) if k in allowed],
+        "pad": [] if keyed else [k for k in _ROW_PAD if k in offered],
         "fingerprint": control_token(prompt) if prompt is not None else "",
         "interrupt": INTERRUPT_KEY,
         "stop": not keyed and still_talking(agent_status(web, agent)),
+        "esc_arms": stops_turn(ESC_KEY, agent.status, asked=prompt is not None),
     }
 
 

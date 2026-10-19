@@ -6,6 +6,9 @@
 {# A status dot; the colour comes from its status class. #}
 {% macro dot(status, id=none, oob=false) %}<span class="dot dot--{{ status }}"{% if id %} id="{{ id }}"{% endif %}{% if oob %} hx-swap-oob="true"{% endif %} aria-hidden="true"></span>{% endmacro %}
 
+{# A count in a status line: the number in strong ink, the noun quiet. Never a pill, never cut. #}
+{% macro count(n, one, many=none) %}<span class="count"><b class="count__n">{{ n }}</b> {{ one if n == 1 else (many or one ~ "s") }}</span>{% endmacro %}
+
 {# The small-caps header over a group or a page, with an optional count beside it. #}
 {% macro section_head(label, n=none, note=none) %}<h2 class="group__head"><span class="group__label">{{ label }}</span>{% if n is not none %}<span class="group__n">{{ n }}</span>{% endif %}{% if note %}<span class="group__note">{{ note }}</span>{% endif %}</h2>{% endmacro %}
 

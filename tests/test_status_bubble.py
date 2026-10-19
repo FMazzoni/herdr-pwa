@@ -164,8 +164,10 @@ def test_past_the_threshold_with_nothing_new_it_says_how_long_it_has_been_quiet(
     view = _working(ASKED, done, quiet=QUIET_AFTER + 95)
     assert view.bubble is not None
     assert view.bubble.state == "quiet"
-    assert view.bubble.text == "No activity for 3m"
+    assert view.bubble.text == "Quiet 3m"
     assert view.bubble.said == "No activity for 3 minutes"
+    # One duration: the turn's own clock is not drawn beside the quiet one.
+    assert view.bubble.time == ""
     fresh = _working(ASKED, done, quiet=QUIET_AFTER - 1)
     assert fresh.bubble is not None
     assert fresh.bubble.state == "working"
@@ -187,7 +189,8 @@ def test_a_blocked_agent_needs_you_in_the_cards_words() -> None:
     view = chat_view(_page(ASKED), turning=asked)
     assert view.bubble is not None
     assert view.bubble.state == "blocked"
-    assert view.bubble.text == "Needs you · Do you want to proceed?"
+    # The question card above says the question; the row only says it waits on you.
+    assert view.bubble.text == "Needs you"
     assert view.bubble.said == "Needs you: Do you want to proceed?"
     assert view.bubble.time == ""
     unread = chat_view(_page(ASKED), turning=Turning(status=AgentStatus.BLOCKED))
@@ -282,13 +285,18 @@ def test_the_route_draws_how_long_a_thinking_turn_has_been_still(tmp_path: Path)
 def test_the_route_draws_a_quiet_turn_still(tmp_path: Path) -> None:
     bubble = _bubble(_chat(tmp_path, "quiet", "working"))
     assert 'data-hp-bubble="quiet"' in bubble
-    assert ">No activity for 3m<" in bubble
+    assert ">Quiet 3m<" in bubble
 
 
-def test_the_route_draws_the_question_the_card_reads(tmp_path: Path) -> None:
-    bubble = _bubble(_chat(tmp_path, "asking", "blocked", capture(PERMISSION)))
+def test_the_route_draws_needs_you_and_leaves_the_question_to_its_card(tmp_path: Path) -> None:
+    found = re.search(
+        r'<div class="tray__row.*?</div>', _chat(tmp_path, "asking", "blocked", capture(PERMISSION))
+    )
+    assert found is not None
+    bubble = found.group(0)
     assert 'data-hp-bubble="blocked"' in bubble
-    assert ">Needs you · Do you want to proceed?<" in bubble
+    assert ">Needs you<" in bubble
+    assert 'data-hp-said="Needs you: Do you want to proceed?"' in bubble
 
 
 def test_the_route_draws_the_receipt_once_the_turn_is_done(tmp_path: Path) -> None:

@@ -156,6 +156,8 @@ _BASH_STDOUT: Final = "bash-stdout"
 _BASH_STDERR: Final = "bash-stderr"
 # Measured: what the harness writes for a `!` command that printed nothing.
 _NO_OUTPUT: Final = "(Bash completed with no output)"
+# How the chat says it, as the command's ending, so a missing fold never reads as a lost output.
+PRINTED_NOTHING: Final = "no output"
 # What a `!` command leads with, as the person typed it, and the tool its line carries.
 SHELL: Final = "!"
 # The command whose run the harness's compact summary belongs to.
@@ -184,6 +186,8 @@ class CommandOutput:
 
     said: str
     failed: bool = False
+    # The harness said the command printed nothing, which an output never recorded does not say.
+    nothing: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -348,7 +352,9 @@ def _shell_output(text: str) -> CommandOutput | Hidden:
     out = plain(_tag(text, _BASH_STDOUT)).strip()
     err = plain(_tag(text, _BASH_STDERR)).strip()
     said = "\n".join(part for part in (out, err) if part and part != _NO_OUTPUT)
-    return CommandOutput(said, failed=bool(err) and not out) if said else HIDDEN
+    if said:
+        return CommandOutput(said, failed=bool(err) and not out)
+    return CommandOutput("", nothing=True) if out == _NO_OUTPUT else HIDDEN
 
 
 def _shell(text: str) -> Injected | None:

@@ -2,44 +2,85 @@
 {% set base = "/agent/" ~ (agent.session|urlencode) %}
 {% set url = base ~ "/tray" %}
 {% set b = chat.bubble %}
-{% set state = b.state if b else "done" if chat.receipt else "still" %}
-{# One row over the composer: what the agent is doing and for how long, the agents it started and
-   the prompts that wait. VoiceOver hears one sentence; the drawn words beside it are hidden from
-   it, and bubble.js says the state aloud only when it changes, through the page's live region.
-   The row opens a sheet above it with those agents, those prompts and the key pad. #}
+{% set dots = {"working": "working", "quiet": "updating", "blocked": "blocked", "done": "done", "still": "idle"} %}
+{# What the row counts, each its own token: bubble.js rewrites only the words, so a count is never
+   lost to a redraw of them, and a count is never cut (the words give way first). #}
+{% macro counts() -%}
+<span class="tray__counts">
+  {%- if row.running %}<span class="tray__count"><span class="tray__sep" aria-hidden="true"> &middot; </span>{{ ui.count(row.running, "agent") }}</span>{% endif %}
+  {%- if row.queued %}<span class="tray__count"><span class="tray__sep" aria-hidden="true"> &middot; </span>{{ ui.count(row.queued, "queued", "queued") }}</span>{% endif -%}
+</span>
+{%- endmacro %}
+{# A control whose first tap only arms the confirm in the sheet's header. Its safe answer is drawn
+   in the same slot, so a second tap of a double tap lands on "Keep going". Without script the tap
+   posts unconfirmed and the server holds it, asking again in the answer region. #}
+{% macro arm(slot, key, label) -%}
+<div class="tray__slot tray__slot--{{ slot }}">{{ ui.key_form(base, agent.target, key, label, screen=fingerprint, kind="danger", extra="tray__arm", docked=true) }}{% set keep %}data-hp-keep hidden{% endset %}{{ ui.button("Keep going", extra="tray__keep", type="button", attrs=keep) }}</div>
+{%- endmacro %}
+{# One row over the composer: the state's dot, what the agent is doing, the counts, the time. The
+   row opens a sheet above it with the agents it started, Stop and the key pad; while a question
+   needs you the keys are with the question, so the row only says so and opens nothing. #}
 <div id="agent-tray" class="tray" data-hp-poll="{{ url }}" hx-get="{{ url }}" hx-target="this" hx-swap="outerHTML" data-hp-topic="chat:{{ agent.session }}" hx-trigger="hp:stale, hp:poke from:body">
+  {%- if row.state == "blocked" %}
+  <div class="tray__row tray__row--blocked" id="agent-tray-row"><span class="sr-only"><span class="tray__said">{{ row.lead }}</span>{{ row.sentence[row.lead|length:] }}</span>{{ ui.dot("blocked") }}<span class="bubble bubble--blocked tray__words" data-hp-bubble="blocked" data-hp-said="{{ b.said }}"><span class="bubble__text" aria-hidden="true">{{ b.text }}</span></span>{{ counts() }}</div>
+  {%- else %}
   <details class="tray__sheet">
-    <summary class="tray__row tray__row--{{ state }}" id="agent-tray-row"><span class="sr-only"><span class="tray__said">{{ row.lead }}</span>{{ row.sentence[row.lead|length:] }}</span>
-      {%- if b %}<span class="bubble bubble--{{ b.state }}" data-hp-bubble="{{ b.state }}" data-hp-said="{{ b.said }}" data-hp-stretch="{{ b.stretch }}"{% if b.ran is not none %} data-hp-ran="{{ b.ran }}"{% endif %}{% if b.quiet is not none %} data-hp-quiet="{{ b.quiet }}"{% endif %} data-hp-quiet-after="{{ b.quiet_after }}" data-working-palette="{{ b.palette }}" data-working-motion="{{ b.motion }}"><span class="bubble__text" aria-hidden="true">{{ b.text }}</span>{% if b.time %}<span class="bubble__time" aria-hidden="true">{{ b.time }}</span>{% endif %}</span>
+    <summary class="tray__row tray__row--{{ row.state }}" id="agent-tray-row"><span class="sr-only"><span class="tray__said">{{ row.lead }}</span>{{ row.sentence[row.lead|length:] }}</span>{{ ui.dot(dots[row.state]) }}
+      {%- if b %}<span class="bubble bubble--{{ b.state }} tray__words" data-hp-bubble="{{ b.state }}" data-hp-said="{{ b.said }}" data-hp-stretch="{{ b.stretch }}"{% if b.ran is not none %} data-hp-ran="{{ b.ran }}"{% endif %}{% if b.quiet is not none %} data-hp-quiet="{{ b.quiet }}"{% endif %} data-hp-quiet-after="{{ b.quiet_after }}" data-working-palette="{{ b.palette }}" data-working-motion="{{ b.motion }}"><span class="bubble__text" aria-hidden="true">{{ b.text }}</span></span>
       {%- elif chat.receipt %}<span class="tray__words chat__receipt" data-hp-bubble="done" data-hp-said="{{ chat.receipt.said }}" aria-hidden="true">{{ chat.receipt.text }}</span>
       {%- else %}<span class="tray__words" aria-hidden="true">{{ row.lead }}</span>{% endif %}
-      {%- if row.running %}<span class="tray__count" aria-hidden="true">&middot; {{ row.running }} agent{{ "" if row.running == 1 else "s" }}</span>{% endif %}
-      {%- if row.queued %}<span class="tray__count" aria-hidden="true">&middot; {{ row.queued }} queued</span>{% endif -%}
+      {{- counts() }}
+      {%- if b and b.time %}<span class="tray__time"><span class="tray__sep" aria-hidden="true"> &middot; </span><span class="bubble__time" aria-hidden="true">{{ b.time }}</span></span>{% endif %}
+      {%- if not b %}<span class="tray__tail" aria-hidden="true">Keys</span>{% endif -%}
     </summary>
     <div class="tray__body">
+      {#- Decorative, not a drag handle: a tap closes the sheet, as the row and a tap outside do. #}
+      {% set grab %}aria-label="Close" data-hp-close{% endset %}
+      {% call ui.button(none, extra="tray__grab", type="button", attrs=grab) %}<span class="tray__grabber" aria-hidden="true"></span>{% endcall %}
+      {#- Armed by interrupt.js after a first tap on Stop… or Esc…: every such slot then holds Keep
+          going where the tap landed, and the way through is filled, on the far side, below. It
+          disarms itself. Without script none of this shows and the server asks instead. #}
+      <div class="tray__head" data-hp-arming="">
+        <div class="tray__plain">
+          <h2 class="sheet__heading tray__title">Activity</h2>
+          <p class="tray__ask" hidden>Stop this turn?</p>
+          {%- if stop %}{{ arm("stop", interrupt, "Stop…") }}{% endif %}
+        </div>
+        {%- if stop or esc_arms %}
+        <div class="tray__armed" hidden>
+          {%- for key, said in [(interrupt, "Ctrl+C"), ("esc", "Esc")] %}
+          <div class="tray__go" data-hp-for="{{ key }}">{{ ui.key_form(base, agent.target, key, "Stop now", screen=fingerprint, kind="stop", confirm=true, docked=true) }}<p class="tray__caption">Sends {{ said }}. Disarms in 5s. Unsent work in this turn is lost.</p></div>
+          {%- endfor %}
+        </div>
+        {%- endif %}
+        <p class="tray__stopping" hidden>Stopping&hellip;</p>
+      </div>
+      {%- if b and b.state == "quiet" %}
+      <p class="tray__note">{{ b.said }}; herdr still reports it working.</p>
+      {%- endif %}
       {#- The agents it started in the background, as its pane lists them: running first, then those
           done this turn. Only beside a live bubble, since a session that dies never says they ended. #}
-      {%- if chat.agents %}<ul class="spawned" aria-label="Agents it started">{% for a in chat.agents %}<li class="spawned__row spawned__row--{{ a.state }}"><span class="spawned__name">{{ a.description }}</span> <span class="spawned__state"><span aria-hidden="true">&middot; </span>{{ a.state }}</span>{% if a.time %} <span class="spawned__time"><span aria-hidden="true">&middot; </span>{{ a.time }}</span>{% endif %}</li>{% endfor %}</ul>{% endif %}
-      {#- Sent while the agent was busy and not taken yet: never a message in the log, so nothing is
-          drawn twice once the turn takes it. #}
-      {%- if chat.queued %}{% set n = chat.queued|length %}<div class="queued"><p class="queued__head">{{ n }} message{{ "" if n == 1 else "s" }} queued</p><ul class="queued__list">{% for text in chat.queued %}<li class="queued__text">{{ text }}</li>{% endfor %}</ul></div>{% endif %}
-      {%- if pad %}
-      <div class="keys keys--pad tray__pad">
-        {%- for key in pad %}
-        {{ ui.key_form(base, agent.target, key, key|capitalize, screen=fingerprint, docked=true) }}
-        {%- endfor %}
-      </div>
-      {%- else %}
-      <p class="tray__note">The keys are with the question.</p>
+      {%- if chat.agents %}
+      <section class="tray__group">
+        <h3 class="sheet__heading">Agents <b class="count__n">{{ chat.agents|length }}</b></h3>
+        <ul class="spawned" aria-label="Agents it started">{% for a in chat.agents %}<li class="spawned__row spawned__row--{{ a.state }}">{{ ui.dot({"running": "working", "failed": "blocked"}.get(a.state, "done")) }}<span class="spawned__name">{{ a.description }}</span><span class="spawned__end">{% if a.state == "failed" %}<span class="spawned__failed">failed</span>{% endif %}{% if a.time %}<span class="spawned__time">{{ a.time }}</span>{% endif %}</span></li>{% endfor %}</ul>
+      </section>
       {%- endif %}
-      {#- bubble.js shows it and remembers the choice; without script nothing in the row moves. #}
-      {% set still %}data-hp-still aria-pressed="false"{% endset %}
-      <p class="tray__still" hidden>{{ ui.button("Stop the animation", "toggle", type="button", attrs=still) }}</p>
+      {%- if pad %}
+      <section class="tray__group">
+        <h3 class="sheet__heading">Keys</h3>
+        <div class="keys tray__pad">
+          {%- for key in pad %}
+          {%- if key == "esc" and esc_arms %}
+          {{ arm("esc", key, "Esc…") }}
+          {%- else %}
+          <div class="tray__slot{% if key == 'esc' %} tray__slot--esc{% endif %}">{{ ui.key_form(base, agent.target, key, key|capitalize, screen=fingerprint, docked=true) }}</div>
+          {%- endif %}
+          {%- endfor %}
+        </div>
+      </section>
+      {%- endif %}
     </div>
   </details>
-  {#- Its own target at the row's edge, only while the agent works; dashed and in the danger
-      colour, apart from Send below it. The second tap it needs is asked in the answer region. #}
-  {%- if stop %}
-  <div class="tray__stop">{{ ui.key_form(base, agent.target, interrupt, "Interrupt", kind="danger", docked=true) }}</div>
   {%- endif %}
 </div>

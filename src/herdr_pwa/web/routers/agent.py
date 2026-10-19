@@ -169,6 +169,12 @@ def tray_region(web: WebState, agent: Agent, chat: ChatView) -> dict[str, object
     return {"agent": agent, "chat": chat, "row": status_row(chat, status), **row_keys(web, agent)}
 
 
+def _status_word(web: WebState, agent: Agent, chat: ChatView) -> str:
+    # herdr still says working for a log still past the threshold; the page says what it shows.
+    quiet = chat.bubble is not None and chat.bubble.state == "quiet"
+    return "quiet" if quiet else agent_status(web, agent).value
+
+
 def build(web: WebState) -> APIRouter:
     """The drill-in's routes."""
     router = APIRouter(prefix="/agent/{session}", dependencies=[Depends(viewer_guard(web))])
@@ -186,6 +192,7 @@ def _page_context(web: WebState, agent: Agent, tab: str, first: str) -> dict[str
     return {
         "agent": agent,
         "agent_status": agent_status(web, agent),
+        "status_word": _status_word(web, agent, chat),
         "tab": chosen,
         "tabs": TABS,
         "heading": page_title(agent.title, agent.agent, agent.target),

@@ -1,5 +1,6 @@
 /* herdr-pwa: the status row. A crest crosses its words while the agent works, its timer ticks
- * between redraws, it says when the log has gone quiet, and its sheet stays open across redraws. */
+ * between redraws, it says when the log has gone quiet, and its sheet stays open across redraws.
+ * It rewrites only the words: the counts beside them are the server's and stay as drawn. */
 (function (hp) {
   "use strict";
 
@@ -123,8 +124,29 @@
     }
   }
 
+  // The row drawn quiet as the server would draw it: a grey dot, one duration, the page's word.
+  function quietRow(node) {
+    var row = node.closest(".tray__row");
+    if (row) {
+      row.classList.replace("tray__row--working", "tray__row--quiet");
+      var dot = row.querySelector(".dot");
+      var time = row.querySelector(".tray__time");
+      if (dot) {
+        dot.className = "dot dot--updating";
+      }
+      if (time) {
+        time.remove();
+      }
+    }
+    var word = document.getElementById("agent-status");
+    if (word && word.textContent === "working") {
+      word.textContent = "quiet";
+    }
+  }
+
   function goQuiet(node, seconds) {
     stopCrest();
+    quietRow(node);
     node.classList.remove("bubble--working");
     node.classList.add("bubble--quiet");
     node.setAttribute("data-hp-bubble", "quiet");
@@ -142,7 +164,8 @@
       return;
     }
     var since = window.performance.now() - b.drawnAt;
-    var time = b.node.querySelector(".bubble__time");
+    var row = b.node.closest(".tray__row");
+    var time = row ? row.querySelector(".bubble__time") : null;
     if (time && b.ran !== null) {
       time.textContent = hp.logic.elapsed(b.ran + since / 1000);
     }
@@ -232,12 +255,12 @@
     }
   }
 
-  // The switch is in the row's sheet, drawn afresh on every redraw: it shows what this device chose.
+  // The switch is on the alerts page, a preference of this device: it shows what this device chose.
   function showStill() {
     var button = document.querySelector("[data-hp-still]");
     if (button) {
       button.setAttribute("aria-pressed", held ? "true" : "false");
-      button.parentNode.hidden = false;
+      (button.closest("[hidden]") || button.parentNode).hidden = false;
     }
   }
 
