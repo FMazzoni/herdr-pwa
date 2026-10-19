@@ -363,7 +363,9 @@ if (nav) {
     // What is drawn: the toggle's box, less the reach its negative margin takes back. Open,
     // the line is the sheet's first row shown whole, so the one-line cap is for closed only.
     strip: line ? { height: box(line).height + parseFloat(getComputedStyle(line).marginBottom),
-      top: box(line).top, under: box(nav).bottom, open: !!line.closest("details[open]") } : null,
+      top: box(line).top, under: box(nav).bottom, open: !!line.closest("details[open]"),
+      hidden: getComputedStyle(line.closest(".stats")).display === "none",
+      typing: !!document.querySelector("#composer:focus-within") } : null,
     meter: meter ? { width: box(meter).width, wants: parseFloat(getComputedStyle(meter).width),
       right: box(meter).right, edge: box(line).right } : null,
     // Cut: clipped with no ellipsis to say so, past the screen, or half under the one line.
@@ -836,6 +838,13 @@ def _judge_strip(bar: dict[str, object], at: Spot) -> None:
     if not isinstance(strip, dict):
         at.fail("no stats strip under the agent's bar")
         return
+    # Typing, the strip steps aside for the keyboard; at any other time it is there.
+    if strip.get("hidden"):
+        if not strip.get("typing"):
+            at.fail("the stats strip is hidden while nothing is being typed")
+        return
+    if strip.get("typing"):
+        at.fail("the stats strip stays while the composer has focus; it steps aside for typing")
     if float(str(strip["top"])) < float(str(strip["under"])) - 0.5:
         at.fail("the stats strip is not under the tabs")
     if at.size.scale == 1.0 and not strip.get("open") and float(str(strip["height"])) > STRIP_MAX:
