@@ -3,12 +3,10 @@ that re-sorts the cards leaves the card under the thumb where it was, so a tap o
 the reader was looking at."""
 
 from collections.abc import Callable
-from pathlib import Path
 
-from firefox import Marionette, phone_window
+from firefox import Bench, Marionette, phone_window
 from pydantic import JsonValue
 from settle import READER_STILL_MS, settle
-from starlette.types import ASGIApp
 
 from tests.catalogue import State, build
 from tests.waiting import eventually
@@ -91,9 +89,10 @@ def _num(seen: dict[str, object], key: str) -> float:
     return float(value) if isinstance(value, int | float) else float("nan")
 
 
-def walk(driver: Marionette, base: str, rig: Rig) -> list[str]:
+def walk(bench: Bench, rig: Rig) -> list[str]:
     """Scroll into the herd, block an agent above the screen, and find the same card underfoot."""
-    driver.send("WebDriver:Navigate", {"url": base + "/"})
+    driver = bench.driver
+    driver.send("WebDriver:Navigate", {"url": bench.base + "/"})
     if not _wait(driver, lambda _seen: True):
         return ["feed hold: the feed never drew its cards"]
     driver.script("window.scrollTo(0, 700);")
@@ -121,19 +120,18 @@ def walk(driver: Marionette, base: str, rig: Rig) -> list[str]:
     return [said]
 
 
-def run(
-    driver: Marionette, base: str, mount: Callable[[ASGIApp], None], scratch: Path
-) -> list[str]:
+def run(bench: Bench) -> list[str]:
     """The walk on a fresh app in its own phone window; empty when the card stays underfoot."""
-    home = scratch / "feed-hold"
+    driver = bench.driver
+    home = bench.scratch / "feed-hold"
     home.mkdir(parents=True)
     state = State("feed hold", "/", "", lambda: {SNAPSHOT: crowd(), READ: read_frame("")})
     rig = build(state, home)
-    mount(rig.http.app)
+    bench.mount(rig.http.app)
     first = driver.handles()[0]
     phone_window(driver, WIDTH, HEIGHT)
     try:
-        problems = walk(driver, base, rig)
+        problems = walk(bench, rig)
     finally:
         driver.send("WebDriver:CloseWindow", {})
         driver.send("WebDriver:SwitchToWindow", {"handle": first})

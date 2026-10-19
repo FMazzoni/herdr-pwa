@@ -107,7 +107,9 @@ def test_an_agent_starts_with_its_model_and_settles_on_its_uuid(
     runner.panes = [{"pane_id": "w1:p1", "agent": None}]
     ready: list[JsonValue] = [{"pane_id": "w1:p1", "agent_session": {"value": UUID}}]
     runner.agents = [[], ready]
-    assert live_session.agent(SESSION, "probe", "claude", "haiku", "/work") == 0
+    assert (
+        live_session.agent(SESSION, live_session.Launch("probe", "claude", "haiku", "/work")) == 0
+    )
     started = [params for method, params in runner.seen if method == "agent.start"]
     assert started == [
         {

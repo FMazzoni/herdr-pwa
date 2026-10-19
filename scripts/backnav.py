@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import quote
 
-from firefox import BrowserError, Marionette
+from firefox import Bench, BrowserError, Marionette
 from starlette.types import ASGIApp
 
 from herdr_pwa.engine import EngineSettings, HerdrClient
@@ -259,17 +259,16 @@ WALKS: tuple[tuple[str, Callable[[Walk, FakeHerd, Path], None]], ...] = (
 )
 
 
-def run(
-    driver: Marionette, base: str, mount: Callable[[ASGIApp], None], scratch: Path
-) -> list[str]:
+def run(bench: Bench) -> list[str]:
     """Every walk on a fresh app; the problems found, empty when back always lands on the feed."""
+    driver = bench.driver
     problems: list[str] = []
     for name, walk_through in WALKS:
         fake = herd()
-        home = scratch / f"backnav-{name}"
+        home = bench.scratch / f"backnav-{name}"
         home.mkdir(parents=True)
-        mount(app_for(home, fake))
-        walk = Walk(driver, base, f"back {name}")
+        bench.mount(app_for(home, fake))
+        walk = Walk(driver, bench.base, f"back {name}")
         first = driver.handles()[0]
         try:
             walk_through(walk, fake, home)

@@ -6,9 +6,8 @@ and once the prompt's outcome shows, both are live again."""
 
 import threading
 from collections.abc import Callable
-from pathlib import Path
 
-from firefox import Marionette, phone_window
+from firefox import Bench, Marionette, phone_window
 from pydantic import JsonValue, TypeAdapter
 from starlette.types import ASGIApp, Receive, Scope, Send
 
@@ -292,26 +291,25 @@ def _in_window(
         driver.send("WebDriver:SwitchToWindow", {"handle": first})
 
 
-def run(
-    driver: Marionette, base: str, mount: Callable[[ASGIApp], None], scratch: Path
-) -> list[str]:
+def run(bench: Bench) -> list[str]:
     """Both walks, each on a fresh app in its own phone window; empty when each write went once."""
-    home = scratch / "send-hold"
+    driver, base = bench.driver, bench.base
+    home = bench.scratch / "send-hold"
     home.mkdir(parents=True)
     rig = build(State("send hold", f"{AGENT}?tab=pane", OPTION, asking), home)
     hold = Hold(landed, ceiling=WAIT_SECONDS)
     rig.wire.after[SEND_KEYS] = hold
     writes = Writes(rig.http.app)
-    mount(writes)
+    bench.mount(writes)
     problems = _in_window(driver, lambda: walk(driver, base, writes, hold.release), hold.release)
     print("  walked send hold", flush=True)
-    home = scratch / "prompt-hold"
+    home = bench.scratch / "prompt-hold"
     home.mkdir(parents=True)
     rig = build(State("prompt hold", AGENT, COMPOSER, idle), home)
     held = Hold(ceiling=WAIT_SECONDS)
     rig.wire.after[PROMPT] = held
     prompts = Writes(rig.http.app, "/prompt")
-    mount(prompts)
+    bench.mount(prompts)
     problems += _in_window(driver, lambda: walk_prompt(driver, base, prompts, held), held.release)
     print("  walked prompt hold", flush=True)
     return problems

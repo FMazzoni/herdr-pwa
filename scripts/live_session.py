@@ -12,6 +12,7 @@ import struct
 import subprocess
 import sys
 import termios
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -240,7 +241,18 @@ def settle(session: str, target: str, timeout: float = 60.0) -> str | None:
         return None
 
 
-def agent(session: str, name: str, kind: str, model: str, cwd: str) -> int:
+@dataclass(frozen=True)
+class Launch:
+    """Which agent to start: its name, its harness, the model it runs and the folder it runs in."""
+
+    name: str
+    kind: str
+    model: str
+    cwd: str
+
+
+def agent(session: str, launch: Launch) -> int:
+    name, kind, model, cwd = launch.name, launch.kind, launch.model, launch.cwd
     for existing in agents(session):
         if existing.get("name") == name:
             uuid = (existing.get("agent_session") or {}).get("value")
@@ -297,7 +309,7 @@ def main(argv: list[str] | None = None) -> int:
         return status(args.session)
     if args.command == "supervise":
         return supervise(args.session)
-    return agent(args.session, args.name, args.kind, args.model, args.cwd)
+    return agent(args.session, Launch(args.name, args.kind, args.model, args.cwd))
 
 
 if __name__ == "__main__":
