@@ -36,6 +36,12 @@ shots *KEYS:
 sheet *ARGS:
     uv run python scripts/sheet.py {{ARGS}}
 
+# A decision page from a TOML data file: each option shot on catalogue states (this tree, this tree
+# under a CSS overlay, or a saved shots folder) beside its pros, cons and effort. One self-contained
+# HTML file with no script or outside file, written beside the data file. --wire for wireframes.
+compare *ARGS:
+    uv run python scripts/compare.py {{ARGS}}
+
 # The browser the shots use; a dev tool, fetched into ~/.cache/ms-playwright, never committed.
 webkit:
     uv run playwright install webkit

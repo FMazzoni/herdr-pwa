@@ -35,6 +35,17 @@ Screenshots are for eyes. They never gate anything; a pixel diff has no place he
     enough to open on a phone.
   - `--device wide` (or `narrow`) draws both columns at that phone instead of `iphone`.
     A `--left` folder with no shots at that width says so in its column.
+- **`--css FILE` and `--wire`** on `just shots`: lay CSS over the served `app.css` in the
+  browser only (repeatable), or the wireframe overlay `scripts/wire.css`, which turns words
+  into bars and colour grey so only layout reads. The tree is never edited, so a CSS
+  variant needs no branch. A template or JS variant still needs its own tree: shoot it there
+  with `--out` and point the compare page at the folder.
+- **`just compare DATA.toml [--wire] [--no-shoot] [--out PATH]`**: the decision page. Shoots
+  each option on the data file's states and writes `DATA.html` beside it: per state, the
+  options side by side; then one card per option with its pros, cons, effort and whether it
+  keeps, bends or breaks an assumption. One self-contained file (pictures inlined, no script,
+  no font or file from outside, ASCII only), so it renders the same opened locally, on the
+  phone or published as an artifact. Shots land in `DATA-shots/`.
 - **`just webkit`**: installs the browser. Without it, shots and sheet print why and
   exit 0. If WebKit fails to launch over a missing system library (seen with
   `libavif.so.13` on Ubuntu 22.04 derivatives), install that library, or extract its
@@ -61,6 +72,49 @@ Screenshots are for eyes. They never gate anything; a pixel diff has no place he
    4. Read the sheet: shoot it, or read the shots on each side.
    5. Hand the sheet's path to whoever asked.
 6. `just check` still decides green; the geometry gate is in it.
+
+## Drafting variants and a decision page
+
+Never hand-write a comparison page or draw a wireframe in CSS: shoot the real thing.
+
+1. Make a folder outside the tree: `.agents/variants/<topic>/`.
+2. Per option that is CSS only, write `<option>.css`: rules laid over `app.css`, using its
+   `:root` tokens. An option that needs a template or JS change is built in its own worktree
+   and shot there with `just shots KEY... --out <folder>`.
+3. Write `<topic>.toml`:
+
+   ```toml
+   title = "Status row"            # the page's heading
+   intro = "What is being decided"  # optional
+   device = "iphone"                # optional: iphone, wide or narrow
+
+   [[area]]                         # one question; repeat for more
+   id = "B"
+   title = "The status row"
+   note = "Why it matters"          # optional
+   pick = "one"                     # or "any"
+   states = ["chat-working-crowded", "chat-needs-you"]
+
+   [[area.options]]
+   id = "B0"
+   name = "Today"                   # no css and no shots: this tree as it is
+
+   [[area.options]]
+   id = "B1"
+   name = "Counts first"
+   css = "b1.css"                   # or shots = "../../shots/b1" from another tree
+   summary = "One line"
+   pros = ["..."]
+   cons = ["..."]
+   effort = "S-M"
+   assumption = "keeps"             # keeps, bends or breaks
+   assumes = "Which assumption, if it bends or breaks"
+   recommended = true
+   ```
+
+4. `just compare .agents/variants/<topic>/<topic>.toml`, read the page, then hand over its
+   path or publish it. Re-run after editing the TOML only with `--no-shoot`.
+5. The page has no picker: the owner answers with option ids.
 
 ## Rubric
 

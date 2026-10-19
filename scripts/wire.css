@@ -1,0 +1,25 @@
+/* Wireframe overlay for `just shots --wire` and compare pages: laid over app.css in the browser
+   only, never served. Words become bars and colour goes grey, so a review reads layout, not
+   copy or palette. Uses app.css's own tokens, so it follows the real sizes. */
+html { filter: grayscale(1); }
+body *, body *::before, body *::after {
+  color: transparent !important;
+  text-shadow: none !important;
+  caret-color: transparent !important;
+}
+/* One bar per line of text, the height of the letters, wrapping where the words wrap. */
+body * {
+  text-decoration-line: line-through !important;
+  text-decoration-style: solid !important;
+  text-decoration-thickness: 0.7em !important;
+  text-decoration-color: var(--ink-3) !important;
+  text-decoration-skip-ink: none !important;
+}
+::placeholder { color: transparent !important; }
+/* The boxes a layout is made of, outlined so their edges and gaps show. */
+:where(header, nav, main, section, article, aside, footer, form, ul, ol, li, details, summary,
+  button, input, textarea, select, .button, .card, .banner, .chip__pill, .composer, .answer) {
+  outline: var(--line-1) dashed var(--ink-3);
+  outline-offset: calc(-1 * var(--line-1));
+}
+img, svg, canvas, video { filter: brightness(0.6); }
