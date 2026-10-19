@@ -51,20 +51,18 @@ def _usage(web: WebState, agent: Agent) -> SessionUsage:
 
 
 def read_stats(web: WebState, agent: Agent) -> Stats:
-    """The stats strip for *agent*: the statusline its pane shows, else its harness's own record."""
+    """The stats strip for *agent*, from its own read of the pane."""
+    return stats_of(web, agent, pane_or_none(web, agent))
+
+
+def stats_of(web: WebState, agent: Agent, pane: panetext.PaneView | None) -> Stats:
+    """The strip from *pane*, this request's one read of the terminal: the statusline it shows,
+    else the harness's own record; ``None`` when the pane could not be read."""
     usage = _usage(web, agent)
     status = agent_status(web, agent).value
     stats = stats_for(Reading(agent.agent or "", status, usage, now=web.wall()))
-    return with_statusline(stats, _statusline(web, agent))
-
-
-def _statusline(web: WebState, agent: Agent) -> list[list[panetext.Run]]:
-    """The rows under the input box in this request's read of the pane; none if it cannot be read."""
-    try:
-        return read_pane(web, agent).status
-    except EngineError:
-        # The strip then says what the log says, as it did before the pane showed a statusline.
-        return []
+    # Unreadable, the strip says what the log says, as it did before the pane showed a statusline.
+    return with_statusline(stats, pane.status if pane is not None else [])
 
 
 class ChatQuery(BaseModel):
@@ -117,16 +115,24 @@ def read_pane(web: WebState, agent: Agent) -> panetext.PaneView:
     return panetext.pane_view(web.client.mirror_read(agent.target, status=agent.status))
 
 
-def first_view(web: WebState, agent: Agent, tab: str) -> Markup | None:
-    """The view the page opens on, drawn into it; ``None`` if the pane cannot be read now."""
+def pane_or_none(web: WebState, agent: Agent) -> panetext.PaneView | None:
+    """One read of the pane for everything a page draws from it; ``None`` if it cannot be read now."""
+    try:
+        return read_pane(web, agent)
+    except EngineError:
+        return None
+
+
+def first_view(
+    web: WebState, agent: Agent, tab: str, pane: panetext.PaneView | None
+) -> Markup | None:
+    """The view the page opens on, drawn into it from the page's read of the pane; ``None`` when
+    that read failed, so the region fetches itself and its own failure is drawn in its place."""
     if tab == "chat":
         return web.pages.piece("chat.html", {"agent": agent, "chat": read_chat(web, agent)})
-    try:
-        view = read_pane(web, agent)
-    except EngineError:
-        # The region then fetches itself, and its own failure is drawn where the view would be.
+    if pane is None:
         return None
-    return web.pages.piece("pane.html", {"agent": agent, "view": view})
+    return web.pages.piece("pane.html", {"agent": agent, "view": pane})
 
 
 def build(web: WebState) -> APIRouter:
@@ -140,6 +146,8 @@ def build(web: WebState) -> APIRouter:
 def _page_context(web: WebState, agent: Agent, tab: str, first: str) -> dict[str, object]:
     """The whole drill-in page: its bar, the chosen tab's first drawing, and the write regions."""
     chosen = tab if tab in TABS else TABS[0]
+    # Read once: the strip's statusline and the Pane tab's mirror are the same terminal.
+    pane = pane_or_none(web, agent)
     return {
         "agent": agent,
         "agent_status": agent_status(web, agent),
@@ -147,8 +155,8 @@ def _page_context(web: WebState, agent: Agent, tab: str, first: str) -> dict[str
         "tabs": TABS,
         "heading": page_title(agent.title, agent.agent, agent.target),
         "first": first_note(first),
-        "stats": read_stats(web, agent),
-        "view": first_view(web, agent, chosen),
+        "stats": stats_of(web, agent, pane),
+        "view": first_view(web, agent, chosen, pane),
         "answer": web.pages.piece("answer.html", answer_region(web, agent)),
         "composer": web.pages.piece("compose.html", composer_region(web, agent)),
     }
