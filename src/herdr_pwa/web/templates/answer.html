@@ -15,7 +15,9 @@
          {#- A sent key's outcome stays up until its own timer, so the stream cannot wipe it the moment
              the screen moves; otherwise the stream says when to look. #}
          {% if sent is defined %}hx-trigger="every {{ cadence * 2 }}s, hp:poke from:body"{% elif refused is not defined %}hx-trigger="hp:stale, hp:poke from:body"{% else %}hx-trigger="hp:poke from:body"{% endif %}>
-  {% set arming = refused is defined and refused.held and key is defined and key == interrupt %}
+  {# A key that stops a turn, held by the server for a second tap: a page with no script, or a stale
+     one, asks here; a live page asks in the status row's sheet before it ever posts. #}
+  {% set arming = refused is defined and refused.held and key is defined and key in (interrupt, "esc") %}
   {# What the last tap did comes first, where the eye lands after the thumb lifts. #}
   {% include "_notice.html" %}
   {% if sent is defined %}
@@ -26,12 +28,13 @@
   {% call ui.banner("failure", "No reply came back.", "That tap may or may not have reached the agent. Look before tapping again.", role="alert", attrs=lost) %}{{ pane_door(agent, "Look at the Pane", "banner__go") }}{% endcall %}
   {% if arming %}
   {# The confirm sits under the banner that asks for it, where the thumb already is. #}
-  {# The way out beside the way through. Keep going sends nothing: it redraws this region.
+  {# The way through first, on the far side from Send; the way out under it, by the thumb. Keep
+     going sends nothing: it redraws this region.
      app.js also redraws it after data-hp-disarm seconds, unless a thumb is on it. #}
   <div class="keys__stop keys__stop--armed" data-hp-disarm="5">
     {% set redraw %}hx-get="{{ base }}/answer" hx-target="#answer" hx-swap="outerHTML" hx-sync="closest .answer:replace"{% endset %}
+    {{ ui.key_form(base, agent.target, key, "Really interrupt" if key == interrupt else "Really send Esc", kind="danger", confirm=true) }}
     {{ ui.button("Keep going", extra="keys__cancel", type="button", attrs=redraw) }}
-    {{ ui.key_form(base, agent.target, interrupt, "Really interrupt", kind="danger", confirm=true) }}
   </div>
   {% endif %}
   {% if asked %}
@@ -82,6 +85,9 @@
   {% elif blocked and sent is not defined and refused is not defined %}
   {% call ui.banner("held", "It is waiting, and its question could not be read here.", "The keys below still reach it; look at the screen before you press one.") %}{{ pane_door(agent, "Look at the Pane", "banner__go") }}{% endcall %}
   {% endif %}
+  {# Only beside a question: otherwise the pad is in the status row's sheet. No Ctrl+C here: the
+     question's own No and Esc decline it, and Stop stays out of the band by Send. #}
+  {% if keyed %}
   <div class="answer__keys">
     {% if not still %}
     {% if hints %}
@@ -104,13 +110,8 @@
     {# Not a button: the key gives the pane to a program no key here can work or quit. #}
     <p class="answer__note answer__note--line">The screen also offers {{ decision.handoffs|map(attribute="label")|join(" and ") }}. That opens another program in the pane, which these keys cannot work or leave, so do it at the terminal.</p>
     {% endif %}
-    {# Last, full width, under a rule: away from Enter, so a stray thumb on the pad never lands here. #}
-    {% if not arming %}
-    <div class="keys__stop">
-      {{ ui.key_form(base, agent.target, interrupt, "Interrupt (Ctrl+C)", kind="danger") }}
-    </div>
-    {% endif %}
   </div>
+  {% endif %}
 </section>
 {# The page's status, redrawn with a sent key so it never says blocked under "Answered". Only
    then: htmx fires afterSwap once per swapped element, and on a poll the extra two would

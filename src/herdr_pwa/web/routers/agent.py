@@ -24,11 +24,11 @@ from herdr_pwa.engine import (
     chat_window,
     locate_log,
 )
-from herdr_pwa.web.chat import ChatView, Turning, chat_view
+from herdr_pwa.web.chat import ChatView, Turning, chat_view, status_row
 from herdr_pwa.web.deps import WebState, hidden_tick, viewer_guard
 from herdr_pwa.web.herd import agent_status, asked_by, find_agent
 from herdr_pwa.web.naming import page_title
-from herdr_pwa.web.routers.compose import answer_region, composer_region
+from herdr_pwa.web.routers.compose import answer_region, composer_region, row_keys
 from herdr_pwa.web.stats import (
     Reading,
     Stats,
@@ -153,15 +153,26 @@ def _page_reads(web: WebState, agent: Agent) -> Reads:
     return replace(reads, pane=panetext.pane_view(look.shown), screen=look.screen)
 
 
-def first_view(web: WebState, tab: str, reads: Reads) -> Markup | None:
+def first_view(web: WebState, tab: str, reads: Reads, chat: ChatView) -> Markup | None:
     """The view the page opens on, drawn into it from the page's *reads*; ``None`` when the pane
     could not be read, so the region fetches itself and its own failure is drawn in its place."""
     if tab == "chat":
-        chat = _chat_of(web, reads, _NEWEST)
         return web.pages.piece("chat.html", {"agent": reads.agent, "chat": chat})
     if reads.pane is None:
         return None
     return web.pages.piece("pane.html", {"agent": reads.agent, "view": reads.pane})
+
+
+def tray_region(web: WebState, agent: Agent, chat: ChatView) -> dict[str, object]:
+    """The status row and its sheet: the turn as *chat* tells it, and the keys the row offers."""
+    status = agent_status(web, agent).value
+    return {"agent": agent, "chat": chat, "row": status_row(chat, status), **row_keys(web, agent)}
+
+
+def _status_word(web: WebState, agent: Agent, chat: ChatView) -> str:
+    # herdr still says working for a log still past the threshold; the page says what it shows.
+    quiet = chat.bubble is not None and chat.bubble.state == "quiet"
+    return "quiet" if quiet else agent_status(web, agent).value
 
 
 def build(web: WebState) -> APIRouter:
@@ -176,16 +187,20 @@ def _page_context(web: WebState, agent: Agent, tab: str, first: str) -> dict[str
     """The whole drill-in page: its bar, the chosen tab's first drawing, and the write regions."""
     chosen = tab if tab in TABS else TABS[0]
     reads = _page_reads(web, agent)
+    # The status row reads the same page of the log on either tab.
+    chat = _chat_of(web, reads, _NEWEST)
     return {
         "agent": agent,
         "agent_status": agent_status(web, agent),
+        "status_word": _status_word(web, agent, chat),
         "tab": chosen,
         "tabs": TABS,
         "heading": page_title(agent.title, agent.agent, agent.target),
         "first": first_note(first),
         "stats": stats_of(web, reads),
-        "view": first_view(web, chosen, reads),
+        "view": first_view(web, chosen, reads, chat),
         "answer": web.pages.piece("answer.html", answer_region(web, agent)),
+        "tray": web.pages.piece("tray.html", tray_region(web, agent, chat)),
         "composer": web.pages.piece("compose.html", composer_region(agent, reads.screen)),
     }
 
@@ -217,6 +232,11 @@ def _view_routes(router: APIRouter, web: WebState) -> None:
     def pane(session: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
         agent = find_agent(web, session)
         return web.pages.fragment("pane.html", {"agent": agent, "view": read_pane(web, agent)})
+
+    @router.get("/tray", dependencies=[Depends(hidden_tick)])
+    def tray(session: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
+        agent = find_agent(web, session)
+        return web.pages.fragment("tray.html", tray_region(web, agent, read_chat(web, agent)))
 
     @router.get("/stats", dependencies=[Depends(hidden_tick)])
     def stats(session: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]

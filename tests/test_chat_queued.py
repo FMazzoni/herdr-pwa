@@ -129,3 +129,12 @@ def test_a_waiting_prompt_is_escaped_text(tmp_path: Path) -> None:
     chat = _chat(tmp_path, records)
     assert "&lt;b&gt;bold&lt;/b&gt; &amp; &lt;script&gt;x&lt;/script&gt;" in chat
     assert "<script>x" not in chat
+
+
+def test_the_row_counts_what_waits_and_its_sheet_does_not_list_it(tmp_path: Path) -> None:
+    write_transcript(tmp_path / "transcripts", WORKING_SESSION, queued_records())
+    tray = build_rig(tmp_path).http.get(
+        f"/agent/{WORKING_SESSION}/tray", headers={"HX-Request": "true"}
+    )
+    assert '<b class="count__n">1</b> queued</span>' in tray.text
+    assert WAITING not in tray.text

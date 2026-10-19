@@ -63,6 +63,8 @@ TEXT_SIZES = (1.3, 2.0)
 TEXT_WIDTHS = (430, 320)
 # Apple's HIG minimum and WCAG 2.5.5: 44 CSS px in both directions.
 TAP_FLOOR = 44
+# How far from Send anything that stops a turn now must stay (docs/design.md).
+STOP_REACH = 120
 # iOS Safari zooms the page into a focused field whose text is under 16px, and does not zoom back.
 FIELD_FONT_FLOOR = 16
 FIELDS = "input:not([type=hidden]), textarea, select"
@@ -184,7 +186,9 @@ const root = document.documentElement;
 root.style.fontSize = parseFloat(getComputedStyle(root).fontSize) * scale + "px";
 const kept = () => {
   const bar = document.getElementById("composer");
-  return !bar || root.style.getPropertyValue("--dock-h").trim() === bar.offsetHeight + "px";
+  const tray = document.getElementById("agent-tray");
+  const trayKept = !tray || root.style.getPropertyValue("--tray-h").trim() === tray.offsetHeight + "px";
+  return !bar || (trayKept && root.style.getPropertyValue("--dock-h").trim() === bar.offsetHeight + "px");
 };
 const started = performance.now();
 const frame = () => {
@@ -224,7 +228,9 @@ const done = arguments[arguments.length - 1];
 const root = document.documentElement;
 const kept = () => {
   const bar = document.getElementById("composer");
-  return !bar || root.style.getPropertyValue("--dock-h").trim() === bar.offsetHeight + "px";
+  const tray = document.getElementById("agent-tray");
+  const trayKept = !tray || root.style.getPropertyValue("--tray-h").trim() === tray.offsetHeight + "px";
+  return !bar || (trayKept && root.style.getPropertyValue("--dock-h").trim() === bar.offsetHeight + "px");
 };
 const started = performance.now();
 const frame = () => {
@@ -276,14 +282,17 @@ for (const el of document.body.querySelectorAll("*")) {
     }
   }
 }
-// A bar fixed to the bottom covers that band of the page at every scroll, even at its end.
+// A bar fixed to the bottom covers that band of the page at every scroll, even at its end, and so
+// does a bar fixed on top of it (the status row on the composer).
 const vh = root.clientHeight;
 const docked = [];
 let covered = 0;
-for (const el of document.body.querySelectorAll("*")) {
-  if (getComputedStyle(el).position !== "fixed") continue;
-  const r = el.getBoundingClientRect();
-  if (r.height > 0 && r.bottom >= vh - 0.5) {
+const fixed = [...document.body.querySelectorAll("*")]
+  .filter((el) => getComputedStyle(el).position === "fixed")
+  .map((el) => [el, el.getBoundingClientRect()])
+  .sort((a, b) => b[1].bottom - a[1].bottom);
+for (const [el, r] of fixed) {
+  if (r.height > 0 && r.bottom >= vh - covered - 0.5) {
     docked.push(el);
     covered = Math.max(covered, vh - r.top);
   }
@@ -354,7 +363,9 @@ if (nav) {
     // What is drawn: the toggle's box, less the reach its negative margin takes back. Open,
     // the line is the sheet's first row shown whole, so the one-line cap is for closed only.
     strip: line ? { height: box(line).height + parseFloat(getComputedStyle(line).marginBottom),
-      top: box(line).top, under: box(nav).bottom, open: !!line.closest("details[open]") } : null,
+      top: box(line).top, under: box(nav).bottom, open: !!line.closest("details[open]"),
+      hidden: getComputedStyle(line.closest(".stats")).display === "none",
+      typing: !!document.querySelector("#composer:focus-within") } : null,
     meter: meter ? { width: box(meter).width, wants: parseFloat(getComputedStyle(meter).width),
       right: box(meter).right, edge: box(line).right } : null,
     // Cut: clipped with no ellipsis to say so, past the screen, or half under the one line.
@@ -366,9 +377,47 @@ if (nav) {
       .map((f) => f.textContent) : [],
   };
 }
+// G2: a control that stops a turn now keeps out of Send's column and REACH px from it, and a
+// confirm's safe answer covers the control whose first tap armed it.
+const drawn = (el) => box(el).width > 0 && getComputedStyle(el).visibility !== "hidden";
+const send = document.querySelector("#composer button[type=submit]");
+const near = [];
+if (send && drawn(send)) {
+  const s = box(send);
+  // In-flow controls as they stand with the page at its end, where the dock meets them.
+  const atEnd = Math.max(0, root.scrollHeight - vh) - window.scrollY;
+  const pinned = (el) => fixed.some(([f]) => f.contains(el));
+  for (const el of document.querySelectorAll(".button--stop, .keys__stop--armed .button--danger")) {
+    if (!drawn(el)) continue;
+    const b = box(el);
+    const lift = pinned(el) ? 0 : atEnd;
+    const r = { left: b.left, right: b.right, top: b.top - lift, bottom: b.bottom - lift };
+    const gap = Math.hypot(Math.max(0, s.left - r.right, r.left - s.right),
+      Math.max(0, s.top - r.bottom, r.top - s.bottom));
+    const column = r.left < s.right - 0.5 && r.right > s.left + 0.5;
+    if (column || gap < REACH) {
+      near.push({ what: describe(el), gap: gap, column: column,
+        rect: [r.left, r.top, r.right, r.bottom].map(Math.round),
+        send: [s.left, s.top, s.right, s.bottom].map(Math.round) });
+    }
+  }
+}
+const uncovered = [];
+for (const slot of document.querySelectorAll(".tray__slot")) {
+  const arm = slot.querySelector(".tray__arm");
+  const keep = slot.querySelector("[data-hp-keep]");
+  if (!arm || !keep) continue;
+  const a = box(arm), k = box(keep);
+  if (k.left > a.left + 0.5 || k.right < a.right - 0.5 || k.top > a.top + 0.5
+      || k.bottom < a.bottom - 0.5) {
+    uncovered.push({ what: describe(arm), arm: [a.left, a.top, a.right, a.bottom].map(Math.round),
+      keep: [k.left, k.top, k.right, k.bottom].map(Math.round) });
+  }
+}
 return { page: page, scrollers: scrollers, spills: spills, taps: taps, edges: edges,
-  buried: buried, measured: measured, zooms: zooms, cells: cells, cut: cut, bar: bar };
-"""
+  buried: buried, measured: measured, zooms: zooms, cells: cells, cut: cut, bar: bar,
+  near: near, uncovered: uncovered };
+""".replace("REACH", str(STOP_REACH))
 
 
 # The rig's own paths, answered by the switch and never seen by the app.
@@ -698,6 +747,20 @@ def _judge_cards(found: dict[str, object], at: Spot) -> None:
         )
 
 
+def _judge_stops(found: dict[str, object], at: Spot) -> None:
+    for row in _rows(found, "near"):
+        where = "in Send's column" if row["column"] else f"{row['gap']:.1f}px from Send"
+        at.fail(
+            f"{row['what']} {row['rect']} stops a turn now and is {where} {row['send']}; "
+            f"keep it out of Send's column and {STOP_REACH}px from it"
+        )
+    for row in _rows(found, "uncovered"):
+        at.fail(
+            f"Keep going {row['keep']} does not cover {row['what']} {row['arm']}, the control "
+            "its first tap armed, so a double tap can land on something else"
+        )
+
+
 def judge(found: dict[str, object], at: Spot) -> None:
     """Turn one geometry probe into problems and exception counts."""
     page = found.get("page")
@@ -741,6 +804,7 @@ def judge(found: dict[str, object], at: Spot) -> None:
             f"widest word {row['word']!r} ({row['widest']:.1f}px), so the word breaks"
         )
     _judge_cards(found, at)
+    _judge_stops(found, at)
     measured = found.get("measured")
     at.tally.taps += measured if isinstance(measured, int) else 0
 
@@ -774,6 +838,13 @@ def _judge_strip(bar: dict[str, object], at: Spot) -> None:
     if not isinstance(strip, dict):
         at.fail("no stats strip under the agent's bar")
         return
+    # Typing, the strip steps aside for the keyboard; at any other time it is there.
+    if strip.get("hidden"):
+        if not strip.get("typing"):
+            at.fail("the stats strip is hidden while nothing is being typed")
+        return
+    if strip.get("typing"):
+        at.fail("the stats strip stays while the composer has focus; it steps aside for typing")
     if float(str(strip["top"])) < float(str(strip["under"])) - 0.5:
         at.fail("the stats strip is not under the tabs")
     if at.size.scale == 1.0 and not strip.get("open") and float(str(strip["height"])) > STRIP_MAX:

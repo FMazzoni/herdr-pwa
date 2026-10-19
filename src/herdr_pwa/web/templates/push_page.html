@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_ui.html" as ui %}
 {% block title %}alerts &mdash; herdr{% endblock %}
 {% block topbar %}<span class="topbar__title">alerts</span>{% endblock %}
 {% block body %}
@@ -27,5 +28,13 @@
     <p class="sheet__state" id="snooze-state" role="status">{% if snoozed %}Finishes are quiet for now.{% else %}Not snoozed.{% endif %}</p>
   </section>
   {% endif %}
+  {# A preference of this device, not a detail of any agent, so it lives here rather than beside
+     the status row. bubble.js shows it with the choice this device remembers. #}
+  <section class="sheet__group" hidden>
+    <h2 class="sheet__heading">The status row</h2>
+    {% set still %}data-hp-still aria-pressed="false"{% endset %}
+    <p class="sheet__row">{{ ui.button("Stop the animation", "toggle", type="button", attrs=still) }}</p>
+    <p class="sheet__note">The words of a working agent stand still on this device; its timer still ticks. Reduce Motion does the same everywhere.</p>
+  </section>
 </main>
 {% endblock %}

@@ -26,6 +26,7 @@ from herdr_pwa.engine.notices import (
     API_ERROR_KINDS,
     COMPACT_COMMAND,
     OUTPUT,
+    PRINTED_NOTHING,
     SHELL,
     SLASH,
     SLASH_KINDS,
@@ -1080,6 +1081,7 @@ def _slash_turn(found: SlashCommand | CommandOutput, uuid: str) -> TranscriptTur
         result=result,
         result_truncated=cut,
         failed=found.failed,
+        outcome=PRINTED_NOTHING if found.nothing else "",
     )
 
 
@@ -1432,11 +1434,18 @@ def _fold_outputs(turns: list[TranscriptTurn]) -> list[TranscriptTurn]:
                 "result": turn.result,
                 "result_truncated": turn.result_truncated,
                 "failed": turn.failed,
+                "outcome": turn.outcome,
             }
             folded[-1] = folded[-1].model_copy(update=update)
             continue
-        folded.append(turn)
+        # Nothing printed, by a command not on the page, is nothing to draw.
+        if not _printed_nothing(turn):
+            folded.append(turn)
     return folded
+
+
+def _printed_nothing(turn: TranscriptTurn) -> bool:
+    return is_slash_command(turn) and turn.tool == OUTPUT and turn.outcome == PRINTED_NOTHING
 
 
 def _runs_compact(turn: TranscriptTurn) -> bool:

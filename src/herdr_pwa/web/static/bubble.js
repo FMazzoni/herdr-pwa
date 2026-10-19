@@ -1,5 +1,6 @@
-/* herdr-pwa: the status bubble. A crest crosses its words while the agent works, its timer
- * ticks between redraws, and it says when the log has gone quiet. */
+/* herdr-pwa: the status row. A crest crosses its words while the agent works, its timer ticks
+ * between redraws, it says when the log has gone quiet, and its sheet stays open across redraws.
+ * It rewrites only the words: the counts beside them are the server's and stay as drawn. */
 (function (hp) {
   "use strict";
 
@@ -113,7 +114,8 @@
   // The bubble's own words, and VoiceOver's, once this page has seen the log stay still too long.
   function showQuiet(node, seconds) {
     var words = node.querySelector(".bubble__text");
-    var described = node.querySelector(".sr-only");
+    var row = node.closest(".tray__row");
+    var described = row ? row.querySelector(".tray__said") : null;
     if (words) {
       words.textContent = hp.logic.quietFor(seconds);
     }
@@ -122,8 +124,29 @@
     }
   }
 
+  // The row drawn quiet as the server would draw it: a grey dot, one duration, the page's word.
+  function quietRow(node) {
+    var row = node.closest(".tray__row");
+    if (row) {
+      row.classList.replace("tray__row--working", "tray__row--quiet");
+      var dot = row.querySelector(".dot");
+      var time = row.querySelector(".tray__time");
+      if (dot) {
+        dot.className = "dot dot--updating";
+      }
+      if (time) {
+        time.remove();
+      }
+    }
+    var word = document.getElementById("agent-status");
+    if (word && word.textContent === "working") {
+      word.textContent = "quiet";
+    }
+  }
+
   function goQuiet(node, seconds) {
     stopCrest();
+    quietRow(node);
     node.classList.remove("bubble--working");
     node.classList.add("bubble--quiet");
     node.setAttribute("data-hp-bubble", "quiet");
@@ -141,7 +164,8 @@
       return;
     }
     var since = window.performance.now() - b.drawnAt;
-    var time = b.node.querySelector(".bubble__time");
+    var row = b.node.closest(".tray__row");
+    var time = row ? row.querySelector(".bubble__time") : null;
     if (time && b.ran !== null) {
       time.textContent = hp.logic.elapsed(b.ran + since / 1000);
     }
@@ -158,10 +182,13 @@
 
   /* Says the bubble's state when it is not the one last said: the first drawing is the page
    * opening, not news. A finished turn's receipt settles in where the bubble was. */
+  // The Pane tab shows the row but says nothing of it: there the terminal is what is being read.
+  var voiced = !!document.querySelector('main[data-hp-tab="chat"]');
+
   function tellBubble() {
-    var shown = document.querySelector("#chat-note [data-hp-bubble]");
+    var shown = document.querySelector("#agent-tray [data-hp-bubble]");
     var state = shown ? shown.getAttribute("data-hp-bubble") : "";
-    if (bubbleState !== null && state !== bubbleState) {
+    if (voiced && bubbleState !== null && state !== bubbleState) {
       if (shown) {
         hp.voice.say(shown.getAttribute("data-hp-said") || "");
       }
@@ -173,7 +200,7 @@
   }
 
   function startBubble() {
-    var node = document.querySelector("#chat-note .bubble[data-hp-bubble]");
+    var node = document.querySelector("#agent-tray .bubble[data-hp-bubble]");
     if (node === bubble.node) {
       return;
     }
@@ -228,7 +255,17 @@
     }
   }
 
+  // The switch is on the alerts page, a preference of this device: it shows what this device chose.
+  function showStill() {
+    var button = document.querySelector("[data-hp-still]");
+    if (button) {
+      button.setAttribute("aria-pressed", held ? "true" : "false");
+      (button.closest("[hidden]") || button.parentNode).hidden = false;
+    }
+  }
+
   function showBubble() {
+    showStill();
     tellBubble();
     startBubble();
   }
@@ -238,15 +275,42 @@
   window.addEventListener("pageshow", wakeBubble);
   stillness.addEventListener("change", restyleBubble);
 
-  var stillButton = document.querySelector("[data-hp-still]");
-  if (stillButton) {
-    stillButton.setAttribute("aria-pressed", held ? "true" : "false");
-    stillButton.parentNode.hidden = false;
-    stillButton.addEventListener("click", function () {
-      held = stillButton.getAttribute("aria-pressed") !== "true";
-      stillButton.setAttribute("aria-pressed", held ? "true" : "false");
-      hp.keep(STILL, held);
+  // The switch is on the alerts page: an agent page open in another tab follows the change.
+  window.addEventListener("storage", function (event) {
+    if (event.key === STILL) {
+      held = event.newValue === "1";
+      showStill();
       restyleBubble();
-    });
-  }
+    }
+  });
+
+  document.addEventListener("click", function (event) {
+    var button = event.target && event.target.closest ? event.target.closest("[data-hp-still]") : null;
+    if (!button) {
+      return;
+    }
+    held = button.getAttribute("aria-pressed") !== "true";
+    hp.keep(STILL, held);
+    showStill();
+    restyleBubble();
+  });
+
+  /* ---- The row's sheet stays open across the redraws that refresh the row ---- */
+  var sheetOpen = false;
+
+  hp.bus.on("swap:capture", function (detail) {
+    var target = detail.target;
+    if (target && target.id === "agent-tray") {
+      var sheet = target.querySelector("details");
+      sheetOpen = !!(sheet && sheet.open);
+    }
+  });
+
+  hp.bus.on("swapped:restore", function () {
+    var sheet = sheetOpen ? document.querySelector("#agent-tray details") : null;
+    sheetOpen = false;
+    if (sheet) {
+      sheet.open = true;
+    }
+  });
 })(window.hp);

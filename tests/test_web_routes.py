@@ -429,15 +429,15 @@ def test_the_view_switch_lives_in_the_top_bar_and_the_title_scrolls(tmp_path: Pa
     assert "<h1" not in bar
 
 
-# The Chat tab's status bubble: the agent's status decides whether there is one, so it cannot
+# The status row's bubble: the agent's status decides whether there is one, so it cannot
 # flicker between polls, and a locked store never reads as "nothing said".
 
-NOTE = '<div class="bubble bubble--'
+NOTE = '<span class="bubble bubble--'
 
 
-def test_the_chat_says_it_is_working_while_the_agent_works(tmp_path: Path) -> None:
+def test_the_row_says_it_is_working_while_the_agent_works(tmp_path: Path) -> None:
     rig = build_rig(tmp_path)
-    body = rig.http.get(f"/agent/{WORKING_SESSION}/chat").text
+    body = rig.http.get(f"/agent/{WORKING_SESSION}/tray").text
     assert NOTE in body
     assert 'data-hp-said="Working"' in body
 
@@ -454,7 +454,7 @@ def _working_at(tmp_path: Path, seq: int, revision: int = 1) -> str:
         agent["state_change_seq"] = seq
         agent["revision"] = revision
     rig = build_rig(tmp_path, {SNAPSHOT: frame})
-    return rig.http.get(f"/agent/{WORKING_SESSION}/chat", headers=FRAGMENT).text
+    return rig.http.get(f"/agent/{WORKING_SESSION}/tray", headers=FRAGMENT).text
 
 
 def test_the_working_verb_holds_for_a_turn_and_changes_with_the_next(tmp_path: Path) -> None:
@@ -472,7 +472,7 @@ def test_the_bubble_is_gone_when_the_agent_stops(tmp_path: Path) -> None:
     for agent in agents_of(frame):
         agent["agent_status"] = "done"
     rig = build_rig(tmp_path, {SNAPSHOT: frame})
-    body = rig.http.get(f"/agent/{WORKING_SESSION}/chat").text
+    body = rig.http.get(f"/agent/{WORKING_SESSION}/tray").text
     assert NOTE not in body
 
 
@@ -536,15 +536,14 @@ def test_an_unreadable_log_on_opening_says_so_in_the_whole_view(tmp_path: Path) 
     assert "could not be read" in response.text
 
 
-def test_the_bubble_stays_on_an_earlier_page(tmp_path: Path) -> None:
-    """An earlier page is drawn down to the newest turn, so Load earlier must not drop it."""
+def test_an_earlier_page_leaves_the_row_alone(tmp_path: Path) -> None:
+    """Load earlier redraws the log; the row above the composer is its own region and stays."""
     _talking(tmp_path)
     rig = build_rig(tmp_path, chat_messages=2)
-    newest = rig.http.get(f"/agent/{WORKING_SESSION}/chat", headers=FRAGMENT).text
-    assert NOTE in newest
     earlier = rig.http.get(f"/agent/{WORKING_SESSION}/chat?before=999999", headers=FRAGMENT)
     assert "Reply 3." in earlier.text
-    assert NOTE in earlier.text
+    assert NOTE not in earlier.text
+    assert NOTE in rig.http.get(f"/agent/{WORKING_SESSION}/tray", headers=FRAGMENT).text
 
 
 def test_whether_there_is_a_bubble_is_a_function_of_the_status_alone() -> None:
@@ -575,6 +574,7 @@ def _get_walk(repo: Path) -> dict[str, tuple[str, ...]]:
         "/agent/{session}/chat": (f"{agent}/chat",),
         "/agent/{session}/pane": (f"{agent}/pane",),
         "/agent/{session}/stats": (f"{agent}/stats",),
+        "/agent/{session}/tray": (f"{agent}/tray",),
         "/agent/{session}/compose": (f"{agent}/compose",),
         "/agent/{session}/answer": (f"{agent}/answer",),
         "/agent/{session}/close": (f"{agent}/close",),

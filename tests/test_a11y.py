@@ -64,6 +64,17 @@ def test_every_text_colour_reads_at_aa_on_every_ground(ink: str, ground: str) ->
     assert ratio >= AA, f"{ink} on {ground} is {ratio:.2f}:1"
 
 
+# Ink drawn on a filled colour rather than on a ground: Stop now's words on its danger fill.
+FILLED = (("--ground", "--blocked"),)
+
+
+@pytest.mark.parametrize(("ink", "fill"), FILLED)
+def test_ink_on_a_filled_button_reads_at_aa(ink: str, fill: str) -> None:
+    ratio = _contrast(TOKENS[ink], TOKENS[fill])
+    assert ratio >= AA, f"{ink} on {fill} is {ratio:.2f}:1"
+    assert f"background: var({fill}); border-color: var({fill}); color: var({ink});" in CSS
+
+
 def _type_tokens() -> dict[str, str]:
     return {
         k: v.strip() for k, v in TOKENS.items() if k.startswith("--text-") and k != "--text-root"

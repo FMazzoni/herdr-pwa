@@ -11,12 +11,12 @@
 {% block topbar %}{{ agent_ui.bar(agent, tab, agent_status) }}{% endblock %}
 {% block strip %}{% include "stats.html" %}{% endblock %}
 {% block body %}
-<main class="agent agent--docked" data-hp-seen="{{ agent.session }}">
+<main class="agent agent--docked" data-hp-seen="{{ agent.session }}" data-hp-tab="{{ tab }}">
   <h1 class="agent__title">{{ heading }}</h1>
   <p class="agent__meta agent__meta--line">
     <span class="agent__facts">
       {#- No whitespace between facts: the separator's own margins space them evenly. -#}
-      <span class="agent__status" id="agent-status">{{ agent_status.value }}</span>
+      <span class="agent__status" id="agent-status">{{ status_word }}</span>
       {%- if agent.agent %}<span class="agent__fact">{{ agent.agent }}</span>{% endif %}
       {%- if agent.workspace %}<span class="agent__fact">{{ agent.workspace }}</span>{% endif -%}
       <span class="agent__fact">{{ agent.target }}</span>
@@ -28,10 +28,6 @@
   {# app.js shows it and remembers the choice; without script the pane just wraps. #}
   {% set columns %}data-hp-columns aria-pressed="false"{% endset %}
   <p class="agent__columns" hidden>{{ ui.button("Keep the columns", "toggle", type="button", attrs=columns) }}</p>
-  {% elif tab == "chat" %}
-  {# bubble.js shows it and remembers the choice; without script nothing in the bubble moves. #}
-  {% set still %}data-hp-still aria-pressed="false"{% endset %}
-  <p class="agent__columns" hidden>{{ ui.button("Stop the animation", "toggle", type="button", attrs=still) }}</p>
   {% endif %}
   {# Drawn here, not fetched after the scripts run: the newest line comes with the page. Each region
      is the same markup its own route sends, so the stream's redraws replace it like for like. #}
@@ -46,6 +42,8 @@
   {% set jump %}id="hp-jump" hidden{% endset %}
   {% call ui.button(none, extra="jump", type="button", attrs=jump) %}Question waiting <span aria-hidden="true">&darr;</span>{% endcall %}
   {{ composer }}
+  {# What the agent is doing, in one row fixed over the composer's top edge, and its sheet. #}
+  {{ tray }}
   {# The composer's colour under the keyboard's pill where the composer cannot reach (app.css). #}
   <div class="pill-rail" aria-hidden="true"><div class="pill-rail__backdrop"></div></div>
 </main>

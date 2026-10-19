@@ -185,9 +185,35 @@ def test_a_working_agent_takes_pad_keys_without_a_fingerprint(tmp_path: Path) ->
     herd = FakeHerd()
     herd.put(P3, S1, status="working")
     r = rig(tmp_path, herd)
-    result = sent(send_key(r.writer, KeyAsk(S1, "esc")))
+    result = sent(send_key(r.writer, KeyAsk(S1, "down")))
     assert (result.outcome, result.evidence) == (Outcome.ACCEPTED, Evidence.DELIVERED)
     assert herd.writes("agent.read") == [], "nothing is waiting, so nothing is read for digits"
+
+
+def test_esc_stops_a_working_agents_turn_so_it_takes_two_taps(tmp_path: Path) -> None:
+    herd = FakeHerd()
+    herd.put(P3, S1, status="working")
+    r = rig(tmp_path, herd)
+    first = refused(send_key(r.writer, KeyAsk(S1, "esc")))
+    assert (first.refusal, first.held) == (Refusal.CONFIRM, True)
+    assert herd.writes(SEND_KEYS) == []
+    _ = sent(send_key(r.writer, KeyAsk(S1, "esc", confirmed=True)))
+    assert herd.writes(SEND_KEYS) == [{"target": "w1:p3", "keys": ["esc"]}]
+
+
+def test_esc_at_a_question_declines_it_in_one_tap(tmp_path: Path) -> None:
+    r = blocked_rig(tmp_path)
+    _ = sent(send_key(r.writer, KeyAsk(S1, "esc", drawn_from=FINGERPRINT)))
+    assert r.herd.writes(SEND_KEYS) == [{"target": "w1:p3", "keys": ["esc"]}]
+
+
+def test_esc_at_an_idle_prompt_takes_one_tap(tmp_path: Path) -> None:
+    herd = FakeHerd()
+    herd.put(P3, S1, status="idle")
+    herd.screens[P3] = [SETTLED]
+    r = rig(tmp_path, herd)
+    _ = sent(send_key(r.writer, KeyAsk(S1, "esc")))
+    assert herd.writes(SEND_KEYS) == [{"target": "w1:p3", "keys": ["esc"]}]
 
 
 def test_a_navigation_key_redraws_the_controls_from_the_screen_it_made(tmp_path: Path) -> None:

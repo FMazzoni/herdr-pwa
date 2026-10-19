@@ -46,6 +46,10 @@
   document.addEventListener("htmx:afterSettle", function () {
     var region = document.getElementById("answer");
     var status = region ? region.getAttribute("data-hp-status") : null;
+    // herdr still says working for a log gone quiet; the page says what the status row shows.
+    if (status === "working" && document.querySelector("#agent-tray .tray__row--quiet")) {
+      status = "quiet";
+    }
     if (!status || status === shownStatus) {
       return;
     }
@@ -55,7 +59,7 @@
       word.textContent = status;
     }
     if (dot) {
-      dot.className = "dot dot--" + status;
+      dot.className = "dot dot--" + (status === "quiet" ? "updating" : status);
     }
     if (hp.logic.finishedNow(shownStatus, status)) {
       markSeen();

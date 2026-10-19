@@ -6,6 +6,9 @@
 {# A status dot; the colour comes from its status class. #}
 {% macro dot(status, id=none, oob=false) %}<span class="dot dot--{{ status }}"{% if id %} id="{{ id }}"{% endif %}{% if oob %} hx-swap-oob="true"{% endif %} aria-hidden="true"></span>{% endmacro %}
 
+{# A count in a status line: the number in strong ink, the noun quiet. Never a pill, never cut. #}
+{% macro count(n, one, many=none) %}<span class="count"><b class="count__n">{{ n }}</b> {{ one if n == 1 else (many or one ~ "s") }}</span>{% endmacro %}
+
 {# The small-caps header over a group or a page, with an optional count beside it. #}
 {% macro section_head(label, n=none, note=none) %}<h2 class="group__head"><span class="group__label">{{ label }}</span>{% if n is not none %}<span class="group__n">{{ n }}</span>{% endif %}{% if note %}<span class="group__note">{{ note }}</span>{% endif %}</h2>{% endmacro %}
 
@@ -31,9 +34,10 @@
 {# One key sent to a pane from the answer panel; `screen` pins the screen it was drawn against.
    A tap disables every control in the region until the answer lands, and replaces a poll in
    flight, which would otherwise swap the region away and drop this answer on the floor.
-   A call block draws the button's inside instead of `label`. #}
-{% macro key_form(base, target, key, label, screen=none, kind=none, confirm=false, extra=none) -%}
-<form method="post" action="{{ base }}/keys" hx-post="{{ base }}/keys" hx-target="#answer" hx-swap="outerHTML" hx-disabled-elt="#answer button" hx-sync="closest .answer:replace">
+   A call block draws the button's inside instead of `label`. `docked` is a key in the status row,
+   outside the region: it syncs with the region by id, and every key waits while one is out. #}
+{% macro key_form(base, target, key, label, screen=none, kind=none, confirm=false, extra=none, docked=false) -%}
+<form method="post" action="{{ base }}/keys" hx-post="{{ base }}/keys" hx-target="#answer" hx-swap="outerHTML" hx-disabled-elt="{{ '#answer button, #agent-tray button' if docked else '#answer button' }}" hx-sync="{{ '#answer:replace' if docked else 'closest .answer:replace' }}">
       <input type="hidden" name="key" value="{{ key }}">{% if screen is not none %}<input type="hidden" name="screen" value="{{ screen }}">{% endif %}<input type="hidden" name="target" value="{{ target }}">
       {% if confirm %}<input type="hidden" name="confirm" value="1">
       {% endif %}{% if caller is defined %}<button class="button{% if kind %} button--{{ kind }}{% endif %}{% if extra %} {{ extra }}{% endif %}" type="submit">{{ caller() }}</button>{% else %}{{ button(label, kind, extra) }}{% endif %}

@@ -205,7 +205,8 @@ def _view(status: AgentStatus, spawned: tuple[SpawnedTime, ...], quiet: float = 
 def test_a_turn_waiting_on_its_agents_says_so_and_never_reads_as_gone_quiet() -> None:
     view = _view(AgentStatus.WORKING, TWO_RUN)
     assert view.bubble is not None
-    assert (view.bubble.state, view.bubble.text) == ("working", "Waiting on 2 agents")
+    # The row counts the agents as a token of its own, so the words do not.
+    assert (view.bubble.state, view.bubble.text) == ("working", "Waiting")
     assert view.bubble.quiet is None
     assert [(a.description, a.state, a.time) for a in view.agents] == [
         ("Seams", "running", "5m"),
@@ -214,7 +215,7 @@ def test_a_turn_waiting_on_its_agents_says_so_and_never_reads_as_gone_quiet() ->
     ]
     one = _view(AgentStatus.WORKING, TWO_RUN[:1])
     assert one.bubble is not None
-    assert one.bubble.text == "Waiting on 1 agent"
+    assert one.bubble.text == "Waiting"
 
 
 def test_with_every_agent_ended_the_bubble_goes_quiet_as_before() -> None:
@@ -231,11 +232,12 @@ def test_the_list_is_drawn_only_beside_a_live_bubble() -> None:
     assert view.agents == ()
 
 
-def test_the_chat_route_lists_the_agents_an_orchestrator_waits_on(tmp_path: Path) -> None:
+def test_the_row_lists_the_agents_an_orchestrator_waits_on(tmp_path: Path) -> None:
     rig = build_rig(tmp_path)
     write_transcript(rig.settings.state_dir.parent / "transcripts", WORKING_SESSION, spawned_chat())
-    body = rig.http.get(f"/agent/{WORKING_SESSION}/chat", headers={"HX-Request": "true"}).text
-    assert 'aria-hidden="true">Waiting on 2 agents</span>' in body
+    body = rig.http.get(f"/agent/{WORKING_SESSION}/tray", headers={"HX-Request": "true"}).text
+    assert 'aria-hidden="true">Waiting</span>' in body
+    assert '<b class="count__n">2</b> agents</span>' in body
     assert body.count('class="spawned__row spawned__row--running"') == 2
     assert body.count('class="spawned__row spawned__row--finished"') == 1
     assert "Remove the foreign capture corpus" in body

@@ -33,6 +33,8 @@ from herdr_pwa.writes.resolve import Writer, agent_now, attempt, one_at_a_time, 
 log = logging.getLogger(__name__)
 
 _VERB: Final = "sent"
+# Esc with no question showing stops a working agent's turn, so it is confirmed like Ctrl+C.
+ESC_KEY: Final = "esc"
 _STARTING_KEYS: Final = frozenset({*PAD_KEYS, INTERRUPT_KEY})
 
 
@@ -50,6 +52,18 @@ class KeySent:
     prompt: BlockedPrompt | None
 
 
+@dataclass(frozen=True, slots=True)
+class KeyAsk:
+    """One tapped control: who it is for, the key, and the screen it was drawn from."""
+
+    session: SessionId
+    key: str
+    expected_target: PaneId | None = None
+    # The token of the question the control was drawn for (keys.control_token).
+    drawn_from: str = ""
+    confirmed: bool = False
+
+
 def _question_now(client: HerdrClient, agent: Agent) -> BlockedPrompt | Refused | None:
     if not reads_dialog(agent.status):
         return None
@@ -64,18 +78,25 @@ def _question_now(client: HerdrClient, agent: Agent) -> BlockedPrompt | Refused 
     return prompt if asks_now(agent.status, prompt) else None
 
 
+def stops_turn(key: str, status: AgentStatus, *, asked: bool) -> bool:
+    """Whether *key* stops a turn rather than answering a screen: Esc while it works, unasked."""
+    return key == ESC_KEY and status is AgentStatus.WORKING and not asked
+
+
 def _check(
-    key: str, prompt: BlockedPrompt | None, drawn_from: str, *, confirmed: bool
+    key: str, prompt: BlockedPrompt | None, ask: KeyAsk, status: AgentStatus
 ) -> Refused | None:
     if key not in allowed_keys(prompt):
         return Refused(Refusal.KEY_NOT_OFFERED, _VERB, prompt=prompt)
     # An interrupt has to work while the screen is moving, so it skips the token check.
     if key == INTERRUPT_KEY:
-        return None if confirmed else Refused(Refusal.CONFIRM, _VERB, prompt=prompt)
+        return None if ask.confirmed else Refused(Refusal.CONFIRM, _VERB, prompt=prompt)
     # With no question showing now, a control drawn under one is stale: Esc there interrupts a turn.
     now = control_token(prompt) if prompt is not None else ""
-    if drawn_from != now:
+    if ask.drawn_from != now:
         return Refused(Refusal.SCREEN_CHANGED, _VERB, screen=now, prompt=prompt)
+    if stops_turn(key, status, asked=prompt is not None) and not ask.confirmed:
+        return Refused(Refusal.CONFIRM, _VERB, prompt=prompt)
     return None
 
 
@@ -125,18 +146,6 @@ def _press(
     return KeySent(agent.target, key, seen.outcome, seen.evidence, ended, seen.prompt)
 
 
-@dataclass(frozen=True, slots=True)
-class KeyAsk:
-    """One tapped control: who it is for, the key, and the screen it was drawn from."""
-
-    session: SessionId
-    key: str
-    expected_target: PaneId | None = None
-    # The token of the question the control was drawn for (keys.control_token).
-    drawn_from: str = ""
-    confirmed: bool = False
-
-
 def send_key(writer: Writer, ask: KeyAsk) -> KeySent | Refused:
     """Send one key the screen offers right now to the agent holding the session."""
     # From the read the key is checked against to the last look at what it did, alone.
@@ -153,7 +162,7 @@ def _send_key(writer: Writer, ask: KeyAsk) -> KeySent | Refused:
         if key != INTERRUPT_KEY:
             return prompt
         prompt = None
-    refused = _check(key, prompt, ask.drawn_from, confirmed=ask.confirmed)
+    refused = _check(key, prompt, ask, agent.status)
     if refused is not None:
         return refused
     return _press(writer, agent, key, prompt)

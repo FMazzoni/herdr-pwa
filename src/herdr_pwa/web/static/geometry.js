@@ -1,6 +1,7 @@
-/* herdr-pwa: the composer dock's geometry. The dock's height and the iOS keyboard's lift are
- * measured here and written to <html> as --dock-h and --kb, only when they change; app.css places
- * the dock with them. A pinned reader is kept at the end as either changes (hp.chatend). */
+/* herdr-pwa: the composer dock's geometry. The dock's height, the status row's over it and the iOS
+ * keyboard's lift are measured here and written to <html> as --dock-h, --tray-h and --kb, only
+ * when they change; app.css places the dock with them. A pinned reader is kept at the end as any
+ * of them changes (hp.chatend). */
 (function (hp) {
   "use strict";
 
@@ -13,30 +14,53 @@
   var docking = false;
   var dockedBand = -1;
   var dockedH = -1;
+  var trayH = -1;
   var liftedKb = -1;
-  var watched = null;
+  // The composer and the status row each grow on their own and are each swapped whole by htmx.
+  var watched = { composer: null, tray: null };
   // The dock grows with iPhone Text Size and with any banner in it; nothing else says so.
   var sizes = typeof window.ResizeObserver === "function" ? new window.ResizeObserver(redock) : null;
 
+  function watch(id) {
+    var node = document.getElementById(id);
+    if (sizes && watched[id] !== node) {
+      if (watched[id]) {
+        sizes.unobserve(watched[id]);
+      }
+      if (node) {
+        sizes.observe(node);
+      }
+      watched[id] = node;
+    }
+    return node;
+  }
+
+  // The status row's height, written only when it changes; whether it did.
+  function measureTray() {
+    var tray = watch("agent-tray");
+    var height = tray ? tray.offsetHeight : 0;
+    if (height === trayH) {
+      return false;
+    }
+    root.style.setProperty("--tray-h", height + "px");
+    trayH = height;
+    return true;
+  }
+
   function dock() {
     docking = false;
-    var bar = document.getElementById("composer");
+    var bar = watch("composer");
     if (!bar) {
       return;
     }
-    if (sizes && watched !== bar) {
-      if (watched) {
-        sizes.unobserve(watched);
-      }
-      sizes.observe(bar);
-      watched = bar;
-    }
     var band = lift();
     var height = bar.offsetHeight;
+    var trayMoved = measureTray();
     // A pinned reader stays at the end as the keyboard opens or the dock grows; a pan of the band
     // is the reader's own scroll (or nothing), so it never moves the page.
     // A frame can land before chatend.js has run, when no reader has been put anywhere yet.
-    var wasEnd = (band !== dockedBand || height !== dockedH) && !!hp.chatend && hp.chatend.pinned();
+    var moved = band !== dockedBand || height !== dockedH || trayMoved;
+    var wasEnd = moved && !!hp.chatend && hp.chatend.pinned();
     dockedBand = band;
     if (height !== dockedH) {
       root.style.setProperty("--dock-h", height + "px");

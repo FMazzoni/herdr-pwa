@@ -103,6 +103,22 @@
      overwrites the two px values; these are what the page reserves without script. */
   --dock-h: 88px;
   --kb: 0px;
+  /* The status row over the dock, measured and overwritten the same way: one 44px row and its rule. */
+  --tray-h: 45px;
+  /* The tallest the row's sheet gets before it scrolls, so the chat still shows above it. */
+  --tray-sheet-max: 55vh;
+  /* The row's sheet: its top corners, and the shadow that lifts it off the chat it covers. */
+  --sheet-radius: var(--radius-3);
+  --sheet-shadow: 0 -8px 24px rgb(0 0 0 / 0.45);
+  /* The sheet's grabber bar, in iOS's proportions. */
+  --grabber-w: 36px;
+  --grabber-h: 4px;
+  /* Stop… and the Keep going that replaces it share this width, so a second tap lands on it. */
+  --arm-w: 7.5em;
+  /* Send's least width, in rem like its type: what stops a turn now stays left of this column. */
+  --send-w: 4.5rem;
+  /* Between the no-script confirm's way through and its way out, so the first stays 120px from Send. */
+  --confirm-gap: 3rem;
   /* How far the composer's colour runs below it while the keyboard is up, under iOS's translucent
      accessory pill. Fixed and tall, not --kb: --kb is 0 whenever iOS has panned the band to the
      layout viewport's bottom, and the pill then sits below that edge. */
@@ -253,14 +269,14 @@ html { -webkit-tap-highlight-color: transparent; }
 .chat__note { color: var(--ink-3); font-size: var(--text-meta); text-align: center; padding: var(--space-6) var(--space-4); }
 /* The way to the Pane under an empty log's note, centred like the note it ends. */
 .chat__go { margin-inline: auto; }
-/* The status bubble sits where the agent's next message will land, shaped like one and at its
-   size, as wide as its words; past the screen's width the words ellipsize, never the timer. */
-.bubble { justify-self: start; display: flex; align-items: baseline; gap: var(--space-5); min-width: 0; max-width: 100%; padding: var(--space-5) var(--space-6); border-radius: var(--radius-3); background: var(--surface); font-size: var(--text-body); color: var(--ink-2); white-space: nowrap; }
+/* The status bubble's words lead the status row, as wide as they are; past the row's width they
+   are the first to give way, ellipsized, before any count or the timer. */
+.bubble { display: flex; flex: 0 1 auto; align-items: baseline; min-width: 0; color: var(--ink-2); white-space: nowrap; }
 .bubble__text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.bubble__time { flex: none; color: var(--ink-3); font-size: var(--text-small); font-variant-numeric: tabular-nums; }
+.bubble__time { font-variant-numeric: tabular-nums; }
 /* Gone quiet: the sweep stops and the words grey. */
 .bubble--quiet { color: var(--ink-3); }
-.bubble--blocked { background: var(--needs-ground); color: var(--needs-ink); }
+.bubble--blocked { color: var(--needs-ink); font-weight: 600; }
 /* Each letter app.js lays out takes the crest's colour where it stands in it, up to the palette's
    peak, and rests in the bubble's ink either side of it. */
 .bubble__glyph {
@@ -270,15 +286,15 @@ html { -webkit-tap-highlight-color: transparent; }
 }
 /* A motion that lifts the letters needs each one a box of its own to move. */
 .bubble.is-lifting .bubble__glyph { display: inline-block; white-space: pre; transform: translateY(calc(var(--glyph-wave, 0) * var(--working-rise) * -1)); }
-/* The finished turn's receipt: one quiet line under the answer, flush with its text. */
-/* The agents the turn started, under its bubble: one quiet line each, the name ellipsized. */
+/* The agents the turn started, in the row's sheet: one quiet line each, the name ellipsized. */
 .spawned { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); margin: 0; padding: 0 0 0 var(--space-6); border-left: var(--line-1) solid var(--rule); list-style: none; font-size: var(--text-meta); color: var(--ink-3); }
 .spawned__row { display: flex; align-items: baseline; gap: var(--space-3); min-width: 0; white-space: nowrap; }
 .spawned__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--ink-2); }
 .spawned__state, .spawned__time { flex: none; font-variant-numeric: tabular-nums; }
 .spawned__row--running .spawned__state { color: var(--ink-2); }
 .spawned__row--failed .spawned__state { color: var(--blocked); font-weight: 600; }
-.chat__receipt { margin: 0; padding: 0 var(--space-6); color: var(--ink-3); font-size: var(--text-meta); font-variant-numeric: tabular-nums; }
+/* The finished turn's receipt, in the row where the bubble was. */
+.chat__receipt { color: var(--ink-3); font-variant-numeric: tabular-nums; }
 /* Drawn as the bubble it replaces goes: it settles into place rather than appearing. */
 .chat__receipt.is-folding { animation: receipt-fold 240ms ease-out; }
 @keyframes receipt-fold { from { opacity: 0; transform: translateY(-0.5em); } }
@@ -421,7 +437,9 @@ html { -webkit-tap-highlight-color: transparent; }
 
 /* The agent page is one column. The composer is docked to the bottom, so the page reserves
    its height; the answer region, asked or quiet, follows the view, next to the dock. */
-.agent--docked { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-5); padding-top: var(--space-5); padding-bottom: calc(var(--dock-h) + var(--space-8)); }
+.agent--docked { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-5); padding-top: var(--space-5); padding-bottom: calc(var(--dock-h) + var(--tray-h) + var(--space-8)); }
+/* With no question and no outcome the region draws nothing, so it keeps no gap in the column. */
+.agent--docked > .answer--quiet { display: contents; }
 .agent--docked > *, .agent--docked > .answer { margin: 0; }
 .agent__meta--line { flex-wrap: nowrap; overflow-wrap: normal; }
 .agent__facts { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -455,6 +473,11 @@ html { -webkit-tap-highlight-color: transparent; }
 .button.chat__earlier-button { color: var(--accent); font-size: var(--text-meta); }
 .turn { padding: var(--space-5) var(--space-6); border-radius: var(--radius-3); background: var(--surface); overflow-wrap: anywhere; }
 .turn--human { background: var(--surface-2); border-left: var(--line-3) solid var(--accent); }
+/* A `!` command: still the person's edge, on a terminal's ground, in the terminal's type. A
+   command wraps rather than being cut: one that cannot be read whole cannot be judged. */
+.turn--shell { background: var(--pane-ground); }
+.turn__cmd { font: var(--text-meta)/1.4 var(--mono); color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; }
+.turn__prompt { color: var(--ansi-green); font-weight: 600; }
 .turn--system { background: transparent; color: var(--ink-3); font-size: var(--text-small); }
 .turn__text { margin: 0; white-space: pre-wrap; }
 .tool__result, .prose pre { overflow-x: auto; padding: var(--space-4); background: var(--ground); border-radius: var(--radius-1); font: var(--text-small)/1.4 var(--mono); }
@@ -500,7 +523,7 @@ html { -webkit-tap-highlight-color: transparent; }
 .turn__output > .tool__result { white-space: pre-wrap; overflow-wrap: anywhere; }
 /* Under large type a failed command's ending wraps to a second row rather than leaving the screen. */
 .turn__output > .tool__line { flex-wrap: wrap; }
-/* Prompts the harness holds: one quiet line under the bubble that opens on them, in the person's ink. */
+/* Prompts the harness holds: one quiet line at the chat's end that opens on them, in the person's ink. */
 .queued { justify-self: start; min-width: 0; max-width: 100%; color: var(--ink-3); font-size: var(--text-meta); }
 .queued__head { display: flex; align-items: center; gap: var(--space-4); min-height: var(--tap); list-style: none; cursor: pointer; }
 .queued__head::-webkit-details-marker { display: none; }
@@ -772,15 +795,15 @@ textarea { resize: vertical; min-height: 4.5em; }
 /* The generic keys stay on one line even at 320px: equal columns, however many there are. */
 .answer__keys .keys--pad { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: var(--space-3); }
 .keys--pad .button { width: 100%; min-width: var(--tap); padding-inline: var(--space-2); }
-/* The interrupt sits on its own row, away from Enter, drawn dashed so it never reads as a key. */
-.keys__stop { margin-top: var(--space-4); padding-top: var(--space-6); border-top: var(--line-1) solid var(--rule); }
-.keys__stop--armed { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); margin-top: 0; padding-top: 0; border-top: 0; }
-.keys__cancel { width: 100%; }
-.keys__stop .button--danger { width: 100%; background: transparent; border-style: dashed; }
+/* The confirm a page with no script gets: the way through on its own row, left, out of Send's
+   column; Keep going under it on the right, so the way through is two rows from Send. */
+.keys__stop--armed { display: grid; justify-items: start; gap: var(--confirm-gap); }
+.keys__stop--armed > form { max-width: calc(100% - var(--send-w) - var(--space-6)); }
+.keys__stop--armed .button--danger { background: transparent; border-style: dashed; overflow-wrap: anywhere; }
+.keys__cancel { justify-self: end; min-width: var(--arm-w); }
 /* In em, so the break moves with Text Size; a query cannot read a custom property. */
 @container (width < 14em) {
   .answer__keys .keys--pad, .keys--compact { grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .keys__stop--armed { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* The composer, docked above the home indicator, and above the keyboard when it is open.
@@ -846,7 +869,7 @@ html.is-keyboard { background: var(--surface); }
 .jump {
   position: fixed;
   left: 50%;
-  bottom: calc(var(--kb) + var(--dock-h) + var(--space-4));
+  bottom: calc(var(--kb) + var(--dock-h) + var(--tray-h) + var(--space-4));
   z-index: 2;
   transform: translateX(-50%);
   min-height: var(--tap);
@@ -855,12 +878,151 @@ html.is-keyboard { background: var(--surface); }
   border-color: var(--accent);
   border-radius: var(--radius-pill);
   white-space: nowrap;
+  /* At a large Text Size the pill is cut, never wider than the column. */
+  max-width: calc(100% - var(--gutter-left) - var(--gutter-right));
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .jump[hidden] { display: none; }
+
+/* The status row, fixed on the composer's top edge and riding the keyboard with it: what the agent
+   is doing, and the counts that are never cut. Its column is the composer's. Nothing in it stops
+   anything: Stop is in its sheet, at the top, far from Send. */
+.tray {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--kb) + var(--dock-h));
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  padding:
+    0
+    calc((100% - min(100%, var(--page-max))) / 2 + var(--gutter-right))
+    0
+    calc((100% - min(100%, var(--page-max))) / 2 + var(--gutter-left));
+  background: var(--surface);
+  border-top: var(--line-1) solid var(--rule);
+  font-size: var(--text-meta);
+  /* What the row drops as it narrows follows Text Size as well as width: em, not px. */
+  container-type: inline-size;
+}
+.tray [hidden] { display: none; }
+/* One of a pair sharing a cell: it keeps its room, so showing the other moves nothing (G2, G3). */
+.tray [data-hp-off] { visibility: hidden; }
+.tray__sheet { flex: 1; min-width: 0; }
+/* The whole row is the sheet's 44px handle. Ranked: the dot and the counts always, then the time,
+   and the words take the ellipsis; a count that does not fit wraps rather than being cut. */
+.tray__row { flex: 1; display: flex; align-items: center; gap: var(--space-4); min-height: var(--tap); list-style: none; color: var(--ink-2); }
+summary.tray__row { cursor: pointer; }
+.tray__row::-webkit-details-marker { display: none; }
+summary.tray__row::after { content: var(--chevron); flex: none; padding-left: var(--space-4); color: var(--ink-3); transform: rotate(-90deg); }
+.tray__sheet[open] > .tray__row::after { transform: rotate(90deg); }
+.tray__row > .dot { margin-inline-end: var(--space-1); }
+.tray__words { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tray__counts { display: flex; flex-wrap: wrap; column-gap: var(--space-4); flex: none; min-width: 0; }
+.tray__count, .tray__time { flex: none; white-space: nowrap; }
+.tray__time { color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.tray__sep { margin-inline-end: var(--space-4); color: var(--ink-3); }
+/* Idle, the row is the way to the keys, and says so. */
+.tray__tail { flex: none; margin-left: auto; color: var(--accent); }
+summary.tray__row:not(:has(.tray__tail))::after { margin-left: auto; }
+.tray__row--quiet .tray__words { color: var(--ink-3); }
+/* Needs you: no sheet to open, the question is the card above; the dot and words carry the colour. */
+.tray__row--blocked { color: var(--needs-ink); font-weight: 600; }
+.count { color: var(--ink-3); }
+.count__n { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+@container (width < 24em) {
+  .tray__row:has(.tray__count) .tray__words { display: none; }
+  .tray__row:has(.tray__count) .tray__count:first-child > .tray__sep { display: none; }
+  .tray__counts { flex-shrink: 1; }
+}
+@container (width < 20em) {
+  .tray__time { display: none; }
+}
+/* The sheet opens upward over the chat, a layer of its own, so the row and the composer never move. */
+.tray__body {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  display: grid;
+  gap: var(--space-6);
+  max-height: var(--tray-sheet-max);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding:
+    0
+    calc((100% - min(100%, var(--page-max))) / 2 + var(--gutter-right))
+    var(--space-6)
+    calc((100% - min(100%, var(--page-max))) / 2 + var(--gutter-left));
+  background: var(--surface);
+  border-top: var(--line-1) solid var(--rule);
+  border-radius: var(--sheet-radius) var(--sheet-radius) 0 0;
+  box-shadow: var(--sheet-shadow);
+  container-type: inline-size;
+}
+/* Closed, the sheet takes no box at all, so nothing measures or scrolls it. */
+.tray__sheet:not([open]) > .tray__body { display: none; }
+/* A full-width 44px close: the bar is drawn, the rest of the box is the tap. */
+.button.tray__grab { display: flex; justify-content: center; align-items: center; width: 100%; margin-bottom: calc(-1 * var(--space-6)); padding: 0; background: transparent; border: 0; }
+.tray__grabber { width: var(--grabber-w); height: var(--grabber-h); border-radius: var(--radius-pill); background: var(--rule); }
+/* The header: the title's cell, which Stop now takes when armed, and Stop…'s, which Keep going
+   takes. Below 20em the cells stack, Keep going still where Stop… was. */
+.tray__head { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-4) var(--space-6); }
+.tray__lead { display: grid; align-items: center; justify-items: start; min-height: var(--tap); }
+.tray__lead > * { grid-area: 1 / 1; }
+.tray__title { margin: 0; }
+.tray__go, .tray__go form { display: grid; }
+.tray__go .button { min-width: var(--arm-w); }
+/* A slot holds a control that arms and the Keep going drawn in its place: one cell, one rect. */
+.tray__slot { display: grid; }
+.tray__slot > * { grid-area: 1 / 1; }
+.tray__slot form { display: grid; }
+.tray__slot--stop { justify-self: end; min-width: var(--arm-w); }
+/* Dashed: this asks before it acts. Filled: this acts now. Danger has no third look. */
+.button.tray__arm { background: transparent; border-style: dashed; }
+.tray__slot .button { font-size: var(--text-meta); padding-inline: var(--space-4); }
+.button--stop { background: var(--blocked); border-color: var(--blocked); color: var(--ground); }
+@container (width < 20em) {
+  .tray__head { grid-template-columns: minmax(0, 1fr); }
+  .tray__go { max-width: calc(100% - var(--send-w) - var(--space-6)); }
+  /* At the largest sizes a word may break: the label is cut across lines before it reaches Send. */
+  .tray__go .button { min-width: 0; overflow-wrap: anywhere; }
+}
+/* What a stop costs, over the section below for the five seconds it is armed: it adds no height. */
+.tray__armed { position: absolute; top: 100%; left: 0; right: 0; z-index: 1; margin: 0; padding: var(--space-2) 0 var(--space-4); background: var(--surface); color: var(--ink-3); font-size: var(--text-small); }
+.tray__note { margin: 0; color: var(--ink-3); font-size: var(--text-small); }
+.tray__group { display: grid; gap: var(--space-3); }
+.tray__group > .sheet__heading { margin: 0; }
+.sheet__heading .count__n { margin-inline-start: var(--space-2); }
+/* One line per agent: its dot, the name cut with an ellipsis, then the time in a tabular column. */
+.tray__body .spawned { gap: 0; padding: 0; border-left: 0; }
+.tray__body .spawned__row { display: grid; grid-template-columns: var(--dot) minmax(0, 1fr) auto; grid-template-areas: "dot name end"; column-gap: var(--space-4); align-items: center; padding-block: var(--space-2); }
+.tray__body .spawned__row > .dot { grid-area: dot; }
+.tray__body .spawned__name { grid-area: name; white-space: nowrap; }
+.spawned__end { grid-area: end; display: flex; gap: var(--space-3); color: var(--ink-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.spawned__failed { color: var(--blocked); font-weight: 600; }
+@container (width < 16em) {
+  .tray__body .spawned__row { grid-template-columns: var(--dot) minmax(0, 1fr); grid-template-areas: "dot name" ". end"; }
+}
+/* The generic keys on one line: Up, Down and Enter share what Esc's column, wide enough for Keep
+   going, leaves; two by two where that no longer fits. */
+.tray__pad { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(var(--arm-w), auto); gap: var(--space-3); }
+.tray__pad .button { padding-inline: var(--space-3); }
+.tray__pad > .tray__slot--esc { margin-inline-start: var(--space-6); }
+@container (width < 22em) {
+  .tray__pad { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tray__pad > .tray__slot--esc { margin-inline-start: 0; }
+}
+/* Typing, the strip under the bar steps aside; the bottom dock's arithmetic is not touched. */
+body:has(#composer:focus-within) .stats { display: none; }
 .composer .banner { margin: 0; }
 /* The button drops under the field once both no longer fit, which only the largest Text Size does. */
 .composer__row { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: end; gap: var(--space-4); }
 .composer__row .field, .composer__row .button { margin: 0; }
+.composer__row .button { min-width: var(--send-w); }
 .composer__row .field { flex: 1 1 var(--composer-min); min-width: 0; }
 .composer textarea { display: block; width: 100%; min-height: var(--tap); resize: none; background: var(--ground); }
 .composer textarea:focus, .composer textarea:not(:placeholder-shown) { min-height: var(--composer-grow); }
