@@ -344,6 +344,39 @@ def test_an_unknown_error_code_stays_a_plain_engine_error(
     wire.close()
 
 
+def test_an_error_body_the_schema_does_not_describe_is_still_a_refusal(
+    sock_path: Path, request: pytest.FixtureRequest
+) -> None:
+    """Reported as a plain engine error, never obeyed and never mistaken for a reply."""
+
+    def handler(req: dict[str, JsonValue], _c: socket.socket) -> dict[str, JsonValue]:
+        return {"id": req["id"], "error": {"code": 7}}
+
+    serve(sock_path, handler, request)
+    wire = transport(sock_path)
+    with pytest.raises(EngineError) as exc:
+        wire.call("agent.get", {"target": "w1:p3"})
+    assert type(exc.value) is EngineError
+    assert exc.value.code == "engine_error"
+    assert exc.value.message == "the runner reported {'code': 7}"
+    wire.close()
+
+
+def test_an_error_that_is_not_an_object_is_left_to_the_reply_reader(
+    sock_path: Path, request: pytest.FixtureRequest
+) -> None:
+    """Only an object under ``error`` is a refusal; the client then refuses the reply's shape."""
+
+    def handler(req: dict[str, JsonValue], _c: socket.socket) -> dict[str, JsonValue]:
+        return {"id": req["id"], "error": "boom"}
+
+    serve(sock_path, handler, request)
+    wire = transport(sock_path)
+    reply = wire.call("agent.get", {"target": "w1:p3"})
+    assert at(reply, "error") == "boom"
+    wire.close()
+
+
 def test_an_error_frame_is_a_conversation_not_a_failure(
     sock_path: Path, request: pytest.FixtureRequest
 ) -> None:
@@ -1241,6 +1274,34 @@ def test_an_error_frame_on_the_stream_maps_onto_the_taxonomy(
 
     serve(sock_path, handler, request)
     with pytest.raises(TargetNotFound, match="no such pane"):
+        list(stream(sock_path))
+
+
+def test_an_error_body_the_schema_does_not_describe_refuses_the_subscription(
+    sock_path: Path, request: pytest.FixtureRequest
+) -> None:
+    def handler(req: dict[str, JsonValue], _conn: socket.socket) -> dict[str, JsonValue]:
+        return {"id": req["id"], "error": {"message": 3}}
+
+    serve(sock_path, handler, request)
+    with pytest.raises(EngineError) as exc:
+        list(stream(sock_path))
+    assert type(exc.value) is EngineError
+    assert exc.value.code == "engine_error"
+    assert exc.value.message.startswith("the runner reported ")
+
+
+def test_a_reply_the_schema_rejects_never_confirms_the_subscription(
+    sock_path: Path, request: pytest.FixtureRequest
+) -> None:
+    """Only a frame herdr's schema reads as ``subscription_started`` opens the stream."""
+
+    def handler(req: dict[str, JsonValue], conn: socket.socket) -> None:
+        for _ in range(MAX_STRAY_FRAMES):
+            conn.sendall(_line({"id": req["id"], "result": {"type": "no_such_arm"}}))
+
+    serve(sock_path, handler, request)
+    with pytest.raises(InvalidResponse, match="never confirmed the subscription"):
         list(stream(sock_path))
 
 

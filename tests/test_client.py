@@ -1036,6 +1036,27 @@ def process_info_frame(*, settled: bool = True) -> dict[str, JsonValue]:
     }
 
 
+def test_a_process_info_reply_the_schema_rejects_still_names_its_pids() -> None:
+    """The pids are salvaged from a frame whose envelope drifted, if that part still reads."""
+    frame = process_info_frame(settled=False)
+    del obj(frame, "result")["type"]
+    eng, _ = build({PROCESS_INFO: frame})
+    assert eng.pane_pids("w1:p9") == (4242, 4243)
+
+
+def test_a_process_info_the_schema_rejects_names_no_pids() -> None:
+    frame = process_info_frame()
+    obj(frame, "result", "process_info")["shell_pid"] = "not a pid"
+    eng, _ = build({PROCESS_INFO: frame})
+    assert eng.pane_pids("w1:p9") == ()
+
+
+def test_a_process_info_reply_with_no_process_info_is_invalid() -> None:
+    eng, _ = build({PROCESS_INFO: {"id": "x", "result": {"type": "pane_process_info"}}})
+    with pytest.raises(InvalidResponse, match="no 'process_info' object"):
+        eng.pane_pids("w1:p9")
+
+
 def started_frame(session: str | None = None) -> dict[str, JsonValue]:
     agent = raw_agent(pane_id="w1:p9")
     if session is None:
