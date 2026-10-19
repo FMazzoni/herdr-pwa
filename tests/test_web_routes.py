@@ -1,6 +1,7 @@
 """Every route over a fake runner: what it renders, what it refuses, and the headers it sends."""
 
 import re
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -178,25 +179,38 @@ def test_a_failed_refresh_over_a_good_snapshot_is_degraded_not_empty(tmp_path: P
     assert WORKING_SESSION in response.text
 
 
+@dataclass(frozen=True)
+class _Row:
+    """One row of the failure table: the status, headline and polling an engine failure gets."""
+
+    failure: Exception
+    status: int
+    headline: str
+    polls: bool
+
+
+def _failure_name(row: _Row) -> str:
+    return type(row.failure).__name__
+
+
 @pytest.mark.parametrize(
-    ("failure", "status", "headline", "polls"),
+    "row",
     [
-        (EngineUnavailable("x"), 503, "runner unreachable", True),
-        (EngineTimeout("x"), 503, "runner too slow", True),
-        (InvalidResponse("x"), 502, "runner answered nonsense", True),
-        (ProtocolMismatch("x"), 409, "runner version drift", True),
-        (EngineMisconfigured("x"), 500, "misconfigured", False),
-        (EngineError("x"), 502, "runner error", True),
+        _Row(EngineUnavailable("x"), 503, "runner unreachable", polls=True),
+        _Row(EngineTimeout("x"), 503, "runner too slow", polls=True),
+        _Row(InvalidResponse("x"), 502, "runner answered nonsense", polls=True),
+        _Row(ProtocolMismatch("x"), 409, "runner version drift", polls=True),
+        _Row(EngineMisconfigured("x"), 500, "misconfigured", polls=False),
+        _Row(EngineError("x"), 502, "runner error", polls=True),
     ],
+    ids=_failure_name,
 )
-def test_the_failure_table_maps_each_engine_failure(
-    tmp_path: Path, failure: Exception, status: int, headline: str, *, polls: bool
-) -> None:
-    rig = build_rig(tmp_path, {SNAPSHOT: failure})
+def test_the_failure_table_maps_each_engine_failure(tmp_path: Path, row: _Row) -> None:
+    rig = build_rig(tmp_path, {SNAPSHOT: row.failure})
     response = rig.http.get("/feed", headers=FRAGMENT)
-    assert response.status_code == status
-    assert headline in response.text
-    assert ("hx-trigger" in response.text) is polls
+    assert response.status_code == row.status
+    assert row.headline in response.text
+    assert ("hx-trigger" in response.text) is row.polls
 
 
 def test_a_failure_fragment_stands_in_for_its_region_under_the_region_id(tmp_path: Path) -> None:
