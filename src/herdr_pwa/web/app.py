@@ -10,7 +10,7 @@ from fastapi.responses import Response
 from starlette.middleware.gzip import GZipMiddleware
 
 from herdr_pwa.audit import AuditLog
-from herdr_pwa.engine import SnapshotCache
+from herdr_pwa.engine import SnapshotCache, engine_settings
 from herdr_pwa.settings import Settings
 from herdr_pwa.web import failures
 from herdr_pwa.web.assets import Assets
@@ -119,7 +119,7 @@ def _web_state(settings: Settings, seams: Seams, pages: Pages) -> tuple[WebState
     )
     # A box that cannot record a write does not serve one.
     audit.preflight()
-    client = seams.client(settings.engine())
+    client = seams.client(engine_settings(settings))
     cache = SnapshotCache(ttl=settings.snapshot_cache_ttl, clock=seams.clock)
     stalls = Stalls(settings.transcript_roots or None)
     pushing = open_push(settings, HerdSource(client, cache, stalls), seams)

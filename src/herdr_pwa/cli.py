@@ -11,7 +11,7 @@ import uvicorn
 
 from herdr_pwa import auth, devreport, pairing, tailscale
 from herdr_pwa.audit import AuditUnavailableError
-from herdr_pwa.engine import HERDR_KINDS, EngineError, harness_kinds
+from herdr_pwa.engine import HERDR_KINDS, EngineError, engine_settings, harness_kinds
 from herdr_pwa.protocol import EXPECTED_PROTOCOL
 from herdr_pwa.push import DeliveryLog, VapidKeyError, health_line
 from herdr_pwa.settings import Settings
@@ -82,7 +82,7 @@ def doctor(settings: Settings, seams: Seams) -> int:
 
     Non-zero on protocol drift, a silent runner, or a tree that moved since the service started.
     """
-    engine = settings.engine()
+    engine = engine_settings(settings)
     lines = [f"pinned protocol: {EXPECTED_PROTOCOL}"]
     try:
         snapshot = seams.client(engine).snapshot()

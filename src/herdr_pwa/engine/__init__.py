@@ -27,7 +27,7 @@ from herdr_pwa.engine.client import (
     ReadOptions,
     StartedAgent,
 )
-from herdr_pwa.engine.config import EngineSettings
+from herdr_pwa.engine.config import EngineSettings, engine_settings
 from herdr_pwa.engine.dialog import BlockedPrompt, KeyHint, MenuShape
 from herdr_pwa.engine.model import (
     Agent,
@@ -159,6 +159,7 @@ __all__ = [
     "as_session_id",
     "chat_window",
     "ends_refused",
+    "engine_settings",
     "harness_kinds",
     "harness_of",
     "has_byte_frontier",

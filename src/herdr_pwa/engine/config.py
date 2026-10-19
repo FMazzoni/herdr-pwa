@@ -3,7 +3,8 @@
 from dataclasses import dataclass
 from pathlib import Path
 
-from herdr_pwa.protocol import EXPECTED_PROTOCOL
+from herdr_pwa.protocol import DEFAULT_SOCKET_PATH, EXPECTED_PROTOCOL
+from herdr_pwa.settings import Settings
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,3 +21,9 @@ class EngineSettings:
     read_lines: int = 200
     # Measured on herdr 0.8.0: 25 lines 2ms, 50 lines 1213ms, 200 lines 6905ms.
     recent_max_lines: int = 25
+
+
+def engine_settings(settings: Settings) -> EngineSettings:
+    """The engine's view of the app's settings."""
+    socket = settings.socket_path or Path(DEFAULT_SOCKET_PATH).expanduser()
+    return EngineSettings(socket_path=socket, command_timeout=settings.command_timeout)
