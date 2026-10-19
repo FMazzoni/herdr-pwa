@@ -550,7 +550,7 @@ def test_the_bubble_stays_on_an_earlier_page(tmp_path: Path) -> None:
 def test_whether_there_is_a_bubble_is_a_function_of_the_status_alone() -> None:
     """No pane read decides it: the same page draws a bubble for a working or blocked agent."""
     page = TranscriptPage(
-        turns=[TranscriptTurn(uuid="t1", speaker=Speaker.human, text="hi", ts="")],
+        turns=[TranscriptTurn(uuid="t1", speaker=Speaker.human, text="hi")],
         state=HistoryState.ok,
     )
     for status in AgentStatus:
