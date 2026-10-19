@@ -19,6 +19,7 @@ SCRIPTS: Final = (
     "stream.js",
     "geometry.js",
     "interrupt.js",
+    "swipe.js",
     "folds.js",
     "chatend.js",
     "voice.js",

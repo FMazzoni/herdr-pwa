@@ -31,6 +31,7 @@ GUARDED = (
     *(f"tests/fixtures/{name}/detection.txt" for name in CAPTURES),
     "scripts/firefox.py",
     "scripts/geometry.py",
+    "scripts/affordance.py",
     "scripts/backnav.py",
     "scripts/chatend.py",
     "scripts/feedhold.py",

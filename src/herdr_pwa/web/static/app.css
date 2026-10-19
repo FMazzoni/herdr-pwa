@@ -113,6 +113,9 @@
   /* The sheet's grabber bar, in iOS's proportions. */
   --grabber-w: 36px;
   --grabber-h: 4px;
+  /* A sheet let go settles this long, closing or springing back past its rest a little. */
+  --sheet-settle: 240ms;
+  --sheet-spring: cubic-bezier(0.25, 1.15, 0.5, 1);
   /* Stop… and the Keep going that replaces it share this width, so a second tap lands on it. */
   --arm-w: 7.5em;
   /* Send's least width, in rem like its type: what stops a turn now stays left of this column. */
@@ -965,6 +968,11 @@ summary.tray__row:not(:has(.tray__tail))::after { margin-left: auto; }
 }
 /* Closed, the sheet takes no box at all, so nothing measures or scrolls it. */
 .tray__sheet:not([open]) > .tray__body { display: none; }
+/* The grabber and the header are the sheet's drag handle (swipe.js): a finger there moves only the
+   sheet, never the page, and selects nothing. Let go, the sheet settles; Reduce Motion skips it. */
+.tray__grab, .tray__head { touch-action: none; -webkit-user-select: none; user-select: none; }
+.tray__body.is-dragging { will-change: transform; }
+.tray__body.is-settling { transition: transform var(--sheet-settle) var(--sheet-spring); }
 /* A full-width 44px close: the bar is drawn, the rest of the box is the tap. */
 .button.tray__grab { display: flex; justify-content: center; align-items: center; width: 100%; margin-bottom: calc(-1 * var(--space-6)); padding: 0; background: transparent; border: 0; }
 .tray__grabber { width: var(--grabber-w); height: var(--grabber-h); border-radius: var(--radius-pill); background: var(--rule); }

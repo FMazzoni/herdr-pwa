@@ -295,3 +295,38 @@ test("glow: across the crest the colour runs trailing edge to leading edge, and 
     last = side;
   }
 });
+
+test("swipeStart: a finger still within the slop is not yet a drag or a scroll", () => {
+  assert.equal(logic.swipeStart({ dx: 3, dy: 5, handle: true, atTop: true }), "wait");
+  assert.equal(logic.swipeStart({ dx: -7, dy: -7, handle: false, atTop: false }), "wait");
+});
+
+test("swipeStart: the grabber and the header drag the sheet whichever way the finger goes", () => {
+  assert.equal(logic.swipeStart({ dx: 0, dy: 20, handle: true, atTop: false }), "drag");
+  assert.equal(logic.swipeStart({ dx: 0, dy: -20, handle: true, atTop: true }), "drag");
+  assert.equal(logic.swipeStart({ dx: 20, dy: 4, handle: true, atTop: true }), "drag");
+});
+
+test("swipeStart: in the list, only a pull down from its top drags; anything else is the list's", () => {
+  assert.equal(logic.swipeStart({ dx: 2, dy: 20, handle: false, atTop: true }), "drag");
+  assert.equal(logic.swipeStart({ dx: 2, dy: 20, handle: false, atTop: false }), "let");
+  assert.equal(logic.swipeStart({ dx: 0, dy: -20, handle: false, atTop: true }), "let");
+  // Sideways is never a pull down, whatever drifts with it.
+  assert.equal(logic.swipeStart({ dx: 20, dy: 12, handle: false, atTop: true }), "let");
+});
+
+test("swipeEnd: past the distance it closes, short of it the sheet springs back", () => {
+  // A 300px sheet closes past 30% of itself, 90px.
+  assert.equal(logic.swipeEnd({ dy: 95, velocity: 0, height: 300 }), true);
+  assert.equal(logic.swipeEnd({ dy: 85, velocity: 0, height: 300 }), false);
+  // A tall sheet never asks for more than 120px.
+  assert.equal(logic.swipeEnd({ dy: 125, velocity: 0.1, height: 800 }), true);
+  assert.equal(logic.swipeEnd({ dy: 115, velocity: 0.1, height: 800 }), false);
+});
+
+test("swipeEnd: a quick flick down closes from a short way; one back up cancels a long one", () => {
+  assert.equal(logic.swipeEnd({ dy: 30, velocity: 0.8, height: 400 }), true);
+  // A twitch is not a flick, however fast.
+  assert.equal(logic.swipeEnd({ dy: 10, velocity: 2, height: 400 }), false);
+  assert.equal(logic.swipeEnd({ dy: 200, velocity: -0.8, height: 400 }), false);
+});

@@ -65,7 +65,7 @@ def _row(body: str) -> str:
 
 
 def _sheet(body: str) -> str:
-    return _part(_tray(body), r'<div class="tray__body">.*</details>')
+    return _part(_tray(body), r'<div class="tray__body"[^>]*>.*</details>')
 
 
 def _head(body: str) -> str:
@@ -136,6 +136,10 @@ def test_an_open_tool_and_its_running_agents_are_counted_apart() -> None:
 def test_the_sheet_has_a_grabber_a_title_and_one_line_agent_rows(tmp_path: Path) -> None:
     sheet = _sheet(_page(tmp_path, crowded_chat(), "working"))
     assert '<button class="button tray__grab" type="button" aria-label="Close"' in sheet
+    # The grabber and the header drag the sheet that swipe.js moves; a tap on the grabber closes it.
+    assert re.search(r'<div class="tray__body" data-hp-swipe>', sheet)
+    assert re.search(r'class="button tray__grab"[^>]*data-hp-close data-hp-grab', sheet)
+    assert re.search(r'<div class="tray__head"[^>]*data-hp-grab', sheet)
     assert '<h2 class="sheet__heading tray__title">Activity</h2>' in sheet
     found = re.finditer(r'<li class="spawned__row spawned__row--(\w+)">(.*?)</li>', sheet)
     rows = [(m.group(1), m.group(2)) for m in found]

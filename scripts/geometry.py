@@ -22,6 +22,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+import affordance  # noqa: E402
 import backnav  # noqa: E402
 import chatend  # noqa: E402
 import feedhold  # noqa: E402
@@ -916,6 +917,9 @@ def run_state(bench: Bench, state: State, size: Size, tally: Tally) -> None:
     )
     judge(found if isinstance(found, dict) else {}, at)
     judge_bar(found if isinstance(found, dict) else {}, at)
+    # Last, since it swipes sheets shut and toggles folds: nothing is measured after it.
+    for problem in affordance.check(driver):
+        at.fail(problem)
     # One window serves every state, so a remembered choice must not leak into the next.
     driver.script("try { localStorage.clear(); sessionStorage.clear(); } catch (e) {}")
     print(f"  measured {at.where}", flush=True)
