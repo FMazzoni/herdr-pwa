@@ -861,6 +861,10 @@ html.is-keyboard { background: var(--surface); }
   border-color: var(--accent);
   border-radius: var(--radius-pill);
   white-space: nowrap;
+  /* At a large Text Size the pill is cut, never wider than the column. */
+  max-width: calc(100% - var(--gutter-left) - var(--gutter-right));
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .jump[hidden] { display: none; }
 
@@ -902,6 +906,7 @@ html.is-keyboard { background: var(--surface); }
   display: grid;
   gap: var(--space-6);
   max-height: var(--tray-sheet-max);
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding:
@@ -911,12 +916,21 @@ html.is-keyboard { background: var(--surface); }
     calc((100% - min(100%, var(--page-max))) / 2 + var(--gutter-left));
   background: var(--surface);
   border-top: var(--line-1) solid var(--rule);
+  /* Its pad goes two by two where four keys no longer fit, as the answer region's does. */
+  container-type: inline-size;
 }
+/* Closed, the sheet takes no box at all, so nothing measures or scrolls it. */
+.tray__sheet:not([open]) > .tray__body { display: none; }
 .tray__note { margin: 0; color: var(--ink-3); }
 .tray__still { display: flex; justify-content: flex-end; margin: 0; }
 .tray__still[hidden] { display: none; }
 /* The generic keys stay on one line even at 320px: equal columns, however many there are. */
 .tray__pad { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: var(--space-3); }
+@container (width < 14em) {
+  .tray__pad { grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+/* At a large Text Size an agent's state and time drop under its name rather than leave the sheet. */
+.tray__body .spawned__row { flex-wrap: wrap; }
 /* Drawn dashed in the danger colour, at the row's far edge, so it never reads as Send below it. */
 .tray__stop { flex: none; }
 .tray__stop .button--danger { min-height: var(--tap); padding-inline: var(--space-4); background: transparent; border-style: dashed; font-size: var(--text-meta); }

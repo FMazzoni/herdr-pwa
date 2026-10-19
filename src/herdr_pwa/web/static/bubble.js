@@ -159,10 +159,13 @@
 
   /* Says the bubble's state when it is not the one last said: the first drawing is the page
    * opening, not news. A finished turn's receipt settles in where the bubble was. */
+  // The Pane tab shows the row but says nothing of it: there the terminal is what is being read.
+  var voiced = !!document.querySelector('main[data-hp-tab="chat"]');
+
   function tellBubble() {
     var shown = document.querySelector("#agent-tray [data-hp-bubble]");
     var state = shown ? shown.getAttribute("data-hp-bubble") : "";
-    if (bubbleState !== null && state !== bubbleState) {
+    if (voiced && bubbleState !== null && state !== bubbleState) {
       if (shown) {
         hp.voice.say(shown.getAttribute("data-hp-said") || "");
       }

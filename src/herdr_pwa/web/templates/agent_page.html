@@ -11,7 +11,7 @@
 {% block topbar %}{{ agent_ui.bar(agent, tab, agent_status) }}{% endblock %}
 {% block strip %}{% include "stats.html" %}{% endblock %}
 {% block body %}
-<main class="agent agent--docked" data-hp-seen="{{ agent.session }}">
+<main class="agent agent--docked" data-hp-seen="{{ agent.session }}" data-hp-tab="{{ tab }}">
   <h1 class="agent__title">{{ heading }}</h1>
   <p class="agent__meta agent__meta--line">
     <span class="agent__facts">

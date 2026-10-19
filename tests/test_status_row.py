@@ -194,6 +194,9 @@ def test_the_pane_tab_has_the_row_too(tmp_path: Path) -> None:
     pane = rig.http.get(f"{PAGE}?tab=pane").text
     assert ">Waiting on 2 agents<" in _row(pane)
     assert "data-hp-still" in _tray(pane)
+    # bubble.js voices the row on the Chat tab alone; the Pane tab said nothing of it before.
+    assert '<main class="agent agent--docked" data-hp-seen' in pane
+    assert 'data-hp-tab="pane"' in pane
 
 
 def test_the_switch_that_stops_the_animation_is_in_the_sheet(tmp_path: Path) -> None:
