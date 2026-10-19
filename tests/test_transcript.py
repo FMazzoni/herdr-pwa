@@ -287,6 +287,45 @@ def test_a_tool_result_gets_a_gist_and_prose_gets_room(tmp_path: Path) -> None:
     assert MAX_RESULT_CHARS < MAX_PROSE_CHARS
 
 
+_IMAGE = {"type": "image", "source": {"type": "base64", "data": "aGk="}}
+_OTHER = {"type": "tool_reference", "tool_name": "Read"}
+
+
+@pytest.mark.parametrize(
+    ("body", "shown"),
+    [
+        ("plain", "plain"),
+        ([{"type": "text", "text": "a"}, _IMAGE], "a\n[image]"),
+        ([{"type": "text", "text": 5}], ""),
+        ([], "[]"),
+        (
+            [{"type": "text", "text": "a"}, _OTHER],
+            json.dumps([{"type": "text", "text": "a"}, _OTHER]),
+        ),
+        ([{"type": "text", "text": "a"}, "loose"], '[{"type": "text", "text": "a"}, "loose"]'),
+        ([{"text": "a"}], '[{"text": "a"}]'),
+        ({"type": "text", "text": "a"}, '{"type": "text", "text": "a"}'),
+        (42, "42"),
+        (None, "null"),
+    ],
+)
+def test_a_tool_result_reads_as_text_and_images_or_as_its_json(
+    tmp_path: Path, body: JsonValue, shown: str
+) -> None:
+    """Text and image parts read as lines; any other body is shown as the JSON it was."""
+    block: dict[str, JsonValue] = {"type": "tool_result", "tool_use_id": "tu1", "content": body}
+    record = {
+        "type": "user",
+        "uuid": "res",
+        "timestamp": "2026-08-19T00:00:01Z",
+        "message": {"role": "user", "content": [block]},
+    }
+    path = tmp_path / "result.jsonl"
+    _ = path.write_text(json.dumps(record) + "\n")
+    [turn] = read_page(path, Window(limit=9)).turns
+    assert (turn.tool, turn.text) == ("result", shown)
+
+
 def test_injected_context_is_capped_at_what_can_be_seen(tmp_path: Path) -> None:
     """A system turn gets the note cap, not the prose cap."""
     injected = tmp_path / "injected.jsonl"

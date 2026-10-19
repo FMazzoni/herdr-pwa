@@ -35,6 +35,20 @@ def _utc_now() -> str:
     return datetime.now(UTC).isoformat(timespec="milliseconds")
 
 
+class DeviceEvent(BaseModel):
+    """One event as the page reported it; everything but these three is its detail."""
+
+    model_config = ConfigDict(extra="allow", frozen=True)
+
+    t: Annotated[StrictFloat | None, or_default(None)] = None
+    page: Annotated[StrictInt | None, or_default(None)] = None
+    kind: Annotated[StrictStr, or_default("?")] = "?"
+
+
+# Left to right, so an object reads as an event and anything else is kept as it was.
+type StoredEvent = Annotated[DeviceEvent | JsonValue, Field(union_mode="left_to_right")]
+
+
 class Batch(BaseModel):
     """One posted batch: the page's session id and its events; anything else it sends is kept."""
 
@@ -50,17 +64,7 @@ class StoredBatch(BaseModel):
     model_config = ConfigDict(extra="allow", frozen=True)
 
     session: Annotated[StrictStr, or_default("")] = ""
-    events: Annotated[list[JsonValue], or_default([])] = []
-
-
-class DeviceEvent(BaseModel):
-    """One event as the page reported it; everything but these three is its detail."""
-
-    model_config = ConfigDict(extra="allow", frozen=True)
-
-    t: Annotated[StrictFloat | None, or_default(None)] = None
-    page: Annotated[StrictInt | None, or_default(None)] = None
-    kind: Annotated[StrictStr, or_default("?")] = "?"
+    events: Annotated[list[StoredEvent], or_default([])] = []
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,28 +108,26 @@ def read_batches(state_dir: Path) -> list[StoredBatch]:
     return [batch for batch in map(_batch, text.splitlines()) if batch is not None]
 
 
-def session_events(batches: list[StoredBatch], session: str = "") -> tuple[str, list[JsonValue]]:
+def session_events(batches: list[StoredBatch], session: str = "") -> tuple[str, list[StoredEvent]]:
     """The chosen session (the latest when empty) and its events in the order they were posted."""
     chosen = session or (batches[-1].session if batches else "")
     if not chosen:
         return "", []
-    events: list[JsonValue] = []
+    events: list[StoredEvent] = []
     for batch in batches:
         if batch.session == chosen:
             events.extend(batch.events)
     return chosen, events
 
 
-def format_event(event: JsonValue) -> str:
+def format_event(event: StoredEvent) -> str:
     """One event as a line: milliseconds since the chain began, page number, kind, the rest."""
-    try:
-        parsed = DeviceEvent.model_validate(event)
-    except ValidationError:
+    if not isinstance(event, DeviceEvent):
         return f"? {event!r}"
-    stamp = "?" if parsed.t is None else f"{parsed.t:9.0f}ms"
-    page = "?" if parsed.page is None else parsed.page
-    detail = json.dumps(parsed.model_extra or {}, ensure_ascii=False, separators=(", ", ": "))
-    return f"{stamp}  p{page}  {parsed.kind:<12} {detail}"
+    stamp = "?" if event.t is None else f"{event.t:9.0f}ms"
+    page = "?" if event.page is None else event.page
+    detail = json.dumps(event.model_extra or {}, ensure_ascii=False, separators=(", ", ": "))
+    return f"{stamp}  p{page}  {event.kind:<12} {detail}"
 
 
 def render(state_dir: Path, session: str = "") -> str:

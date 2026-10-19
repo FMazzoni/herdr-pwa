@@ -247,6 +247,37 @@ def test_the_device_report_reads_lines_the_previous_build_wrote(tmp_path: Path) 
     ]
 
 
+def test_a_report_with_malformed_events_still_reads_every_line(tmp_path: Path) -> None:
+    """A non-object event is shown as it was, a wrong-shaped field reads as ``?``."""
+    lines: list[JsonValue] = [
+        {
+            "session": "k3x-9",
+            "events": [
+                7,
+                "x",
+                [1],
+                None,
+                {"t": "soon", "page": 1.5, "kind": 3, "extra": True},
+                {"t": 2, "kind": "load", "seen": {"a": 1}},
+            ],
+        },
+        {"session": "k3x-9", "events": "not a list"},
+        {"session": "k3x-9", "events": [{"kind": "after"}]},
+    ]
+    text = "".join(json.dumps(line) + "\n" for line in lines)
+    _ = (tmp_path / devreport.REPORT_FILENAME).write_text(text)
+    assert devreport.render(tmp_path).splitlines() == [
+        "session k3x-9: 7 event(s)",
+        "? 7",
+        "? 'x'",
+        "? [1]",
+        "? None",
+        '?  p?  ?            {"extra": true}',
+        '        2ms  p?  load         {"seen": {"a": 1}}',
+        "?  p?  after        {}",
+    ]
+
+
 def test_an_appended_report_line_keeps_everything_the_page_sent(tmp_path: Path) -> None:
     store = devreport.ReportStore(tmp_path, clock=lambda: "2026-10-10T10:00:00.000+00:00")
     posted = {"session": "k3x-9", "page": 1, "seq": 1, "events": [{"t": 0, "kind": "load"}]}

@@ -8,7 +8,16 @@ from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from pathlib import Path
-from typing import Annotated, BinaryIO, ClassVar, Final, NamedTuple, Protocol, override
+from typing import (
+    Annotated,
+    BinaryIO,
+    ClassVar,
+    Final,
+    Literal,
+    NamedTuple,
+    Protocol,
+    override,
+)
 
 from pydantic import (
     AliasChoices,
@@ -16,7 +25,8 @@ from pydantic import (
     ConfigDict,
     Field,
     JsonValue,
-    TypeAdapter,
+    RootModel,
+    StrictStr,
     ValidationError,
 )
 
@@ -313,6 +323,26 @@ class ToolInput(BaseModel):
         )
 
 
+class _ResultPart(BaseModel):
+    """One part of a tool result's content list that the chat can show as text."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    type: Literal["text", "image"]
+    text: Text = None
+
+
+class _ResultParts(RootModel[Annotated[list[_ResultPart], Field(min_length=1)]]):
+    """A tool result's content when it is text and images only; an empty list is not one."""
+
+
+# Left to right, so only a result of text and images reads as parts; any other is kept
+# whole and shown as the JSON it was.
+type _ResultBody = Annotated[
+    StrictStr | _ResultParts | JsonValue, Field(union_mode="left_to_right")
+]
+
+
 class _Block(BaseModel):
     """One content block of a message: prose, a tool call, or a tool's result."""
 
@@ -325,8 +355,7 @@ class _Block(BaseModel):
     input: Annotated[ToolInput | None, OR_NONE] = None
     tool_use_id: Text = None
     is_error: Flag = None
-    # Kept whole: a result that is not text and images is shown as the JSON it was.
-    content: JsonValue = None
+    content: _ResultBody = None
 
     @property
     def said(self) -> str:
@@ -337,18 +366,6 @@ class _Block(BaseModel):
     def called(self) -> str:
         """The tool a ``tool_use`` block calls, empty when it names none."""
         return self.name or ""
-
-
-class _ResultPart(BaseModel):
-    """One part of a tool result's content list."""
-
-    model_config = ConfigDict(extra="ignore")
-
-    type: Text = None
-    text: Text = None
-
-
-_RESULT_PARTS: Final = TypeAdapter(list[_ResultPart])
 
 
 class _Details(BaseModel):
@@ -1207,24 +1224,14 @@ def _user_block(block: _Block, uuid: str, *, meta: bool) -> TranscriptTurn | Non
     return None
 
 
-def _result_text(body: JsonValue) -> str:
+def _result_text(body: _ResultBody) -> str:
     """A tool result as text; an inline image is named, never dumped as its base64."""
     if isinstance(body, str):
         return body
-    parts = _result_parts(body)
-    if not parts or any(part.type not in ("text", "image") for part in parts):
-        return json.dumps(body, ensure_ascii=False)
-    return "\n".join(part.text or "" if part.type == "text" else "[image]" for part in parts)
-
-
-def _result_parts(body: JsonValue) -> list[_ResultPart]:
-    """*body* as a list of result parts, or none when it is not one."""
-    if not isinstance(body, list):
-        return []
-    try:
-        return _RESULT_PARTS.validate_python(body)
-    except ValidationError:
-        return []
+    if isinstance(body, _ResultParts):
+        parts = body.root
+        return "\n".join(part.text or "" if part.type == "text" else "[image]" for part in parts)
+    return json.dumps(body, ensure_ascii=False)
 
 
 def api_error_turn(found: ApiError, uuid: str) -> TranscriptTurn:
