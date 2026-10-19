@@ -6,16 +6,16 @@
 {# What the row counts, each its own token: bubble.js rewrites only the words, so a count is never
    lost to a redraw of them, and a count is never cut (the words give way first). #}
 {% macro counts() -%}
-<span class="tray__counts">
-  {%- if row.running %}<span class="tray__count"><span class="tray__sep" aria-hidden="true"> &middot; </span>{{ ui.count(row.running, "agent") }}</span>{% endif %}
-  {%- if row.queued %}<span class="tray__count"><span class="tray__sep" aria-hidden="true"> &middot; </span>{{ ui.count(row.queued, "queued", "queued") }}</span>{% endif -%}
-</span>
+{%- if row.running or row.queued %}<span class="tray__counts">
+  {%- if row.running %}<span class="tray__count"><span class="tray__sep" aria-hidden="true">&middot;</span>{{ ui.count(row.running, "agent") }}</span>{% endif %}
+  {%- if row.queued %}<span class="tray__count"><span class="tray__sep" aria-hidden="true">&middot;</span>{{ ui.count(row.queued, "queued", "queued") }}</span>{% endif -%}
+</span>{% endif %}
 {%- endmacro %}
 {# A control whose first tap only arms the confirm in the sheet's header. Its safe answer is drawn
    in the same slot, so a second tap of a double tap lands on "Keep going". Without script the tap
    posts unconfirmed and the server holds it, asking again in the answer region. #}
 {% macro arm(slot, key, label) -%}
-<div class="tray__slot tray__slot--{{ slot }}">{{ ui.key_form(base, agent.target, key, label, screen=fingerprint, kind="danger", extra="tray__arm", docked=true) }}{% set keep %}data-hp-keep hidden{% endset %}{{ ui.button("Keep going", extra="tray__keep", type="button", attrs=keep) }}</div>
+<div class="tray__slot tray__slot--{{ slot }}">{{ ui.key_form(base, agent.target, key, label, screen=fingerprint, kind="danger", extra="tray__arm", docked=true) }}{% set keep %}data-hp-keep data-hp-off{% endset %}{{ ui.button("Keep going", extra="tray__keep", type="button", attrs=keep) }}</div>
 {%- endmacro %}
 {# One row over the composer: the state's dot, what the agent is doing, the counts, the time. The
    row opens a sheet above it with the agents it started, Stop and the key pad; while a question
@@ -30,30 +30,28 @@
       {%- elif chat.receipt %}<span class="tray__words chat__receipt" data-hp-bubble="done" data-hp-said="{{ chat.receipt.said }}" aria-hidden="true">{{ chat.receipt.text }}</span>
       {%- else %}<span class="tray__words" aria-hidden="true">{{ row.lead }}</span>{% endif %}
       {{- counts() }}
-      {%- if b and b.time %}<span class="tray__time"><span class="tray__sep" aria-hidden="true"> &middot; </span><span class="bubble__time" aria-hidden="true">{{ b.time }}</span></span>{% endif %}
+      {%- if b and b.time %}<span class="tray__time"><span class="tray__sep" aria-hidden="true">&middot;</span><span class="bubble__time" aria-hidden="true">{{ b.time }}</span></span>{% endif %}
       {%- if not b %}<span class="tray__tail" aria-hidden="true">Keys</span>{% endif -%}
     </summary>
     <div class="tray__body">
       {#- Decorative, not a drag handle: a tap closes the sheet, as the row and a tap outside do. #}
       {% set grab %}aria-label="Close" data-hp-close{% endset %}
       {% call ui.button(none, extra="tray__grab", type="button", attrs=grab) %}<span class="tray__grabber" aria-hidden="true"></span>{% endcall %}
-      {#- Armed by interrupt.js after a first tap on Stop… or Esc…: every such slot then holds Keep
-          going where the tap landed, and the way through is filled, on the far side, below. It
-          disarms itself. Without script none of this shows and the server asks instead. #}
+      {#- Armed by interrupt.js after a first tap on Stop… or Esc…: each such slot then shows Keep
+          going where the tap landed, and the filled Stop now takes the title's place on the far
+          side. Each pair shares one cell and only its visibility changes, so arming moves nothing.
+          It disarms itself. Without script none of this shows and the server asks instead. #}
       <div class="tray__head" data-hp-arming="">
-        <div class="tray__plain">
+        <div class="tray__lead">
           <h2 class="sheet__heading tray__title">Activity</h2>
-          <p class="tray__ask" hidden>Stop this turn?</p>
-          {%- if stop %}{{ arm("stop", interrupt, "Stop…") }}{% endif %}
+          {%- if stop %}{% for key, said in [(interrupt, "Ctrl+C"), ("esc", "Esc")] %}
+          <div class="tray__go" data-hp-for="{{ key }}" data-hp-off>{{ ui.key_form(base, agent.target, key, "Stop now (" ~ said ~ ")", screen=fingerprint, kind="stop", confirm=true, docked=true) }}</div>
+          {%- endfor %}{% endif %}
         </div>
-        {%- if stop or esc_arms %}
-        <div class="tray__armed" hidden>
-          {%- for key, said in [(interrupt, "Ctrl+C"), ("esc", "Esc")] %}
-          <div class="tray__go" data-hp-for="{{ key }}">{{ ui.key_form(base, agent.target, key, "Stop now", screen=fingerprint, kind="stop", confirm=true, docked=true) }}<p class="tray__caption">Sends {{ said }}. Disarms in 5s. Unsent work in this turn is lost.</p></div>
-          {%- endfor %}
-        </div>
+        {%- if stop %}
+        {{ arm("stop", interrupt, "Stop…") }}
+        <p class="tray__armed" hidden>Unsent work in this turn is lost. Disarms in 5s.</p>
         {%- endif %}
-        <p class="tray__stopping" hidden>Stopping&hellip;</p>
       </div>
       {%- if b and b.state == "quiet" %}
       <p class="tray__note">{{ b.said }}; herdr still reports it working.</p>

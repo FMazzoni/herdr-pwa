@@ -88,7 +88,7 @@ def _drawn(markup: str) -> str:
     """The row's words as drawn, tags and the sentence for VoiceOver dropped."""
     said = r'<span class="sr-only"><span class="tray__said">[^<]*</span>[^<]*</span>'
     seen = re.sub(said, "", markup)
-    return " ".join(re.sub(r"<[^>]+>", "", seen).replace("&middot;", "·").split())
+    return " ".join(re.sub(r"<[^>]+>", " ", seen).replace("&middot;", "·").split())
 
 
 def test_a_working_agent_is_one_row_above_the_composer(tmp_path: Path) -> None:
@@ -137,7 +137,8 @@ def test_the_sheet_has_a_grabber_a_title_and_one_line_agent_rows(tmp_path: Path)
     sheet = _sheet(_page(tmp_path, crowded_chat(), "working"))
     assert '<button class="button tray__grab" type="button" aria-label="Close"' in sheet
     assert '<h2 class="sheet__heading tray__title">Activity</h2>' in sheet
-    rows = re.findall(r'<li class="spawned__row spawned__row--(\w+)">(.*?)</li>', sheet)
+    found = re.finditer(r'<li class="spawned__row spawned__row--(\w+)">(.*?)</li>', sheet)
+    rows = [(m.group(1), m.group(2)) for m in found]
     assert [state for state, _ in rows] == ["running", "running", "finished"]
     for state, row in rows:
         dot = "working" if state == "running" else "done"
@@ -167,12 +168,15 @@ def test_while_working_esc_asks_first_and_shares_stops_confirm(tmp_path: Path) -
     pad = _part(sheet, r'<div class="keys tray__pad">.*')
     esc = _part(pad, r'<div class="tray__slot tray__slot--esc">.*?</div>')
     assert _keys(esc) == ["esc"]
-    assert "button--danger tray__arm" in esc and ">Esc…</button>" in esc
+    assert "button--danger tray__arm" in esc
+    assert ">Esc…</button>" in esc
     # Without script the tap is held by the server for a second one; with it, it arms in place.
     assert 'name="confirm"' not in esc
     assert 'class="button tray__keep" type="button"' in esc
-    armed = _part(sheet, r'<div class="tray__armed" hidden>.*?(?=<section)')
+    # The way through takes the title's place on the far side, drawn but not shown until armed.
+    armed = _part(sheet, r'<div class="tray__lead">.*?(?=<div class="tray__slot)')
     assert _keys(armed) == [INTERRUPT_KEY, "esc"]
+    assert armed.count("data-hp-off>") == 2
     assert armed.count('<input type="hidden" name="confirm" value="1">') == 2
     assert armed.count("button--stop") == 2
 
@@ -182,15 +186,16 @@ def test_stop_is_in_the_sheets_header_and_never_in_the_row(tmp_path: Path) -> No
     head = _head(body)
     stop = _part(head, r'<div class="tray__slot tray__slot--stop">.*?</div>')
     assert _keys(stop) == [INTERRUPT_KEY]
-    assert ">Stop…</button>" in stop and "button--danger tray__arm" in stop
+    assert ">Stop…</button>" in stop
+    assert "button--danger tray__arm" in stop
     # The first tap only arms: it carries no confirm, so the server holds it if no script ran.
     assert 'name="confirm"' not in stop
     # The safe option is drawn in the same slot, so the second tap of a double tap lands on it.
     assert 'class="button tray__keep" type="button"' in stop
-    assert '<p class="tray__ask" hidden>Stop this turn?</p>' in head
-    armed = _part(head, r'<div class="tray__armed" hidden>.*')
-    assert "Sends Ctrl+C. Disarms in 5s." in armed
-    assert "Unsent work in this turn is lost." in armed
+    assert ">Stop now (Ctrl+C)</button>" in head
+    assert ">Stop now (Esc)</button>" in head
+    armed = _part(head, r'<p class="tray__armed" hidden>.*?</p>')
+    assert "Unsent work in this turn is lost. Disarms in 5s." in armed
     assert INTERRUPT_KEY not in _keys(_row(body))
     assert 'class="tray__stop"' not in _tray(body)
     # Its outcome and the no-script confirm land in the answer region, as every key's do.
@@ -216,6 +221,7 @@ def test_an_idle_agent_has_no_stop_and_its_row_says_how_long_it_worked_and_keys(
     assert '<span class="tray__tail" aria-hidden="true">Keys</span>' in row
     assert "tray__slot--stop" not in _tray(body)
     assert "tray__armed" not in _tray(body)
+    assert "button--stop" not in _tray(body)
 
 
 def test_a_quiet_agent_says_quiet_once_in_neutral_ink_and_keeps_stop_in_the_sheet(

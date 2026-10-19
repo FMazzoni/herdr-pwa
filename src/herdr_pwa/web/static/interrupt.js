@@ -75,15 +75,28 @@
     var parts = [];
     var controls = node ? node.querySelectorAll("button, summary") : [];
     for (var i = 0; i < controls.length; i++) {
-      var shown = controls[i].offsetParent !== null || controls[i].tagName === "SUMMARY";
+      var shown = !controls[i].closest("[data-hp-off], [hidden]");
       parts.push(shown ? controls[i].className + ":" + controls[i].textContent.trim() : "-");
     }
     return parts.join("|");
   }
 
-  function toggle(nodes, hide) {
+  // One of a pair that shares a cell: shown or not, it keeps its room (app.css [data-hp-off]).
+  function offWhere(nodes, off) {
     for (var i = 0; i < nodes.length; i++) {
-      nodes[i].hidden = hide(nodes[i]);
+      nodes[i].toggleAttribute("data-hp-off", off(nodes[i]));
+    }
+  }
+
+  function drawStopping(node) {
+    var stopping = Date.now() - stoppedAt < STOPPING_MS;
+    var stops = node.querySelectorAll(".tray__slot--stop .tray__arm");
+    for (var i = 0; i < stops.length; i++) {
+      if (!stops[i].hasAttribute("data-hp-label")) {
+        stops[i].setAttribute("data-hp-label", stops[i].textContent);
+      }
+      stops[i].disabled = stopping;
+      stops[i].textContent = stopping ? "Stopping\u2026" : stops[i].getAttribute("data-hp-label");
     }
   }
 
@@ -93,27 +106,21 @@
     if (!head) {
       return;
     }
-    var armed = head.querySelector(".tray__armed");
-    if (!armed) {
+    var caption = head.querySelector(".tray__armed");
+    if (!caption) {
       arming = "";
     }
     head.setAttribute("data-hp-arming", arming);
-    toggle(head.querySelectorAll(".tray__title"), function () { return !!arming; });
-    toggle(head.querySelectorAll(".tray__ask"), function () { return !arming; });
-    if (armed) {
-      armed.hidden = !arming;
-      toggle(armed.querySelectorAll("[data-hp-for]"), function (go) {
-        return go.getAttribute("data-hp-for") !== arming;
-      });
+    offWhere(head.querySelectorAll(".tray__title"), function () { return !!arming; });
+    offWhere(head.querySelectorAll(".tray__go"), function (go) {
+      return go.getAttribute("data-hp-for") !== arming;
+    });
+    offWhere(node.querySelectorAll(".tray__arm"), function () { return !!arming; });
+    offWhere(node.querySelectorAll(".tray__slot [data-hp-keep]"), function () { return !arming; });
+    if (caption) {
+      caption.hidden = !arming;
     }
-    toggle(node.querySelectorAll(".tray__arm"), function () { return !!arming; });
-    toggle(node.querySelectorAll(".tray__slot [data-hp-keep]"), function () { return !arming; });
-    var stopping = Date.now() - stoppedAt < STOPPING_MS;
-    var stops = node.querySelectorAll(".tray__slot--stop .tray__arm");
-    for (var i = 0; i < stops.length; i++) {
-      stops[i].disabled = stopping;
-    }
-    toggle(head.querySelectorAll(".tray__stopping"), function () { return !stopping; });
+    drawStopping(node);
     trayShape = shapeOf(node);
   }
 

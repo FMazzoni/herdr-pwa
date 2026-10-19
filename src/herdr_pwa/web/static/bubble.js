@@ -275,6 +275,15 @@
   window.addEventListener("pageshow", wakeBubble);
   stillness.addEventListener("change", restyleBubble);
 
+  // The switch is on the alerts page: an agent page open in another tab follows the change.
+  window.addEventListener("storage", function (event) {
+    if (event.key === STILL) {
+      held = event.newValue === "1";
+      showStill();
+      restyleBubble();
+    }
+  });
+
   document.addEventListener("click", function (event) {
     var button = event.target && event.target.closest ? event.target.closest("[data-hp-still]") : null;
     if (!button) {

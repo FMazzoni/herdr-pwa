@@ -1274,12 +1274,12 @@ AGENT_PAGE: Final = (
     State(
         "chat-queued-open",
         f"{AGENT}?tab=chat",
-        "#agent-tray details[open] .queued__text",
+        ".chat .queued[open] .queued__text",
         runner(_stressed),
         queued_records(),
-        title="Chat: the status row's sheet opened on the prompt that waits",
-        armed="#agent-tray .tray__row",
-        act=_click("#agent-tray .tray__row"),
+        title="Chat: the queued line opened on the prompt that waits",
+        armed=".chat .queued__head",
+        act=_click(".chat .queued__head"),
     ),
     State(
         "chat-bash-command",
@@ -1926,13 +1926,17 @@ FILES: Final = (
     ),
 )
 
-# Taps Stop the animation, then watches the bubble frame by frame: its letters (where they stand,
-# their colour, any lift) must not change over STILL_FRAMES frames while its timer ticks on. Only
-# then is the proof drawn; a letter that moves, or a timer that stops, leaves it undrawn.
+# Turns Stop the animation on as the alerts page in another tab does (the device's storage, and
+# the event a browser fires in every other tab), then watches the bubble frame by frame: its
+# letters (where they stand, their colour, any lift) must not change over STILL_FRAMES frames
+# while its timer ticks on. Only then is the proof drawn; a letter that moves, or a timer that
+# stops, leaves it undrawn.
 STILL_FRAMES: Final = 60
-STILL_WATCH: Final = (
-    _click("[data-hp-still]")
-    + r"""
+STILL_WATCH: Final = r"""
+localStorage.setItem("hp-still", "1");
+window.dispatchEvent(new StorageEvent("storage", { key: "hp-still", newValue: "1" }));
+""" + (
+    r"""
 const look = () => {
   const words = document.querySelector("#agent-tray .bubble__text");
   if (!words) return "gone";
@@ -1945,7 +1949,7 @@ const look = () => {
   return parts.join("|");
 };
 const clock = () => (document.querySelector("#agent-tray .bubble__time") || {}).textContent;
-const pressed = document.querySelector("[data-hp-still]").getAttribute("aria-pressed") === "true";
+const pressed = localStorage.getItem("hp-still") === "1";
 let first = null;
 let started = null;
 let frames = 0;
@@ -2026,17 +2030,37 @@ TURNS: Final = (
         "#agent-tray details[open] .tray__pad",
         runner(_working_as("working")),
         prime=_crowded_at,
-        title="The status row's sheet open: the agents, the prompt that waits, and the key pad",
+        title="The status row's sheet open: the agents it started, Stop and the key pad",
         armed="#agent-tray .tray__row",
         act=_click("#agent-tray .tray__row"),
     ),
     State(
-        "chat-needs-you-sheet",
+        "chat-working-armed",
+        f"{AGENT}?tab=chat",
+        "#agent-tray .tray__head[data-hp-arming='ctrl-c'] .tray__armed:not([hidden])",
+        runner(_working_as("working")),
+        prime=_crowded_at,
+        title="Stop armed in place: Keep going where Stop… was, Stop now filled on the far side",
+        armed="#agent-tray .tray__row",
+        act=_click("#agent-tray .tray__row") + _click("#agent-tray .tray__slot--stop .tray__arm"),
+    ),
+    State(
+        "chat-working-esc-armed",
+        f"{AGENT}?tab=chat",
+        "#agent-tray .tray__head[data-hp-arming='esc'] .tray__armed:not([hidden])",
+        runner(_working_as("working")),
+        prime=_turn_at("tool"),
+        title="Esc… while the agent works arms the same confirm, Keep going where Esc… was",
+        armed="#agent-tray .tray__row",
+        act=_click("#agent-tray .tray__row") + _click("#agent-tray .tray__slot--esc .tray__arm"),
+    ),
+    State(
+        "chat-working-quiet-sheet",
         f"{AGENT}?tab=chat",
         "#agent-tray details[open] .tray__note",
-        runner(_working_as("blocked"), capture(PERMISSION)),
-        prime=_turn_at("asking"),
-        title="The status row's sheet over a question: the keys stay with the question",
+        runner(_working_as("working")),
+        prime=_turn_at("quiet"),
+        title="The sheet of an agent gone quiet: herdr still says working, and Stop… stays",
         armed="#agent-tray .tray__row",
         act=_click("#agent-tray .tray__row"),
     ),

@@ -904,6 +904,8 @@ html.is-keyboard { background: var(--surface); }
   container-type: inline-size;
 }
 .tray [hidden] { display: none; }
+/* One of a pair sharing a cell: it keeps its room, so showing the other moves nothing (G2, G3). */
+.tray [data-hp-off] { visibility: hidden; }
 .tray__sheet { flex: 1; min-width: 0; }
 /* The whole row is the sheet's 44px handle. Ranked: the dot and the counts always, then the time,
    and the words take the ellipsis; a count that does not fit wraps rather than being cut. */
@@ -914,10 +916,10 @@ summary.tray__row::after { content: var(--chevron); flex: none; padding-left: va
 .tray__sheet[open] > .tray__row::after { transform: rotate(90deg); }
 .tray__row > .dot { margin-inline-end: var(--space-1); }
 .tray__words { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tray__counts { display: flex; flex-wrap: wrap; flex: none; min-width: 0; }
+.tray__counts { display: flex; flex-wrap: wrap; column-gap: var(--space-4); flex: none; min-width: 0; }
 .tray__count, .tray__time { flex: none; white-space: nowrap; }
 .tray__time { color: var(--ink-3); font-variant-numeric: tabular-nums; }
-.tray__sep { color: var(--ink-3); }
+.tray__sep { margin-inline-end: var(--space-4); color: var(--ink-3); }
 /* Idle, the row is the way to the keys, and says so. */
 .tray__tail { flex: none; margin-left: auto; color: var(--accent); }
 summary.tray__row:not(:has(.tray__tail))::after { margin-left: auto; }
@@ -931,7 +933,7 @@ summary.tray__row:not(:has(.tray__tail))::after { margin-left: auto; }
   .tray__row:has(.tray__count) .tray__count:first-child > .tray__sep { display: none; }
   .tray__counts { flex-shrink: 1; }
 }
-@container (width < 19em) {
+@container (width < 20em) {
   .tray__time { display: none; }
 }
 /* The sheet opens upward over the chat, a layer of its own, so the row and the composer never move. */
@@ -960,25 +962,31 @@ summary.tray__row:not(:has(.tray__tail))::after { margin-left: auto; }
 /* Closed, the sheet takes no box at all, so nothing measures or scrolls it. */
 .tray__sheet:not([open]) > .tray__body { display: none; }
 /* A full-width 44px close: the bar is drawn, the rest of the box is the tap. */
-.button.tray__grab { display: flex; justify-content: center; align-items: flex-start; width: 100%; margin-bottom: calc(-1 * var(--space-6)); padding: var(--space-4) 0 0; background: transparent; border: 0; }
+.button.tray__grab { display: flex; justify-content: center; align-items: center; width: 100%; margin-bottom: calc(-1 * var(--space-6)); padding: 0; background: transparent; border: 0; }
 .tray__grabber { width: var(--grabber-w); height: var(--grabber-h); border-radius: var(--radius-pill); background: var(--rule); }
-.tray__plain { display: flex; align-items: center; justify-content: space-between; gap: var(--space-6); min-height: var(--tap); }
+/* The header: the title's cell, which Stop now takes when armed, and Stop…'s, which Keep going
+   takes. Below 20em the cells stack, Keep going still where Stop… was. */
+.tray__head { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-4) var(--space-6); }
+.tray__lead { display: grid; align-items: center; justify-items: start; min-height: var(--tap); }
+.tray__lead > * { grid-area: 1 / 1; }
 .tray__title { margin: 0; }
-.tray__ask { margin: 0; color: var(--ink); font-size: var(--text-body); font-weight: 600; }
+.tray__go, .tray__go form { display: grid; }
+.tray__go .button { min-width: var(--arm-w); }
 /* A slot holds a control that arms and the Keep going drawn in its place: one cell, one rect. */
 .tray__slot { display: grid; }
-.tray__slot > *, .tray__slot form { grid-area: 1 / 1; display: grid; }
-.tray__slot--stop { min-width: var(--arm-w); }
+.tray__slot > * { grid-area: 1 / 1; }
+.tray__slot form { display: grid; }
+.tray__slot--stop { justify-self: end; min-width: var(--arm-w); }
 /* Dashed: this asks before it acts. Filled: this acts now. Danger has no third look. */
-.button.tray__arm { background: transparent; border-style: dashed; font-size: var(--text-meta); padding-inline: var(--space-6); }
+.button.tray__arm { background: transparent; border-style: dashed; }
+.tray__slot .button { font-size: var(--text-meta); padding-inline: var(--space-4); }
 .button--stop { background: var(--blocked); border-color: var(--blocked); color: var(--ground); }
-.tray__armed { display: grid; gap: var(--space-4); }
-.tray__go { display: grid; justify-items: start; gap: var(--space-3); }
-.tray__go .button { min-width: var(--arm-w); }
 @container (width < 20em) {
-  .tray__go { justify-items: stretch; }
+  .tray__head { grid-template-columns: minmax(0, 1fr); }
+  .tray__lead { justify-items: stretch; }
 }
-.tray__caption, .tray__stopping { margin: 0; color: var(--ink-3); font-size: var(--text-small); }
+/* What a stop costs, over the section below for the five seconds it is armed: it adds no height. */
+.tray__armed { position: absolute; top: 100%; left: 0; right: 0; z-index: 1; margin: 0; padding: var(--space-2) 0 var(--space-4); background: var(--surface); color: var(--ink-3); font-size: var(--text-small); }
 .tray__note { margin: 0; color: var(--ink-3); font-size: var(--text-small); }
 .tray__group { display: grid; gap: var(--space-3); }
 .tray__group > .sheet__heading { margin: 0; }
@@ -993,11 +1001,13 @@ summary.tray__row:not(:has(.tray__tail))::after { margin-left: auto; }
 @container (width < 16em) {
   .tray__body .spawned__row { grid-template-columns: var(--dot) minmax(0, 1fr); grid-template-areas: "dot name" ". end"; }
 }
-/* The generic keys stay on one line even at 320px: equal columns, Esc last and set apart. */
-.tray__pad { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: var(--space-3); }
+/* The generic keys on one line: Up, Down and Enter share what Esc's column, wide enough for Keep
+   going, leaves; two by two where that no longer fits. */
+.tray__pad { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(var(--arm-w), auto); gap: var(--space-3); }
+.tray__pad .button { padding-inline: var(--space-3); }
 .tray__pad > .tray__slot--esc { margin-inline-start: var(--space-6); }
-@container (width < 14em) {
-  .tray__pad { grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@container (width < 22em) {
+  .tray__pad { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .tray__pad > .tray__slot--esc { margin-inline-start: 0; }
 }
 /* Typing, the strip under the bar steps aside; the bottom dock's arithmetic is not touched. */
