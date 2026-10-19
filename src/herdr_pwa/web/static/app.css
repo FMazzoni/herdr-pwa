@@ -897,14 +897,17 @@ html.is-keyboard { background: var(--surface); }
 .stats__model { color: var(--ink); }
 .stats__note { color: var(--ink-3); }
 .stats__context { display: inline-flex; align-items: center; white-space: nowrap; }
-/* The harness's statusline, one line per row it printed. Each row wraps between its pieces, as
-   the terminal's columns never let it; a piece is moved whole to the next line, and breaks at
-   its own spaces only when it alone is wider than the row. One token wider than the phone
-   breaks rather than scrolls: nothing in the sticky bar may pan sideways, and nothing printed
-   may be cut short. */
-.stats__status { display: flex; flex: 1 1 auto; flex-direction: column; gap: var(--space-1); min-width: 0; font-variant-numeric: tabular-nums; color: var(--ink); }
+/* The harness's statusline. The line is its first row, pieces spaced as the terminal spaced
+   them, cut at the phone's width with an ellipsis: the strip stays one quiet line, and the
+   sheet under the tap has every row whole. */
+.stats__status { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--ink); }
+.stats__status > .stats__seg + .stats__seg { margin-left: var(--space-3); }
+/* In the sheet, each row wraps between its pieces, as the terminal's columns never let it; a
+   piece moves whole to the next line, and breaks at its own spaces only when it alone is wider
+   than the row. One token wider than the phone breaks rather than scrolls or is cut. */
+.stats__status-rows { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-2) 0 var(--space-3); font-variant-numeric: tabular-nums; color: var(--ink); }
 .stats__status-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-3); }
-.stats__seg { min-width: 0; overflow-wrap: anywhere; }
+.stats__status-row > .stats__seg { min-width: 0; overflow-wrap: anywhere; }
 .meter { flex: none; width: var(--meter-w); height: var(--meter-h); margin-right: var(--space-2); overflow: hidden; background: var(--surface-2); border: var(--line-1) solid var(--rule); border-radius: var(--radius-pill); }
 .meter__fill { display: block; height: 100%; background: var(--accent); }
 .meter--full .meter__fill { background: var(--unknown); }

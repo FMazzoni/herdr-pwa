@@ -592,3 +592,61 @@ def test_a_narrow_pane_cuts_the_row_and_the_strip_shows_what_the_screen_shows(
     strip = _with_screen(tmp_path, NARROW_SCREEN)
     assert '<span class="ansi-red">91</span>' in strip
     assert "Opus 5.5" not in strip
+
+
+# ---- the shapes people run: powerline, bars and icons, several rows -------------------------
+
+POWERLINE_SCREEN = (RIG / "claude-statusline-powerline.ansi").read_text()
+BARS_SCREEN = (RIG / "claude-statusline-bars.ansi").read_text()
+ROWS_SCREEN = (RIG / "claude-statusline-rows.ansi").read_text()
+PRIVATE_USE = re.compile(r"[-]")
+
+
+def _summary_and_sheet(strip: str) -> tuple[str, str]:
+    line = strip[strip.index('<span class="stats__status"') : strip.index("</summary>")]
+    sheet = strip[strip.index('<div class="stats__status-rows">') : strip.index("</div>")]
+    return line, sheet
+
+
+def test_the_line_is_the_first_row_only_and_the_sheet_has_every_row_whole(tmp_path: Path) -> None:
+    strip = _with_screen(tmp_path, ROWS_SCREEN)
+    line, sheet = _summary_and_sheet(strip)
+    assert "Opus 5.5" in line
+    assert "ctx" not in line
+    assert "stats__status-row" not in line
+    assert len(re.findall(r'<span class="stats__status-row">', sheet)) == 4
+    assert (
+        sheet.index("Opus 5.5")
+        < sheet.index("22%")
+        < sheet.index("6h34m")
+        < sheet.index("auto mode")
+    )
+    assert "Statusline: Opus 5.5 | herdr-pwa [main]; ctx 22% | 5h 46%(now) | 7d 91%(1d5h);" in strip
+
+
+def test_a_powerline_statusline_keeps_its_words_and_colours_and_draws_no_private_use_glyph(
+    tmp_path: Path,
+) -> None:
+    strip = _with_screen(tmp_path, POWERLINE_SCREEN)
+    assert not PRIVATE_USE.search(strip)
+    line, sheet = _summary_and_sheet(strip)
+    for word in ("main", "Opus 5.5", "ctx 22%", "5h 46% · 7d 91%"):
+        assert word in line, word
+        assert word in sheet, word
+    # Truecolour foregrounds land on the nearest of the sixteen tokens; backgrounds are not drawn.
+    assert 'class="ansi-bright-white"' in line
+    assert "ansi-bg" not in strip
+    assert "Statusline: main Opus 5.5 ctx 22% 5h 46% · 7d 91%;" in strip
+
+
+def test_a_bar_statusline_splits_at_its_bars_and_bullets_and_keeps_its_blocks_and_emoji(
+    tmp_path: Path,
+) -> None:
+    strip = _with_screen(tmp_path, BARS_SCREEN)
+    line, _ = _summary_and_sheet(strip)
+    pieces: list[str] = re.findall(r'<span class="stats__seg">(.*?)</span></span>', line)
+    texts = [re.sub(r"<[^>]+>", "", piece) for piece in pieces]
+    assert texts == [
+        "█████░░░░░ 52%", "│", "⏱ 12m", "│", "💰 $1.20", "•", "🧠 Opus 5.5", "•", "\u276f main",
+    ]  # fmt: skip
+    assert '<span class="ansi-green">█████</span>' in line

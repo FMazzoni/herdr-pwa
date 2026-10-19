@@ -194,11 +194,15 @@ def _split_chrome(
     return lines[: prompt - 1], lines[bottom + 1 : end], lines[prompt:bottom]
 
 
-# A statusline's segments: text between `|` separators, or across the padding a script uses to
-# right-align its last field. The separators stay, as the person printed them; the padding is
-# the terminal's width, not a word, so it goes.
+# A statusline's segments: text between separators (`|`, `│` or `•` standing between
+# whitespace), or across the padding a script uses to right-align its last field, or at a
+# glyph from a font the phone does not have. The separators stay, as the person printed them.
+# The padding is the terminal's width, not a word, so it goes; so does a private-use glyph
+# (Nerd Font icons and powerline arrows, U+E000-U+F8FF), which a phone draws as a blank box:
+# noise, so the gap between the pieces stands in for it.
 _SEGMENT_BREAK: Final = re.compile(
-    f"(?P<pad>[{re.escape(_WS)}]{{2,}})|(?:^|(?<=[{re.escape(_WS)}]))\\|(?:$|(?=[{re.escape(_WS)}]))"
+    f"(?P<drop>[{re.escape(_WS)}]{{2,}}|[\ue000-\uf8ff]+)"
+    f"|(?:^|(?<=[{re.escape(_WS)}]))[|\u2502\u2022](?:$|(?=[{re.escape(_WS)}]))"
 )
 
 
@@ -218,7 +222,7 @@ def segments(runs: list[Run]) -> list[list[Run]]:
     at = 0
     for found in _SEGMENT_BREAK.finditer(flat):
         pieces.append(_trimmed(flat, at, found.start()))
-        if found.group("pad") is None:
+        if found.group("drop") is None:
             pieces.append((found.start(), found.end()))
         at = found.end()
     pieces.append(_trimmed(flat, at, len(flat)))

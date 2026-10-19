@@ -757,3 +757,16 @@ def test_segments_split_across_right_aligning_padding_and_drop_only_the_padding(
 def test_segments_never_split_inside_a_word_or_on_a_bar_inside_one() -> None:
     row = [Run("a|b  c | d")]
     assert [plain_text(seg) for seg in panetext.segments(row)] == ["a|b", "c", "|", "d"]
+
+
+def test_segments_split_at_bar_and_bullet_separators_between_whitespace_too() -> None:
+    row = [Run("a │ b • c │d")]
+    assert [plain_text(seg) for seg in panetext.segments(row)] == ["a", "│", "b", "•", "c │d"]
+
+
+def test_a_private_use_glyph_is_a_break_between_pieces_and_is_not_kept() -> None:
+    """Nerd Font icons and powerline arrows draw as blank boxes on a phone: noise, not words."""
+    row = [Run(" main", "ansi-blue"), Run("", "ansi-red"), Run(" ctx 22% ")]
+    pieces = panetext.segments(row)
+    assert [plain_text(seg) for seg in pieces] == ["main", "ctx 22%"]
+    assert pieces[0][0].cls == "ansi-blue"
