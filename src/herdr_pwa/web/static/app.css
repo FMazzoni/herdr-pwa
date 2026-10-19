@@ -1079,7 +1079,7 @@ body:has(#composer:focus-within) .stats { display: none; }
 .composer--held textarea { color: var(--ink-3); background: var(--surface); }
 .composer--held textarea:not(:placeholder-shown) { min-height: var(--tap); }
 .composer--held textarea::placeholder { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.composer--held textarea:placeholder-shown { font-size: var(--text-meta); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.composer--held textarea:placeholder-shown { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .field__label--quiet { position: absolute; width: var(--line-1); height: var(--line-1); overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .banner--held { border-left-color: var(--unknown); }
 .banner--sent { border-left-color: var(--done); }
