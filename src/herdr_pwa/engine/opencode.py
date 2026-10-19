@@ -29,7 +29,6 @@ from herdr_pwa.engine.transcript import (
     TranscriptAdapter,
     TranscriptPage,
     TranscriptTurn,
-    TurnStamp,
     Window,
     api_error_turn,
     clip,
@@ -110,9 +109,7 @@ class _ToolInput(BaseModel):
 class _Times(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    start: Number = None
     created: Number = None
-    completed: Number = None
 
 
 type _When = Annotated[_Times | None, OR_NONE]
@@ -127,7 +124,6 @@ class _State(BaseModel):
     status: Text = None
     error: Text = None
     output: Text = None
-    time: _When = None
 
 
 class _Said(BaseModel):
@@ -157,7 +153,6 @@ class _Part(BaseModel):
     tool: Text = None
     call: Text = Field(default=None, validation_alias="callID")
     state: Annotated[_State | None, OR_NONE] = None
-    time: _When = None
     source: Annotated[_MentionSource | None, OR_NONE] = None
     filename: Text = None
     name: Text = None
@@ -509,21 +504,7 @@ def _stamp(value: object) -> str:
     return datetime.fromtimestamp(value / 1000, UTC).isoformat().replace("+00:00", "Z")
 
 
-def _moment(part: _Part, message: _MessageRecord) -> str:
-    """When a part happened, falling back to when its message was created."""
-    # A tool part keeps its clock inside ``state``, where the result also is.
-    state = part.state.time if part.state is not None else None
-    for holder in (part.time, state, message.time):
-        if holder is None:
-            continue
-        for value in (holder.start, holder.created):
-            stamp = _stamp(value)
-            if stamp:
-                return stamp
-    return ""
-
-
-def _text_turn(part: _Part, stamp: TurnStamp, role: str) -> TranscriptTurn | None:
+def _text_turn(part: _Part, uuid: str, role: str) -> TranscriptTurn | None:
     """A ``text`` part, where the whole speaker question lives."""
     body = part.text
     if body is None:
@@ -534,14 +515,11 @@ def _text_turn(part: _Part, stamp: TurnStamp, role: str) -> TranscriptTurn | Non
     if not text:
         return None
     speaker = Speaker.human if human else Speaker.system if system else Speaker.agent
-    return TranscriptTurn(
-        uuid=stamp.uuid, speaker=speaker, text=text, ts=stamp.written, truncated=cut
-    )
+    return TranscriptTurn(uuid=uuid, speaker=speaker, text=text, truncated=cut)
 
 
-def _tool_turn(part: _Part, stamp: TurnStamp) -> TranscriptTurn:
+def _tool_turn(part: _Part, uuid: str) -> TranscriptTurn:
     """A ``tool`` part, which carries the call AND its result in one record."""
-    uuid, ts = stamp.uuid, stamp.written
     state = part.state or _State()
     args = state.input
     text, cut = ("", False) if args is None else first_line(args.naming(), MAX_SUMMARY_CHARS)
@@ -552,7 +530,6 @@ def _tool_turn(part: _Part, stamp: TurnStamp) -> TranscriptTurn:
         uuid=uuid,
         speaker=Speaker.tool,
         text=text,
-        ts=ts,
         tool=part.tool or "",
         truncated=cut,
         call=part.call or "",
@@ -562,7 +539,7 @@ def _tool_turn(part: _Part, stamp: TurnStamp) -> TranscriptTurn:
     )
 
 
-def _mention_turn(part: _Part, stamp: TurnStamp) -> TranscriptTurn | None:
+def _mention_turn(part: _Part, uuid: str) -> TranscriptTurn | None:
     """A ``file`` or ``agent`` part: the ``@`` a person typed into their prompt."""
     source = part.source or _MentionSource()
     written = source.value
@@ -571,9 +548,7 @@ def _mention_turn(part: _Part, stamp: TurnStamp) -> TranscriptTurn | None:
     text, cut = one_line(written if written is not None else (part.filename or part.name))
     if not text:
         return None
-    return TranscriptTurn(
-        uuid=stamp.uuid, speaker=Speaker.system, text=text, ts=stamp.written, truncated=cut
-    )
+    return TranscriptTurn(uuid=uuid, speaker=Speaker.system, text=text, truncated=cut)
 
 
 def _turn(part: _Part, message: _MessageRecord) -> TranscriptTurn | None:
@@ -582,13 +557,12 @@ def _turn(part: _Part, message: _MessageRecord) -> TranscriptTurn | None:
     uuid = part.id
     if kind in _QUIET_TYPES or not uuid:
         return None
-    stamp = TurnStamp(uuid, _moment(part, message))
     if kind == "text":
-        return _text_turn(part, stamp, message.role or "")
+        return _text_turn(part, uuid, message.role or "")
     if kind == "tool":
-        return _tool_turn(part, stamp)
+        return _tool_turn(part, uuid)
     if kind in ("file", "agent"):
-        return _mention_turn(part, stamp)
+        return _mention_turn(part, uuid)
     return None
 
 
@@ -627,19 +601,13 @@ def _failure(message: _MessageRecord) -> ApiError | None:
     return api_error(code, data.message or error.name or "")
 
 
-def _ended(message: _MessageRecord) -> str:
-    """When *message* ended, which is when its failure happened."""
-    times = message.time or _Times()
-    return _stamp(times.completed) or _stamp(times.created)
-
-
 def _read(store: _Store, messages: _Messages, entry: tuple[str, str], max_bytes: int) -> _Read:
     """One stream entry, its read charged to the page: a part, or a failed message's error."""
     identifier, key = entry
     if key == identifier:
         message = messages.get(identifier)
         found = _failure(message)
-        turn = None if found is None else api_error_turn(found, TurnStamp(key, _ended(message)))
+        turn = None if found is None else api_error_turn(found, key)
         return _Read(turn, intact=True, over=messages.spent > max_bytes)
     part, spent = store.part(key)
     messages.spent += spent

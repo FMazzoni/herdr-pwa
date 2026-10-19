@@ -100,7 +100,7 @@ def _rows(db: SessionStore, ids: Sequence[int]) -> dict[int, Row]:
         return {}
     holes = ",".join("?" * len(ids))
     # SQLite cannot bind a variable-length IN list; `holes` is only `?` placeholders.
-    columns = "id, role, content, tool_call_id, tool_calls, tool_name, timestamp"
+    columns = "id, role, content, tool_call_id, tool_calls, tool_name"
     sql = f"select {columns} from messages where session_id = ? and id in ({holes})"  # noqa: S608
     return {_as_int(row[0]): row for row in db.rows(sql, db.session, *ids)}
 
@@ -149,22 +149,20 @@ _COST_UNKNOWN: Final = frozenset({"", "none", "unknown"})
 
 def _turn(row: Row) -> TranscriptTurn | None:
     """One ``messages`` row as a chat turn, or ``None`` to drop it."""
-    identifier, role, content, call_id, calls, tool_name, stamp = row
+    identifier, role, content, call_id, calls, tool_name = row
     uuid = str(identifier)
-    ts = _stamp(stamp)
     text = content if isinstance(content, str) else ""
     if role == "user":
         body, cut = clip(text, MAX_PROSE_CHARS)
         if not body:
             return None
-        return TranscriptTurn(uuid=uuid, speaker=Speaker.human, text=body, ts=ts, truncated=cut)
+        return TranscriptTurn(uuid=uuid, speaker=Speaker.human, text=body, truncated=cut)
     if role == "tool":
         body, cut = clip(text, MAX_RESULT_CHARS)
         return TranscriptTurn(
             uuid=uuid,
             speaker=Speaker.tool,
             text=body,
-            ts=ts,
             tool="result",
             truncated=cut,
             call=str(call_id or ""),
@@ -173,13 +171,11 @@ def _turn(row: Row) -> TranscriptTurn | None:
         return None
     body, cut = clip(text, MAX_PROSE_CHARS)
     if body:
-        return TranscriptTurn(uuid=uuid, speaker=Speaker.agent, text=body, ts=ts, truncated=cut)
-    return _call_turn(_calls(calls), uuid=uuid, ts=ts, tool_name=tool_name)
+        return TranscriptTurn(uuid=uuid, speaker=Speaker.agent, text=body, truncated=cut)
+    return _call_turn(_calls(calls), uuid=uuid, tool_name=tool_name)
 
 
-def _call_turn(
-    calls: list[_ToolCall], *, uuid: str, ts: str, tool_name: object
-) -> TranscriptTurn | None:
+def _call_turn(calls: list[_ToolCall], *, uuid: str, tool_name: object) -> TranscriptTurn | None:
     """The FIRST tool call of an assistant row, collapsed the way Claude's is."""
     if not calls:
         return None
@@ -190,7 +186,6 @@ def _call_turn(
         uuid=uuid,
         speaker=Speaker.tool,
         text=summary,
-        ts=ts,
         tool=str(function.name or tool_name or ""),
         truncated=cut,
         call=first.id or first.call_id or "",

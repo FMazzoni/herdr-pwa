@@ -124,7 +124,6 @@ class TranscriptTurn(BaseModel):
     uuid: str
     speaker: Speaker
     text: str
-    ts: str = ""
     tool: str = ""
     truncated: bool = False
     # The tool_use id, carried by a call and by its result: the only thing pairing the two.
@@ -168,13 +167,6 @@ def is_compact_summary(turn: TranscriptTurn) -> bool:
 def is_api_error(turn: TranscriptTurn) -> bool:
     """Whether *turn* is the harness saying a turn ended with no answer, not the agent speaking."""
     return turn.speaker is Speaker.notice and turn.tool in API_ERROR_KINDS
-
-
-class TurnStamp(NamedTuple):
-    """The record a turn is drawn from: its id, and when it was written."""
-
-    uuid: str
-    written: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -1055,25 +1047,23 @@ def _blocks(record: ClaudeRecord) -> list[_Block]:
     return [block for block in content if block is not None]
 
 
-def _slash_turn(found: SlashCommand | CommandOutput, stamp: TurnStamp) -> TranscriptTurn:
+def _slash_turn(found: SlashCommand | CommandOutput, uuid: str) -> TranscriptTurn:
     """A slash command as one quiet line; its output is one too until it is folded onto it."""
     if isinstance(found, SlashCommand):
         text, cut = one_line(found.line, MAX_NOTE_CHARS)
         return TranscriptTurn(
-            uuid=stamp.uuid,
+            uuid=uuid,
             speaker=Speaker.notice,
             text=text,
-            ts=stamp.written,
             tool=SLASH,
             truncated=cut,
         )
     text, _ = one_line(found.said)
     result, cut = clip(found.said, MAX_RESULT_CHARS)
     return TranscriptTurn(
-        uuid=stamp.uuid,
+        uuid=uuid,
         speaker=Speaker.notice,
         text=text,
-        ts=stamp.written,
         tool=OUTPUT,
         result=result,
         result_truncated=cut,
@@ -1082,11 +1072,10 @@ def _slash_turn(found: SlashCommand | CommandOutput, stamp: TurnStamp) -> Transc
 
 
 def _injected_turn(
-    found: TaskNotice | PeerMessage | SlashCommand | CommandOutput, stamp: TurnStamp
+    found: TaskNotice | PeerMessage | SlashCommand | CommandOutput, uuid: str
 ) -> TranscriptTurn:
-    uuid, ts = stamp.uuid, stamp.written
     if isinstance(found, SlashCommand | CommandOutput):
-        return _slash_turn(found, stamp)
+        return _slash_turn(found, uuid)
     if isinstance(found, TaskNotice):
         detail, _ = one_line(found.detail)
         # A command opens on the whole of what was run; anything else on what it said.
@@ -1096,7 +1085,6 @@ def _injected_turn(
             uuid=uuid,
             speaker=Speaker.notice,
             text=detail,
-            ts=ts,
             tool=found.kind,
             result=result,
             result_truncated=cut,
@@ -1113,7 +1101,6 @@ def _injected_turn(
         uuid=uuid,
         speaker=Speaker.peer,
         text=body,
-        ts=ts,
         truncated=cut,
         sender=found.sender,
         report=found.report,
@@ -1121,30 +1108,29 @@ def _injected_turn(
     )
 
 
-def _summary_turn(content: str, stamp: TurnStamp) -> TranscriptTurn:
+def _summary_turn(content: str, uuid: str) -> TranscriptTurn:
     """A compact summary as a quiet line that opens on it, until it folds onto its /compact."""
     result, cut = clip(content, MAX_RESULT_CHARS)
     return TranscriptTurn(
-        uuid=stamp.uuid,
+        uuid=uuid,
         speaker=Speaker.notice,
         text=SUMMARY_LINE,
-        ts=stamp.written,
         tool=SUMMARY,
         result=result,
         result_truncated=cut,
     )
 
 
-def _user_text(record: ClaudeRecord, content: str, stamp: TurnStamp) -> TranscriptTurn | None:
+def _user_text(record: ClaudeRecord, content: str, uuid: str) -> TranscriptTurn | None:
     """A user record whose content is one string: a prompt, or something the harness wrote."""
     if record.is_compact_summary is True:
-        return _summary_turn(content, stamp)
+        return _summary_turn(content, uuid)
     human = _is_human(record)
     found = injected(record.origin, content, human=human)
     if isinstance(found, Hidden):
         return None
     if found is not None:
-        return _injected_turn(found, stamp)
+        return _injected_turn(found, uuid)
     if record.is_meta:
         return None
     # The cap follows the speaker: injected machinery gets the note cap, as the view shows three lines.
@@ -1152,30 +1138,28 @@ def _user_text(record: ClaudeRecord, content: str, stamp: TurnStamp) -> Transcri
     if not text:
         return None
     return TranscriptTurn(
-        uuid=stamp.uuid,
+        uuid=uuid,
         speaker=Speaker.human if human else Speaker.system,
         text=text,
-        ts=stamp.written,
         truncated=cut,
     )
 
 
-def _user_record(record: ClaudeRecord, stamp: TurnStamp) -> TranscriptTurn | None:
+def _user_record(record: ClaudeRecord, uuid: str) -> TranscriptTurn | None:
     """A ``role: "user"`` record, which is where the whole trap lives."""
     content = record.message.content if record.message is not None else None
     if isinstance(content, str):
-        return _user_text(record, content, stamp)
+        return _user_text(record, content, uuid)
     meta = record.is_meta is True
     for block in _blocks(record):
-        turn = _user_block(block, stamp, meta=meta)
+        turn = _user_block(block, uuid, meta=meta)
         if turn is not None:
             return turn
     return None
 
 
-def _user_block(block: _Block, stamp: TurnStamp, *, meta: bool) -> TranscriptTurn | None:
+def _user_block(block: _Block, uuid: str, *, meta: bool) -> TranscriptTurn | None:
     """One content block of a user record, or ``None`` if it is not conversation."""
-    uuid, ts = stamp.uuid, stamp.written
     kind = block.type
     if kind == "tool_result":
         text, cut = clip(_result_text(block.content), MAX_RESULT_CHARS)
@@ -1183,7 +1167,6 @@ def _user_block(block: _Block, stamp: TurnStamp, *, meta: bool) -> TranscriptTur
             uuid=uuid,
             speaker=Speaker.tool,
             text=text,
-            ts=ts,
             tool="result",
             truncated=cut,
             call=block.tool_use_id or "",
@@ -1192,9 +1175,7 @@ def _user_block(block: _Block, stamp: TurnStamp, *, meta: bool) -> TranscriptTur
     if kind == "text" and not meta:
         text, cut = clip(block.said, MAX_NOTE_CHARS)
         if text:
-            return TranscriptTurn(
-                uuid=uuid, speaker=Speaker.system, text=text, ts=ts, truncated=cut
-            )
+            return TranscriptTurn(uuid=uuid, speaker=Speaker.system, text=text, truncated=cut)
     return None
 
 
@@ -1218,15 +1199,14 @@ def _result_parts(body: JsonValue) -> list[_ResultPart]:
         return []
 
 
-def api_error_turn(found: ApiError, stamp: TurnStamp) -> TranscriptTurn:
+def api_error_turn(found: ApiError, uuid: str) -> TranscriptTurn:
     """A turn that ended with no answer as a quiet line saying what unblocks it."""
     line, _ = one_line(found.line)
     result, cut = clip(found.said, MAX_RESULT_CHARS)
     return TranscriptTurn(
-        uuid=stamp.uuid,
+        uuid=uuid,
         speaker=Speaker.notice,
         text=line,
-        ts=stamp.written,
         tool=found.kind,
         result="" if result == line else result,
         result_truncated=cut,
@@ -1234,29 +1214,27 @@ def api_error_turn(found: ApiError, stamp: TurnStamp) -> TranscriptTurn:
     )
 
 
-def _api_error_turn(record: ClaudeRecord, stamp: TurnStamp) -> TranscriptTurn:
+def _api_error_turn(record: ClaudeRecord, uuid: str) -> TranscriptTurn:
     """A refused turn, opening on the harness's words."""
     said = "\n".join(block.said for block in _blocks(record) if block.type == "text")
-    return api_error_turn(api_error(record.error, said), stamp)
+    return api_error_turn(api_error(record.error, said), uuid)
 
 
-def _assistant_record(record: ClaudeRecord, stamp: TurnStamp) -> TranscriptTurn | None:
+def _assistant_record(record: ClaudeRecord, uuid: str) -> TranscriptTurn | None:
     """An assistant record: prose, or one collapsed tool call."""
-    uuid, ts = stamp.uuid, stamp.written
     for block in _blocks(record):
         btype = block.type
         if btype == "text":
             text, cut = clip(block.said, MAX_PROSE_CHARS)
             if not text:
                 return None
-            return TranscriptTurn(uuid=uuid, speaker=Speaker.agent, text=text, ts=ts, truncated=cut)
+            return TranscriptTurn(uuid=uuid, speaker=Speaker.agent, text=text, truncated=cut)
         if btype == "tool_use":
             text, cut = tool_summary(block.input)
             return TranscriptTurn(
                 uuid=uuid,
                 speaker=Speaker.tool,
                 text=text,
-                ts=ts,
                 tool=block.called,
                 truncated=cut,
                 call=block.id or "",
@@ -1267,11 +1245,11 @@ def _assistant_record(record: ClaudeRecord, stamp: TurnStamp) -> TranscriptTurn 
     return None
 
 
-def _local_command(record: ClaudeRecord, stamp: TurnStamp) -> TranscriptTurn | None:
+def _local_command(record: ClaudeRecord, uuid: str) -> TranscriptTurn | None:
     """A slash command, or its output, that Claude Code wrote as a system record."""
     found = injected(None, record.content or "", human=False)
     if isinstance(found, SlashCommand | CommandOutput):
-        return _slash_turn(found, stamp)
+        return _slash_turn(found, uuid)
     return None
 
 
@@ -1290,9 +1268,9 @@ def _delivered(record: ClaudeRecord) -> TaskNotice | PeerMessage | None:
     return found if isinstance(found, TaskNotice | PeerMessage) else None
 
 
-def _queued_turn(record: ClaudeRecord, stamp: TurnStamp) -> TranscriptTurn | None:
+def _queued_turn(record: ClaudeRecord, uuid: str) -> TranscriptTurn | None:
     found = _delivered(record)
-    return _injected_turn(found, stamp) if found is not None else None
+    return _injected_turn(found, uuid) if found is not None else None
 
 
 def _claude_turn(record: ClaudeRecord) -> TranscriptTurn | None:
@@ -1301,25 +1279,24 @@ def _claude_turn(record: ClaudeRecord) -> TranscriptTurn | None:
     uuid = record.uuid
     if not uuid:
         return None
-    stamp = TurnStamp(uuid, record.timestamp or "")
     # Measured: /artifacts, /branch, /feedback and others are written this way, same tags.
     if kind == "system" and record.subtype == "local_command":
-        return _local_command(record, stamp)
+        return _local_command(record, uuid)
     if kind == "attachment":
-        return _queued_turn(record, stamp)
+        return _queued_turn(record, uuid)
     if kind in _SKIP_TYPES or record.message is None:
         return None
-    return _message_turn(record, stamp)
+    return _message_turn(record, uuid)
 
 
-def _message_turn(record: ClaudeRecord, stamp: TurnStamp) -> TranscriptTurn | None:
+def _message_turn(record: ClaudeRecord, uuid: str) -> TranscriptTurn | None:
     """A record that carries a ``message``: the person's side, or the agent's."""
     if record.type == "user":
-        return _user_record(record, stamp)
+        return _user_record(record, uuid)
     if record.type == "assistant" and record.is_api_error is True:
-        return _api_error_turn(record, stamp)
+        return _api_error_turn(record, uuid)
     if record.type == "assistant":
-        return _assistant_record(record, stamp)
+        return _assistant_record(record, uuid)
     return None
 
 

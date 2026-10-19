@@ -327,7 +327,7 @@ def test_a_record_whose_fields_drifted_still_reaches_the_chat(tmp_path: Path) ->
     log = tmp_path / "drift.jsonl"
     log.write_text("not json\n" + json.dumps(drifted) + "\n[1, 2]\n")
     (turn,) = read_page(log, Window(limit=40)).turns
-    assert (turn.uuid, turn.speaker, turn.ts, turn.call) == ("drifted", Speaker.tool, "", "")
+    assert (turn.uuid, turn.speaker, turn.call) == ("drifted", Speaker.tool, "")
     assert turn.tool == "Bash"
 
 
