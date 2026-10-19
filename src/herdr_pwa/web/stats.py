@@ -205,14 +205,10 @@ class _Context:
         return round(100 * self.used / self.window)
 
 
-def _newest(usage: SessionUsage) -> ModelRef:
-    return usage.models[-1] if usage.models else ModelRef()
-
-
 def _context(harness: Harness | None, usage: SessionUsage) -> _Context | None:
     if (harness is not None and not harness.stores_context) or not usage.context_tokens:
         return None
-    return _Context(usage.context_tokens, window_of(_newest(usage).model))
+    return _Context(usage.context_tokens, window_of(usage.latest.model))
 
 
 @dataclass(frozen=True, slots=True)
@@ -257,7 +253,7 @@ def _priced(harness: Harness | None) -> bool:
 def _found(reading: Reading) -> _Found:
     harness, usage, now = harness_of(reading.agent_kind), reading.usage, reading.now
     return _Found(
-        model=_newest(usage),
+        model=usage.latest,
         context=_context(harness, usage),
         turn=_turn(reading),
         # Zero is the tally's word for "the harness recorded no money".

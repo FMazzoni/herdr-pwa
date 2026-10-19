@@ -132,6 +132,8 @@ _USAGE_SQL: Final = (
     " output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens,"
     " actual_cost_usd, estimated_cost_usd, cost_status"
     " from session_model_usage where session_id = ?"
+    # Oldest last answer first, so the model that answered most recently is remembered last.
+    " order by last_seen"
 )
 
 _CLOCK_SQL: Final = (

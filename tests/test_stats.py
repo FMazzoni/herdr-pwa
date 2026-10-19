@@ -55,6 +55,7 @@ def tally(model: str = "claude-haiku-4-5-20251001", **fields: object) -> Session
         "cache_read_tokens": 1_200_000,
         "context_tokens": 50_000,
         "models": [ModelRef(model)] if model else [],
+        "latest": ModelRef(model),
         "prompts": 3,
         "turn_started": FOUR_MINUTES_AGO,
         "last_at": FOUR_MINUTES_AGO,
@@ -351,6 +352,69 @@ def test_hermes_counts_only_live_prompts(tmp_path: Path) -> None:
     found = usage(Source.of(test_hermes.SESSION, agent_kind="hermes", root=tmp_path))
     assert found.prompts == 0
     assert found.turn_started == ""
+
+
+MODEL_SWITCH = Path(__file__).parent / "fixtures" / "transcript" / "notices" / "model-switch.jsonl"
+
+
+def test_a_session_that_switched_models_and_back_names_the_one_answering_now(
+    tmp_path: Path,
+) -> None:
+    """Opus, then Haiku, then Opus again: the strip says Opus, and both keep their totals."""
+    root = tmp_path / "transcripts"
+    records = TypeAdapter(list[dict[str, JsonValue]]).validate_python(
+        [json.loads(line) for line in MODEL_SWITCH.read_text().splitlines()]
+    )
+    write_transcript(root, WORKING_SESSION, records)
+    found = UsageCache().read(
+        locate_log(Source.of(WORKING_SESSION, agent_kind="claude", root=str(root)))
+    )
+    assert [ref.model for ref in found.models] == [
+        "claude-opus-4-5-20251101",
+        "claude-haiku-4-5-20251001",
+    ]
+    assert stats_for(Reading("claude", "idle", found, NOW)).model == "Opus 4.5"
+
+
+def test_a_fork_with_no_answer_yet_names_the_model_its_parent_answered_with_last(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "transcripts"
+    records = TypeAdapter(list[dict[str, JsonValue]]).validate_python(
+        [json.loads(line) for line in MODEL_SWITCH.read_text().splitlines()]
+    )
+    write_transcript(root, "parent-session", records)
+    child = said("u-fork", FOUR_MINUTES_AGO)
+    child["sessionId"] = WORKING_SESSION
+    child["forkedFrom"] = {"sessionId": "parent-session", "messageUuid": "x"}
+    write_transcript(root, WORKING_SESSION, [child])
+    found = UsageCache().read(
+        locate_log(Source.of(WORKING_SESSION, agent_kind="claude", root=str(root)))
+    )
+    assert found.messages == 3
+    assert stats_for(Reading("claude", "idle", found, NOW)).model == "Opus 4.5"
+
+
+def test_opencode_names_the_model_that_answered_last_not_the_last_one_met(
+    tmp_path: Path,
+) -> None:
+    """The captured session's last answer, moved back onto the model it started on."""
+    rows = test_opencode.edited(
+        11, '"hy3-free","providerID":"opencode"', '"zai-org/GLM-5.2","providerID":"togetherai"'
+    )
+    test_opencode.build(tmp_path / "opencode.db", rows)
+    found = usage(Source.of(MIXED, agent_kind="opencode", root=tmp_path))
+    assert found.models[-1].model == "zai-org/GLM-5.3-Flash"
+    assert stats_for(Reading("opencode", "idle", found, NOW)).model == "GLM-5.2"
+
+
+def test_hermes_names_the_model_its_rollup_saw_last(tmp_path: Path) -> None:
+    """Hermes keeps one row per model; its ``last_seen`` says which answered most recently."""
+    path = test_hermes.build(tmp_path / HERMES_DB)
+    test_hermes.spend(path, model="now-model", first_seen=1.0, last_seen=30.0)
+    test_hermes.spend(path, model="then-model", first_seen=10.0, last_seen=20.0)
+    found = usage(Source.of(test_hermes.SESSION, agent_kind="hermes", root=tmp_path))
+    assert stats_for(Reading("hermes", "idle", found, NOW)).model == "now-model"
 
 
 # ---- the strip on the page --------------------------------------------------------------------
