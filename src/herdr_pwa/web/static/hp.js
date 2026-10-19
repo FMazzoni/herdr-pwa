@@ -233,6 +233,40 @@
       return Math.min(1, Math.max(0, (x - crest) / (2 * reach) + 0.5));
     }
 
+    // How far a finger moves before it is a drag or a scroll rather than a tap.
+    var SWIPE_SLOP_PX = 8;
+    // A sheet let go past this share of its height, or this far, closes (iOS sheets close near a third).
+    var SWIPE_CLOSE_SHARE = 0.3;
+    var SWIPE_CLOSE_MAX_PX = 120;
+    // A flick: this fast at the end (px per ms), and further than a twitch.
+    var FLICK_SPEED = 0.5;
+    var FLICK_MIN_PX = 16;
+
+    /* Whose a finger is once it leaves the slop, given how far it went (dx, dy, down positive),
+     * whether it began on the sheet's grabber or header, and whether the list is at its top:
+     * "drag" moves the sheet, "let" leaves it to the list, "wait" has not decided. */
+    function swipeStart(move) {
+      if (Math.abs(move.dx) < SWIPE_SLOP_PX && Math.abs(move.dy) < SWIPE_SLOP_PX) {
+        return "wait";
+      }
+      if (move.handle) {
+        return "drag";
+      }
+      var down = move.dy > 0 && Math.abs(move.dy) > Math.abs(move.dx);
+      return down && move.atTop ? "drag" : "let";
+    }
+
+    // Whether a sheet let go `dy` px down, moving at `velocity` px per ms, closes or springs back.
+    function swipeEnd(release) {
+      if (release.velocity <= -FLICK_SPEED) {
+        return false;
+      }
+      if (release.velocity >= FLICK_SPEED && release.dy >= FLICK_MIN_PX) {
+        return true;
+      }
+      return release.dy >= Math.min(release.height * SWIPE_CLOSE_SHARE, SWIPE_CLOSE_MAX_PX);
+    }
+
     return {
       RETRY_FIRST_MS: RETRY_FIRST_MS,
       pin: pin,
@@ -253,6 +287,8 @@
       goneQuiet: goneQuiet,
       wave: wave,
       glow: glow,
+      swipeStart: swipeStart,
+      swipeEnd: swipeEnd,
     };
   })();
   // hp:logic:end

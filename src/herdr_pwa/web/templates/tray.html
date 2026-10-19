@@ -33,15 +33,16 @@
       {%- if b and b.time %}<span class="tray__time"><span class="tray__sep" aria-hidden="true">&middot;</span><span class="bubble__time" aria-hidden="true">{{ b.time }}</span></span>{% endif %}
       {%- if not b %}<span class="tray__tail" aria-hidden="true">Keys</span>{% endif -%}
     </summary>
-    <div class="tray__body">
-      {#- Decorative, not a drag handle: a tap closes the sheet, as the row and a tap outside do. #}
-      {% set grab %}aria-label="Close" data-hp-close{% endset %}
+    <div class="tray__body" data-hp-swipe>
+      {#- The sheet's handle: swiped down it drags the sheet shut (swipe.js), and a tap closes it, as
+          the row and a tap outside do. The header below is the same handle. #}
+      {% set grab %}aria-label="Close" data-hp-close data-hp-grab{% endset %}
       {% call ui.button(none, extra="tray__grab", type="button", attrs=grab) %}<span class="tray__grabber" aria-hidden="true"></span>{% endcall %}
       {#- Armed by interrupt.js after a first tap on Stop… or Esc…: each such slot then shows Keep
           going where the tap landed, and the filled Stop now takes the title's place on the far
           side. Each pair shares one cell and only its visibility changes, so arming moves nothing.
           It disarms itself. Without script none of this shows and the server asks instead. #}
-      <div class="tray__head" data-hp-arming="">
+      <div class="tray__head" data-hp-arming="" data-hp-grab>
         <div class="tray__lead">
           <h2 class="sheet__heading tray__title">Activity</h2>
           {%- if stop %}{% for key, said in [(interrupt, "Ctrl+C"), ("esc", "Esc")] %}
