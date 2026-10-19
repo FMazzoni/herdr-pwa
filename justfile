@@ -58,9 +58,9 @@ live-serve: live-session
 live-session:
     uv run python scripts/live_session.py up
 
-# Start (or reuse) a cheap claude-on-haiku agent in the hp-test session.
-live-agent: live-session
-    uv run python scripts/live_session.py agent
+# Start (or reuse) a cheap claude-on-haiku agent in a pane of its own; --cwd picks its folder.
+live-agent *args: live-session
+    uv run python scripts/live_session.py agent {{args}}
 
 # Show the hp-test socket and every agent in it.
 live-status:
