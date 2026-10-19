@@ -1394,6 +1394,15 @@ AGENT_PAGE: Final = (
         title="Agent page: a blocked agent, answerable with one tap",
     ),
     State(
+        "agent-answer-more-keys",
+        f"{AGENT}?tab=pane",
+        "#answer .answer__more[open] .keys--pad",
+        _blocked_on(PERMISSION),
+        title="Agent page: the screen's other keys unfolded under the answers",
+        armed="#answer .answer__more-head",
+        act=_click("#answer .answer__more-head"),
+    ),
+    State(
         "agent-answer-plan",
         f"{AGENT}?tab=pane",
         "#answer .answer__question",
@@ -1467,7 +1476,7 @@ AGENT_PAGE: Final = (
     State(
         "agent-unreadable",
         AGENT,
-        "#answer .keys--pad",
+        "#answer .answer__keys .keys--compact",
         _unreadable(lambda: herd(**BLOCKED)),
         title="Agent page: blocked, and the question could not be read",
     ),

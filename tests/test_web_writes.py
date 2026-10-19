@@ -474,8 +474,8 @@ def test_a_checklist_says_why_its_rows_are_not_buttons_and_links_the_pane(
     assert "option--still" in text
     assert "option__box--on" in text, "the ticked box is drawn ticked"
     assert "Submit is the last row" in text
-    assert "Tick / Enter" in text
-    assert "What this screen says" not in text, "its hints only repeat the keys under the rows"
+    assert '<span class="key__name">Enter</span> <span class="key__verb">tick</span>' in text
+    assert "Enter to select" not in text, "its hints only repeat the keys under the rows"
     assert f'href="/agent/{S1}?tab=pane#agent-view"' in text
     assert 'name="key" value="1"' not in text
 
