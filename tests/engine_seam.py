@@ -49,6 +49,7 @@ from herdr_pwa.engine.transport import (
     MAX_REQUEST_BYTES,
     MAX_STRAY_FRAMES,
     SocketTransport,
+    decode_frame,
     raise_for_error_frame,
 )
 
@@ -92,6 +93,7 @@ __all__ = [
     "claude_record",
     "client_module",
     "copied_from",
+    "decode_frame",
     "discovery_subscriptions",
     "fold_page",
     "fold_turns",

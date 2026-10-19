@@ -325,9 +325,9 @@ def decoded_frame(text: bytes) -> dict[str, JsonValue]:
     """A reply frame carrying ``text``, round-tripped through the real wire."""
     line = json.dumps(read_frame("\x00PLACEHOLDER\x00")).encode()
     framed = line.replace(b"\\u0000PLACEHOLDER\\u0000", text)
-    payload = SocketTransport._decode(framed)  # pyright: ignore[reportPrivateUsage]
-    raise_for_error_frame(payload)  # pane content is data, never an envelope
-    return payload
+    reply = SocketTransport._decode(framed)  # pyright: ignore[reportPrivateUsage]
+    raise_for_error_frame(reply)  # pane content is data, never an envelope
+    return reply.payload
 
 
 def test_pane_text_that_merely_looks_like_json_still_comes_back() -> None:

@@ -12,12 +12,14 @@ from herdr_pwa.engine import (
     HerdrClient,
     PaneId,
     SessionId,
+    WireReply,
     as_pane_id,
     as_session_id,
 )
 from herdr_pwa.writes.outcome import Pacing
 from herdr_pwa.writes.resolve import Writer
 from tests._jsonpath import obj
+from tests._wire_support import as_reply
 
 FIXTURES = Path(__file__).parent / "fixtures"
 SNAPSHOT: dict[str, JsonValue] = obj(
@@ -145,7 +147,7 @@ class FakeHerd:
         *,
         timeout: float | None = None,
         idempotent: bool = True,
-    ) -> dict[str, JsonValue]:
+    ) -> WireReply:
         del timeout, idempotent
         self.calls.append((method, dict(params)))
         if method in self.fail:
@@ -154,7 +156,7 @@ class FakeHerd:
         hook = self.after.get(method)
         if hook is not None:
             hook(self, params)
-        return answer
+        return as_reply(answer)
 
     def close(self) -> None:
         pass

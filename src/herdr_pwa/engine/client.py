@@ -35,6 +35,7 @@ from herdr_pwa.engine.transport import (
     SocketTransport,
     TargetNotFound,
     Transport,
+    WireReply,
 )
 from herdr_pwa.protocol import WRITE_METHODS
 
@@ -178,6 +179,18 @@ class _Reply(NamedTuple):
 
     method: str
     payload: Frame
+    result: wire.ResponseResult | ValidationError
+
+
+class _SalvagedProcessInfo(wire.PaneProcessInfo):
+    """The process info of a reply whose envelope the schema refused, read on its own."""
+
+    @classmethod
+    def salvage(cls, raw: Frame) -> wire.PaneProcessInfo | None:
+        try:
+            return cls.model_validate(raw)
+        except ValidationError:
+            return None
 
 
 class StartedAgent(NamedTuple):
@@ -252,16 +265,16 @@ class HerdrClient:
         writes = method in WRITE_METHODS
         if writes and not guarded:
             self._require_writable(timeout)
-        frame = request_type.model_validate({"id": _UNSENT, "method": method, "params": params})
+        frame = request_type(id=_UNSENT, method=method, params=params)
         dumped = frame.model_dump(mode="json", exclude_none=True)
-        payload = self.transport.call(
+        reply: WireReply = self.transport.call(
             method,
             # A json-mode dump is JSON by construction, and the schema pins params to an object.
             cast(Frame, dumped["params"]),
             timeout=self._resolve_timeout(timeout),
             idempotent=not writes,
         )
-        return _Reply(method, payload)
+        return _Reply(method, reply.payload, reply.result)
 
     def _resolve_timeout(self, timeout: float | None) -> float:
         return self.settings.command_timeout if timeout is None else timeout
@@ -270,23 +283,22 @@ class HerdrClient:
         self, reply: _Reply, arm: type[_Arm], *, degrade: bool
     ) -> tuple[_Arm | None, Frame]:
         """Validate a reply against herdr's schema; return its arm and its payload."""
-        method, payload = reply
+        method, payload, result = reply
         key = payload_field(arm)
-        try:
-            root = wire.SuccessResponse.model_validate(payload).result.root
-        except ValidationError as exc:
+        if isinstance(result, ValidationError):
             if not degrade:
                 raise InvalidResponse(
                     f"{method} answered a frame that does not match the "
-                    f"runner's own published schema: {exc}"
-                ) from exc
+                    f"runner's own published schema: {result}"
+                ) from result
             log.warning(
                 "%s answered a frame that does not match the runner's own "
                 "published schema; serving it anyway, writes will fail closed: %s",
                 method,
-                exc,
+                result,
             )
             return None, self._sub_object(payload, key, method=method)
+        root = result.root
         if not isinstance(root, arm):
             raise InvalidResponse(
                 f"{method} answered {type(root).__name__} where {arm.__name__} was expected"
@@ -297,14 +309,13 @@ class HerdrClient:
     def _arm(self, reply: _Reply, arm: type[_Arm]) -> _Arm:
         """Validate a reply and hand back its **typed arm**, never a payload field."""
         del self
-        method, payload = reply
-        try:
-            root = wire.SuccessResponse.model_validate(payload).result.root
-        except ValidationError as exc:
+        method, _, result = reply
+        if isinstance(result, ValidationError):
             raise InvalidResponse(
                 f"{method} answered a frame that does not match the runner's "
-                f"own published schema: {exc}"
-            ) from exc
+                f"own published schema: {result}"
+            ) from result
+        root = result.root
         if not isinstance(root, arm):
             raise InvalidResponse(
                 f"{method} answered {type(root).__name__} where {arm.__name__} was expected"
@@ -660,9 +671,8 @@ class HerdrClient:
             wire.PaneProcessInfoResponseResult,
             degrade=True,
         )
-        try:
-            info = arm.process_info if arm else wire.PaneProcessInfo.model_validate(raw)
-        except ValidationError:
+        info = arm.process_info if arm else _SalvagedProcessInfo.salvage(raw)
+        if info is None:
             return ()
         pids = [] if info.shell_pid is None else [info.shell_pid]
         pids.extend(process.pid for process in info.foreground_processes or [])

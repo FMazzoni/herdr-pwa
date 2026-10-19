@@ -179,7 +179,7 @@ def test_the_request_is_one_newline_terminated_json_object(
     """The whole protocol, asserted on the bytes rather than on an intention."""
     wire = transport(sock_path)
     reply = wire.call("session.snapshot", {})
-    assert at(reply, "result", "echo") == "session.snapshot"
+    assert at(reply.payload, "result", "echo") == "session.snapshot"
     assert server.requests[0]["method"] == "session.snapshot"
     assert server.requests[0]["params"] == {}
     assert set(server.requests[0]) == {"id", "method", "params"}
@@ -218,7 +218,7 @@ def test_a_reply_is_matched_to_the_id_that_asked_for_it(
 
     serve(sock_path, handler, request)
     wire = transport(sock_path, timeout=0.3)
-    assert at(wire.call("session.snapshot", {}), "result", "echo") == "session.snapshot"
+    assert at(wire.call("session.snapshot", {}).payload, "result", "echo") == "session.snapshot"
     with pytest.raises(EngineError):  # never a reply, and never the wrong one
         wire.call("agent.list", {})  # answered under the first call's id
     wire.close()
@@ -280,7 +280,7 @@ def test_satisfies_the_transport_protocol(sock_path: Path) -> None:
 
     wire: Transport = transport(sock_path)
     reply = wire.call("session.snapshot", {}, timeout=FAST, idempotent=True)
-    assert at(reply, "result", "echo") == "session.snapshot"
+    assert at(reply.payload, "result", "echo") == "session.snapshot"
     wire.close()
     wire.close()  # "calling it twice must be harmless"
 
@@ -373,7 +373,7 @@ def test_an_error_that_is_not_an_object_is_left_to_the_reply_reader(
     serve(sock_path, handler, request)
     wire = transport(sock_path)
     reply = wire.call("agent.get", {"target": "w1:p3"})
-    assert at(reply, "error") == "boom"
+    assert at(reply.payload, "error") == "boom"
     wire.close()
 
 
@@ -653,7 +653,9 @@ def test_undecodable_pane_bytes_come_back_replaced_rather_than_raising(
 
     serve(sock_path, handler, request)
     wire = transport(sock_path)
-    assert "\ufffd" in str(at(wire.call("agent.read", {"target": "w1:p3"}), "result", "text"))
+    assert "\ufffd" in str(
+        at(wire.call("agent.read", {"target": "w1:p3"}).payload, "result", "text")
+    )
     wire.close()
 
 
@@ -763,7 +765,7 @@ def test_a_reply_for_an_id_nobody_awaits_is_skipped_with_a_warning(
     wire = transport(sock_path)
     with caplog.at_level(logging.WARNING):
         reply = wire.call("session.snapshot", {})
-    assert at(reply, "result", "echo") == "session.snapshot"
+    assert at(reply.payload, "result", "echo") == "session.snapshot"
     assert "somebody-else" in caplog.text
     wire.close()
 
@@ -798,7 +800,7 @@ def test_a_late_reply_left_in_the_pipe_is_never_returned_to_the_next_caller(
     serve(sock_path, handler, request)
     wire = transport(sock_path)
     wire.call("session.snapshot", {})
-    assert at(wire.call("agent.list", {}), "result", "echo") == "agent.list"
+    assert at(wire.call("agent.list", {}).payload, "result", "echo") == "agent.list"
     wire.close()
 
 
@@ -822,7 +824,7 @@ def test_a_dead_reused_connection_is_transparently_redialled(
     fake = serve(sock_path, handler, request)
     wire = transport(sock_path)
     wire.call("agent.list", {})
-    assert at(wire.call("agent.list", {}), "result", "echo") == "agent.list"
+    assert at(wire.call("agent.list", {}).payload, "result", "echo") == "agent.list"
     assert fake.connections == 2
     wire.close()
 
@@ -922,7 +924,7 @@ def test_concurrent_callers_each_get_their_own_reply(server: FakeHerdr, sock_pat
         method = f"agent.get.{n}"
         reply = wire.call(method, {"target": str(n)})
         with lock:
-            seen.append((method, at(reply, "result", "echo")))
+            seen.append((method, at(reply.payload, "result", "echo")))
 
     threads = [threading.Thread(target=ask, args=(n,)) for n in range(16)]
     for t in threads:

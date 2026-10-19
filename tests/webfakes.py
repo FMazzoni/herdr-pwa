@@ -13,13 +13,14 @@ from fastapi.testclient import TestClient
 from pydantic import JsonValue, TypeAdapter
 from starlette.routing import BaseRoute
 
-from herdr_pwa.engine import EngineSettings, HerdrClient
+from herdr_pwa.engine import EngineSettings, HerdrClient, WireReply
 from herdr_pwa.settings import Settings
 from herdr_pwa.web.app import create_app
 from herdr_pwa.web.assets import SCRIPTS, STATIC_DIR
 from herdr_pwa.web.seams import Seams
 from herdr_pwa.writes.outcome import Pacing
 from tests._jsonpath import at, obj
+from tests._wire_support import as_reply
 from tests.engine_seam import method_of, wire_request
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -105,7 +106,7 @@ class FakeWire:
         *,
         timeout: float | None = None,
         idempotent: bool = True,
-    ) -> dict[str, JsonValue]:
+    ) -> WireReply:
         del timeout, idempotent
         self.calls.append(method)
         target = params.get("target")
@@ -118,7 +119,7 @@ class FakeWire:
         hook = self.after.get(method)
         if hook is not None:
             hook(self)
-        return reply(params) if callable(reply) else copy.deepcopy(reply)
+        return as_reply(reply(params) if callable(reply) else copy.deepcopy(reply))
 
     def close(self) -> None:
         return None
