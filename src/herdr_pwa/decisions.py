@@ -72,9 +72,6 @@ class ScreenDecision:
     shape: MenuShape
     question: str
     options: tuple[OptionRow, ...]
-    digits: tuple[str, ...]
-    rows_answer: bool
-    rows_toggle: bool
     hints: tuple[KeyHint, ...]
     answer_hints: tuple[KeyHint, ...]
     handoffs: tuple[KeyHint, ...]
@@ -112,9 +109,6 @@ class Freshness:
     age: float | None
     age_label: str
     condition: Condition
-    disconnected: bool
-    degraded: bool
-    failure: str
 
     @property
     def stale(self) -> bool:
@@ -219,9 +213,6 @@ def decide_screen(prompt: BlockedPrompt) -> ScreenDecision:
             )
             for i, option in enumerate(prompt.options)
         ),
-        digits=digits,
-        rows_answer=rows_answer(prompt),
-        rows_toggle=rows_toggle(prompt),
         hints=prompt.hints,
         answer_hints=answer_hints(prompt, digits=digits),
         handoffs=prompt.handoffs,
@@ -388,9 +379,6 @@ def freshness(age: float | None, cadence: int, error: str | None) -> Freshness:
         age=age,
         age_label="" if age is None else ago(age),
         condition=_condition(age, cadence, failing=error is not None),
-        disconnected=age is not None and age > DISCONNECTED_AFTER,
-        degraded=error is not None,
-        failure=error or "",
     )
 
 
