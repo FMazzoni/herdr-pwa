@@ -23,8 +23,11 @@ from herdr_pwa.decisions import (
     HerdDecision,
     Overlay,
     ScreenDecision,
+    answer_digits,
     decide_herd,
     decide_screen,
+    rows_answer,
+    rows_toggle,
 )
 from herdr_pwa.engine import BlockedPrompt, Snapshot, rank
 
@@ -180,14 +183,15 @@ def _array(items: Iterable[JsonValue]) -> list[JsonValue]:
     return list(items)
 
 
-def _screen_json(decision: ScreenDecision) -> dict[str, JsonValue]:
+def _screen_json(decision: ScreenDecision, prompt: BlockedPrompt) -> dict[str, JsonValue]:
+    """The ledger's row: the decision, and the per-screen reads the old app also recorded."""
     steps = decision.steps
     return {
         "verdict": {
             "shape": str(decision.shape),
             "options": len(decision.options),
-            "digits": _array(decision.digits),
-            "rows_answer": decision.rows_answer,
+            "digits": _array(answer_digits(prompt)),
+            "rows_answer": rows_answer(prompt),
             "hints": [h.key for h in decision.hints],
             "ticked": _array(decision.ticked),
             "checkable": decision.checkable,
@@ -195,7 +199,7 @@ def _screen_json(decision: ScreenDecision) -> dict[str, JsonValue]:
         },
         "render": {
             "answer_hints": [h.key for h in decision.answer_hints],
-            "rows_toggle": decision.rows_toggle,
+            "rows_toggle": rows_toggle(prompt),
             "corroborated": decision.corroborated,
             "drew_rows": decision.drew_rows,
             "asked": decision.asked,
@@ -205,35 +209,42 @@ def _screen_json(decision: ScreenDecision) -> dict[str, JsonValue]:
     }
 
 
-def _freshness_json(fresh: Freshness) -> dict[str, JsonValue]:
+def _freshness_json(fresh: Freshness, error: str | None) -> dict[str, JsonValue]:
+    """The ledger's row: the freshness, and the three flags the old app derived beside it."""
     return {
         "age": fresh.age,
         "age_label": fresh.age_label,
         "condition": str(fresh.condition),
         "stale": fresh.stale,
-        "disconnected": fresh.disconnected,
-        "degraded": fresh.degraded,
-        "failure": fresh.failure,
+        "disconnected": fresh.age is not None and fresh.age > DISCONNECTED_AFTER,
+        "degraded": error is not None,
+        "failure": error or "",
     }
 
 
-def _row_json(row: AgentRow, prompt: JsonValue) -> dict[str, JsonValue]:
+def _row_json(
+    row: AgentRow, prompt_id: JsonValue, prompt: BlockedPrompt | None
+) -> dict[str, JsonValue]:
     found: dict[str, JsonValue] = {
         "target": row.target,
         "status": str(row.status),
         "effective_status": str(row.effective_status),
         "feed_key": _array(row.feed_key),
-        "prompt": prompt,
+        "prompt": prompt_id,
     }
     if row.answer is not None:
-        found["answer_digits"] = _array(row.answer.digits)
-        found["rows_answer"] = row.answer.rows_answer
+        assert prompt is not None
+        found["answer_digits"] = _array(answer_digits(prompt))
+        found["rows_answer"] = rows_answer(prompt)
         found["answer_hints"] = [h.key for h in row.answer.answer_hints]
     return found
 
 
 def _herd_json(
-    herd: HerdDecision, prompt_ids: dict[str, JsonValue], freshness: list[JsonValue]
+    herd: HerdDecision,
+    prompt_ids: dict[str, JsonValue],
+    prompts: dict[str, BlockedPrompt],
+    freshness: list[JsonValue],
 ) -> dict[str, JsonValue]:
     return {
         "order": [row.session for row in herd.rows],
@@ -249,7 +260,10 @@ def _herd_json(
         "counts": {str(status): count for status, count in herd.counts.items()},
         "cadence": herd.cadence,
         "freshness": freshness,
-        "agents": {row.session: _row_json(row, prompt_ids.get(row.session)) for row in herd.rows},
+        "agents": {
+            row.session: _row_json(row, prompt_ids.get(row.session), prompts.get(row.session))
+            for row in herd.rows
+        },
     }
 
 
@@ -321,14 +335,15 @@ def test_the_vendored_screens_are_exactly_the_ledger_rows_that_read_them() -> No
 
 @pytest.mark.parametrize("capture_id", _cases(SCREENS))
 def test_screen_matches_the_ledger(capture_id: str) -> None:
-    decision = decide_screen(BlockedPrompt.parse(_decoded(capture_id)))
+    prompt = BlockedPrompt.parse(_decoded(capture_id))
     expected = {k: v for k, v in _obj(SCREENS[capture_id]).items() if k != "input"}
-    assert _screen_json(decision) == expected
+    assert _screen_json(decide_screen(prompt), prompt) == expected
 
 
 @pytest.mark.parametrize("capture_id", HANDED_OFF)
 def test_a_hand_off_key_is_all_that_leaves_the_ledger(capture_id: str) -> None:
-    decision = decide_screen(BlockedPrompt.parse(_decoded(capture_id)))
+    prompt = BlockedPrompt.parse(_decoded(capture_id))
+    decision = decide_screen(prompt)
     handed = {hint.key for hint in decision.handoffs}
     assert handed
     # A copy: the ledger is shared by every test in the module.
@@ -338,7 +353,7 @@ def test_a_hand_off_key_is_all_that_leaves_the_ledger(capture_id: str) -> None:
         assert isinstance(keys, list)
         assert handed <= set(keys)
         _obj(expected[part])[field] = [key for key in keys if key not in handed]
-    assert _screen_json(decision) == expected
+    assert _screen_json(decision, prompt) == expected
 
 
 @pytest.mark.parametrize(("capture_id", "twin"), PARKED.items())
@@ -346,18 +361,19 @@ def test_a_parked_cursor_reads_as_the_cursor_on_a_row(capture_id: str, twin: str
     parked = BlockedPrompt.parse(_decoded(capture_id))
     on_a_row = BlockedPrompt.parse(_decoded(twin))
     expected = {k: v for k, v in _obj(SCREENS[twin]).items() if k != "input"}
-    assert _screen_json(decide_screen(parked)) == expected
+    assert _screen_json(decide_screen(parked), parked) == expected
     # Identity is what a control carries; equal identity means a tap drawn before the move lands.
     assert parked.identity == on_a_row.identity
 
 
 @pytest.mark.parametrize("capture_id", STRIP_SEEN)
 def test_a_strip_seen_without_rows_is_all_that_leaves_the_ledger(capture_id: str) -> None:
-    decision = decide_screen(BlockedPrompt.parse(_decoded(capture_id)))
+    prompt = BlockedPrompt.parse(_decoded(capture_id))
+    decision = decide_screen(prompt)
     expected = copy.deepcopy({k: v for k, v in _obj(SCREENS[capture_id]).items() if k != "input"})
     assert _obj(expected["verdict"])["steps"] is None
     _obj(expected["verdict"])["steps"] = [0, 2]
-    assert _screen_json(decision) == expected
+    assert _screen_json(decision, prompt) == expected
 
 
 def _herd_found(herd_id: str) -> tuple[dict[str, JsonValue], dict[str, JsonValue]]:
@@ -383,14 +399,14 @@ def _herd_found(herd_id: str) -> tuple[dict[str, JsonValue], dict[str, JsonValue
                 "taken_at": taken_at,
                 "age": herd.freshness.age,
                 "error": error,
-                "result": _freshness_json(herd.freshness),
+                "result": _freshness_json(herd.freshness, error),
             }
         )
     herd = decide_herd(
         snapshot.agents, prompts=prompts, overlay=Overlay(unread), fetched=Fetched(NOW)
     )
     expected = {k: v for k, v in entry.items() if k != "input"}
-    return _herd_json(herd, prompt_ids, freshness), expected
+    return _herd_json(herd, prompt_ids, prompts, freshness), expected
 
 
 @pytest.mark.parametrize("herd_id", _cases(HERDS))
