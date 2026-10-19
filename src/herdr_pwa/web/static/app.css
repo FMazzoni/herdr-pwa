@@ -943,12 +943,21 @@ summary.tray__row:not(:has(.tray__tail))::after { margin-left: auto; }
 @container (width < 20em) {
   .tray__time { display: none; }
 }
+/* The sheet's shelf: a box with no height on the row's top edge, cut there and nowhere else
+   (the shadow above it stays), so a sheet moved down goes in behind the row rather than over it. */
+.tray__shelf {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  clip-path: inset(-100vh -100vw 0 -100vw);
+}
 /* The sheet opens upward over the chat, a layer of its own, so the row and the composer never move. */
 .tray__body {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 100%;
+  bottom: 0;
   display: grid;
   gap: var(--space-6);
   max-height: var(--tray-sheet-max);
@@ -967,7 +976,7 @@ summary.tray__row:not(:has(.tray__tail))::after { margin-left: auto; }
   container-type: inline-size;
 }
 /* Closed, the sheet takes no box at all, so nothing measures or scrolls it. */
-.tray__sheet:not([open]) > .tray__body { display: none; }
+.tray__sheet:not([open]) > .tray__shelf { display: none; }
 /* The grabber and the header are the sheet's drag handle (swipe.js): a finger there moves only the
    sheet, never the page, and selects nothing. Let go, the sheet settles; Reduce Motion skips it. */
 .tray__grab, .tray__head { touch-action: none; -webkit-user-select: none; user-select: none; }

@@ -227,3 +227,60 @@ def test_under_reduce_motion_the_sheet_closes_at_once_without_the_spring(sheet: 
     found = sheet.swipe(GRABBER, FLICK, 16)
     assert found["openAtUp"] is False
     assert found["sameHistory"] is True
+
+
+# Down from the grabber, frame by frame, then let go to close; at each move and each frame of the
+# settle, what the finger would hit across the row and the composer's top, which the sheet must
+# never be. How far below the row's top the sheet's box reached proves the drag went past it.
+TUCK = r"""
+const [moves, frame, settleMs] = arguments;
+const done = arguments[arguments.length - 1];
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const el = document.querySelector("#agent-tray .tray__grabber");
+const body = el.closest("details").querySelector(".tray__body");
+const row = document.querySelector("#agent-tray .tray__row").getBoundingClientRect();
+const r = el.getBoundingClientRect();
+const x = r.left + r.width / 2, y = r.top + r.height / 2;
+const send = (type, dy) => el.dispatchEvent(new PointerEvent(type, {
+  bubbles: true, cancelable: true, composed: true, pointerId: 7, pointerType: "touch",
+  isPrimary: true, clientX: x, clientY: y + dy, button: type === "pointermove" ? -1 : 0,
+  buttons: type === "pointerup" ? 0 : 1,
+}));
+const covered = [];
+let reach = 0;
+const look = (when) => {
+  reach = Math.max(reach, body.getBoundingClientRect().bottom - row.top);
+  for (const fx of [0.05, 0.5, 0.95]) {
+    for (const py of [row.top + 1, (row.top + row.bottom) / 2, row.bottom - 1, row.bottom + 4]) {
+      const hit = document.elementFromPoint(row.left + row.width * fx, py);
+      if (hit && body.contains(hit)) covered.push(`${when} at ${Math.round(py)}px`);
+    }
+  }
+};
+(async () => {
+  send("pointerdown", 0);
+  for (const dy of moves) {
+    await wait(frame);
+    send("pointermove", dy);
+    look(`drag ${dy}`);
+  }
+  send("pointerup", moves[moves.length - 1]);
+  const started = Date.now();
+  while (body.classList.contains("is-settling") && Date.now() - started < settleMs) {
+    look("settle");
+    await wait(frame / 2);
+  }
+  done({ covered, reach, open: body.closest("details").open });
+})();
+"""
+
+
+def test_the_sheet_drags_and_settles_behind_the_row_never_over_it(sheet: Sheet) -> None:
+    found = _FOUND.validate_python(
+        sheet.driver.script_async(TUCK, [12, 60, 120, 180, 240], 16, SETTLE_MS)
+    )
+    reach = found["reach"]
+    assert isinstance(reach, int | float)
+    assert reach > 100, "the drag never went past the row"
+    assert found["covered"] == [], "the sheet lay over the row or the composer"
+    assert found["open"] is False
