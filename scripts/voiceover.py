@@ -6,9 +6,8 @@ is heard as one sentence, and its redraw says nothing and leaves its sheet as th
 from collections.abc import Callable
 from pathlib import Path
 
-from firefox import Marionette, phone_window
+from firefox import Bench, Marionette, phone_window
 from settle import settle
-from starlette.types import ASGIApp
 
 from tests.catalogue import (
     AGENT,
@@ -23,7 +22,7 @@ from tests.catalogue import (
     runner,
 )
 from tests.waiting import eventually
-from tests.webfakes import WORKING_SESSION, Rig, assistant_says, write_transcript
+from tests.webfakes import WORKING_SESSION, assistant_says, write_transcript
 
 WIDTH = 390
 HEIGHT = 844
@@ -186,9 +185,9 @@ def _new_message(driver: Marionette, name: str, home: Path) -> list[str]:
     return [f"{name}: a new reply should be said once, as a new message; heard {said!r}"]
 
 
-def poll(driver: Marionette, base: str, rig: Rig, home: Path) -> list[str]:
+def poll(bench: Bench, home: Path) -> list[str]:
     """The quiet poll, then a new message, on a chat under a question."""
-    del rig
+    driver, base = bench.driver, bench.base
     name = "voiceover poll"
     driver.send("WebDriver:Navigate", {"url": base + f"{AGENT}?tab=chat"})
     if not _ready(driver, "#agent-view .turn--agent") or not _ready(driver, "#answer .button"):
@@ -196,9 +195,10 @@ def poll(driver: Marionette, base: str, rig: Rig, home: Path) -> list[str]:
     return _quiet_poll(driver, name) + _new_message(driver, name, home)
 
 
-def outcome(driver: Marionette, base: str, rig: Rig, home: Path) -> list[str]:
+def outcome(bench: Bench, home: Path) -> list[str]:
     """A tapped answer's outcome banner is said through the live region."""
-    del rig, home
+    del home
+    driver, base = bench.driver, bench.base
     name = "voiceover outcome"
     state = next(s for s in STATES if s.name == "agent-answer-confirmed")
     driver.send("WebDriver:Navigate", {"url": base + state.path})
@@ -228,9 +228,10 @@ def _strip_heard(driver: Marionette) -> dict[str, object]:
     return found if isinstance(found, dict) else {}
 
 
-def strip(driver: Marionette, base: str, rig: Rig, home: Path) -> list[str]:
+def strip(bench: Bench, home: Path) -> list[str]:
     """The strip is one sentence aloud; refreshed, it says nothing and keeps its sheet open."""
-    del rig, home
+    del home
+    driver, base = bench.driver, bench.base
     name = "voiceover strip"
     state = next(s for s in STATES if s.name == "usage-chat")
     driver.send("WebDriver:Navigate", {"url": base + state.path})
@@ -261,7 +262,7 @@ def strip(driver: Marionette, base: str, rig: Rig, home: Path) -> list[str]:
     return problems
 
 
-def _walks() -> tuple[tuple[State, Callable[[Marionette, str, Rig, Path], list[str]]], ...]:
+def _walks() -> tuple[tuple[State, Callable[[Bench, Path], list[str]]], ...]:
     asking = State(
         "voiceover poll",
         f"{AGENT}?tab=chat",
@@ -274,20 +275,19 @@ def _walks() -> tuple[tuple[State, Callable[[Marionette, str, Rig, Path], list[s
     return ((asking, poll), (answered, outcome), (stats, strip))
 
 
-def run(
-    driver: Marionette, base: str, mount: Callable[[ASGIApp], None], scratch: Path
-) -> list[str]:
+def run(bench: Bench) -> list[str]:
     """Every walk on a fresh app in its own phone window; empty when VoiceOver is served well."""
+    driver = bench.driver
     problems: list[str] = []
     for state, walk in _walks():
-        home = scratch / f"voiceover-{state.name.replace(' ', '-')}"
+        home = bench.scratch / f"voiceover-{state.name.replace(' ', '-')}"
         home.mkdir(parents=True)
         rig = build(state, home)
-        mount(rig.http.app)
+        bench.mount(rig.http.app)
         first = driver.handles()[0]
         phone_window(driver, WIDTH, HEIGHT)
         try:
-            problems += walk(driver, base, rig, home)
+            problems += walk(bench, home)
         finally:
             driver.send("WebDriver:CloseWindow", {})
             driver.send("WebDriver:SwitchToWindow", {"handle": first})

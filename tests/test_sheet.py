@@ -14,7 +14,7 @@ def test_a_saved_shot_is_drawn_and_a_missing_one_says_why(tmp_path: Path) -> Non
     (tmp_path / "iphone" / "feed.png").write_bytes(b"png")
     before = sheet.Side("before", tmp_path)
     after = sheet.Side("after", tmp_path / "elsewhere")
-    page = sheet.write_sheet(["feed"], before, after, tmp_path / "s.html", embed=False)
+    page = sheet.write_sheet(["feed"], before, after, sheet.Page(tmp_path / "s.html"))
     text = page.read_text(encoding="utf-8")
     assert 'src="iphone/feed.png"' in text
     assert "no shot at this width" in text

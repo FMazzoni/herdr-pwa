@@ -10,11 +10,13 @@ import socket
 import subprocess
 import sys
 import tempfile
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 
 from pydantic import JsonValue, TypeAdapter
+from starlette.types import ASGIApp
 
 from tests.waiting import eventually
 
@@ -260,3 +262,14 @@ def phone_window(driver: Marionette, width: int, height: int) -> str:
     if inner != width:
         raise BrowserError(f"asked for a {width}px window and got {inner}px")
     return handle
+
+
+@dataclass(frozen=True)
+class Bench:
+    """What a walk runs on: the browser, the app server's address, its door and a scratch dir."""
+
+    driver: Marionette
+    base: str
+    # Points the server at a fresh app, so each walk gets its own.
+    mount: Callable[[ASGIApp], None]
+    scratch: Path

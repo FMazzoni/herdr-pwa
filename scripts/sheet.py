@@ -30,6 +30,14 @@ class Side:
     device: Device = IPHONE
 
 
+@dataclass(frozen=True)
+class Page:
+    """Where the sheet is written, and whether its shots are inlined or linked beside it."""
+
+    path: Path
+    embed: bool = False
+
+
 def _image(path: Path, *, embed: bool, page: Path) -> str:
     if embed:
         data = base64.b64encode(path.read_bytes()).decode()
@@ -37,7 +45,7 @@ def _image(path: Path, *, embed: bool, page: Path) -> str:
     return os.path.relpath(path, page.parent)
 
 
-def _cell(side: Side, key: str, *, embed: bool, page: Path) -> str:
+def _cell(side: Side, key: str, page: Page) -> str:
     shot = side.shots / side.device.name / f"{key}.png"
     head = f"<figcaption>{html.escape(side.label)}</figcaption>"
     if not shot.is_file():
@@ -45,9 +53,9 @@ def _cell(side: Side, key: str, *, embed: bool, page: Path) -> str:
         folder = side.shots / side.device.name
         why = "no screen" if folder.is_dir() else "no shot at this width"
         return f'<figure class="none">{head}<p>{html.escape(why)}</p></figure>'
-    src = _image(shot, embed=embed, page=page)
+    src = _image(shot, embed=page.embed, page=page.path)
     full = shot.with_suffix(".full.png")
-    link = src if embed or not full.is_file() else _image(full, embed=False, page=page)
+    link = src if page.embed or not full.is_file() else _image(full, embed=False, page=page.path)
     return (
         f'<figure>{head}<a href="{html.escape(link)}">'
         f'<img src="{html.escape(src)}" alt="{html.escape(side.label)} {key}" loading="lazy">'
@@ -80,13 +88,12 @@ img { display: block; width: 100%; height: auto; border: 1px solid var(--rule); 
 """
 
 
-def write_sheet(keys: list[str], left: Side, right: Side, page: Path, *, embed: bool) -> Path:
+def write_sheet(keys: list[str], left: Side, right: Side, page: Page) -> Path:
     """Write the HTML: one section per key, the two sides as a pair of phones."""
     sections = [
         f"<section><h2>{html.escape(key)}</h2>"
         f'<p class="title">{html.escape(TITLES.get(key, ""))}</p>'
-        f'<div class="pair">{_cell(left, key, embed=embed, page=page)}'
-        f"{_cell(right, key, embed=embed, page=page)}</div></section>"
+        f'<div class="pair">{_cell(left, key, page)}{_cell(right, key, page)}</div></section>'
         for key in keys
     ]
     stamp = time.strftime("%Y-%m-%d %H:%M")
@@ -99,9 +106,9 @@ def write_sheet(keys: list[str], left: Side, right: Side, page: Path, *, embed: 
         f'<p class="meta">{len(keys)} states, WebKit as an iPhone ({size}), {stamp}. '
         "Tap a screen for the whole page.</p>" + "".join(sections) + "</body></html>"
     )
-    page.parent.mkdir(parents=True, exist_ok=True)
-    page.write_text(body, encoding="utf-8")
-    return page
+    page.path.parent.mkdir(parents=True, exist_ok=True)
+    page.path.write_text(body, encoding="utf-8")
+    return page.path
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -133,7 +140,7 @@ def main(argv: list[str] | None = None) -> int:
     left = Side(args.left_label, args.left, device)
     failed = shoot(states, work / "after", (device,), css_pixels=args.embed)
     right = Side(args.right_label, work / "after", device)
-    page = write_sheet(keys, left, right, args.out or work / "index.html", embed=args.embed)
+    page = write_sheet(keys, left, right, Page(args.out or work / "index.html", args.embed))
     for line in failed:
         print(f"  FAIL {line}")
     size = page.stat().st_size / 1_000_000

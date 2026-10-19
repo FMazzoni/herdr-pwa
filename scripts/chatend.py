@@ -23,7 +23,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from firefox import Marionette, phone_window
+from firefox import Bench, Marionette, phone_window
 from pydantic import JsonValue
 from settle import READER_STILL_MS, settle
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
@@ -1726,27 +1726,22 @@ def names() -> list[str]:
     return [tab.name for tab, _walk in _walks(lambda _app: None)]
 
 
-def run(
-    driver: Marionette,
-    base: str,
-    mount: Callable[[ASGIApp], None],
-    scratch: Path,
-    only: frozenset[str] | None = None,
-) -> list[str]:
+def run(bench: Bench, only: frozenset[str] | None = None) -> list[str]:
     """Every walk, or those ``only`` names, on a fresh app in its own phone window; empty when
     each tab keeps its end."""
+    driver = bench.driver
     problems: list[str] = []
-    for tab, walk in _walks(mount):
+    for tab, walk in _walks(bench.mount):
         if only is not None and tab.name not in only:
             continue
-        home = scratch / f"end-{tab.name.replace(' ', '-')}"
+        home = bench.scratch / f"end-{tab.name.replace(' ', '-')}"
         home.mkdir(parents=True)
         rig = build(tab.state, home)
-        mount(rig.http.app)
+        bench.mount(rig.http.app)
         first = driver.handles()[0]
         phone_window(driver, tab.width, tab.height)
         try:
-            problems += walk(WalkCtx(driver, base, tab, rig, home))
+            problems += walk(WalkCtx(driver, bench.base, tab, rig, home))
         finally:
             driver.send("WebDriver:CloseWindow", {})
             driver.send("WebDriver:SwitchToWindow", {"handle": first})

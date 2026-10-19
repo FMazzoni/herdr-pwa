@@ -28,6 +28,7 @@ import feedhold  # noqa: E402
 import sendhold  # noqa: E402
 import voiceover  # noqa: E402
 from firefox import (  # noqa: E402
+    Bench,
     BrowserError,
     Marionette,
     browser,
@@ -643,6 +644,19 @@ def _load_problems(seen: dict[str, object], ready: str, *, scripted: bool) -> li
     return problems
 
 
+@dataclass(frozen=True)
+class Size:
+    """A phone width and an iPhone Text Size, as a multiple of the default."""
+
+    width: int
+    scale: float = 1.0
+
+    def label(self, name: str) -> str:
+        """Where a finding was made, for the report."""
+        text = f" at {self.scale:.0%} text" if self.scale != 1.0 else ""
+        return f"{self.width}px {name}{text}"
+
+
 @dataclass
 class Tally:
     """Every problem found, and how often each argued exception was needed."""
@@ -658,131 +672,131 @@ class Tally:
         self.used[selector] = self.used.get(selector, 0) + 1
 
 
+@dataclass(frozen=True)
+class Spot:
+    """One state measured at one size: its name in the report, the size, and the tally it adds to."""
+
+    where: str
+    size: Size
+    tally: Tally
+
+    def fail(self, problem: str) -> None:
+        """Record a problem found here."""
+        self.tally.problems.append(f"{self.where}: {problem}")
+
+
 def _rows(found: dict[str, object], key: str) -> list[dict[str, object]]:
     value = found.get(key)
     return [r for r in value if isinstance(r, dict)] if isinstance(value, list) else []
 
 
-def _judge_cards(found: dict[str, object], where: str, tally: Tally) -> None:
+def _judge_cards(found: dict[str, object], at: Spot) -> None:
     for row in _rows(found, "cut"):
-        tally.problems.append(
-            f"{where}: {row['what']} {row['text']!r} is cut to {row['shown']:.1f}px of "
+        at.fail(
+            f"{row['what']} {row['text']!r} is cut to {row['shown']:.1f}px of "
             f"{row['full']:.1f}px; only a card's workspace may ellipsize"
         )
 
 
-def judge(found: dict[str, object], where: str, tally: Tally) -> None:
+def judge(found: dict[str, object], at: Spot) -> None:
     """Turn one geometry probe into problems and exception counts."""
     page = found.get("page")
     if isinstance(page, dict) and page["content"] > page["vw"]:
-        tally.problems.append(
-            f"{where}: the PAGE scrolls sideways: {page['content']}px in a {page['vw']}px viewport"
-        )
+        at.fail(f"the PAGE scrolls sideways: {page['content']}px in a {page['vw']}px viewport")
     for row in _rows(found, "scrollers"):
         if isinstance(allowed := row["allowed"], str):
-            tally.allow(allowed)
+            at.tally.allow(allowed)
         else:
-            tally.problems.append(
-                f"{where}: unlisted scroller {row['what']}: {row['content']}px in {row['box']}px"
-            )
+            at.fail(f"unlisted scroller {row['what']}: {row['content']}px in {row['box']}px")
     for row in _rows(found, "edges"):
-        tally.problems.append(
-            f"{where}: sideways scroller {row['what']} starts {row['left']:.1f}px from the "
+        at.fail(
+            f"sideways scroller {row['what']} starts {row['left']:.1f}px from the "
             f"left edge, inside the {EDGE_INSET}px the back swipe needs"
         )
     for row in _rows(found, "spills"):
-        tally.problems.append(
-            f"{where}: {row['what']} spills out of the viewport "
-            f"({row['left']:.1f}..{row['right']:.1f}px)"
+        at.fail(
+            f"{row['what']} spills out of the viewport ({row['left']:.1f}..{row['right']:.1f}px)"
         )
     for row in _rows(found, "buried"):
-        tally.problems.append(
-            f"{where}: tap target {row['what']} ends at {row['bottom']:.1f}px, under the bar "
+        at.fail(
+            f"tap target {row['what']} ends at {row['bottom']:.1f}px, under the bar "
             f"fixed to the bottom even when the page is scrolled to its end ({row['end']:.1f}px)"
         )
     for row in _rows(found, "taps"):
         if isinstance(allowed := row["allowed"], str):
-            tally.allow(allowed)
+            at.tally.allow(allowed)
         else:
-            tally.problems.append(
-                f"{where}: tap target {row['what']} is "
+            at.fail(
+                f"tap target {row['what']} is "
                 f"{row['width']:.1f}x{row['height']:.1f}px, under {TAP_FLOOR}px"
             )
     for row in _rows(found, "zooms"):
-        tally.problems.append(
-            f"{where}: field {row['what']} is set in {row['size']}px type; under "
+        at.fail(
+            f"field {row['what']} is set in {row['size']}px type; under "
             f"{FIELD_FONT_FLOOR}px iOS zooms the page in when it takes focus"
         )
     for row in _rows(found, "cells"):
-        tally.problems.append(
-            f"{where}: table cell {row['what']} is {row['inner']:.1f}px wide, narrower than its "
+        at.fail(
+            f"table cell {row['what']} is {row['inner']:.1f}px wide, narrower than its "
             f"widest word {row['word']!r} ({row['widest']:.1f}px), so the word breaks"
         )
-    _judge_cards(found, where, tally)
+    _judge_cards(found, at)
     measured = found.get("measured")
-    tally.taps += measured if isinstance(measured, int) else 0
+    at.tally.taps += measured if isinstance(measured, int) else 0
 
 
-def _judge_tabs(bar: dict[str, object], where: str, tally: Tally) -> None:
+def _judge_tabs(bar: dict[str, object], at: Spot) -> None:
     tabs = [t for t in bar["tabs"] if isinstance(t, dict)] if isinstance(bar["tabs"], list) else []
     labels = tuple(str(t["label"]) for t in tabs)
     if labels != BAR_TABS:
-        tally.problems.append(f"{where}: the agent's bar holds {labels}, not {BAR_TABS}")
+        at.fail(f"the agent's bar holds {labels}, not {BAR_TABS}")
     for tab in tabs:
         if (
             float(str(tab["width"])) < TAP_FLOOR - 0.5
             or float(str(tab["height"])) < TAP_FLOOR - 0.5
         ):
-            tally.problems.append(
-                f"{where}: the {tab['label']} segment is {tab['width']:.1f}x{tab['height']:.1f}px"
-            )
+            at.fail(f"the {tab['label']} segment is {tab['width']:.1f}x{tab['height']:.1f}px")
     if not bar["oneRow"]:
-        tally.problems.append(f"{where}: the three tabs wrapped off the back link's row")
+        at.fail("the three tabs wrapped off the back link's row")
     if bar["name"] != "Back to herd":
-        tally.problems.append(f"{where}: the back link is named {bar['name']!r}")
+        at.fail(f"the back link is named {bar['name']!r}")
 
 
-def _judge_word(bar: dict[str, object], where: str, size: "Size", tally: Tally) -> None:
-    wants = size.scale == 1.0 and size.width in WORD_WIDTHS
+def _judge_word(bar: dict[str, object], at: Spot) -> None:
+    wants = at.size.scale == 1.0 and at.size.width in WORD_WIDTHS
     if bar["word"] is not wants:
         said = "keeps" if bar["word"] else "drops"
-        tally.problems.append(
-            f"{where}: the back link {said} its word; it should {'keep' if wants else 'drop'} it"
-        )
+        at.fail(f"the back link {said} its word; it should {'keep' if wants else 'drop'} it")
 
 
-def _judge_strip(bar: dict[str, object], where: str, size: "Size", tally: Tally) -> None:
+def _judge_strip(bar: dict[str, object], at: Spot) -> None:
     strip = bar["strip"]
     if not isinstance(strip, dict):
-        tally.problems.append(f"{where}: no stats strip under the agent's bar")
+        at.fail("no stats strip under the agent's bar")
         return
     if float(str(strip["top"])) < float(str(strip["under"])) - 0.5:
-        tally.problems.append(f"{where}: the stats strip is not under the tabs")
-    if size.scale == 1.0 and not strip.get("open") and float(str(strip["height"])) > STRIP_MAX:
-        tally.problems.append(
-            f"{where}: the stats strip is {strip['height']:.1f}px tall, over {STRIP_MAX}px"
-        )
+        at.fail("the stats strip is not under the tabs")
+    if at.size.scale == 1.0 and not strip.get("open") and float(str(strip["height"])) > STRIP_MAX:
+        at.fail(f"the stats strip is {strip['height']:.1f}px tall, over {STRIP_MAX}px")
     meter = bar["meter"]
     if isinstance(meter, dict) and (
         float(str(meter["width"])) < float(str(meter["wants"])) - 0.5
         or float(str(meter["right"])) > float(str(meter["edge"])) + 0.5
     ):
-        tally.problems.append(f"{where}: the context meter is squeezed or cut: {meter}")
+        at.fail(f"the context meter is squeezed or cut: {meter}")
     cut = bar["cut"]
     if isinstance(cut, list) and cut:
-        tally.problems.append(
-            f"{where}: the strip cuts {cut}; a fact leaves the line whole or ends in an ellipsis"
-        )
+        at.fail(f"the strip cuts {cut}; a fact leaves the line whole or ends in an ellipsis")
 
 
-def judge_bar(found: dict[str, object], where: str, size: "Size", tally: Tally) -> None:
+def judge_bar(found: dict[str, object], at: Spot) -> None:
     """An agent's bar: three 44px tabs on one row, the right back link, the strip under them."""
     bar = found.get("bar")
     if not isinstance(bar, dict):
         return
-    _judge_tabs(bar, where, tally)
-    _judge_word(bar, where, size, tally)
-    _judge_strip(bar, where, size, tally)
+    _judge_tabs(bar, at)
+    _judge_word(bar, at)
+    _judge_strip(bar, at)
 
 
 def _grow_text(driver: Marionette, scale: float, *, settle: bool = True) -> bool:
@@ -793,41 +807,30 @@ def _grow_text(driver: Marionette, scale: float, *, settle: bool = True) -> bool
     return kept
 
 
-@dataclass(frozen=True)
-class Size:
-    """A phone width and an iPhone Text Size, as a multiple of the default."""
-
-    width: int
-    scale: float = 1.0
-
-    def label(self, name: str) -> str:
-        """Where a finding was made, for the report."""
-        text = f" at {self.scale:.0%} text" if self.scale != 1.0 else ""
-        return f"{self.width}px {name}{text}"
-
-
-def run_state(driver: Marionette, state: State, base: str, size: Size, tally: Tally) -> None:
+def run_state(bench: Bench, state: State, size: Size, tally: Tally) -> None:
     """Load one state at one size; it must prove it loaded before anything is measured."""
-    where = size.label(state.name)
+    driver, base = bench.driver, bench.base
+    at = Spot(size.label(state.name), size, tally)
     scale = size.scale
     try:
         driver.send("WebDriver:Navigate", {"url": base + state.path})
     except BrowserError as exc:
         # Marionette refuses to land on Firefox's own error page; that is a load failure too.
-        tally.problems.append(f"{where}: NOT LOADED: {str(exc)[:160]}")
+        at.fail(f"NOT LOADED: {str(exc)[:160]}")
         return
     problems = _loaded(driver, state, base)
     if problems:
-        tally.problems += [f"{where}: NOT LOADED: {p}" for p in problems]
+        for problem in problems:
+            at.fail(f"NOT LOADED: {problem}")
         return
     if scale != 1.0 and not _grow_text(driver, scale, settle=not state.in_flight):
-        tally.problems.append(
-            f"{where}: the docked composer was not re-measured after the text grew, so the "
+        at.fail(
+            "the docked composer was not re-measured after the text grew, so the "
             "room the page keeps for it is the old size"
         )
     elif scale == 1.0 and driver.script_async(DOCK_KEPT, DOCK_CEILING_MS) is not True:
-        tally.problems.append(
-            f"{where}: the docked composer was not re-measured after it changed size, so the "
+        at.fail(
+            "the docked composer was not re-measured after it changed size, so the "
             "room the page keeps for it is the old size"
         )
     found = driver.script(
@@ -840,11 +843,11 @@ def run_state(driver: Marionette, state: State, base: str, size: Size, tally: Ta
         FIELDS,
         FIELD_FONT_FLOOR,
     )
-    judge(found if isinstance(found, dict) else {}, where, tally)
-    judge_bar(found if isinstance(found, dict) else {}, where, size, tally)
+    judge(found if isinstance(found, dict) else {}, at)
+    judge_bar(found if isinstance(found, dict) else {}, at)
     # One window serves every state, so a remembered choice must not leak into the next.
     driver.script("try { localStorage.clear(); sessionStorage.clear(); } catch (e) {}")
-    print(f"  measured {where}", flush=True)
+    print(f"  measured {at.where}", flush=True)
 
 
 def stale(tally: Tally) -> list[str]:
@@ -905,17 +908,18 @@ def _strings(value: object) -> list[str]:
     return [str(v) for v in value] if isinstance(value, list) else []
 
 
-def _do(task: Task, driver: Marionette, base: str, switch: Switch, scratch: Path) -> Tally:
-    """Run one task in this worker's browser; one state's browser failure is that state's alone."""
+def _do(task: Task, bench: Bench, switch: Switch) -> Tally:
+    """Run one task on this worker's bench; one state's browser failure is that state's alone."""
+    driver = bench.driver
     tally = Tally()
     if task["kind"] == "states":
         size = Size(int(str(task["width"])), float(str(task["scale"])))
         phone_window(driver, size.width, HEIGHT)
         for state in pick(_strings(task["names"])):
             try:
-                mounted = install(switch, state, scratch)
+                mounted = install(switch, state, bench.scratch)
                 tally.problems += [f"{size.label(state.name)}: {p}" for p in mounted]
-                run_state(driver, state, base, size, tally)
+                run_state(bench, state, size, tally)
             except BrowserError as exc:
                 tally.problems.append(f"{size.label(state.name)}: the browser failed: {exc}")
             tally.problems += [f"{size.label(state.name)}: {e}" for e in switch.drain()]
@@ -925,9 +929,9 @@ def _do(task: Task, driver: Marionette, base: str, switch: Switch, scratch: Path
     module = str(task["module"])
     if module == CHAT_END and task.get("names"):
         only = frozenset(_strings(task["names"]))
-        tally.problems += chatend.run(driver, base, switch.mount, scratch, only)
+        tally.problems += chatend.run(bench, only)
     else:
-        tally.problems += WALKS[module].run(driver, base, switch.mount, scratch)
+        tally.problems += WALKS[module].run(bench)
     tally.problems += [f"{_label(task)}: {e}" for e in switch.drain()]
     return tally
 
@@ -946,7 +950,8 @@ def worker() -> int:
         for n, line in enumerate(sys.stdin):
             task: Task = dict(_LINE.validate_json(line))
             try:
-                tally = _do(task, driver, base, switch, Path(scratch) / str(n))
+                bench = Bench(driver, base, switch.mount, Path(scratch) / str(n))
+                tally = _do(task, bench, switch)
             except BrowserError as exc:
                 tally = Tally(problems=[f"{_label(task)}: the browser failed: {exc}"])
             answer = {"problems": tally.problems, "used": tally.used, "taps": tally.taps}
