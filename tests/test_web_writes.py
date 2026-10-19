@@ -17,6 +17,7 @@ from herdr_pwa.engine import (
     HerdrClient,
     screen_digest,
 )
+from herdr_pwa.panetext import as_text_read
 from herdr_pwa.settings import Settings
 from herdr_pwa.web.app import create_app
 from herdr_pwa.web.seams import Seams
@@ -24,11 +25,14 @@ from herdr_pwa.writes.keys import control_token
 from herdr_pwa.writes.lifecycle import on_path
 from herdr_pwa.writes.outcome import Pacing
 from tests._fake_herd import P3, P5, S1, S2, SETTLED, FakeClock, FakeHerd, capture, echoed
+from tests._jsonpath import obj
 from tests.webfakes import IDENTITY
 
 ORIGIN = {"Origin": "http://testserver"}
 PERMISSION = capture("capture-blocked-permission-prompt")
 FINGERPRINT = control_token(BlockedPrompt.parse(PERMISSION))
+# The digest of the settled screen as a write reads it: the text of its colour read.
+SETTLED_CLAIM = screen_digest(as_text_read(SETTLED))
 
 
 @dataclass
@@ -97,7 +101,7 @@ def test_the_composer_carries_the_idle_screen_digest_and_a_draft_key(tmp_path: P
     w = idle(tmp_path)
     response = w.http.get(f"/agent/{S1}/compose")
     assert response.status_code == 200
-    assert screen_digest(SETTLED) in response.text
+    assert SETTLED_CLAIM in response.text
     assert f'data-hp-draft="{S1}"' in response.text
 
 
@@ -130,7 +134,7 @@ def test_a_destructive_prompt_is_held_with_its_reason_then_sent(tmp_path: Path) 
     assert "rm with a recursive flag" in held.text
     assert 'name="confirm" value="1"' in held.text
     assert w.herd.writes("agent.prompt") == []
-    data = {"text": "rm -rf build", "confirm": "1", "screen": screen_digest(SETTLED)}
+    data = {"text": "rm -rf build", "confirm": "1", "screen": SETTLED_CLAIM}
     _ = w.http.post(f"/agent/{S1}/prompt", data=data, headers=ORIGIN)
     assert len(w.herd.writes("agent.prompt")) == 1
 
@@ -159,7 +163,7 @@ def test_a_prompt_that_may_have_landed_is_not_sent_again_without_saying_so(
     assert "may or may not have been sent" in lost.text
     assert "Send again anyway" in lost.text
     form_back = _posted_back(lost.text)
-    assert form_back["screen"] == screen_digest(SETTLED), "a fresh digest, not an empty one"
+    assert form_back["screen"] == SETTLED_CLAIM, "a fresh digest, not an empty one"
     del w.herd.after["agent.prompt"]
     # The plain resubmit, as a stray tap or a restored draft would send it.
     plain = {k: v for k, v in form_back.items() if k != "again"}
@@ -697,11 +701,11 @@ def test_the_doors_destructive_confirm_is_tied_to_the_screen_it_was_asked_about(
     assert held.status_code == 200
     prompt = next(f for f in _forms(held.text) if 'name="text"' in f)
     assert 'name="confirm"' in prompt
-    assert f'name="screen" value="{screen_digest(SETTLED)}"' in prompt
+    assert f'name="screen" value="{SETTLED_CLAIM}"' in prompt
     herd.screens[P3] = [SETTLED.replace("Done.", "Done, and moved on.")]
     moved = w.http.post(
         "/starting/w1:p3/prompt",
-        data={"text": "rm -rf build", "confirm": "1", "screen": screen_digest(SETTLED)},
+        data={"text": "rm -rf build", "confirm": "1", "screen": SETTLED_CLAIM},
         headers=ORIGIN,
     )
     assert moved.status_code == 409
@@ -823,3 +827,54 @@ def test_a_model_posted_for_opencode_starts_it_when_declared(
     assert response.status_code == 303
     [start] = herd.writes("agent.start")
     assert start["args"] == ["--model", PICKLE]
+
+
+@dataclass
+class _Coloured(FakeHerd):
+    """A runner that answers a colour read in colour and a text read with tmux's padding."""
+
+    def _agent_read(self, params: dict[str, JsonValue]) -> dict[str, JsonValue]:
+        answer = super()._agent_read(params)
+        read = obj(answer, "result", "read")
+        text = str(read["text"])
+        if params.get("format") == "ansi":
+            read["text"] = text.replace("\u276f", "\x1b[1m\u276f\x1b[0m")
+        else:
+            read["text"] = "\n".join(row.ljust(40) for row in text.splitlines())
+        return answer
+
+
+def _claimed(page: str) -> str:
+    form = next(f for f in _forms(page) if 'id="composer"' in f)
+    found = re.search(r'name="screen" value="([0-9a-f]*)"', form)
+    assert found is not None, form
+    return found.group(1)
+
+
+@pytest.mark.parametrize("herd", [FakeHerd(), _Coloured()], ids=["plain", "coloured"])
+def test_the_screen_the_page_claims_is_the_one_the_prompt_is_checked_against(
+    tmp_path: Path, herd: FakeHerd
+) -> None:
+    herd.put(P3, S1)
+    herd.screens[P3] = [SETTLED]
+    w = web(tmp_path, herd)
+    claim = _claimed(w.http.get(f"/agent/{S1}").text)
+    assert claim, "an idle agent's composer claims its screen"
+    sent = w.http.post(f"/agent/{S1}/prompt", data={"text": "hi", "screen": claim}, headers=ORIGIN)
+    assert sent.status_code == 200, sent.text
+    assert herd.writes("agent.prompt") == [{"target": "w1:p3", "text": "hi"}]
+
+
+@pytest.mark.parametrize("herd", [FakeHerd(), _Coloured()], ids=["plain", "coloured"])
+def test_a_claim_the_screen_has_moved_on_from_is_still_refused(
+    tmp_path: Path, herd: FakeHerd
+) -> None:
+    herd.put(P3, S1)
+    herd.screens[P3] = [SETTLED]
+    w = web(tmp_path, herd)
+    claim = _claimed(w.http.get(f"/agent/{S1}").text)
+    herd.screens[P3] = [echoed("\u276f something else")]
+    stale = w.http.post(f"/agent/{S1}/prompt", data={"text": "hi", "screen": claim}, headers=ORIGIN)
+    assert stale.status_code == 409
+    assert "the screen changed since this was drawn" in stale.text
+    assert herd.writes("agent.prompt") == []

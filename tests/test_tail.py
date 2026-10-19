@@ -15,6 +15,7 @@ from herdr_pwa.engine import (
     TailCache,
     TranscriptTurn,
     chat_window,
+    locate_log,
 )
 from tests.engine_seam import Window, is_message, read_page
 from tests.webfakes import build_rig
@@ -203,7 +204,7 @@ def test_chat_window_starts_over_when_the_conversation_moved(tmp_path: Path) -> 
     root = tmp_path / "transcripts"
     write(root / "-tmp" / f"{SESSION}.jsonl", tool_heavy(30))
     page = chat_window(
-        Source.of(SESSION, agent_kind="claude", root=str(root), log="another-file"),
+        locate_log(Source.of(SESSION, agent_kind="claude", root=str(root), log="another-file")),
         ask=Ask(messages=20, start=5),
         tails=TailCache(),
     )
@@ -215,7 +216,7 @@ def test_chat_window_folds_results_and_names_a_missing_log(tmp_path: Path) -> No
     root = tmp_path / "transcripts"
     write(root / "-tmp" / f"{SESSION}.jsonl", tool_heavy(3))
     page = chat_window(
-        Source.of(SESSION, agent_kind="claude", root=str(root)),
+        locate_log(Source.of(SESSION, agent_kind="claude", root=str(root))),
         ask=Ask(messages=20),
         tails=TailCache(),
     )
@@ -223,7 +224,9 @@ def test_chat_window_folds_results_and_names_a_missing_log(tmp_path: Path) -> No
     assert calls
     assert all(c.result.startswith("output") for c in calls)
     gone = chat_window(
-        Source.of("5b609dba-d756-493a-a3fc-b4e09bf0a183", agent_kind="claude", root=str(root)),
+        locate_log(
+            Source.of("5b609dba-d756-493a-a3fc-b4e09bf0a183", agent_kind="claude", root=str(root))
+        ),
         ask=Ask(messages=20),
         tails=TailCache(),
     )

@@ -12,6 +12,7 @@ from herdr_pwa.engine import BlockedPrompt, EngineSettings, HerdrClient, as_pane
 from herdr_pwa.panetext import (
     MAX_RUNS_PER_LINE,
     Run,
+    as_text_read,
     cells,
     composer_top,
     is_clean_prose,
@@ -353,6 +354,22 @@ def test_no_other_status_pays_for_the_detection_round_trip() -> None:
         engine, wire = _client(["x"])
         engine.mirror_read(P3, status=status)
         assert [call["source"] for call in wire.reads] == ["visible"], status
+
+
+def test_the_drill_ins_look_reads_an_unblocked_screen_once_for_its_mirror_and_its_text() -> None:
+    engine, wire = _client([read(BLOCKED), read(BLOCKED)])
+    look = engine.mirror(P3, status="idle")
+    assert [(call["source"], call["format"]) for call in wire.reads] == [("visible", "ansi")]
+    assert look.screen == as_text_read(look.shown)
+    assert look.screen == engine.screen(P3), "the text a write checks is the text the page claims"
+
+
+def test_a_blocked_look_reads_the_visible_screen_beside_the_detection_it_draws() -> None:
+    engine, wire = _client(["Do you want to proceed?\n1. Yes\n2. No\n", "visible text  "])
+    look = engine.mirror(P3, status="blocked")
+    assert [call["source"] for call in wire.reads] == ["detection", "visible"]
+    assert "Do you want to proceed?" in look.shown
+    assert look.screen == "visible text"
 
 
 def test_the_module_stays_a_leaf() -> None:

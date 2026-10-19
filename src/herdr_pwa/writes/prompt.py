@@ -106,10 +106,15 @@ def _text_refusal(text: str) -> Refused | None:
 
 def _read_now(client: HerdrClient, target: PaneId) -> str | Refused:
     try:
-        return client.read(target, VISIBLE_READ)
+        return client.screen(target)
     except EngineError as exc:
         log.warning("prompt refused: %s could not be read first: %s", target, exc)
         return Refused(Refusal.UNREADABLE, _VERB, detail=str(exc))
+
+
+def screen_claim(screen: str) -> str:
+    """The digest a composer drawn over *screen* claims; none over a question, which issues none."""
+    return "" if asks_a_question(screen) else screen_digest(screen)
 
 
 def _preflight(send: _Send, screen: str) -> Refused | None:
@@ -143,7 +148,7 @@ def read_back(
     """Whether the pane comes to show the text more often than before, within *reads* looks."""
     for _ in range(reads):
         try:
-            after = client.read(echo.target, VISIBLE_READ)
+            after = client.screen(echo.target)
         except EngineError:
             after = ""
         if landed(echo.text, echo.before, after):

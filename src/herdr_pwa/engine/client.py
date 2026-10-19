@@ -138,6 +138,19 @@ class ReadOptions:
 PLAIN_READ: Final = ReadOptions()
 # What is on the pane's screen right now, as text.
 VISIBLE_READ: Final = ReadOptions(source="visible")
+# The same screen in colour: the mirror draws it, and its text is what a prompt is checked against.
+SCREEN_READ: Final = ReadOptions(source="visible", colour=True)
+
+
+class Mirror(NamedTuple):
+    """One look at a pane for the drill-in: what its mirror draws, and the visible screen as text.
+
+    ``screen`` is ``None`` when the mirror drew the detection buffer and the screen beside it could
+    not be read.
+    """
+
+    shown: str
+    screen: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -427,18 +440,41 @@ class HerdrClient:
         ``options`` gives the lines and the timeout; the mirror chooses the source, in colour.
         """
         target = as_pane_id(target)
-        if str(getattr(status, "value", status)).strip().lower() == _BLOCKED:
-            try:
-                detected = self.read(
-                    target,
-                    replace(options, source=wire_request.ReadSource.detection, colour=True),
-                )
-            except EngineError as exc:
-                log.debug("detection read failed for %s: %s", target, exc)
-            else:
-                if panetext.is_clean_prose(detected):
-                    return detected
+        detected = self._detected(target, status, options)
+        if detected is not None:
+            return detected
         return self.read(target, replace(options, source=None, colour=True))
+
+    def mirror(self, target: PaneId, *, status: object = "") -> Mirror:
+        """The mirror's read with the visible screen as text beside it, one read when they are one."""
+        target = as_pane_id(target)
+        detected = self._detected(target, status, PLAIN_READ)
+        if detected is None:
+            shown = self.read(target, SCREEN_READ)
+            return Mirror(shown, panetext.as_text_read(shown))
+        try:
+            return Mirror(detected, self.screen(target))
+        except EngineError as exc:
+            log.debug("visible read failed for %s: %s", target, exc)
+            return Mirror(detected, None)
+
+    def screen(self, target: PaneId) -> str:
+        """The visible screen as text, from the colour read the mirror takes of it."""
+        # Text from the colour read, so the screen a page claims is the one a write checks.
+        return panetext.as_text_read(self.read(target, SCREEN_READ))
+
+    def _detected(self, target: PaneId, status: object, options: ReadOptions) -> str | None:
+        """A blocked agent's detection buffer in colour when it is clean prose, else ``None``."""
+        if str(getattr(status, "value", status)).strip().lower() != _BLOCKED:
+            return None
+        try:
+            detected = self.read(
+                target, replace(options, source=wire_request.ReadSource.detection, colour=True)
+            )
+        except EngineError as exc:
+            log.debug("detection read failed for %s: %s", target, exc)
+            return None
+        return detected if panetext.is_clean_prose(detected) else None
 
     def explain(self, target: PaneId, *, timeout: float | None = None) -> Frame:
         """Which detection rule decided this agent's state, on what evidence."""
