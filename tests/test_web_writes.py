@@ -64,6 +64,7 @@ def web(
             "tailscaled_socket": tmp_path / "no-tailscaled.sock",
             "snapshot_cache_ttl": 0.001,
             "opencode_models": opencode_models,
+            "public_host": "testserver",
         }
     )
 

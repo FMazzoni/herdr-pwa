@@ -44,6 +44,8 @@ def settings_for(tmp_path: Path) -> Settings:
         state_dir=tmp_path / "state",
         socket_path=tmp_path / "no-runner.sock",
         tailnet_login=LOGIN,
+        # What serve learns from tailscaled at startup.
+        public_host=NODE,
         push_subject="mailto:operator@example.net",
         push_interval=0.02,
         push_debounce=0.0,

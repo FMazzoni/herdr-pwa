@@ -37,6 +37,7 @@ from herdr_pwa.web.started import STARTED_FILENAME, StartedTree, fingerprint, re
 from herdr_pwa.writes.answer import KeySent
 from herdr_pwa.writes.lifecycle import declared_models, record_service_models, record_service_path
 from herdr_pwa.writes.outcome import Evidence, Outcome
+from tests.fakes import NODE, status_route, tailscaled
 from tests.webfakes import (
     FIXTURES,
     SNAPSHOT,
@@ -279,7 +280,11 @@ def _doctor(
     tmp_path: Path, wire: FakeWire, now: float = 0.0, *, opencode_models: tuple[str, ...] = ()
 ) -> tuple[int, str]:
     settings = Settings(
-        socket_path=tmp_path / "x.sock", state_dir=tmp_path, opencode_models=opencode_models
+        socket_path=tmp_path / "x.sock",
+        state_dir=tmp_path,
+        opencode_models=opencode_models,
+        tailscaled_socket=tmp_path / "no-tailscaled.sock",
+        public_host=NODE,
     )
     out: list[str] = []
 
@@ -305,6 +310,34 @@ def test_doctor_passes_when_both_sides_speak_the_pin(tmp_path: Path) -> None:
     code, out = _doctor(tmp_path, FakeWire({SNAPSHOT: _frame(EXPECTED_PROTOCOL)}))
     assert code == 0
     assert out.rstrip().endswith("doctor: OK")
+
+
+def _doctor_on(settings: Settings) -> tuple[int, str]:
+    out: list[str] = []
+    wire = FakeWire({SNAPSHOT: _frame(EXPECTED_PROTOCOL)})
+
+    def factory(engine: EngineSettings) -> HerdrClient:
+        return HerdrClient(engine, transport=wire)
+
+    code = doctor(settings, Seams(wall=lambda: 0.0, client_factory=factory, write=out.append))
+    return code, "".join(out)
+
+
+def test_doctor_names_the_served_host_and_fails_without_one(tmp_path: Path) -> None:
+    base = {"socket_path": tmp_path / "x.sock", "state_dir": tmp_path}
+    code, out = _doctor_on(Settings.model_validate({**base, "public_host": f"{NODE.upper()}."}))
+    assert code == 0
+    assert f"served host: {NODE} (from HP_PUBLIC_HOST)" in out
+    with tailscaled(tmp_path, canned=status_route()) as fake:
+        settings = Settings.model_validate({**base, "tailscaled_socket": fake.socket_path})
+        code, out = _doctor_on(settings)
+    assert code == 0
+    assert f"served host: {NODE} (from tailscaled's MagicDNS name)" in out
+    missing = {**base, "tailscaled_socket": tmp_path / "none.sock"}
+    code, out = _doctor_on(Settings.model_validate(missing))
+    assert code == 1
+    assert "served host: unknown, so every Tailscale identity is refused" in out
+    assert out.rstrip().endswith("doctor: FAIL")
 
 
 def test_doctor_says_when_push_last_sent_failed_and_held_back(tmp_path: Path) -> None:

@@ -64,7 +64,7 @@ def writer_for(web: WebState, request: Request, identity: auth.Identity) -> Writ
     origin = Origin.of(
         identity,
         client_ip=request.client.host if request.client else "",
-        forwarded_for=request.headers.get("x-forwarded-for", ""),
+        headers=request.headers,
     )
     return Writer(
         web.client,

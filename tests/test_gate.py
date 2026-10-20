@@ -14,8 +14,10 @@ from starlette.types import Message, Receive, Scope, Send
 from herdr_pwa import cli
 from herdr_pwa.settings import Settings
 from herdr_pwa.web.gate import MAX_BODY_BYTES
+from herdr_pwa.web.seams import Seams
 from herdr_pwa.web.security import CSP
-from tests.webfakes import IDENTITY, WORKING_SESSION, build_rig
+from tests.fakes import NODE, status_route, tailscaled
+from tests.webfakes import IDENTITY, WORKING_SESSION, Rig, build_rig
 
 # Every route a caller with no identity may reach. A new entry needs a reason here.
 OPEN_ROUTES = frozenset(
@@ -61,6 +63,92 @@ def test_every_route_but_the_open_ones_refuses_a_caller_with_no_identity(
     for method, path in OPEN_ROUTES:
         assert rig.http.request(method, path).status_code == 200
     assert rig.wire.calls == []
+
+
+REBINDING = {"Host": "evil.example:8772", "Origin": "http://evil.example:8772"}
+
+
+def _refusals(
+    rig: Rig, headers: dict[str, str], status: int, *, writes_only: bool = False
+) -> list[str]:
+    app = rig.http.app
+    assert isinstance(app, FastAPI)
+    walked = sorted(set(_routes(app)) - OPEN_ROUTES)
+    assert len(walked) > 20
+    leaks: list[str] = []
+    for method, path in walked:
+        if writes_only and method in {"GET", "HEAD", "OPTIONS"}:
+            continue
+        response = rig.http.request(method, _concrete(path), headers=headers)
+        if response.status_code != status:
+            leaks.append(f"{method} {path} -> {response.status_code}")
+    return leaks
+
+
+def test_a_forged_header_on_a_rebinding_host_is_refused_on_every_route(tmp_path: Path) -> None:
+    # A DNS-rebinding page sends its own name as Host and Origin, and may set the header.
+    rig = build_rig(tmp_path, device_report=True)
+    assert _refusals(rig, {**IDENTITY, **REBINDING}, 403) == []
+    assert rig.wire.calls == []
+    assert rig.http.get("/").status_code == 200
+
+
+def test_another_tailnet_login_is_refused_on_every_route(tmp_path: Path) -> None:
+    rig = build_rig(tmp_path, device_report=True, tailnet_login="owner@example.com")
+    assert _refusals(rig, {**IDENTITY, **SAME_ORIGIN}, 403) == []
+    assert rig.wire.calls == []
+
+
+def test_a_cross_origin_write_is_refused_on_every_write_route(tmp_path: Path) -> None:
+    rig = build_rig(tmp_path, device_report=True)
+    cross = {"Origin": "https://evil.example"}
+    assert _refusals(rig, cross, 403, writes_only=True) == []
+    assert rig.wire.calls == []
+
+
+def test_the_served_magicdns_name_is_accepted_in_any_spelling(tmp_path: Path) -> None:
+    rig = build_rig(tmp_path, public_host=NODE)
+    for host in (NODE, NODE.upper(), f"{NODE}.", f"{NODE}:443"):
+        assert rig.http.get("/", headers={"Host": host}).status_code == 200, host
+    assert rig.http.get("/", headers={"Host": f"{NODE}:8443"}).status_code == 403
+    assert rig.http.get("/").status_code == 403
+
+
+def _served_app(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, socket: Path) -> TestClient:
+    monkeypatch.setenv("HP_STATE_DIR", str(tmp_path / "state"))
+    monkeypatch.setenv("HP_SOCKET_PATH", str(tmp_path / "no-runner.sock"))
+    monkeypatch.setenv("HP_TAILSCALED_SOCKET", str(socket))
+    monkeypatch.setenv("HP_PUSH_NOTIFIER", "0")
+    monkeypatch.delenv("HP_PUBLIC_HOST", raising=False)
+    monkeypatch.delenv("HP_ASSUME_LOGIN", raising=False)
+    served: list[object] = []
+
+    def run(app: object, **_: object) -> None:
+        served.append(app)
+
+    monkeypatch.setattr(cli.uvicorn, "run", run)
+    cli.serve(Settings(), 0, Seams())
+    (app,) = served
+    assert isinstance(app, FastAPI)
+    return TestClient(app, headers=IDENTITY)
+
+
+def test_serve_learns_the_served_name_from_tailscaled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with tailscaled(tmp_path, canned=status_route()) as fake:
+        client = _served_app(monkeypatch, tmp_path, fake.socket_path)
+    assert client.get("/", headers={"Host": NODE}).status_code == 200
+    assert client.get("/", headers=REBINDING).status_code == 403
+
+
+def test_serve_with_no_learnable_name_refuses_every_header_identity(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    client = _served_app(monkeypatch, tmp_path, tmp_path / "no-tailscaled.sock")
+    assert "Refusing every Tailscale identity" in caplog.text
+    for host in (NODE, "testserver", "evil.example:8772"):
+        assert client.get("/", headers={"Host": host}).status_code == 403, host
 
 
 def test_an_unrouted_path_is_refused_too(tmp_path: Path) -> None:

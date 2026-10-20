@@ -148,11 +148,17 @@ def test_a_no_echo_prompt_keeps_the_length_and_never_the_text(tmp_path: Path) ->
     )
 
 
-def test_actor_and_both_addresses_are_kept_on_both_auth_paths(tmp_path: Path) -> None:
+def test_actor_both_addresses_host_and_origin_are_kept_on_both_auth_paths(
+    tmp_path: Path,
+) -> None:
+    sent = {
+        "X-Forwarded-For": "100.64.0.7",
+        "Host": "evil.example:8772",
+        "Origin": "http://evil.example:8772",
+    }
     for identity in (Identity("you@example.com"), Identity("you@example.com", via="config")):
         recorder = Recorder(
-            make_log(tmp_path),
-            Origin.of(identity, client_ip="127.0.0.1", forwarded_for="100.64.0.7"),
+            make_log(tmp_path), Origin.of(identity, client_ip="127.0.0.1", headers=sent)
         )
         _ = recorder.record(Write(KEYS, payload="1"))
     first, second = lines(tmp_path)
@@ -162,6 +168,9 @@ def test_actor_and_both_addresses_are_kept_on_both_auth_paths(tmp_path: Path) ->
         "config",
     )
     assert (first["client_ip"], first["forwarded_for"]) == ("127.0.0.1", "100.64.0.7")
+    # A forged write names the host it was sent to, so it no longer reads as the phone's.
+    assert (first["host"], first["origin"]) == ("evil.example:8772", "http://evil.example:8772")
+    assert "from 100.64.0.7 to evil.example:8772 " in describe(records(tmp_path)[0])
 
 
 def test_two_generations_bound_the_disk(tmp_path: Path) -> None:

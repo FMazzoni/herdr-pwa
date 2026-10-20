@@ -52,6 +52,8 @@ class Settings(BaseSettings):
     # Waives the identity header for this named login, confined to a loopback Host.
     assume_login: str = ""
     tailscaled_socket: Path = Path("/var/run/tailscale/tailscaled.sock")
+    # The only Host a header identity is accepted on; empty asks tailscaled for its MagicDNS name.
+    public_host: str = ""
 
     push_enabled: bool = True
     # Off leaves the routes up but never polls; tests run without the background loop.
@@ -74,7 +76,7 @@ class Settings(BaseSettings):
     audit_max_bytes: int = Field(default=5 * 1024 * 1024, ge=4096)
     audit_payload_chars: int = Field(default=512, ge=0)
 
-    @field_validator("tailnet_login", "assume_login", "push_subject")
+    @field_validator("tailnet_login", "assume_login", "push_subject", "public_host")
     @classmethod
     def _trimmed(cls, value: str) -> str:
         return value.strip()
