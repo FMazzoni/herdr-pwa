@@ -30,7 +30,8 @@ def answer_digits(prompt: BlockedPrompt | None) -> tuple[str, ...]:
     # Single-choice only: a checklist digit toggles, and a picker digit once changed a global default.
     if prompt is None or not prompt.options or prompt.shape is not MenuShape.SINGLE_CHOICE:
         return ()
-    if not prompt.corroborated:
+    # Measured live: beside a preview a digit only moves the cursor, so it is no answer.
+    if not prompt.corroborated or prompt.digits_move:
         return ()
     # A wrapped label was not printed whole, so the row it names is not certain.
     if not all(printed_whole(prompt.raw, option.label) for option in prompt.options):

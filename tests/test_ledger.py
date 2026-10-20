@@ -65,40 +65,28 @@ PARKED: dict[str, str] = {
     ),
 }
 
-# claude questions drawn with a preview box beside their rows, and what each now reads.
-_ROWS_READ: dict[str, JsonValue] = {"corroborated": True, "drew_rows": True, "asked": True}
+# claude questions drawn with a preview box beside their rows, and what each now reads. No
+# row earns a digit, which there moves the cursor and answers nothing, so every key stays.
+_ROWS_READ: dict[str, JsonValue] = {
+    "corroborated": True,
+    "drew_rows": True,
+    "asked": True,
+    "is_choice": True,
+}
+_ONE_QUESTION: dict[str, dict[str, JsonValue]] = {
+    "verdict": {"shape": "single-choice", "options": 3},
+    "render": {**_ROWS_READ, "numbers": [1, 2, 3]},
+}
+_WIZARD_STEP: dict[str, dict[str, JsonValue]] = {
+    "verdict": {"shape": "single-choice", "options": 2, "steps": [0, 2]},
+    "render": {**_ROWS_READ, "numbers": [1, 2]},
+}
 PREVIEWED: dict[str, dict[str, dict[str, JsonValue]]] = {
-    "foreign/collie/claude--select-preview.txt": {
-        "verdict": {
-            "shape": "single-choice",
-            "options": 3,
-            "digits": ["1", "2", "3"],
-            "rows_answer": True,
-        },
-        "render": {**_ROWS_READ, "is_choice": True, "numbers": [1, 2, 3], "answer_hints": ["esc"]},
-    },
-    "foreign/collie/claude--select-preview-note-attached.txt": {
-        "verdict": {
-            "shape": "single-choice",
-            "options": 3,
-            "digits": ["1", "2", "3"],
-            "rows_answer": True,
-        },
-        "render": {**_ROWS_READ, "is_choice": True, "numbers": [1, 2, 3], "answer_hints": ["esc"]},
-    },
-    "foreign/collie/claude--wizard-preview-q1.txt": {
-        "verdict": {"shape": "single-choice", "options": 2, "digits": ["1", "2"], "steps": [0, 2]},
-        "render": {**_ROWS_READ, "is_choice": True, "numbers": [1, 2]},
-    },
-    "foreign/collie/claude--wizard-preview-note-attached.txt": {
-        "verdict": {"shape": "single-choice", "options": 2, "digits": ["1", "2"], "steps": [0, 2]},
-        "render": {**_ROWS_READ, "is_choice": True, "numbers": [1, 2]},
-    },
-    # Row 1's label wraps inside its column, so the rows are read but earn no digit.
-    "foreign/collie/claude--wizard-preview-wrapped-label.txt": {
-        "verdict": {"shape": "single-choice", "options": 2, "steps": [0, 2]},
-        "render": {**_ROWS_READ, "is_choice": True, "numbers": [1, 2]},
-    },
+    "foreign/collie/claude--select-preview.txt": _ONE_QUESTION,
+    "foreign/collie/claude--select-preview-note-attached.txt": _ONE_QUESTION,
+    "foreign/collie/claude--wizard-preview-q1.txt": _WIZARD_STEP,
+    "foreign/collie/claude--wizard-preview-note-attached.txt": _WIZARD_STEP,
+    "foreign/collie/claude--wizard-preview-wrapped-label.txt": _WIZARD_STEP,
 }
 
 # Every deliberate divergence from the ledger, by entry id, with the reason it is better.
@@ -123,8 +111,8 @@ DIVERGENCES: dict[str, str] = {
         PREVIEWED,
         "claude draws an option's preview as a box beside the rows, and the old app read the "
         "box's sides as text after the last row, so no run was read and the question offered "
-        "only its printed keys. The rows are now read with the box cut away, and on a wizard "
-        "step the strip above them says the question is one step of two. "
+        "only its printed keys. The rows are now read with the box cut away, still with no "
+        "digit, and on a wizard step the strip above them says the question is one step of two. "
         "test_a_preview_beside_the_rows_is_all_that_leaves_the_ledger holds the rest.",
     ),
     **dict.fromkeys(
