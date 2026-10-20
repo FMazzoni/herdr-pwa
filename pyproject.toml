@@ -41,6 +41,7 @@ dev = [
     "datamodel-code-generator",
     "playwright>=1.63.0",
     "pytest-xdist>=3.8.0",
+    "hypothesis>=6.170.5",
 ]
 
 [tool.complexipy]

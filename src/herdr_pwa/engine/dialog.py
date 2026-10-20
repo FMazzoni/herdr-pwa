@@ -505,6 +505,8 @@ def _titled_message(paragraphs: list[str]) -> str:
     return ""
 
 
+# A counter or clock in a row label ticks while the question stays put.
+_DIGITS_RE = re.compile(r"\d+")
 _COUNTER_RE = re.compile(r"^Question \d+/\d+\b[^\n]*\n")
 """codex's ``Question N/M`` counter, heading the question it counts, whatever that ends with."""
 
@@ -618,10 +620,16 @@ class BlockedPrompt(BaseModel):
     """The hints whose key gives the terminal to another program, so never a control."""
     stepper: Stepper | None = None
     body: str = ""
-    drew_rows: bool = False
     asked: bool = False
     digits_move: bool = False
     """True when the rows sit beside a preview, where a digit moves the cursor and answers nothing."""
+    drawn_labels: tuple[str, ...] = ()
+    """The labels of the trailing row run, named as options or not, with their digits masked."""
+
+    @property
+    def drew_rows(self) -> bool:
+        """True when the screen ends in a numbered row run, trusted as a menu or not."""
+        return bool(self.drawn_labels)
 
     @field_validator("target", mode="before")
     @classmethod
@@ -678,6 +686,8 @@ class BlockedPrompt(BaseModel):
         if not (self.question or self.options or self.shape is MenuShape.MULTI_SELECT):
             return ""
         rows = (f"{o.number}\x1f{o.label}\x1f{o.checked}" for o in self.options)
+        # Rows not named as options still answer on Enter, so relabelling one moves the question.
+        unnamed = () if self.options else self.drawn_labels
         step = self.stepper
         return screen_digest(
             "\x1e".join(
@@ -688,6 +698,7 @@ class BlockedPrompt(BaseModel):
                     self.question,
                     "" if step is None else f"{step.answered}/{'\x1d'.join(step.steps)}",
                     *rows,
+                    *unnamed,
                 )
             )
         )
@@ -724,7 +735,7 @@ class BlockedPrompt(BaseModel):
             options=_choices(buttons) if shape is MenuShape.BUTTONS else _options(run, shape),
             stepper=_stepper(lines, stop) or _tabs_strip(lines, stop, hints),
             body=_body(lines, box),
-            drew_rows=found is not None,
+            drawn_labels=tuple(_DIGITS_RE.sub("#", label) for _, _, label in found or ()),
             asked=bool(_asks(lines, stop)),
             raw=screen.text,
             shape=shape,
