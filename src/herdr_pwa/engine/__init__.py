@@ -29,6 +29,7 @@ from herdr_pwa.engine.client import (
 )
 from herdr_pwa.engine.config import EngineSettings, engine_settings
 from herdr_pwa.engine.dialog import BlockedPrompt, KeyHint, MenuShape, ends_a_question
+from herdr_pwa.engine.holder import holds_session
 from herdr_pwa.engine.model import (
     Agent,
     AgentStatus,
@@ -175,6 +176,7 @@ __all__ = [
     "harness_of",
     "has_byte_frontier",
     "history",
+    "holds_session",
     "is_api_error",
     "is_compact_summary",
     "is_slash_command",

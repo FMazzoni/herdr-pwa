@@ -38,7 +38,7 @@ from herdr_pwa.web.stats import (
     with_statusline,
 )
 from herdr_pwa.web.writing import first_note
-from herdr_pwa.writes.resolve import doubt
+from herdr_pwa.writes.resolve import Witness, doubt
 
 # Files is a tab too, but its pages are the explorer's, reached through /agent/<session>/files.
 TABS: Final = ("chat", "pane")
@@ -107,7 +107,7 @@ def _chat_of(web: WebState, reads: Reads, query: ChatQuery) -> ChatView:
     agent = reads.agent
     ask = Ask(messages=web.settings.chat_messages, start=query.start, before=query.before)
     page = chat_window(reads.log, ask=ask, tails=web.tails)
-    said = doubt(agent, web.settings.transcript_roots)
+    said = doubt(agent, Witness(web.client, web.settings.transcript_roots, web.proc))
     drawn = query.start is not None or query.before is not None
     # Every page reaches the newest turn, an earlier one included, so each says what is on its way.
     return chat_view(page, turning=_turning(web, agent, reads.usage), doubt=said, drawn=drawn)
