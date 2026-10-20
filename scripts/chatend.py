@@ -361,14 +361,32 @@ def cold(ctx: WalkCtx) -> list[str]:
 
 
 # A slow link, as a phone's often is, lets a frame run between two of the page's scripts. The page
-# is made to measure itself after geometry.js (a resize, as iOS sends while its bars settle), and
-# chatend.js is held back until that frame has run.
+# is made to measure itself after one script (a resize, as iOS sends while its bars settle), and a
+# later one is held back until that frame has run.
 FRAME_JS = "/walk/frame.js"
 FRAMED = "/walk/framed"
 FRAME = f'dispatchEvent(new Event("resize")); requestAnimationFrame(() => fetch("{FRAMED}"));'
-AFTER_GEOMETRY = re.compile(rb'<script src="/static/geometry\.js\?v=[0-9a-f]+" defer></script>')
-# Under a digest the server does not know, chatend.js is never cached, so every load fetches it.
-CHATEND_URL = re.compile(rb"(/static/chatend\.js\?v=)([0-9a-f]+)")
+# The frame lands the page itself, as the dock's first measure does when it falls in that frame.
+LANDING_FRAME = f'hp.chatend.toEnd(); requestAnimationFrame(() => fetch("{FRAMED}"));'
+
+
+@dataclass(frozen=True, slots=True)
+class Held:
+    """Which script the slow link holds, the script after which the frame runs, and the frame."""
+
+    script: str = "chatend.js"
+    after: str = "geometry.js"
+    frame: str = FRAME
+
+
+def _tag(name: str) -> re.Pattern[bytes]:
+    return re.compile(
+        rb'<script src="/static/' + re.escape(name.encode()) + rb'\?v=[0-9a-f]+" defer></script>'
+    )
+
+
+def _digest(name: str) -> re.Pattern[bytes]:
+    return re.compile(rb"(/static/" + re.escape(name.encode()) + rb"\?v=)([0-9a-f]+)")
 
 
 async def _serve(send: Send, body: bytes, kind: bytes) -> None:
@@ -377,11 +395,16 @@ async def _serve(send: Send, body: bytes, kind: bytes) -> None:
     await send({"type": "http.response.body", "body": body})
 
 
-def _late_page(page: bytes) -> bytes:
-    """``page`` measuring itself after geometry.js, with chatend.js fetched afresh."""
-    page = CHATEND_URL.sub(lambda m: m[1] + b"0" * len(m[2]), page)
-    tag = f'<script src="{FRAME_JS}" defer></script>'.encode()
-    return AFTER_GEOMETRY.sub(lambda m: m[0] + tag, page)
+def _late_page(held: str, after: str) -> Callable[[bytes], bytes]:
+    """A page measuring itself after ``after``, with ``held`` fetched afresh."""
+
+    def rewrite(page: bytes) -> bytes:
+        # Under a digest the server does not know, the held script is never cached.
+        page = _digest(held).sub(lambda m: m[1] + b"0" * len(m[2]), page)
+        tag = f'<script src="{FRAME_JS}" defer></script>'.encode()
+        return _tag(after).sub(lambda m: m[0] + tag, page)
+
+    return rewrite
 
 
 def _rewriting(send: Send, rewrite: Callable[[bytes], bytes]) -> Send:
@@ -404,10 +427,11 @@ def _unzipped(scope: Scope) -> Scope:
 
 
 class SlowLink:
-    """``app`` with chatend.js held back until the page has drawn a frame after geometry.js."""
+    """``app`` with one script held back until the page has drawn a frame after an earlier one."""
 
-    def __init__(self, app: ASGIApp) -> None:
+    def __init__(self, app: ASGIApp, held: Held | None = None) -> None:
         self.app = app
+        self.scripts = held or Held()
         self.framed = asyncio.Event()
         self.held = False
 
@@ -415,20 +439,24 @@ class SlowLink:
         """Serve the frame's script and its signal, hold chatend.js for it, pass the rest."""
         path = str(scope["path"]) if scope["type"] == "http" else ""
         if path == FRAME_JS:
-            await _serve(send, FRAME.encode(), b"text/javascript")
+            await _serve(send, self.scripts.frame.encode(), b"text/javascript")
             return
         if path == FRAMED:
             self.framed.set()
             await _serve(send, b"", b"text/plain")
             return
-        if path == "/static/chatend.js":
+        if path == f"/static/{self.scripts.script}":
             self.held = True
             with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(self.framed.wait(), WAIT_SECONDS)
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
-        await self.app(_unzipped(scope), receive, _rewriting(send, _late_page))
+        await self.app(
+            _unzipped(scope),
+            receive,
+            _rewriting(send, _late_page(self.scripts.script, self.scripts.after)),
+        )
 
 
 def slow_link(
@@ -445,6 +473,39 @@ def slow_link(
         if not (link.held and link.framed.is_set()):
             return [*problems, f"{tab.name}: no frame ran before chatend.js, so it proves nothing"]
         return problems
+
+    return walk
+
+
+def columns_late(
+    mount: Callable[[ASGIApp], None],
+) -> Walk:
+    """The tall question loaded on a slow link that holds app.js past a frame after chatend.js."""
+
+    def walk(ctx: WalkCtx) -> list[str]:
+        """That frame lands the page on the question before app.js shows Keep the columns above
+        it; the dock's measure on load then lands it again, with the question's top under the bar."""
+        driver, tab = ctx.driver, ctx.tab
+        link = SlowLink(ctx.rig.http.app, Held("app.js", "chatend.js", LANDING_FRAME))
+        mount(link)
+        ctx.open()
+        found: dict[str, object] = {}
+        if not _until(lambda: bool(found.update(_tall(driver)) or found)):
+            return [f"{tab.name}: never drew its question"]
+        settle(driver)
+        found.update(_tall(driver))
+        if not (link.held and link.framed.is_set()):
+            return [f"{tab.name}: no frame ran before app.js, so it proves nothing"]
+        if not found.get("tall"):
+            return [
+                f"{tab.name}: the answer fits between the bar and the dock, so it proves nothing"
+            ]
+        top, under = _num(found, "top"), _num(found, "under")
+        if abs(top - under) <= DRIFT:
+            return []
+        return [
+            f"{tab.name}: the question's first line sits at {top:.0f}px, not under the bar ({under:.0f}px)"
+        ]
 
     return walk
 
@@ -1992,10 +2053,12 @@ def _walks(
     chat = State("stream loss", f"{AGENT}?tab=chat", "", runner(snapshot_frame), long_chat(TURNS))
     lost = State(chat.name, chat.path, "", chat.replies, chat.transcript, settings=LIVE_SETTINGS)
     slow = State("slow link", f"{AGENT}?tab=chat", "", runner(snapshot_frame), long_chat(TURNS))
+    [plan] = pick(["agent-answer-plan"])
     return [
         *_tabs(),
         (Tab("stream loss", lost, f"Reply {TURNS - 1}:", _say), falls_back(mount)),
         (Tab("chat slow link", slow, f"Reply {TURNS - 1}:", _say), slow_link(mount)),
+        (Tab("tall plan columns late", plan, "", _print, 320, 568), columns_late(mount)),
     ]
 
 
