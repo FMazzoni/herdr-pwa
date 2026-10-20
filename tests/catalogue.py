@@ -19,6 +19,7 @@ from tests.test_opencode import build as opencode_db
 from tests.webfakes import (
     AGENT_GET,
     FIXTURES,
+    IDLE_SESSION,
     PROMPT,
     READ,
     SEND_KEYS,
@@ -702,6 +703,69 @@ def crowded_chat() -> list[dict[str, JsonValue]]:
 
 def _crowded_at(rig: Rig) -> None:
     write_transcript(rig.settings.state_dir.parent / "transcripts", WORKING_SESSION, crowded_chat())
+
+
+# What an idle agent left running: a dev server, a watcher, a long build, as their calls name them.
+BACKGROUND_SHELLS: Final = (
+    ("Serve the docs on port 4000", "npm run docs -- --port 4000"),
+    ("", "uv run python scripts/shots.py --watch --states chat-idle-shells chat-idle-both"),
+    ("Build the release bundle", "npm run build"),
+)
+
+
+def _shell(
+    n: int, description: str, command: str, seconds_ago: float
+) -> list[dict[str, JsonValue]]:
+    """A Bash call sent to the background, and the result that names its task id."""
+    args: dict[str, JsonValue] = {"command": command, "run_in_background": True}
+    if description:
+        args["description"] = description
+    result = _result(n, f"Command running in background with ID: bg{n}.", seconds_ago)
+    result["toolUseResult"] = {"stdout": "", "stderr": "", "backgroundTaskId": f"bg{n}"}
+    return [_call(n, "Bash", args, seconds_ago + 1), result]
+
+
+# A dev server an earlier turn left running, which no later turn waits on.
+OLD_SERVER: Final = ("Serve the site on port 8000", "python -m http.server 8000")
+
+
+@dataclass(frozen=True)
+class LeftRunning:
+    """What an agent left running: shells and agents its last turn started, servers an older one did."""
+
+    shells: int = 0
+    agents: int = 0
+    old: int = 0
+
+
+def background_chat(left: LeftRunning) -> list[dict[str, JsonValue]]:
+    """A finished turn that left ``left``'s shells and agents running behind it, after an earlier
+    turn that left its old servers running."""
+    shells, agents, old = left.shells, left.agents, left.old
+    records: list[dict[str, JsonValue]] = []
+    if old:
+        records.append(_at(human_says("Start the site server.", uuid="sh0"), 3600))
+        for n in range(old):
+            records.extend(_shell(20 + n, *OLD_SERVER, 3500 - 10 * n))
+    records.append(_at(human_says("Start the docs server and the watchers.", uuid="sh"), 900))
+    for n, (description, command) in enumerate(BACKGROUND_SHELLS[:shells], start=1):
+        records.extend(_shell(n, description, command, 880 - 60 * n))
+    for n, (agent, description) in enumerate(SPAWNED_WORKERS[:agents], start=10):
+        records.extend(_launch(n, agent, description, 700 - n))
+    records.append(_at(assistant_says("All started; they run on.", uuid="sa"), 600, "sm9"))
+    return records
+
+
+def _background_at(left: LeftRunning, *, server: bool = False) -> Prime:
+    """The working pane's agent left work running; *server*: an idle one left only an old server."""
+
+    def prime(rig: Rig) -> None:
+        roots = rig.settings.state_dir.parent / "transcripts"
+        write_transcript(roots, WORKING_SESSION, background_chat(left))
+        if server:
+            write_transcript(roots, IDLE_SESSION, background_chat(LeftRunning(old=1)))
+
+    return prime
 
 
 def _turn_at(stage: str) -> Prime:
@@ -2082,6 +2146,49 @@ TURNS: Final = (
         runner(_working_as("idle")),
         prime=_turn_at("done"),
         title="Chat with an idle agent whose last turn is over",
+    ),
+    State(
+        "chat-idle-shells",
+        f"{AGENT}?tab=chat",
+        "#agent-tray .tray__row--background",
+        runner(_working_as("idle")),
+        prime=_background_at(LeftRunning(shells=2)),
+        title="Idle, with two shells it started still running: the row says so",
+    ),
+    State(
+        "chat-idle-agent",
+        f"{AGENT}?tab=chat",
+        "#agent-tray .tray__row--background",
+        runner(_working_as("idle")),
+        prime=_background_at(LeftRunning(agents=1)),
+        title="Idle, with an agent it started still running",
+    ),
+    State(
+        "chat-idle-both",
+        f"{AGENT}?tab=chat",
+        "#agent-tray .tray__row--background",
+        runner(_working_as("idle")),
+        prime=_background_at(LeftRunning(shells=3, agents=2, old=1)),
+        title="Idle, with shells and agents it started still running, and an older server",
+    ),
+    State(
+        "chat-idle-both-sheet",
+        f"{AGENT}?tab=chat",
+        "#agent-tray details[open] .spawned",
+        runner(_working_as("idle")),
+        prime=_background_at(LeftRunning(shells=3, agents=2, old=1)),
+        title="The sheet of an idle agent: agents, then shells (the last turn's first), by name and time",
+        armed="#agent-tray .tray__row",
+        act=_click("#agent-tray .tray__row"),
+    ),
+    State(
+        "feed-idle-pending",
+        "/",
+        "#feed-list .card__status--running",
+        runner(_working_as("idle")),
+        prime=_background_at(LeftRunning(shells=1, agents=2), server=True),
+        title="The feed: an idle agent whose work still runs leads the idle cards in blue; one that "
+        "left only an old server stays plain idle",
     ),
     State(
         "chat-needs-you",

@@ -24,6 +24,7 @@ from herdr_pwa.engine import (
     chat_window,
     locate_log,
 )
+from herdr_pwa.web.background import background_times
 from herdr_pwa.web.chat import ChatView, Turning, chat_view, status_row
 from herdr_pwa.web.deps import WebState, hidden_tick, viewer_guard
 from herdr_pwa.web.herd import agent_status, asked_by, find_agent
@@ -32,7 +33,6 @@ from herdr_pwa.web.routers.compose import answer_region, composer_region, row_ke
 from herdr_pwa.web.stats import (
     Reading,
     Stats,
-    spawned_times,
     stats_for,
     turn_times,
     with_statusline,
@@ -125,7 +125,7 @@ def _turning(web: WebState, agent: Agent, usage: SessionUsage) -> Turning:
         stretch=f"{agent.session}:{turn}",
         asked=asked_by(web, agent) if needs_you(status) else "",
         times=turn_times(usage, now),
-        spawned=spawned_times(usage, now),
+        spawned=background_times(web, str(agent.target), usage, now),
     )
 
 

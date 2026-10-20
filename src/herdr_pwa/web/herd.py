@@ -2,7 +2,7 @@
 
 import logging
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from herdr_pwa.decisions import (
     Fetched,
@@ -22,6 +22,7 @@ from herdr_pwa.engine import (
     Snapshot,
     as_session_id,
 )
+from herdr_pwa.web.background import pending_by_session
 from herdr_pwa.web.deps import WebState
 from herdr_pwa.web.failures import AgentGone
 from herdr_pwa.web.naming import card_question
@@ -107,6 +108,7 @@ def load_herd(web: WebState) -> Herd:
     entry = web.snapshot()
     snapshot = entry.value
     overlay = overlay_of(web, snapshot.agents)
+    overlay = replace(overlay, pending=pending_by_session(web, snapshot.agents, overlay))
     blocked = (a for a in snapshot.agents if a.session and shows_question(a, overlay))
     prompts: dict[str, BlockedPrompt] = {
         a.session: p for a in blocked if (p := prompt_of(web, a)) is not None

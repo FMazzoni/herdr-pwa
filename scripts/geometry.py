@@ -403,6 +403,36 @@ if (send && drawn(send)) {
     }
   }
 }
+// G4: a status-row line never opens on a separator. One left of its counts box is clipped away.
+const leading = [];
+const shown = (el) => box(el).width > 0 && getComputedStyle(el).visibility !== "hidden";
+const sameLine = (a, b) => Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 0.5 * a.height;
+for (const counts of document.querySelectorAll(".tray__counts")) {
+  const edge = box(counts).left;
+  const row = counts.closest(".tray__row");
+  const words = row ? [...row.querySelectorAll(".tray__words")].filter(shown) : [];
+  const before = words.map(box);
+  for (const count of counts.querySelectorAll(".tray__count")) {
+    const sep = count.querySelector(".tray__sep");
+    const text = count.querySelector(".count") || count;
+    if (sep && shown(sep) && box(sep).right > edge + 0.5) {
+      const s = box(sep);
+      // The words sit centred on the row, so beside a wrapped run any overlap puts them on its line.
+      const beside = (b) => b.right <= s.left + 0.5 && (words.length && b === before[0]
+        ? Math.min(s.bottom, b.bottom) > Math.max(s.top, b.top) : sameLine(s, b));
+      if (!before.some(beside)) {
+        leading.push({ what: describe(count), text: count.textContent.trim() });
+      }
+    }
+    if (shown(text)) before.push(box(text));
+  }
+}
+// G4: herdr's state word in the row is never dropped, at any width or text size.
+for (const word of document.querySelectorAll(".tray__row .tray__words--state")) {
+  if (!shown(word) || word.scrollWidth > word.clientWidth + 0.5) {
+    leading.push({ what: describe(word), text: word.textContent.trim(), state: true });
+  }
+}
 const uncovered = [];
 for (const slot of document.querySelectorAll(".tray__slot")) {
   const arm = slot.querySelector(".tray__arm");
@@ -417,7 +447,7 @@ for (const slot of document.querySelectorAll(".tray__slot")) {
 }
 return { page: page, scrollers: scrollers, spills: spills, taps: taps, edges: edges,
   buried: buried, measured: measured, zooms: zooms, cells: cells, cut: cut, bar: bar,
-  near: near, uncovered: uncovered };
+  near: near, uncovered: uncovered, leading: leading };
 """.replace("REACH", str(STOP_REACH))
 
 
@@ -748,6 +778,16 @@ def _judge_cards(found: dict[str, object], at: Spot) -> None:
         )
 
 
+def _judge_leading(found: dict[str, object], at: Spot) -> None:
+    for row in _rows(found, "leading"):
+        if row.get("state"):
+            at.fail(f"the status row drops or cuts its state word {row['text']!r}")
+        else:
+            at.fail(
+                f"{row['what']} {row['text']!r} opens a line of the status row with its separator"
+            )
+
+
 def _judge_stops(found: dict[str, object], at: Spot) -> None:
     for row in _rows(found, "near"):
         where = "in Send's column" if row["column"] else f"{row['gap']:.1f}px from Send"
@@ -806,6 +846,7 @@ def judge(found: dict[str, object], at: Spot) -> None:
         )
     _judge_cards(found, at)
     _judge_stops(found, at)
+    _judge_leading(found, at)
     measured = found.get("measured")
     at.tally.taps += measured if isinstance(measured, int) else 0
 

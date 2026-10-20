@@ -81,11 +81,22 @@
 
 {# The first line of a card: status dot, a title that ellipsizes, and the status word. `word` says
    something else in the status's place; `dotted=false` leaves the dot out. #}
-{% macro card_top(status, title, word=none, dotted=true) -%}
+{% macro pending_words(pending) -%}
+{%- if pending.agents %}{{ pending.agents }} agent{{ "s" if pending.agents != 1 }}{% endif %}
+{%- if pending.agents and pending.shells %} · {% endif %}
+{%- if pending.shells %}{{ pending.shells }} shell{{ "s" if pending.shells != 1 }}{% endif %}
+{%- endmacro %}
+
+{% macro card_top(status, title, word=none, dotted=true, pending=none) -%}
 <span class="card__top">
-      {{ dot(status) if dotted else "" }}
+      {{ dot("running" if pending else status) if dotted else "" }}
       <span class="card__title">{{ title }}</span>
+      {%- if pending %}
+      {#- Idle with work still to come back: what runs, in the slot the state word takes. #}
+      <span class="card__status card__status--running">{{ pending_words(pending) }}</span>
+      {%- else %}
       <span class="card__status">{{ status if word is none else word }}</span>
+      {%- endif %}
     </span>
 {%- endmacro %}
 

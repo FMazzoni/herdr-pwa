@@ -163,8 +163,8 @@ def test_the_page_lists_running_agents_then_those_ended_this_turn() -> None:
         ],
     )
     assert spawned_times(usage, NOW) == (
-        SpawnedTime("Runs", running=True, seconds=1800),
-        SpawnedTime("Ended", running=False, failed=True, seconds=600),
+        SpawnedTime("Runs", running=True, seconds=1800, fresh=True),
+        SpawnedTime("Ended", running=False, failed=True, seconds=600, fresh=True),
     )
 
 
@@ -225,11 +225,13 @@ def test_with_every_agent_ended_the_bubble_goes_quiet_as_before() -> None:
     assert [a.state for a in view.agents] == ["finished"]
 
 
-def test_the_list_is_drawn_only_beside_a_live_bubble() -> None:
-    """A session that dies never says its agents ended, so an idle agent lists none."""
+def test_once_the_turn_is_over_the_list_is_drawn_only_while_one_still_runs() -> None:
+    """What a dead process left never says it ended; the router leaves that out by when the
+    agent's process started, so an agent still listed running is one that runs."""
     view = _view(AgentStatus.DONE, TWO_RUN)
     assert view.bubble is None
-    assert view.agents == ()
+    assert [a.state for a in view.agents] == ["running", "running", "finished"]
+    assert _view(AgentStatus.DONE, TWO_RUN[2:]).agents == ()
 
 
 def test_the_row_lists_the_agents_an_orchestrator_waits_on(tmp_path: Path) -> None:

@@ -17,7 +17,7 @@ from herdr_pwa.engine.transcript import (
     tally_claude,
 )
 
-# Few phones watch few agents; past this the least recently viewed log is forgotten.
+# At least this many logs are held; the feed fits it to the herd, since each card reads its tally.
 MAX_FILES: Final = 6
 _SEAL_BYTES: Final = 64
 
@@ -45,6 +45,16 @@ class UsageCache:
         self._max_files = files
         self._max_bytes = max_bytes
         self._lock = threading.Lock()
+
+    def fit(self, agents: int) -> None:
+        """Hold a tally for each of *agents* agents, never fewer than the floor."""
+        with self._lock:
+            self._max_files = max(MAX_FILES, agents)
+
+    @property
+    def held(self) -> int:
+        """How many logs' tallies are held now."""
+        return len(self._files)
 
     def read(self, log: Located) -> SessionUsage:
         """*log*'s tally. Never raises; a harness with no store answers ``unsupported``."""
@@ -74,7 +84,8 @@ class UsageCache:
             )
             if held is None or not appended:
                 held = _Held(ident, tally_claude(path, max_bytes=self._max_bytes), b"")
-            elif stat.st_size > held.live.end:
+            else:
+                # Grown even when the log is not: its agents' logs may have been.
                 grow_claude(held.live, path)
             held.seal = _seal(path, held.live.end)
             self._files[key] = held

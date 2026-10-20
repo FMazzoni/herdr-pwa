@@ -2,14 +2,20 @@
 {% set base = "/agent/" ~ (agent.session|urlencode) %}
 {% set url = base ~ "/tray" %}
 {% set b = chat.bubble %}
-{% set dots = {"working": "working", "quiet": "updating", "blocked": "blocked", "done": "done", "still": "idle"} %}
+{% set dots = {"working": "working", "quiet": "updating", "blocked": "blocked", "done": "done", "still": "idle", "background": "idle"} %}
 {# What the row counts, each its own token: bubble.js rewrites only the words, so a count is never
-   lost to a redraw of them, and a count is never cut (the words give way first). #}
+   lost to a redraw of them, and a count is never cut (the words give way first). Agents come first:
+   they report back and wake the agent, where a shell may be a server that runs on. #}
 {% macro counts() -%}
-{%- if row.running or row.queued %}<span class="tray__counts">
+{%- if row.shells or row.running or row.queued %}<span class="tray__counts">
   {%- if row.running %}<span class="tray__count"><span class="tray__sep" aria-hidden="true">&middot;</span>{{ ui.count(row.running, "agent") }}</span>{% endif %}
+  {%- if row.shells %}<span class="tray__count"><span class="tray__sep" aria-hidden="true">&middot;</span>{{ ui.count(row.shells, "shell") }}</span>{% endif %}
   {%- if row.queued %}<span class="tray__count"><span class="tray__sep" aria-hidden="true">&middot;</span>{{ ui.count(row.queued, "queued", "queued") }}</span>{% endif -%}
 </span>{% endif %}
+{%- endmacro %}
+{#- One background item in the sheet: its dot, its name cut by the row's ellipsis, how it ended, its time. #}
+{% macro spawned_row(a) -%}
+<li class="spawned__row spawned__row--{{ a.state }}">{{ ui.dot({"running": "working", "failed": "blocked"}.get(a.state, "done")) }}<span class="spawned__name">{{ a.description }}</span><span class="spawned__end">{% if a.state == "failed" %}<span class="spawned__failed">failed</span>{% endif %}{% if a.time %}<span class="spawned__time">{{ a.time }}</span>{% endif %}</span></li>
 {%- endmacro %}
 {# A control whose first tap only arms the confirm in the sheet's header. Its safe answer is drawn
    in the same slot, so a second tap of a double tap lands on "Keep going". Without script the tap
@@ -27,11 +33,14 @@
   <details class="tray__sheet">
     <summary class="tray__row tray__row--{{ row.state }}" id="agent-tray-row"><span class="sr-only"><span class="tray__said">{{ row.lead }}</span>{{ row.sentence[row.lead|length:] }}</span>{{ ui.dot(dots[row.state]) }}
       {%- if b %}<span class="bubble bubble--{{ b.state }} tray__words" data-hp-bubble="{{ b.state }}" data-hp-said="{{ b.said }}" data-hp-stretch="{{ b.stretch }}"{% if b.ran is not none %} data-hp-ran="{{ b.ran }}"{% endif %}{% if b.quiet is not none %} data-hp-quiet="{{ b.quiet }}"{% endif %} data-hp-quiet-after="{{ b.quiet_after }}" data-working-palette="{{ b.palette }}" data-working-motion="{{ b.motion }}"><span class="bubble__text" aria-hidden="true">{{ b.text }}</span></span>
+      {#- herdr's state word is never dropped: it is what the row is about. #}
+      {%- elif row.state == "background" %}<span class="tray__words tray__words--state" aria-hidden="true">{{ row.lead }}</span>
       {%- elif chat.receipt %}<span class="tray__words chat__receipt" data-hp-bubble="done" data-hp-said="{{ chat.receipt.said }}" aria-hidden="true">{{ chat.receipt.text }}</span>
-      {%- else %}<span class="tray__words" aria-hidden="true">{{ row.lead }}</span>{% endif %}
+      {%- else %}<span class="tray__words tray__words--state" aria-hidden="true">{{ row.lead }}</span>{% endif %}
       {{- counts() }}
       {%- if b and b.time %}<span class="tray__time"><span class="tray__sep" aria-hidden="true">&middot;</span><span class="bubble__time" aria-hidden="true">{{ b.time }}</span></span>{% endif %}
-      {%- if not b %}<span class="tray__tail" aria-hidden="true">Keys</span>{% endif -%}
+      {#- The label names what the tap opens: the work still running leads the sheet when there is any. #}
+      {%- if not b %}<span class="tray__tail" aria-hidden="true">{{ "Details" if chat.agents or chat.shells else "Keys" }}</span>{% endif -%}
     </summary>
     {#- The sheet's shelf: it ends at the row's top, so a sheet dragged or settling down slides in
         behind the row and is gone, never over the row or the composer. #}
@@ -60,12 +69,18 @@
         {%- if b and b.state == "quiet" %}
         <p class="tray__note">{{ b.said }}; herdr still reports it working.</p>
         {%- endif %}
-        {#- The agents it started in the background, as its pane lists them: running first, then those
-            done this turn. Only beside a live bubble, since a session that dies never says they ended. #}
+        {#- What it started in the background, agents above shells, as its pane lists them: running first, then those done
+            this turn. Beside a live bubble, or while one still runs; what a dead process left is not. #}
         {%- if chat.agents %}
         <section class="tray__group">
           <h3 class="sheet__heading">Agents <b class="count__n">{{ chat.agents|length }}</b></h3>
-          <ul class="spawned" aria-label="Agents it started">{% for a in chat.agents %}<li class="spawned__row spawned__row--{{ a.state }}">{{ ui.dot({"running": "working", "failed": "blocked"}.get(a.state, "done")) }}<span class="spawned__name">{{ a.description }}</span><span class="spawned__end">{% if a.state == "failed" %}<span class="spawned__failed">failed</span>{% endif %}{% if a.time %}<span class="spawned__time">{{ a.time }}</span>{% endif %}</span></li>{% endfor %}</ul>
+          <ul class="spawned" aria-label="Agents it started">{% for a in chat.agents %}{{ spawned_row(a) }}{% endfor %}</ul>
+        </section>
+        {%- endif %}
+        {%- if chat.shells %}
+        <section class="tray__group">
+          <h3 class="sheet__heading">Shells <b class="count__n">{{ chat.shells|length }}</b></h3>
+          <ul class="spawned" aria-label="Shells it started">{% for a in chat.shells %}{{ spawned_row(a) }}{% endfor %}</ul>
         </section>
         {%- endif %}
         {%- if pad %}

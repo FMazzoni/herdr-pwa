@@ -7,6 +7,7 @@ from typing import Final
 from herdr_pwa.clock import duration, duration_said, elapsed
 from herdr_pwa.decisions import QUIET_AFTER, gone_quiet, needs_you, still_talking
 from herdr_pwa.engine import (
+    SPAWNED_SHELL,
     AgentStatus,
     HistoryState,
     Speaker,
@@ -134,8 +135,10 @@ class ChatView:
     # is over, how long it worked.
     bubble: "Bubble | None" = None
     receipt: "Receipt | None" = None
-    # Under the bubble: the agents it started in the background, running first, as its pane lists.
+    # Under the bubble: the agents it started in the background, running first, as its pane lists,
+    # and the shells it left running.
     agents: "tuple[AgentLine, ...]" = ()
+    shells: "tuple[AgentLine, ...]" = ()
     # Why the session the pane reports may not be the agent there; shown above everything.
     doubt: str = ""
     # The log could not be read under a drawing the reader already has, which then stands.
@@ -317,15 +320,29 @@ class AgentLine:
     time: str = ""
 
 
+# A shell is named by its call's description or its command's first line, cut here; the sheet's
+# ellipsis takes what is left of the row.
+_SHELL_CHARS: Final = 120
+
+
 def _agent_line(agent: SpawnedTime) -> AgentLine:
     state = "running" if agent.running else "failed" if agent.failed else "finished"
     time = elapsed(agent.seconds) if agent.seconds is not None else ""
+    if agent.kind == SPAWNED_SHELL:
+        return AgentLine(agent.description[:_SHELL_CHARS] or "Shell", state, time)
     return AgentLine(agent.description or "Agent", state, time)
 
 
 def _waiting_on(spawned: tuple[SpawnedTime, ...]) -> bool:
-    """Whether the turn waits on agents it started; the row counts them beside the words."""
-    return any(agent.running for agent in spawned)
+    """Whether the turn waits on agents it started; the row counts them beside the words. A shell
+    left running is not waited on: the turn goes on, or ends, beside it."""
+    return any(agent.running and agent.kind != SPAWNED_SHELL for agent in spawned)
+
+
+def _lines(spawned: tuple[SpawnedTime, ...], *, shells: bool) -> "tuple[AgentLine, ...]":
+    # Running first, and of those what the last turn started; stable, so each keeps its age order.
+    ordered = sorted(spawned, key=lambda a: (not a.running, not a.fresh))
+    return tuple(_agent_line(a) for a in ordered if (a.kind == SPAWNED_SHELL) == shells)
 
 
 @dataclass(frozen=True, slots=True)
@@ -493,8 +510,10 @@ def chat_view(
     held = drawn and not turns and page.state is HistoryState.unreadable
     items = fold_tools(turns)
     bubble, receipt = _status(items, turning)
-    # Only while the turn is live: an agent killed with its session never says it ended.
-    agents = tuple(_agent_line(agent) for agent in turning.spawned) if bubble else ()
+    # Beside a live turn, or while something it started still runs; the router leaves out what
+    # a dead process left, which never says it ended.
+    listed = bubble is not None or any(agent.running for agent in turning.spawned)
+    spawned = turning.spawned if listed else ()
     return ChatView(
         items,
         note,
@@ -503,7 +522,8 @@ def chat_view(
         more=page.has_more,
         bubble=bubble,
         receipt=receipt,
-        agents=agents,
+        agents=_lines(spawned, shells=False),
+        shells=_lines(spawned, shells=True),
         doubt=doubt,
         held=held,
         door=not turns and page.state in _READ_ON_PANE,
@@ -513,14 +533,15 @@ def chat_view(
 
 @dataclass(frozen=True, slots=True)
 class Row:
-    """The status row above the composer: its state, how many started agents still run, how many
-    prompts wait, and the one sentence VoiceOver hears for it."""
+    """The status row above the composer: its state, how many started agents and shells still
+    run, how many prompts wait, and the one sentence VoiceOver hears for it."""
 
     state: str
     running: int
     queued: int
     lead: str
     sentence: str
+    shells: int = 0
 
 
 def _counted(n: int, one: str, many: str, tail: str) -> str:
@@ -528,18 +549,23 @@ def _counted(n: int, one: str, many: str, tail: str) -> str:
 
 
 def status_row(view: ChatView, status: str) -> Row:
-    """The row for *view*: its bubble's words, else the finished turn's, else the status word."""
+    """The row for *view*: its bubble's words, else the finished turn's, else the status word,
+    which says what it left running once its turn is over."""
     running = sum(1 for agent in view.agents if agent.state == "running")
+    shells = sum(1 for shell in view.shells if shell.state == "running")
     queued = len(view.queued)
     if view.bubble is not None:
         state, lead = view.bubble.state, view.bubble.describe
+    elif running or shells:
+        state, lead = "background", status.capitalize()
     elif view.receipt is not None:
         state, lead = "done", view.receipt.said
     else:
         state, lead = "still", status.capitalize()
     counts = (
         _counted(running, "agent", "agents", "running"),
+        _counted(shells, "shell", "shells", "running"),
         _counted(queued, "message", "messages", "queued"),
     )
     sentence = "".join(f"{part}. " for part in (lead, *counts) if part).strip()
-    return Row(state, running, queued, lead, sentence)
+    return Row(state, running, queued, lead, sentence, shells)

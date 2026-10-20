@@ -54,6 +54,8 @@ from herdr_pwa.engine.tail import (
 )
 from herdr_pwa.engine.transcript import (
     HERDR_KINDS,
+    SPAWNED_AGENT,
+    SPAWNED_SHELL,
     Harness,
     HistoryState,
     ModelRef,
@@ -106,6 +108,8 @@ __all__ = [
     "PANE_BUSY_CODE",
     "PLAIN_READ",
     "SESSION_MOVED_CODE",
+    "SPAWNED_AGENT",
+    "SPAWNED_SHELL",
     "VISIBLE_READ",
     "Agent",
     "AgentStatus",

@@ -1,5 +1,6 @@
 """What VoiceOver, Text Size and Reduce Motion get from the stylesheet and the markup."""
 
+import colorsys
 import re
 from pathlib import Path
 
@@ -39,6 +40,7 @@ TEXT_COLOURS = (
     "--accent",
     "--blocked",
     "--working",
+    "--running",
     "--idle",
     "--done",
     "--unknown",
@@ -62,6 +64,16 @@ def _contrast(front: str, back: str) -> float:
 def test_every_text_colour_reads_at_aa_on_every_ground(ink: str, ground: str) -> None:
     ratio = _contrast(TOKENS[ink], TOKENS[ground])
     assert ratio >= AA, f"{ink} on {ground} is {ratio:.2f}:1"
+
+
+def _hue(hex_colour: str) -> float:
+    red, green, blue = (int(hex_colour.lstrip("#")[i : i + 2], 16) / 255 for i in (0, 2, 4))
+    return colorsys.rgb_to_hsv(red, green, blue)[0] * 360
+
+
+def test_the_running_blue_is_not_the_accent_blue() -> None:
+    """A card still at work is told by its blue, which no link or edge in the accent shares."""
+    assert abs(_hue(TOKENS["--running"]) - _hue(TOKENS["--accent"])) >= 15
 
 
 # Ink drawn on a filled colour rather than on a ground: Stop now's words on its danger fill.

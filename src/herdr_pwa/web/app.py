@@ -11,6 +11,7 @@ from starlette.middleware.gzip import GZipMiddleware
 
 from herdr_pwa.audit import AuditLog
 from herdr_pwa.engine import SnapshotCache, engine_settings
+from herdr_pwa.process_start import ProcessStarts
 from herdr_pwa.settings import Settings
 from herdr_pwa.web import failures
 from herdr_pwa.web.assets import Assets
@@ -135,6 +136,7 @@ def _web_state(settings: Settings, seams: Seams, pages: Pages) -> tuple[WebState
         wall=seams.wall,
         seen=pushing.stores.seen if pushing is not None else None,
         which=seams.which,
+        starts=ProcessStarts(client, proc=seams.proc, clock=seams.clock),
     )
     return web, pushing
 

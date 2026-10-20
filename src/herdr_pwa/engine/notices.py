@@ -295,8 +295,10 @@ def _task(text: str) -> TaskNotice | None:
     if found is None:
         return None
     body = found.group(1)
+    # Measured: some deliveries escape the quotes round the description, as JSON would.
+    summary = _tag(body, "summary").replace('\\"', '"')
     return TaskNotice(
-        summary=_tag(body, "summary") or _tag(body, "task-id"),
+        summary=summary or _tag(body, "task-id"),
         status=_tag(body, "status"),
         elapsed_ms=_millis(_tag(body, "duration_ms")),
         result=_tag(body, "result"),
