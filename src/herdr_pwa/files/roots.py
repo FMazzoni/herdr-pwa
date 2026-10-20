@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Final
 
 from herdr_pwa.files.git import Git
-from herdr_pwa.files.reader import OutsideRoot, inside
+from herdr_pwa.files.reader import NotReadable, OutsideRoot, inside
 
 ROOT_ID: Final = re.compile(r"[0-9a-f]{12}")
 # Credentials and this app's own state never show, even inside a root, even behind a tap.
@@ -26,7 +26,17 @@ DENIED_UNDER_HOME: Final = (
     ".kube",
 )
 # Names that may hold a secret: shown only after a tap that says so.
-_SECRET: Final = re.compile(r"(?i)^(\.env.*|.*\.pem|id_.*|.*\.key|credentials.*)$")
+_SECRET: Final = re.compile(
+    r"""(?ix) ^(
+        \.env.* | id_.* | credentials.* | secrets\..*
+      | \.npmrc | \.pypirc | \.htpasswd | \.netrc | \.git-credentials
+      | .*\.(pem | key | p12 | pfx | kdbx)
+      # A token by itself or at a name's end, bare or as data: never tokenizer.py or tokens.css.
+      | (.*[._-])? tokens? (\.(txt | json | ya?ml | toml | ini | conf | cfg))?
+    )$"""
+)
+# Git's own directory: config holds remote URLs with tokens; the git views read it through pygit2.
+_GIT_DIR: Final = ".git"
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,6 +52,11 @@ class Root:
 def root_id(path: Path) -> str:
     """An id that names ``path`` without spelling it in a URL."""
     return hashlib.sha256(str(path).encode()).hexdigest()[:12]
+
+
+def is_git_dir(name: str) -> bool:
+    """Whether a directory entry is git's own, which the explorer never lists or reads."""
+    return name.lower() == _GIT_DIR
 
 
 def is_secret(name: str) -> bool:
@@ -98,13 +113,26 @@ def discover(cwds: Iterable[tuple[str, str]], git: Git, fence: Fence) -> tuple[R
 
 
 def resolve(root: Root, rel: str, fence: Fence) -> Path:
-    """``rel`` resolved, links and all; raises unless the result is inside ``root`` and fenced."""
+    """``rel`` resolved, links and all; raises unless it is inside ``root``, fenced, not in .git."""
     if "\0" in rel:
         raise OutsideRoot("a NUL in a path")
     real = (root.path / rel).resolve()
     if not inside(real, root.path) or not fence.allows(real):
         raise OutsideRoot(rel)
+    if any(is_git_dir(part) for part in real.relative_to(root.path).parts):
+        raise OutsideRoot(rel)
+    _probe(real)
     return real
+
+
+def _probe(real: Path) -> None:
+    # A name past NAME_MAX, or a parent it may not search, raises from every later is_dir().
+    try:
+        real.lstat()
+    except (FileNotFoundError, NotADirectoryError):
+        return
+    except OSError as exc:
+        raise NotReadable(exc.strerror or "unreadable") from exc
 
 
 def relative(root: Root, real: Path) -> str:

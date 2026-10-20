@@ -19,6 +19,7 @@ from herdr_pwa.files.roots import (
     Root,
     UnknownRoot,
     discover,
+    is_git_dir,
     is_secret,
     relative,
     resolve,
@@ -197,7 +198,7 @@ def _redirect(url: str) -> RedirectResponse:
 def _children(explorer: Explorer, spot: _Spot, *, everything: bool) -> list[tuple[str, bool, int]]:
     root, rel = spot.root, spot.rel
     listing = LocalReader(root.path).list_dir(spot.real)
-    entries = [(e.name, e.is_dir, e.size) for e in listing.entries]
+    entries = [(e.name, e.is_dir, e.size) for e in listing.entries if not is_git_dir(e.name)]
     if everything:
         return entries
     prefix = f"{rel}/" if rel else ""

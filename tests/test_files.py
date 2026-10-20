@@ -89,6 +89,41 @@ def test_a_path_that_leads_out_of_the_root_is_refused(
     assert "root:" not in response.text
 
 
+@pytest.mark.parametrize(
+    "path", [".git", ".git/config", ".git/HEAD", "src/../.git/config", ".GIT/config"]
+)
+@pytest.mark.parametrize("view", ["file", "tree", "diff", "raw", "watch"])
+def test_git_s_own_directory_is_fenced_in_every_view(
+    tmp_path: Path, repo: Path, path: str, view: str
+) -> None:
+    rig = _rig(tmp_path, repo)
+    response = rig.http.get(f"{_base(repo)}/{view}?path={path}", follow_redirects=False)
+    assert response.status_code == 403, response.text[:300]
+    assert "[core]" not in response.text
+
+
+def test_the_full_listing_leaves_out_git_s_directory_and_the_git_views_still_work(
+    tmp_path: Path, repo: Path
+) -> None:
+    rig = _rig(tmp_path, repo)
+    base = _base(repo)
+    everything = rig.http.get(f"{base}/tree?all=1").text
+    assert ">build/<" in everything
+    assert not _holds(everything, ">.git/<")
+    assert "src%2Fapp%2Fserver.py" in rig.http.get(base).text
+    changed = rig.http.get(f"{base}/diff?path=src/app/server.py").text
+    assert "PORT = 8088" in changed
+
+
+@pytest.mark.parametrize("view", ["file", "tree", "diff", "raw", "watch"])
+def test_a_name_past_name_max_is_a_refusal_not_a_crash(
+    tmp_path: Path, repo: Path, view: str
+) -> None:
+    rig = _rig(tmp_path, repo)
+    response = rig.http.get(f"{_base(repo)}/{view}?path=src/{'a' * 300}", follow_redirects=False)
+    assert response.status_code == 404, response.text[:300]
+
+
 def test_a_twice_encoded_traversal_is_a_literal_name_that_is_not_there(
     tmp_path: Path, repo: Path
 ) -> None:
@@ -269,6 +304,25 @@ def test_a_secret_is_held_behind_a_tap_everywhere(tmp_path: Path, repo: Path) ->
         ("tls.key", True),
         ("credentials.json", True),
         ("Credentials", True),
+        (".npmrc", True),
+        (".pypirc", True),
+        (".htpasswd", True),
+        ("client.p12", True),
+        ("client.PFX", True),
+        ("passwords.kdbx", True),
+        ("secrets.yaml", True),
+        ("token", True),
+        ("GITHUB_TOKEN", True),
+        ("api-token.txt", True),
+        (".npm_token", True),
+        ("refresh.tokens.json", True),
+        ("tokenizer.py", False),
+        ("tokens.css", False),
+        ("css_tokens.py", False),
+        ("test_css_tokens.py", False),
+        ("css_tokens.allow", False),
+        ("secretary.md", False),
+        ("npmrc.md", False),
         ("environment.py", False),
         ("keys.py", False),
         ("README.md", False),
@@ -276,6 +330,19 @@ def test_a_secret_is_held_behind_a_tap_everywhere(tmp_path: Path, repo: Path) ->
 )
 def test_secret_names(name: str, *, secret: bool) -> None:
     assert is_secret(name) is secret
+
+
+def test_package_index_credentials_are_held_behind_the_tap(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path / "published")
+    (repo / ".npmrc").write_text(f"//registry.npmjs.org/:_authToken={SECRET_TEXT}\n")
+    (repo / ".pypirc").write_text(f"[pypi]\npassword = {SECRET_TEXT}\n")
+    rig = _rig(tmp_path, repo)
+    base = _base(repo)
+    for name in (".npmrc", ".pypirc"):
+        held = rig.http.get(f"{base}/file?path={name}")
+        assert "may hold secrets" in held.text, name
+        assert SECRET_TEXT not in held.text, name
+        assert SECRET_TEXT in rig.http.get(f"{base}/file?path={name}&reveal=1").text, name
 
 
 def test_a_binary_file_says_so_and_shows_no_bytes(tmp_path: Path, repo: Path) -> None:
