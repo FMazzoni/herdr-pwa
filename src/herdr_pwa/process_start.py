@@ -29,7 +29,8 @@ def _boot(proc: Path) -> float | None:
     return float(found) if found.isdigit() else None
 
 
-def _ticks_since_boot(pid: int, proc: Path) -> int | None:
+def ticks_since_boot(pid: int, *, proc: Path) -> int | None:
+    """When *pid* started, in clock ticks since boot; ``None`` when /proc cannot say."""
     try:
         text = (proc / str(pid) / "stat").read_text()
     except OSError:
@@ -43,7 +44,7 @@ def _ticks_since_boot(pid: int, proc: Path) -> int | None:
 def started_at(pid: int, *, proc: Path, ticks: int) -> float | None:
     """When *pid* started, in wall-clock seconds; ``None`` when /proc cannot say."""
     boot = _boot(proc)
-    since = _ticks_since_boot(pid, proc)
+    since = ticks_since_boot(pid, proc=proc)
     if boot is None or since is None or ticks <= 0:
         return None
     return boot + since / ticks

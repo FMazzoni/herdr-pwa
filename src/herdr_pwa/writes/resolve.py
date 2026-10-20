@@ -5,6 +5,7 @@ import threading
 from collections.abc import Callable, Generator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Final, Protocol
 
 from herdr_pwa.audit import AuditUnavailableError, Entry, Write
@@ -18,8 +19,10 @@ from herdr_pwa.engine import (
     SessionId,
     Snapshot,
     Workspace,
+    holds_session,
     session_origin,
 )
+from herdr_pwa.managed import PROC
 from herdr_pwa.writes.outcome import Pacing
 from herdr_pwa.writes.refusal import Refusal, Refused
 
@@ -35,10 +38,19 @@ class AuditTrail(Protocol):
 
 
 @dataclass(frozen=True, slots=True)
+class Witness:
+    """Where a session's holder is looked for: the runner, the session stores and /proc."""
+
+    client: HerdrClient
+    stores: tuple[str, ...] = ()
+    proc: Path = PROC
+
+
+@dataclass(frozen=True, slots=True)
 class Writer:
     """What every write needs: the runner, the audit trail, the clock its waits run on, the
-    transcript roots a session's own store is looked up in (empty: each harness's default), and
-    the models the operator declared per kind.
+    transcript roots a session's own store is looked up in (empty: each harness's default), the
+    models the operator declared per kind, and the /proc a pane's process is looked up in.
     """
 
     client: HerdrClient
@@ -46,6 +58,12 @@ class Writer:
     pacing: Pacing = Pacing()  # noqa: RUF009 - frozen, so one shared default is safe
     stores: tuple[str, ...] = ()
     declared: Mapping[str, tuple[str, ...]] = field(default_factory=dict[str, tuple[str, ...]])
+    proc: Path = PROC
+
+    @property
+    def witness(self) -> Witness:
+        """Where this writer looks for who holds a session."""
+        return Witness(self.client, self.stores, self.proc)
 
 
 def snapshot_now(client: HerdrClient, *, verb: str) -> Snapshot | Refused:
@@ -57,10 +75,24 @@ def snapshot_now(client: HerdrClient, *, verb: str) -> Snapshot | Refused:
         return Refused(Refusal.UNREACHABLE, verb, detail=str(exc))
 
 
-def doubt(agent: Agent, stores: tuple[str, ...] = ()) -> str:
+def doubt(agent: Agent, witness: Witness) -> str:
     """Why *agent*'s reported session may belong to something else in its pane, or ``""``."""
-    started = session_origin(agent, root=stores or None)
-    return identity_doubt(started, (agent.foreground_cwd, agent.cwd))
+    root = witness.stores or None
+    said = identity_doubt(session_origin(agent, root=root), (agent.foreground_cwd, agent.cwd))
+    # A folder renamed under a live agent leaves its store's path behind; the process the
+    # pane's keys reach naming this session as its own outweighs where it started.
+    if said and holds_session(agent, _leader(witness.client, agent), root=root, proc=witness.proc):
+        log.info("%s holds %s although it started elsewhere", agent.target, agent.session)
+        return ""
+    return said
+
+
+def _leader(client: HerdrClient, agent: Agent) -> int | None:
+    try:
+        return client.foreground_leader(str(agent.target))
+    except Exception:  # any runner failure only loses the proof, and the doubt stands
+        log.debug("no process info for %s", agent.target, exc_info=True)
+        return None
 
 
 def agent_now(
@@ -80,7 +112,7 @@ def agent_now(
         return Refused(Refusal.GONE, verb, detail=resolution.message)
     # The session check on the wire compares herdr's record with herdr's record; a pane whose
     # record was overwritten by a nested harness passes it, and the keys reach the real agent.
-    said = doubt(resolution.agent, writer.stores)
+    said = doubt(resolution.agent, writer.witness)
     if said:
         log.warning("write refused at %s: %s", resolution.agent.target, said)
         return Refused(Refusal.DOUBTED_IDENTITY, verb, detail=said)

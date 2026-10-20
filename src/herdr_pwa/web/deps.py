@@ -3,6 +3,7 @@
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from fastapi import Request
 
@@ -17,6 +18,7 @@ from herdr_pwa.engine import (
     TailCache,
     UsageCache,
 )
+from herdr_pwa.managed import PROC
 from herdr_pwa.notify_state import SeenLedger
 from herdr_pwa.process_start import ProcessStarts
 from herdr_pwa.settings import Settings
@@ -55,6 +57,8 @@ class WebState:
     seen: SeenLedger | None = None
     # When each pane's agent process started; absent, work a dead process left is counted too.
     starts: ProcessStarts | None = None
+    # Where a pane's process is looked up, for whether it holds the session herdr reports.
+    proc: Path = PROC
 
     def snapshot(self) -> CachedValue[Snapshot]:
         """The shared snapshot, fetched only if nobody else is fetching it."""

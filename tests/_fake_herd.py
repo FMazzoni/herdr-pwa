@@ -106,6 +106,8 @@ class FakeHerd:
     calls: list[tuple[str, dict[str, JsonValue]]] = field(
         default_factory=list[tuple[str, dict[str, JsonValue]]]
     )
+    # The process leading each pane's terminal; a pane not named here leads with its shell.
+    leaders: dict[str, int] = field(default_factory=dict[str, int])
     protocol: int = 22
     started_session: str = ""
 
@@ -219,11 +221,15 @@ class FakeHerd:
 
     def _pane_process_info(self, params: dict[str, JsonValue]) -> dict[str, JsonValue]:
         shell: dict[str, JsonValue] = {"pid": 4242, "name": "bash", "argv": ["/bin/bash"]}
+        leader = self.leaders.get(_target(params))
+        running: list[JsonValue] = [shell]
+        if leader is not None:
+            running = [{"pid": leader, "name": "claude", "argv": ["claude"]}]
         info: dict[str, JsonValue] = {
             "pane_id": _target(params),
             "shell_pid": 4242,
-            "foreground_process_group_id": 4242,
-            "foreground_processes": [shell],
+            "foreground_process_group_id": 4242 if leader is None else leader,
+            "foreground_processes": running,
         }
         return {"id": "x", "result": {"type": "pane_process_info", "process_info": info}}
 

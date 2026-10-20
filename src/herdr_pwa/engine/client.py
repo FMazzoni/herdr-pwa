@@ -662,6 +662,19 @@ class HerdrClient:
 
     def pane_pids(self, pane_id: str, *, timeout: float | None = None) -> tuple[int, ...]:
         """Every process in this pane, shell first. A runner that will not say answers `()`."""
+        info = self._process_info(pane_id, timeout)
+        if info is None:
+            return ()
+        pids = [] if info.shell_pid is None else [info.shell_pid]
+        pids.extend(process.pid for process in info.foreground_processes or [])
+        return tuple(dict.fromkeys(pids))
+
+    def foreground_leader(self, pane_id: str, *, timeout: float | None = None) -> int | None:
+        """The process leading the pane's terminal, the one its keys reach, or ``None``."""
+        info = self._process_info(pane_id, timeout)
+        return None if info is None else info.foreground_process_group_id
+
+    def _process_info(self, pane_id: str, timeout: float | None) -> wire.PaneProcessInfo | None:
         arm, raw = self._result(
             self._call(
                 wire_request.PaneProcessInfoRequest,
@@ -671,12 +684,7 @@ class HerdrClient:
             wire.PaneProcessInfoResponseResult,
             degrade=True,
         )
-        info = arm.process_info if arm else _SalvagedProcessInfo.salvage(raw)
-        if info is None:
-            return ()
-        pids = [] if info.shell_pid is None else [info.shell_pid]
-        pids.extend(process.pid for process in info.foreground_processes or [])
-        return tuple(dict.fromkeys(pids))
+        return arm.process_info if arm else _SalvagedProcessInfo.salvage(raw)
 
     def create_tab(self, tab: NewTab, *, timeout: float | None = None) -> str:
         """Make a new tab with one shell pane in it, and return its root pane."""

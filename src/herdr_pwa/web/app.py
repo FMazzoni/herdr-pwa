@@ -137,6 +137,7 @@ def _web_state(settings: Settings, seams: Seams, pages: Pages) -> tuple[WebState
         seen=pushing.stores.seen if pushing is not None else None,
         which=seams.which,
         starts=ProcessStarts(client, proc=seams.proc, clock=seams.clock),
+        proc=seams.proc,
     )
     return web, pushing
 
