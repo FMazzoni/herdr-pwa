@@ -287,6 +287,18 @@ def plan_coming_tab(name: str) -> Tab:
     return Tab(name, State("plan coming", _pane().path, "", working), "", _print, 320, 568)
 
 
+def _plan_printed(rig: Rig, _home: Path, _n: int) -> str:
+    """Make the terminal print the plan under its scrollback; return the plan's last line."""
+    plan = capture(PLAN)
+    rig.wire.replies[READ] = read_frame(long_pane(LINES) + plan)
+    return plan.rstrip().rsplit("\n", 1)[-1].strip()
+
+
+def plan_printing_tab(name: str, width: int = 320, height: int = 568) -> Tab:
+    """The Pane tab of a working agent whose terminal prints the plan as it comes to ask it."""
+    return Tab(name, _pane(), LAST_LINE, _plan_printed, width, height)
+
+
 def _scrolled_up_stays(ctx: WalkCtx) -> list[str]:
     driver, tab = ctx.driver, ctx.tab
     driver.script("window.scrollTo(0, 200);")
@@ -548,7 +560,8 @@ const dock = (document.getElementById("agent-tray") || document.getElementById("
   .getBoundingClientRect().top;
 const line = parseFloat(getComputedStyle(question).lineHeight) || 24;
 return { top: question.getBoundingClientRect().top, line: line, under: under, dock: dock,
-  tall: region.getBoundingClientRect().height > dock - under };
+  tall: region.getBoundingClientRect().height > dock - under,
+  gap: document.documentElement.scrollHeight - innerHeight - scrollY };
 """
 
 
@@ -580,32 +593,72 @@ def tall_question(ctx: WalkCtx) -> list[str]:
     return [f"{tab.name}: the question's first line sits at {top:.0f}px, not {where}"]
 
 
-def question_arrives(ctx: WalkCtx) -> list[str]:
-    """A question taller than the room that arrives while the reader is at the end lands as one
-    loaded with the page does: its first line just under the bar. The screen already shows it, so
-    only the answer region redraws."""
+def _landed_in_view(name: str, found: dict[str, object], *, printed: bool) -> list[str]:
+    top, under, dock = _num(found, "top"), _num(found, "under"), _num(found, "dock")
+    if not found.get("tall"):
+        if not printed:
+            return [f"{name}: the answer fits between the bar and the dock, so it proves nothing"]
+        if _num(found, "gap") <= DRIFT and top >= under - DRIFT:
+            return []
+        return [f"{name}: the question that fits sits at {top:.0f}px, not at the end"]
+    if top >= under - DRIFT and top + _num(found, "line") <= dock:
+        return []
+    where = f"between the bar ({under:.0f}px) and the dock ({dock:.0f}px)"
+    return [f"{name}: the question that arrived sits at {top:.0f}px, not {where}"]
+
+
+STALE = 'htmx.trigger(document.getElementById(arguments[0]), "hp:stale");'
+
+
+def _question_landed(ctx: WalkCtx, *, printed: bool, answer_first: bool = False) -> list[str]:
+    """Turn the agent blocked, the terminal printing the plan first if ``printed``, poke the
+    page (the answer region alone first if ``answer_first``, then the pane), and check the
+    question lands in view: a tall one with its first line between the bar and the dock, and,
+    when the terminal printed it, one that fits at the end."""
     driver, tab = ctx.driver, ctx.tab
     ctx.open()
     seen = _wait_for(driver, tab.newest)
     if not seen or _num(seen, "gap") > DRIFT:
         return [f"{tab.name}: never landed at the end before the question came"]
+    if printed:
+        _ = ctx.grow(1)
     ctx.rig.wire.replies[SNAPSHOT] = herd(**BLOCKED)
     # The app holds a snapshot for a while; the rig's clock moves past that.
     ctx.rig.clock.sleep(60.0)
-    driver.script(POKE)
+    if answer_first:
+        driver.script(STALE, "answer")
+    else:
+        driver.script(POKE)
     if not _until(lambda: bool(_tall(driver))):
         return [f"{tab.name}: the question never arrived"]
     settle(driver)
+    if answer_first:
+        driver.script(STALE, "agent-view")
+        settle(driver)
     found: dict[str, object] = {}
     if not _until(lambda: bool(found.update(_tall(driver)) or found)):
         return [f"{tab.name}: never settled"]
-    if not found.get("tall"):
-        return [f"{tab.name}: the answer fits between the bar and the dock, so it proves nothing"]
-    top, under, dock = _num(found, "top"), _num(found, "under"), _num(found, "dock")
-    if top >= under - DRIFT and top + _num(found, "line") <= dock:
-        return []
-    where = f"between the bar ({under:.0f}px) and the dock ({dock:.0f}px)"
-    return [f"{tab.name}: the question that arrived sits at {top:.0f}px, not {where}"]
+    return _landed_in_view(tab.name, found, printed=printed)
+
+
+def question_arrives(ctx: WalkCtx) -> list[str]:
+    """A question taller than the room that arrives while the reader is at the end lands as one
+    loaded with the page does: its first line just under the bar. The screen already shows it, so
+    only the answer region redraws."""
+    return _question_landed(ctx, printed=False)
+
+
+def question_printed(ctx: WalkCtx) -> list[str]:
+    """The same when the terminal prints the question in the poll that brings it: the pane and
+    the answer region both redraw, in either order, and the question still lands in view, at the
+    end if it fits."""
+    return _question_landed(ctx, printed=True)
+
+
+def question_printed_after(ctx: WalkCtx) -> list[str]:
+    """The order that lost it: the answer region lands on the tall question's top, then the pane
+    draws its new lines in above it, and the question must still be in view."""
+    return _question_landed(ctx, printed=True, answer_first=True)
 
 
 JUMP = r"""
@@ -1825,6 +1878,9 @@ def _tabs() -> tuple[tuple[Tab, Walk], ...]:
         (Tab("pane question waiting", asking_pane, "", _print), waiting_pill),
         (Tab("tall plan", plan, "", _print, width=320, height=568), tall_question),
         (plan_coming_tab("tall plan arrives"), question_arrives),
+        (plan_printing_tab("tall plan printed"), question_printed),
+        (plan_printing_tab("tall plan printed wide", WIDTH, HEIGHT), question_printed),
+        (plan_printing_tab("tall plan printed after"), question_printed_after),
         (
             Tab("tall multiselect", ticks, "", _print, width=430, height=932, scale=2.0),
             tall_question,
