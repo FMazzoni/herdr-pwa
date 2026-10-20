@@ -505,8 +505,27 @@ def _titled_message(paragraphs: list[str]) -> str:
     return ""
 
 
+_COUNTER_RE = re.compile(r"^Question \d+/\d+\b[^\n]*\n")
+"""codex's ``Question N/M`` counter, heading the question it counts, whatever that ends with."""
+
+_QUESTION_MARK_RE = re.compile(r"[\w)\]\"'`\u2019\u201d\u2026]\?")
+"""A '?' ending a word: a git status's ``[!?]`` in a status line asks nothing."""
+
+
+def ends_a_question(text: str) -> bool:
+    """Whether *text* holds a '?' that ends a word, which is how prose asks."""
+    return _QUESTION_MARK_RE.search(text) is not None
+
+
+def _posed(paragraph: str) -> str:
+    """What *paragraph* asks, or ``""``: a counted question, else one ending a word in '?'."""
+    if counted := _COUNTER_RE.match(paragraph):
+        return paragraph[counted.end() :]
+    return paragraph if ends_a_question(paragraph) else ""
+
+
 def _asks(lines: list[str], stop: int) -> str:
-    """A request title's message, else a '?' paragraph above *stop*: a dialog asking, not a box."""
+    """A request title's message, else the nearest asking paragraph above *stop*: a dialog, not a box."""
     # A dialog takes the input box's place; with the box drawn, only its status line follows.
     if composer_top(lines) < stop:
         return ""
@@ -516,8 +535,8 @@ def _asks(lines: list[str], stop: int) -> str:
     # With no rule above there is no box, so only the paragraph right above the run can ask.
     window = _MAX_CHROME_PARAGRAPHS + 1 if start else 1
     for paragraph in reversed(_askable(lines, start, stop)[-window:]):
-        if "?" in paragraph:
-            return paragraph
+        if posed := _posed(paragraph):
+            return posed
     return ""
 
 

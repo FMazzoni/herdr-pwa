@@ -173,6 +173,20 @@ def test_card_question_never_promotes_scrollback(path: Path) -> None:
     assert card_question(_asking(path.read_text())) == ""
 
 
+@pytest.mark.parametrize(
+    "path",
+    [
+        *_reads("capture-idle-*/*.txt"),
+        *_reads("capture-working-*/*.txt"),
+    ],
+    ids=_named,
+)
+def test_card_question_never_prints_a_status_line_s_git_mark(path: Path) -> None:
+    # A git-aware status line marks untracked files with '?': nothing on the screen asks.
+    dirty = path.read_text().replace("herdr-pwa [main]", "herdr-pwa on main [!?]")
+    assert card_question(_asking(dirty)) == ""
+
+
 def test_card_question_drops_escapes_from_a_question() -> None:
     screen = "\x1b]0;title\x07\x1b[1mDo you want to \x1b[32mdeploy\x1b[0m?\x07\n"
     assert card_question(_asking(screen)) == "Do you want to deploy?"

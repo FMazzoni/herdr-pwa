@@ -5,7 +5,7 @@ import unicodedata
 from typing import Final
 
 from herdr_pwa.decisions import AgentRow, ScreenDecision
-from herdr_pwa.engine import CONTEXT_FULL, MenuShape
+from herdr_pwa.engine import CONTEXT_FULL, MenuShape, ends_a_question
 from herdr_pwa.panetext import plain
 
 # Spinner and status glyphs a harness prefixes its terminal title with.
@@ -60,7 +60,7 @@ def card_title(row: AgentRow) -> str:
 def _reads_as_asking(answer: ScreenDecision, question: str) -> bool:
     if answer.asked or answer.options or answer.drew_rows or answer.shape is not MenuShape.NONE:
         return True
-    return "?" in question or _PROMPT_OPENING.search(question) is not None
+    return ends_a_question(question) or _PROMPT_OPENING.search(question) is not None
 
 
 def card_question(row: AgentRow) -> str:
