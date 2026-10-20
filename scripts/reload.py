@@ -19,7 +19,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from geometry import HTMX_SETTLED, Switch, install, serve  # noqa: E402
 from playwright.sync_api import Page  # noqa: E402
 from pydantic import BaseModel, TypeAdapter  # noqa: E402
-from shots import IPHONE, SETTLE_MS, context, drive, missing_browser, webkit  # noqa: E402
+from shots import IPHONE, NARROW, SETTLE_MS, Device, context, drive, missing_browser, webkit  # noqa: E402
 
 from tests.catalogue import AGENT, State, pick  # noqa: E402
 
@@ -143,14 +143,24 @@ def replaced(walk: Walk, state: State) -> None:
 
 def pane_door(walk: Walk, state: State) -> None:
     """The answer note's link to the Pane, from ``state``'s tab: the Pane lands at its end."""
+    _door(walk, state, "#answer .answer__go", "#agent-view .pane__line")
+
+
+def unread_door(walk: Walk, state: State) -> None:
+    """The banner's link to the Pane over a question that could not be read, whose read fails
+    there too: with no line to land on, the Pane still lands at its end, the question in view."""
+    _door(walk, state, "#answer .banner--held .banner__go", "#agent-view:not(:has(.boot))")
+
+
+def _door(walk: Walk, state: State, door: str, view: str) -> None:
     drive(walk.page, state, walk.base + state.path)
-    _ = walk.settle("#answer .answer__go")
+    _ = walk.settle(door)
     length = TypeAdapter(int).validate_python(walk.page.evaluate("() => history.length"))
     walk.page.evaluate("() => { window.__hpDoorLeft = true; }")
-    walk.page.click("#answer .answer__go")
+    walk.page.click(door)
     # A new document, or this one jumped to a fragment: either way the tap has taken.
     walk.page.wait_for_function(OPENED)
-    seen = walk.settle("#agent-view .pane__line")
+    seen = walk.settle(view)
     end = TypeAdapter(int).validate_python(walk.page.evaluate(END))
     walk.landed(seen, seen.model_copy(update={"y": end}), "the Pane link")
     if walk.page.evaluate("() => history.length") != length:
@@ -165,13 +175,15 @@ WHOLE_FILE = replace(
 # A question whose rows are not buttons, so its note links to the Pane.
 MULTISELECT = pick(["agent-answer-multiselect"])[0]
 
-WALKS: tuple[tuple[str, State, Callable[[Walk, State], None]], ...] = (
-    ("reload pane question", pick(["agent-answer-multiselect"])[0], reloaded),
-    ("reload long chat", pick(["chat-long"])[0], reloaded),
-    ("forward into an agent", pick(["agent-answer-multiselect"])[0], forward),
-    ("replaced by a file", WHOLE_FILE, replaced),
-    ("pane link from chat", replace(MULTISELECT, path=f"{AGENT}?tab=chat"), pane_door),
-    ("pane link on the pane", MULTISELECT, pane_door),
+WALKS: tuple[tuple[str, State, Callable[[Walk, State], None], Device], ...] = (
+    ("reload pane question", pick(["agent-answer-multiselect"])[0], reloaded, IPHONE),
+    ("reload long chat", pick(["chat-long"])[0], reloaded, IPHONE),
+    ("forward into an agent", pick(["agent-answer-multiselect"])[0], forward, IPHONE),
+    ("replaced by a file", WHOLE_FILE, replaced, IPHONE),
+    ("pane link from chat", replace(MULTISELECT, path=f"{AGENT}?tab=chat"), pane_door, IPHONE),
+    ("pane link on the pane", MULTISELECT, pane_door, IPHONE),
+    # At 390px the page fits one screen, so it lands whatever the script does.
+    ("pane link over an unread question", pick(["agent-unreadable"])[0], unread_door, NARROW),
 )
 
 
@@ -181,9 +193,9 @@ def run(rounds: int) -> list[str]:
     problems: list[str] = []
     with serve(switch) as base, webkit() as phone, tempfile.TemporaryDirectory() as scratch:
         for n in range(rounds):
-            for name, state, walk_through in WALKS:
+            for name, state, walk_through, device in WALKS:
                 _ = install(switch, state, Path(scratch) / f"{n}-{len(problems)}-{name}")
-                ctx = context(phone, IPHONE)
+                ctx = context(phone, device)
                 walk = Walk(ctx.new_page(), base, f"{name} #{n + 1}")
                 try:
                     walk_through(walk, state)

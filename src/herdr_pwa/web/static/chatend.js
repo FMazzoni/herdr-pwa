@@ -91,8 +91,9 @@
   }
 
   // Pinned only if this actually reached the end; a tall question's top is not the end.
+  // A question under a view with no lines (an error, an empty log) still waits at the end.
   function toEnd() {
-    if (readUnits().length) {
+    if (readUnits().length || asking()) {
       window.scrollTo(0, endY());
       pinOn("landed");
       onQuestion = !pin.pinned;
