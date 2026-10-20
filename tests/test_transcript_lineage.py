@@ -20,7 +20,7 @@ from herdr_pwa.engine import (
     locate,
     locate_log,
 )
-from tests.engine_seam import HEAD_BYTES, HEAD_FINISH, Window, history
+from tests.engine_seam import HEAD_BYTES, HEAD_FINISH, Window, copied_from, history
 
 FIXTURES = Path(__file__).parent / "fixtures" / "transcript" / "lineage"
 
@@ -609,6 +609,21 @@ def test_the_captured_copy_is_a_foreground_compaction_written_by_its_parent() ->
     assert "sessionKind" not in FORK_BOUNDARY
     assert _forked(FORK_BOUNDARY)["sessionId"] == FORK_CONTINUED["session_id"]
     assert FORK_CONTINUED["sessionId"] == FORK_BOUNDARY["sessionId"]
+
+
+@pytest.mark.parametrize("background", [False, True], ids=["measured", "stamp-read"])
+def test_a_copied_stamp_naming_the_parents_writer_does_not_outvote_forked_from(
+    project: Path, background: bool
+) -> None:
+    """Measured on 2.1.289: a fork's copied records keep the stamp of whoever wrote them."""
+    # The stamp names the session the writing process started as, so a copy inherits its parent's.
+    copy = _continued(project, _Log(COPY, "2026-08-21T23:15:00.000Z", parent=ROOT), STRANGER)
+    if background:
+        lines = copy.read_text(encoding="utf-8").splitlines()
+        stamped = TypeAdapter(dict[str, JsonValue]).validate_json(lines[-1])
+        stamped["sessionKind"] = "bg"
+        copy.write_text("\n".join([*lines[:-1], json.dumps(stamped)]) + "\n", encoding="utf-8")
+    assert copied_from(copy) == ROOT
 
 
 def test_a_smaller_copy_the_named_session_is_still_writing_is_followed(project: Path) -> None:

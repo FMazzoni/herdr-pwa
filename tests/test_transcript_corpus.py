@@ -119,32 +119,46 @@ def test_the_corpus_says_which_versions_it_actually_held() -> None:
     )
 
 
+def _own(records: list[dict[str, JsonValue]]) -> str:
+    return next((sid for r in records if isinstance(sid := r.get("sessionId"), str)), "")
+
+
+def _declared(records: list[dict[str, JsonValue]]) -> str:
+    return next(
+        (
+            sid
+            for r in records
+            if isinstance(parent := r.get("forkedFrom"), dict)
+            and isinstance(sid := parent.get("sessionId"), str)
+        ),
+        "",
+    )
+
+
+def _carried_by(log: Path, stamp: str) -> bool:
+    try:
+        return f'"session_id":"{stamp}"'.encode() in log.read_bytes()
+    except OSError:
+        return False
+
+
 @corpus
-def test_a_foreign_provenance_stamp_never_disagrees_with_a_declared_fork() -> None:
-    """The measurement the resolution half's coverage claim actually rests on."""
-    disagreements: list[str] = []
+def test_a_foreign_stamp_on_a_declared_fork_names_the_parent_or_came_with_the_copy() -> None:
+    """The measurement behind trusting ``forkedFrom`` over the stamp, and the stamp without it."""
+    # Measured on 2.1.289: a fork copies each record's stamp verbatim, its parent's foreign ones too.
+    unexplained: list[str] = []
     for path, records in HEADS:
-        own = next(
-            (sid for r in records if isinstance(sid := r.get("sessionId"), str)),
-            "",
-        )
-        declared = next(
-            (
-                sid
-                for r in records
-                if isinstance(parent := r.get("forkedFrom"), dict)
-                and isinstance(sid := parent.get("sessionId"), str)
-            ),
-            "",
-        )
+        own, declared = _own(records), _declared(records)
         foreign = {
             stamp for r in records if isinstance(stamp := r.get("session_id"), str) and stamp != own
         }
-        if declared and foreign and foreign != {declared}:
-            disagreements.append(f"{path.name}: forkedFrom={declared} stamps={foreign}")
-    assert not disagreements, (
-        "a provenance stamp contradicts a declared fork: "
-        f"{disagreements}; the stamped-parent coverage claim no longer holds.\n{WHAT_IT_SAW}"
+        parent = path.parent / f"{declared}.jsonl"
+        stray = {stamp for stamp in foreign - {declared} if not _carried_by(parent, stamp)}
+        if declared and stray:
+            unexplained.append(f"{path.name}: forkedFrom={declared} stamps={stray}")
+    assert not unexplained, (
+        "a provenance stamp on a declared fork is neither its parent nor copied from it: "
+        f"{unexplained}; the stamp no longer means the session that wrote the record.\n{WHAT_IT_SAW}"
     )
 
 
