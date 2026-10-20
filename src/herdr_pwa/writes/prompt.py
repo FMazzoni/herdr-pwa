@@ -16,13 +16,7 @@ from herdr_pwa.engine import (
     SessionId,
     screen_digest,
 )
-from herdr_pwa.writes.guard import (
-    asks_a_question,
-    destructive_reason,
-    landed,
-    no_echo_notice,
-    unsendable,
-)
+from herdr_pwa.writes.guard import asks_a_question, landed, no_echo_notice, unsendable
 from herdr_pwa.writes.outcome import Evidence, Outcome, Pacing, audit_result
 from herdr_pwa.writes.refusal import Refusal, Refused, failed_result, refusal_for
 from herdr_pwa.writes.resolve import Writer, agent_now, attempt, one_at_a_time, snapshot_now
@@ -90,7 +84,6 @@ class _Send:
     session: SessionId
     text: str
     drawn_against: str
-    confirmed: bool
     # A working agent's screen moves, so no digest is issued for it to carry back.
     issue: bool
     # Sent anyway after an attempt whose outcome is unknown; said in so many words.
@@ -124,12 +117,8 @@ def _preflight(send: _Send, screen: str) -> Refused | None:
     digest = screen_digest(screen) if send.issue else ""
     if send.drawn_against and send.drawn_against != screen_digest(screen):
         return Refused(Refusal.SCREEN_CHANGED, _VERB, screen=digest)
-    # Before the destructive confirm, so its own confirm cannot stand in for this one.
     if not send.again and UNSURE.pending(send.session, send.text):
         return Refused(Refusal.RESEND, _VERB, screen=digest)
-    reason = "" if send.confirmed else destructive_reason(send.text)
-    if reason:
-        return Refused(Refusal.CONFIRM, _VERB, reason=reason, screen=digest)
     return None
 
 
@@ -206,7 +195,6 @@ class PromptAsk:
     expected_target: PaneId | None = None
     # The digest the composer was drawn against; empty claims nothing about the screen.
     drawn_against: str = ""
-    confirmed: bool = False
     again: bool = False
 
 
@@ -227,7 +215,6 @@ def _send_prompt(writer: Writer, ask: PromptAsk) -> PromptSent | Refused:
         ask.session,
         ask.text,
         ask.drawn_against,
-        ask.confirmed,
         issue=agent.status is not AgentStatus.WORKING,
         again=ask.again,
     )
@@ -263,13 +250,10 @@ def _settled(
 
 @dataclass(frozen=True, slots=True)
 class FirstPromptAsk:
-    """A prompt for a session-less agent: its pane, the text, and the screen it was typed against."""
+    """A prompt for a session-less agent: its pane and the text."""
 
     pane: PaneId
     text: str
-    # The digest the door was drawn against; a confirm counts only with it.
-    drawn_against: str = ""
-    confirmed: bool = False
 
 
 def send_first_prompt(writer: Writer, ask: FirstPromptAsk) -> PromptSent | Refused:
@@ -290,17 +274,13 @@ def _send_first_prompt(writer: Writer, ask: FirstPromptAsk) -> PromptSent | Refu
     refused = _text_refusal(ask.text) or _settled(writer.client, ask.pane, writer.pacing)
     if refused is not None:
         return refused
-    # A confirm counts only with the digest of the screen it was asked about.
-    bound = ask.confirmed and bool(ask.drawn_against)
-    send = _Send(ask.pane, NO_SESSION, ask.text, ask.drawn_against, bound, issue=True)
-    return _type(writer, send)
+    return _type(writer, _Send(ask.pane, NO_SESSION, ask.text, "", issue=True))
 
 
 def send_opening_prompt(writer: Writer, pane: PaneId, text: str) -> PromptSent | Refused:
     """Type the new-agent form's prompt at the agent this request started, once it listens."""
 
     def opening() -> PromptSent | Refused:
-        # The form held a destructive prompt for its confirm before anything was created.
         refused = _text_refusal(text) or _settled(
             writer.client, pane, writer.pacing, by_address=False
         )
@@ -313,7 +293,7 @@ def send_opening_prompt(writer: Writer, pane: PaneId, text: str) -> PromptSent |
         if agent is None:
             return Refused(Refusal.GONE, _VERB)
         # Keyed on whatever identity it has by now; the wire checks that it still holds the pane.
-        return _type(writer, _Send(pane, agent.session, text, "", confirmed=True, issue=True))
+        return _type(writer, _Send(pane, agent.session, text, "", issue=True))
 
     # The pane's key, as a first prompt by address from another tab would take it.
     return one_at_a_time(f"pane:{pane}", _VERB, opening)

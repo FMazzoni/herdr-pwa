@@ -28,8 +28,7 @@
     <datalist id="cwds">{% for cwd in cwds %}<option value="{{ cwd }}"></option>{% endfor %}</datalist>
     {% call ui.field("First prompt (optional)") %}<textarea name="prompt" rows="3" maxlength="4000">{{ values.get('prompt', '') }}</textarea>{% endcall %}
     <p class="field__note">Typed once the agent is listening. opencode and hermes only name themselves once prompted, so a prompt here opens them straight on their page.</p>
-    {% if refused is defined and refused.held %}<input type="hidden" name="confirm" value="1">{% endif %}
-    {{ ui.button("Start it anyway" if refused is defined and refused.held else "Start") }}
+    {{ ui.button("Start") }}
   </form>
 </main>
 {% endblock %}

@@ -19,7 +19,6 @@
   {% endif %}
   <input type="hidden" name="target" value="{{ agent.target }}">
   <input type="hidden" name="screen" value="{{ screen }}">
-  {% if refused is defined and refused.held %}<input type="hidden" name="confirm" value="1">{% endif %}
   {% if again %}<input type="hidden" name="again" value="1">{% endif %}
   <div class="composer__row">
     {% call ui.field("Prompt", quiet=true) %}
@@ -28,6 +27,6 @@
                 {% if sent is defined and sent.no_echo %}data-hp-forget{% endif %}>{{ text }}</textarea>
     {% endcall %}
     {% set off %}{% if held %}disabled{% endif %}{% endset %}
-    {{ ui.button('Send again anyway' if again else 'Send it anyway' if refused is defined and refused.held else 'Send', attrs=off) }}
+    {{ ui.button('Send again anyway' if again else 'Send', attrs=off) }}
   </div>
 </form>

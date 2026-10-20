@@ -127,15 +127,11 @@ def test_a_prompt_at_a_question_is_409_and_keeps_the_text(tmp_path: Path) -> Non
     assert w.herd.writes("agent.prompt") == []
 
 
-def test_a_destructive_prompt_is_held_with_its_reason_then_sent(tmp_path: Path) -> None:
+def test_a_shell_command_prompt_is_sent_on_the_first_tap(tmp_path: Path) -> None:
     w = idle(tmp_path)
-    held = w.http.post(f"/agent/{S1}/prompt", data={"text": "rm -rf build"}, headers=ORIGIN)
-    assert held.status_code == 200
-    assert "rm with a recursive flag" in held.text
-    assert 'name="confirm" value="1"' in held.text
-    assert w.herd.writes("agent.prompt") == []
-    data = {"text": "rm -rf build", "confirm": "1", "screen": SETTLED_CLAIM}
-    _ = w.http.post(f"/agent/{S1}/prompt", data=data, headers=ORIGIN)
+    sent = w.http.post(f"/agent/{S1}/prompt", data={"text": "rm -rf build"}, headers=ORIGIN)
+    assert sent.status_code == 200
+    assert 'name="confirm"' not in sent.text
     assert len(w.herd.writes("agent.prompt")) == 1
 
 
@@ -582,28 +578,6 @@ def test_the_new_agent_form_has_a_way_back_and_a_first_prompt(tmp_path: Path) ->
     assert 'name="prompt"' in page
 
 
-def test_a_destructive_first_prompt_holds_the_form_and_creates_nothing(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _on_path(tmp_path, monkeypatch, "claude")
-    herd = FakeHerd()
-    herd.add_workspace("w1")
-    w = web(tmp_path, herd)
-    data = {
-        "name": "probe",
-        "kind": "claude",
-        "workspace": "w1",
-        "cwd": str(tmp_path),
-        "prompt": "git push --force",
-    }
-    response = w.http.post("/new", data=data, headers=ORIGIN)
-    assert response.status_code == 200
-    assert "git push --force" in response.text
-    assert 'name="confirm" value="1"' in response.text
-    assert "Start it anyway" in response.text
-    assert herd.writes("tab.create") == []
-
-
 def test_a_first_prompt_that_was_not_typed_is_said_on_the_page_it_opens(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -688,33 +662,6 @@ def test_the_doors_interrupt_confirm_is_its_own_and_never_rides_on_the_prompt(
     )
     assert confirmed.status_code == 200
     assert herd.writes("agent.send_keys") == [{"target": "w1:p3", "keys": ["ctrl-c"]}]
-
-
-def test_the_doors_destructive_confirm_is_tied_to_the_screen_it_was_asked_about(
-    tmp_path: Path,
-) -> None:
-    herd = FakeHerd()
-    herd.put(P3, "", status="idle")
-    herd.screens[P3] = [SETTLED]
-    w = web(tmp_path, herd)
-    held = w.http.post("/starting/w1:p3/prompt", data={"text": "rm -rf build"}, headers=ORIGIN)
-    assert held.status_code == 200
-    prompt = next(f for f in _forms(held.text) if 'name="text"' in f)
-    assert 'name="confirm"' in prompt
-    assert f'name="screen" value="{SETTLED_CLAIM}"' in prompt
-    herd.screens[P3] = [SETTLED.replace("Done.", "Done, and moved on.")]
-    moved = w.http.post(
-        "/starting/w1:p3/prompt",
-        data={"text": "rm -rf build", "confirm": "1", "screen": SETTLED_CLAIM},
-        headers=ORIGIN,
-    )
-    assert moved.status_code == 409
-    assert w.herd.writes("agent.prompt") == []
-    unbound = w.http.post(
-        "/starting/w1:p3/prompt", data={"text": "rm -rf build", "confirm": "1"}, headers=ORIGIN
-    )
-    assert unbound.status_code == 200, "a confirm that names no screen confirms nothing"
-    assert w.herd.writes("agent.prompt") == []
 
 
 def _exits(herd: FakeHerd, _params: dict[str, JsonValue]) -> None:

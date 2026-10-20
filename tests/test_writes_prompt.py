@@ -13,7 +13,6 @@ from herdr_pwa.writes.guard import (
     MAX_PROMPT_CHARS,
     NO_ECHO_MECHANISM,
     asks_a_question,
-    destructive_reason,
     landed,
     no_echo_notice,
 )
@@ -192,20 +191,15 @@ def test_a_screen_digest_that_no_longer_matches_refuses_and_reissues(tmp_path: P
 
 def test_a_working_agent_is_issued_no_digest_to_carry(tmp_path: Path) -> None:
     r = idle_rig(tmp_path, status="working")
-    result = refused(send_prompt(r.writer, PromptAsk(S1, "rm -rf build")))
-    assert result.refusal is Refusal.CONFIRM
+    result = refused(send_prompt(r.writer, PromptAsk(S1, "hello", drawn_against="stale")))
+    assert result.refusal is Refusal.SCREEN_CHANGED
     assert result.screen == ""
 
 
-def test_a_destructive_prompt_is_held_then_sent_on_the_second_tap(tmp_path: Path) -> None:
+def test_a_shell_command_in_a_prompt_goes_on_the_first_tap(tmp_path: Path) -> None:
+    # What an agent runs is left to the agent's own permissions, not second-guessed here.
     r = idle_rig(tmp_path)
-    held = refused(send_prompt(r.writer, PromptAsk(S1, "rm -rf ./node_modules")))
-    assert held.held
-    assert held.status == 200
-    assert "rm with a recursive flag" in held.reason
-    assert r.herd.writes(PROMPT) == []
-    again = PromptAsk(S1, "rm -rf ./node_modules", drawn_against=held.screen, confirmed=True)
-    _ = sent(send_prompt(r.writer, again))
+    _ = sent(send_prompt(r.writer, PromptAsk(S1, "rm -rf ./node_modules && git push --force")))
     assert len(r.herd.writes(PROMPT)) == 1
 
 
@@ -278,93 +272,6 @@ def test_a_first_prompt_at_an_agent_with_a_session_is_sent_to_its_own_page(
         refused(send_first_prompt(r.writer, FirstPromptAsk(P3, "hi"))).refusal
         is Refusal.HAS_IDENTITY
     )
-
-
-# The guard's own tables, lifted with their reasons.
-
-
-@pytest.mark.parametrize(
-    ("text", "named"),
-    [
-        ("rm -rf build", "rm with a recursive flag"),
-        ("rm --recursive ./out", "rm with a recursive flag"),
-        ("git push --force origin main", "git push --force"),
-        ("git push -f", "git push --force"),
-        ("sudo systemctl restart nginx", "sudo"),
-        ("dd if=/dev/zero of=/dev/sda", "dd with if="),
-        ("mkfs.ext4 /dev/sdb1", "mkfs"),
-        ("chmod -R 777 /srv", "chmod with a recursive flag"),
-        ("echo broken > /etc/hosts", "a redirect onto a system path"),
-        ("npm publish --force", "--force"),
-        ("$ sudo rm -rf /", "sudo"),
-        # A wrapper in front of the verb leaves it the command that runs.
-        ("\\rm -rf build", "rm with a recursive flag"),
-        ("command rm -rf build", "rm with a recursive flag"),
-        ("env rm -rf build", "rm with a recursive flag"),
-        ("env -i PATH=/bin rm -rf build", "rm with a recursive flag"),
-        ("LC_ALL=C rm -rf build", "rm with a recursive flag"),
-        ("nohup rm -rf build", "rm with a recursive flag"),
-        ("command \\rm -r build", "rm with a recursive flag"),
-        # A verb after a separator starts its own command.
-        ("cd build && rm -rf out", "rm with a recursive flag"),
-        ("make clean || rm -rf out", "rm with a recursive flag"),
-        ("cd /srv; git reset --hard", "git reset --hard"),
-        ("ls *.log | xargs rm -rf", "rm with a recursive flag"),
-        ("find . -name '*.pyc' -delete", "find with -delete"),
-        ("find /tmp -type f -exec rm {} +", "find with -delete"),
-        ("git reset --hard", "git reset --hard"),
-        ("git reset --hard origin/main", "git reset --hard"),
-        ("git -C ../repo reset --hard HEAD~3", "git reset --hard"),
-        ("git clean -f", "git clean -f"),
-        ("git clean -fdx", "git clean -f"),
-        ("git clean -xdf", "git clean -f"),
-        ("git clean --force -d", "git clean -f"),
-        ("git checkout -- .", "git checkout or restore of everything"),
-        ("git restore .", "git checkout or restore of everything"),
-        ("git branch -D feature", "git branch -D"),
-        ("git push origin --delete feature", "git push --delete"),
-        ("git stash clear", "git stash clear"),
-        ("rsync -a --delete src/ dst/", "rsync --delete"),
-        ("shred -u secrets.txt", "shred"),
-    ],
-)
-def test_the_verbs_worth_a_second_tap(text: str, named: str) -> None:
-    assert named in destructive_reason(text)
-
-
-@pytest.mark.parametrize(
-    "text",
-    [
-        "let us play sudoku after this",
-        "rm foo.txt; ls -r",
-        "cat notes.md | grep -R todo",
-        "the rm -rf in the Makefile is wrong, please fix it",
-        "explain why git push --force is dangerous",
-        # Wrappers and separators widen where a verb may start, not what counts as one.
-        "command -v rm",
-        "environment rm -rf is a bad idea",
-        "the env rm -rf trick is wrong, please fix it",
-        "git reset --soft HEAD~1",
-        "git reset HEAD file.txt",
-        "git clean -n",
-        "git clean -nd",
-        "git checkout -- src/app.py",
-        "git checkout main",
-        "git restore --staged .",
-        "git branch -d merged-feature",
-        "git push origin feature",
-        "git stash pop",
-        "find . -name '*.pyc'",
-        "find . -name '*.pyc' -print",
-        "explain how find -delete differs from rm",
-        "please do not git reset --hard, my work is uncommitted",
-        "rsync -a src/ dst/",
-        "the shredder is broken",
-        "",
-    ],
-)
-def test_prose_about_those_verbs_does_not_ask(text: str) -> None:
-    assert destructive_reason(text) == ""
 
 
 def test_text_left_in_the_input_box_has_not_landed() -> None:
@@ -447,15 +354,4 @@ def test_a_lost_answer_hands_back_a_fresh_digest_and_holds_the_same_text(tmp_pat
     assert (held.refusal, held.status, held.screen) == (Refusal.RESEND, 200, lost.screen)
     # Different text is a different prompt, and goes.
     _ = sent(send_prompt(r.writer, PromptAsk(S1, "something else")))
-    assert len(r.herd.writes(PROMPT)) == 2
-
-
-def test_sending_again_anyway_still_asks_for_the_destructive_confirm(tmp_path: Path) -> None:
-    r = idle_rig(tmp_path)
-    r.herd.after[PROMPT] = _lost
-    _ = refused(send_prompt(r.writer, PromptAsk(S1, "rm -rf build", confirmed=True)))
-    del r.herd.after[PROMPT]
-    again = refused(send_prompt(r.writer, PromptAsk(S1, "rm -rf build", again=True)))
-    assert again.refusal is Refusal.CONFIRM
-    _ = sent(send_prompt(r.writer, PromptAsk(S1, "rm -rf build", again=True, confirmed=True)))
     assert len(r.herd.writes(PROMPT)) == 2

@@ -403,14 +403,9 @@ def test_a_blank_first_prompt_sends_nothing(tmp_path: Path) -> None:
     assert r.herd.writes("agent.prompt") == []
 
 
-def test_a_destructive_first_prompt_is_held_before_anything_is_created(tmp_path: Path) -> None:
+def test_a_shell_command_first_prompt_starts_on_the_first_tap(tmp_path: Path) -> None:
     r = listening_rig(tmp_path)
-    held = refused(start_agent(r.writer, ask(tmp_path, prompt="rm -rf build"), which=everywhere))
-    assert held.refusal is Refusal.CONFIRM
-    assert "rm with a recursive flag" in held.reason
-    assert r.herd.writes("tab.create") == []
-    confirmed = dataclasses.replace(ask(tmp_path, prompt="rm -rf build"), confirmed=True)
-    result = start_agent(r.writer, confirmed, which=everywhere)
+    result = start_agent(r.writer, ask(tmp_path, prompt="rm -rf build"), which=everywhere)
     assert isinstance(result, AgentStarted)
     assert isinstance(result.first, PromptSent)
 
@@ -625,15 +620,6 @@ def test_a_launch_prompt_holds_the_new_pane(tmp_path: Path) -> None:
     _ = start_agent(r.writer, ask(tmp_path, "opencode", prompt="go"), which=everywhere)
     in_flight(late)
     assert r.herd.writes("agent.prompt") == []
-
-
-def test_a_destructive_launch_prompt_is_held_before_anything_is_created(tmp_path: Path) -> None:
-    r = argv_rig(tmp_path)
-    held = refused(
-        start_agent(r.writer, ask(tmp_path, "opencode", prompt="rm -rf build"), which=everywhere)
-    )
-    assert held.refusal is Refusal.CONFIRM
-    assert r.herd.writes("tab.create") == []
 
 
 def test_a_launch_prompt_fills_in_after_a_model() -> None:

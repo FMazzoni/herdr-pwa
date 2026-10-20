@@ -21,7 +21,6 @@
   {% endif %}
   <p>This agent has no session yet. claude names itself as it starts; opencode and hermes only once they are first prompted, so a prompt here is what makes it appear.</p>
   <form class="form" {{ sheet(base ~ "/prompt") }}>
-    {% if held and not key %}<input type="hidden" name="confirm" value="1"><input type="hidden" name="screen" value="{{ refused.screen }}">{% endif %}
     {% call ui.field("First prompt") %}<textarea name="text" rows="3" maxlength="4000">{{ text if text is defined else "" }}</textarea>{% endcall %}
     {{ ui.button("Send") }}
   </form>

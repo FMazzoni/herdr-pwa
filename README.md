@@ -17,8 +17,8 @@ It runs on the machine herdr runs on and is reached only over your tailnet, thro
   your tailnet lets reach the node may drive every agent, and startup warns.
 - **Writes are guarded.** Every write is same-origin, keyed on the agent's session (pane
   ids are reused), re-checked against a fresh read of the pane, and refused when the
-  screen is not the one the phone was shown. Destructive shell input asks for a
-  confirm on the server. Nothing is re-sent automatically.
+  screen is not the one the phone was shown. Nothing is re-sent automatically. What
+  a prompt asks an agent to run is left to that agent's own permissions.
 - **Writes are audited.** Each prompt, key, start and close is recorded before it is
   sent, in a 0600 log under the state directory; a box that cannot record does not
   serve.
