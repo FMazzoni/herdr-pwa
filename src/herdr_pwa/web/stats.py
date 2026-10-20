@@ -169,15 +169,22 @@ class SpawnedTime:
     failed: bool = False
     seconds: float | None = None
     kind: str = SPAWNED_AGENT
+    # Started since the newest prompt: work the last turn set going.
+    fresh: bool = False
 
 
-def _spawned_time(agent: SpawnedAgent, now: float) -> SpawnedTime:
+def _fresh(agent: SpawnedAgent, turn_started: str) -> bool:
+    return bool(turn_started) and (agent.resumed or agent.started) >= turn_started
+
+
+def _spawned_time(agent: SpawnedAgent, now: float, turn_started: str) -> SpawnedTime:
     # A resumed agent's run is the one since it was woken.
     since = _seconds_since(agent.resumed or agent.started, now)
     if agent.done:
         until = _seconds_since(agent.ended, now)
         since = since - until if since is not None and until is not None else None
-    return SpawnedTime(agent.description, not agent.done, agent.failed, since, agent.kind)
+    fresh = _fresh(agent, turn_started)
+    return SpawnedTime(agent.description, not agent.done, agent.failed, since, agent.kind, fresh)
 
 
 def _before(stamp: str, since: float | None) -> bool:
@@ -202,11 +209,14 @@ def _this_turn(agent: SpawnedAgent, turn_started: str, since: float | None) -> b
 def spawned_times(
     usage: SessionUsage, now: float, *, since: float | None = None
 ) -> tuple[SpawnedTime, ...]:
-    """The tally's background agents and shells still running, then those that ended this turn,
-    each by when it started; *since* is when the agent's process started, when known."""
-    shown = [agent for agent in usage.agents if _this_turn(agent, usage.turn_started, since)]
-    shown.sort(key=lambda agent: (agent.done, agent.started))
-    return tuple(_spawned_time(agent, now) for agent in shown)
+    """The tally's background agents and shells still running, the last turn's first, then those
+    that ended this turn, each by when it started; *since* is when the agent's process started,
+    when known."""
+    turn = usage.turn_started
+    shown = [agent for agent in usage.agents if _this_turn(agent, turn, since)]
+    # Running first; of those, what the last turn started before what an older one left.
+    shown.sort(key=lambda agent: (agent.done, not _fresh(agent, turn), agent.started))
+    return tuple(_spawned_time(agent, now, turn) for agent in shown)
 
 
 @dataclass(frozen=True, slots=True)

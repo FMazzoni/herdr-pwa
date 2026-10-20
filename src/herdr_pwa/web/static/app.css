@@ -15,6 +15,8 @@
   --accent: #6BA6E6;
   --blocked: #E8705A;
   --working: #3FBF9A;
+  /* An idle agent whose work is still to come back: a blue apart from the accent's links. */
+  --running: #7C8CFF;
   --idle: #BCCDE4;
   --done: #B18BF5;
   --unknown: #E3C169;
@@ -50,6 +52,9 @@
   --space-9: 18px;
   --space-10: 24px;
   --space-11: 32px;
+  /* A status-row separator's box, and the room it takes with the gap after it. */
+  --sep: 0.5em;
+  --sep-room: calc(var(--sep) + var(--space-4));
 
   /* Type sizes, in rem so the whole scale follows the root, which follows iPhone Text Size.
      At the default setting the root is 17px: these are 13.6, 14.9, 17 and 19.1px. */
@@ -437,6 +442,7 @@ html { -webkit-tap-highlight-color: transparent; }
 .dot { width: var(--dot); height: var(--dot); border-radius: var(--radius-round); flex: none; background: var(--unknown); }
 .dot--blocked { background: var(--blocked); }
 .dot--working { background: var(--working); }
+.dot--running { background: var(--running); }
 .dot--idle { background: var(--idle); }
 .dot--done { background: var(--done); }
 /* Not a herdr state: an answer took the question away and herdr has not reported since. */
@@ -964,14 +970,27 @@ summary.tray__row::after { content: var(--chevron); flex: none; padding-left: va
 .tray__tail { flex: none; margin-left: auto; color: var(--accent); }
 summary.tray__row:not(:has(.tray__tail))::after { margin-left: auto; }
 .tray__row--quiet .tray__words { color: var(--ink-3); }
+/* herdr's state word is short and never cut: the counts beside it wrap instead. */
+.tray__words--state { flex: none; }
 /* Needs you: no sheet to open, the question is the card above; the dot and words carry the colour. */
 .tray__row--blocked { color: var(--needs-ink); font-weight: 600; }
 .count { color: var(--ink-3); }
 .count__n { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
 @container (width < 24em) {
-  .tray__row:has(.tray__count) .tray__words { display: none; }
-  .tray__row:has(.tray__count) .tray__count:first-child > .tray__sep { display: none; }
-  .tray__counts { flex-shrink: 1; }
+  /* Narrow, a verb or a receipt gives way to the counts; herdr's state word never does. */
+  .tray__row:has(.tray__count) .tray__words:not(.tray__words--state) { display: none; }
+  .tray__row:has(.tray__count):not(:has(.tray__words--state)) .tray__count:first-child > .tray__sep { display: none; }
+  /* The counts need the room more than the label: the chevron still says the row opens. */
+  .tray__row:has(.tray__count) .tray__tail { display: none; }
+  summary.tray__row:has(.tray__count)::after { margin-left: auto; }
+  /* Counts that wrap: each one's separator sits in the room its count is pulled back by, and the
+     counts box clips its own start, so a line never opens on a separator and no count is cut. */
+  .tray__counts { flex-shrink: 1; column-gap: calc(var(--space-4) + var(--sep-room)); clip-path: inset(-100vh -100vw -100vh 0); }
+  .tray__count { margin-inline-start: calc(-1 * var(--sep-room)); display: flex; align-items: baseline; flex-shrink: 1; min-width: 0; }
+  /* A count wider than the row wraps its own words under its number, rather than run under Keys. */
+  .tray__count > .count { min-width: 0; white-space: normal; }
+  .tray__count:first-child { margin-inline-start: 0; }
+  .tray__sep { display: inline-block; flex: none; inline-size: var(--sep); text-align: center; }
 }
 @container (width < 20em) {
   .tray__time { display: none; }

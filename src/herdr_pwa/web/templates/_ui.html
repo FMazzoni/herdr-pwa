@@ -7,7 +7,7 @@
 {% macro dot(status, id=none, oob=false) %}<span class="dot dot--{{ status }}"{% if id %} id="{{ id }}"{% endif %}{% if oob %} hx-swap-oob="true"{% endif %} aria-hidden="true"></span>{% endmacro %}
 
 {# A count in a status line: the number in strong ink, the noun quiet. Never a pill, never cut. #}
-{% macro count(n, one, many=none, tail="") %}<span class="count"><b class="count__n">{{ n }}</b> {{ one if n == 1 else (many or one ~ "s") }}{{ tail }}</span>{% endmacro %}
+{% macro count(n, one, many=none) %}<span class="count"><b class="count__n">{{ n }}</b> {{ one if n == 1 else (many or one ~ "s") }}</span>{% endmacro %}
 
 {# The small-caps header over a group or a page, with an optional count beside it. #}
 {% macro section_head(label, n=none, note=none) %}<h2 class="group__head"><span class="group__label">{{ label }}</span>{% if n is not none %}<span class="group__n">{{ n }}</span>{% endif %}{% if note %}<span class="group__note">{{ note }}</span>{% endif %}</h2>{% endmacro %}
@@ -81,12 +81,19 @@
 
 {# The first line of a card: status dot, a title that ellipsizes, and the status word. `word` says
    something else in the status's place; `dotted=false` leaves the dot out. #}
-{% macro card_top(status, title, word=none, dotted=true, background=false) -%}
+{% macro pending_words(pending) -%}
+{%- if pending.agents %}{{ pending.agents }} agent{{ "s" if pending.agents != 1 }}{% endif %}
+{%- if pending.agents and pending.shells %} · {% endif %}
+{%- if pending.shells %}{{ pending.shells }} shell{{ "s" if pending.shells != 1 }}{% endif %}
+{%- endmacro %}
+
+{% macro card_top(status, title, word=none, dotted=true, pending=none) -%}
 <span class="card__top">
-      {{ dot(status) if dotted else "" }}
+      {{ dot("running" if pending else status) if dotted else "" }}
       <span class="card__title">{{ title }}</span>
-      {%- if background %}
-      <span class="card__status card__status--background">background</span>
+      {%- if pending %}
+      {#- Idle with work still to come back: what runs, in the slot the state word takes. #}
+      <span class="card__status card__status--running">{{ pending_words(pending) }}</span>
       {%- else %}
       <span class="card__status">{{ status if word is none else word }}</span>
       {%- endif %}

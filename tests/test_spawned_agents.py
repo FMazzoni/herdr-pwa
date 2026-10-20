@@ -163,8 +163,8 @@ def test_the_page_lists_running_agents_then_those_ended_this_turn() -> None:
         ],
     )
     assert spawned_times(usage, NOW) == (
-        SpawnedTime("Runs", running=True, seconds=1800),
-        SpawnedTime("Ended", running=False, failed=True, seconds=600),
+        SpawnedTime("Runs", running=True, seconds=1800, fresh=True),
+        SpawnedTime("Ended", running=False, failed=True, seconds=600, fresh=True),
     )
 
 

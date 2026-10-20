@@ -2,7 +2,7 @@
 
 import posixpath
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Final
 
@@ -116,6 +116,21 @@ class Freshness:
         return self.condition is not Condition.LIVE
 
 
+@dataclass(frozen=True, slots=True)
+class Pending:
+    """Work an idle agent started that is still to come back: agents that will report, and
+    shells its last turn started."""
+
+    agents: int = 0
+    shells: int = 0
+
+    def __bool__(self) -> bool:
+        return bool(self.agents or self.shells)
+
+
+NOTHING_PENDING: Final = Pending()
+
+
 @dataclass(frozen=True)
 class AgentRow:
     """One feed row: who the agent is, where it sits, and how to answer it."""
@@ -132,6 +147,8 @@ class AgentRow:
     workspace_id: str = ""
     # Stopped on a full context: what it needs is said by the transcript, not asked on the screen.
     stalled: bool = False
+    # Idle with work it started still to come back; such a card leads the idle ones.
+    pending: Pending = NOTHING_PENDING
 
 
 @dataclass(frozen=True)
@@ -271,6 +288,8 @@ class Overlay:
     stalled: frozenset[str] = frozenset()
     # Sessions herdr calls stopped whose screen still holds a dialog: its rules can miss one.
     asking: frozenset[str] = frozenset()
+    # Idle sessions with work still to come back, read from their logs.
+    pending: Mapping[str, Pending] = field(default_factory=dict[str, Pending])
 
 
 NO_OVERLAY: Final = Overlay()
@@ -398,7 +417,20 @@ def agent_row(agent: Agent, overlay: Overlay, prompt: BlockedPrompt | None) -> A
         answer=None if prompt is None else decide_screen(prompt),
         workspace_id=agent.workspace_id,
         stalled=agent.session in overlay.stalled and agent.status in _STALLABLE,
+        pending=_pending(agent, overlay, status),
     )
+
+
+def _pending(agent: Agent, overlay: Overlay, status: AgentStatus) -> Pending:
+    # Only an idle card is marked: herdr's other states already say the agent is not resting.
+    if status is not AgentStatus.IDLE:
+        return NOTHING_PENDING
+    return overlay.pending.get(str(agent.session), NOTHING_PENDING)
+
+
+def _order(row: AgentRow) -> tuple[int, bool, tuple[int, int, int, str]]:
+    # Within its status, a card with work still to come back leads; otherwise the feed's own order.
+    return (row.feed_key[0], not row.pending, row.feed_key)
 
 
 def _sections(rows: tuple[AgentRow, ...]) -> tuple[Section, ...]:
@@ -440,7 +472,7 @@ def decide_herd(
     rows = tuple(
         sorted(
             (agent_row(agent, overlay, prompts.get(agent.session)) for agent in herd),
-            key=lambda row: row.feed_key,
+            key=_order,
         )
     )
     counts = dict.fromkeys(AgentStatus, 0)

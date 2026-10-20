@@ -6,7 +6,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Final
 
+from herdr_pwa.decisions import Fetched, Overlay, Pending, decide_herd
 from herdr_pwa.engine import (
+    Agent,
     AgentStatus,
     HistoryState,
     Located,
@@ -17,9 +19,10 @@ from herdr_pwa.engine import (
     UsageCache,
 )
 from herdr_pwa.process_start import ProcessStarts
+from herdr_pwa.web.background import pending_of
 from herdr_pwa.web.chat import Turning, chat_view, status_row
 from herdr_pwa.web.stats import SpawnedTime, TurnTimes, spawned_times
-from tests.catalogue import FIXTURES, background_chat
+from tests.catalogue import FIXTURES, LeftRunning, background_chat
 from tests.engine_seam import TaskNotice, injected, tally_claude
 from tests.webfakes import (
     SNAPSHOT,
@@ -167,8 +170,8 @@ def test_the_process_start_is_read_from_the_panes_claude(tmp_path: Path) -> None
 
 SHELLS: Final = (
     SpawnedTime("Serve the docs", running=True, seconds=600, kind="shell"),
-    SpawnedTime("npm run build", running=True, seconds=60, kind="shell"),
-    SpawnedTime("Review", running=True, seconds=300),
+    SpawnedTime("npm run build", running=True, seconds=60, kind="shell", fresh=True),
+    SpawnedTime("Review", running=True, seconds=300, fresh=True),
 )
 
 
@@ -182,11 +185,12 @@ def test_an_idle_agent_with_work_still_running_says_so() -> None:
     page = TranscriptPage(turns=[], state=HistoryState.ok)
     view = chat_view(page, turning=_view(AgentStatus.IDLE, SHELLS))
     assert view.bubble is None
-    assert [s.description for s in view.shells] == ["Serve the docs", "npm run build"]
+    # The shells the last turn started come first, then the older ones.
+    assert [s.description for s in view.shells] == ["npm run build", "Serve the docs"]
     assert [a.description for a in view.agents] == ["Review"]
     row = status_row(view, "idle")
-    assert (row.state, row.lead, row.shells, row.running) == ("background", "Idle", 2, 1)
-    assert row.sentence == "Idle. 2 shells running. 1 agent running."
+    assert (row.state, row.lead, row.running, row.shells) == ("background", "Idle", 1, 2)
+    assert row.sentence == "Idle. 1 agent running. 2 shells running."
 
 
 def test_an_idle_agent_with_nothing_running_is_plain_idle() -> None:
@@ -205,26 +209,93 @@ def test_a_working_turn_is_not_waiting_on_a_shell() -> None:
     assert status_row(view, "working").shells == 1
 
 
-def _idle_rig(tmp_path: Path, shells: int, agents: int) -> Rig:
+def test_only_pending_work_counts_for_the_feed() -> None:
+    """Agents that will report back, and shells the last turn started; never an older server."""
+    assert pending_of(SHELLS) == Pending(agents=1, shells=1)
+    assert pending_of(SHELLS[:1]) == Pending()
+    assert not Pending()
+    ended = SpawnedTime("Built", running=False, seconds=60, kind="shell", fresh=True)
+    assert pending_of((ended,)) == Pending()
+
+
+def _idle_rig(tmp_path: Path, left: LeftRunning) -> Rig:
     frame = snapshot_frame()
     next(a for a in agents_of(frame) if a.get("pane_id") == WORKING_PANE)["agent_status"] = "idle"
     rig = build_rig(tmp_path, {SNAPSHOT: frame})
     roots = rig.settings.state_dir.parent / "transcripts"
-    write_transcript(roots, WORKING_SESSION, background_chat(shells, agents))
+    write_transcript(roots, WORKING_SESSION, background_chat(left))
     return rig
 
 
-def test_the_row_counts_the_shells_and_the_sheet_lists_them(tmp_path: Path) -> None:
-    rig = _idle_rig(tmp_path, shells=2, agents=1)
-    body = rig.http.get(f"/agent/{WORKING_SESSION}/tray", headers={"HX-Request": "true"}).text
+def _tray(rig: Rig) -> str:
+    return rig.http.get(f"/agent/{WORKING_SESSION}/tray", headers={"HX-Request": "true"}).text
+
+
+def test_the_row_counts_agents_then_shells_and_keeps_its_state_word(tmp_path: Path) -> None:
+    body = _tray(_idle_rig(tmp_path, LeftRunning(shells=2, agents=1)))
     assert "tray__row--background" in body
-    assert '<b class="count__n">2</b> shells</span>' in body
-    assert '<b class="count__n">1</b> agent running</span>' in body
-    assert "Shells <b" in body
+    assert 'class="tray__words tray__words--state" aria-hidden="true">Idle</span>' in body
+    agents = body.index('<b class="count__n">1</b> agent</span>')
+    shells = body.index('<b class="count__n">2</b> shells</span>')
+    assert agents < shells
+    assert "running</span>" not in body.split("tray__shelf")[0]
+
+
+def test_the_row_offers_details_with_work_running_and_keys_without(tmp_path: Path) -> None:
+    assert '<span class="tray__tail" aria-hidden="true">Details</span>' in _tray(
+        _idle_rig(tmp_path / "a", LeftRunning(shells=1, agents=0))
+    )
+    assert '<span class="tray__tail" aria-hidden="true">Keys</span>' in _tray(
+        _idle_rig(tmp_path / "b", LeftRunning(shells=0, agents=0))
+    )
+
+
+def test_the_sheet_lists_agents_above_shells(tmp_path: Path) -> None:
+    body = _tray(_idle_rig(tmp_path, LeftRunning(shells=2, agents=1)))
+    assert body.index("Agents <b") < body.index("Shells <b")
     assert body.count('class="spawned__row spawned__row--running"') == 3
 
 
-def test_the_feed_card_says_background_instead_of_idle(tmp_path: Path) -> None:
-    rig = _idle_rig(tmp_path, shells=1, agents=0)
-    body = rig.http.get("/feed").text
-    assert body.count('class="card__status card__status--background">background</span>') == 1
+def test_a_card_with_pending_work_leads_the_idle_cards_marked_running(tmp_path: Path) -> None:
+    body = _idle_rig(tmp_path, LeftRunning(shells=1, agents=2)).http.get("/feed").text
+    idle = body[body.index("group--idle") :]
+    cards = idle.split('class="card ')[1:]
+    assert "dot--running" in cards[0]
+    assert '<span class="card__status card__status--running">2 agents · 1 shell</span>' in cards[0]
+    assert all("dot--running" not in card for card in cards[1:])
+
+
+def test_an_old_server_shell_never_moves_or_marks_a_card(tmp_path: Path) -> None:
+    body = _idle_rig(tmp_path, LeftRunning(shells=0, agents=0, old=1)).http.get("/feed").text
+    assert "dot--running" not in body
+    assert "card__status--running" not in body
+    # The agent page still lists it.
+    tray = _tray(_idle_rig(tmp_path / "again", LeftRunning(shells=0, agents=0, old=1)))
+    assert "Shells <b" in tray
+
+
+def _agent(n: int, status: AgentStatus, seq: int) -> Agent:
+    return Agent.model_validate(
+        {
+            "session": f"00000000-0000-4000-8000-00000000000{n}",
+            "target": f"w1:p{n}",
+            "status": status,
+            "agent": "claude",
+            "state_change_seq": seq,
+        }
+    )
+
+
+def test_pending_cards_sort_to_the_top_of_idle_and_keep_their_order() -> None:
+    herd = [_agent(n, AgentStatus.IDLE, 10 - n) for n in (1, 2, 3, 4)]
+    herd.append(_agent(5, AgentStatus.WORKING, 1))
+    pending = {str(herd[2].session): Pending(agents=1), str(herd[3].session): Pending(shells=2)}
+    overlay = Overlay(pending=pending)
+    rows = decide_herd(herd, prompts={}, overlay=overlay, fetched=Fetched(0.0)).rows
+    assert [str(r.target) for r in rows] == ["w1:p5", "w1:p3", "w1:p4", "w1:p1", "w1:p2"]
+    assert rows[1].pending == Pending(agents=1)
+    # Only an idle card is marked; herdr's other states keep their place.
+    assert rows[0].pending == Pending()
+    # With nothing pending the order is the one the feed always had.
+    plain = decide_herd(herd, prompts={}, overlay=Overlay(), fetched=Fetched(0.0)).rows
+    assert [str(r.target) for r in plain] == ["w1:p5", "w1:p1", "w1:p2", "w1:p3", "w1:p4"]

@@ -340,7 +340,9 @@ def _waiting_on(spawned: tuple[SpawnedTime, ...]) -> bool:
 
 
 def _lines(spawned: tuple[SpawnedTime, ...], *, shells: bool) -> "tuple[AgentLine, ...]":
-    return tuple(_agent_line(a) for a in spawned if (a.kind == SPAWNED_SHELL) == shells)
+    # Running first, and of those what the last turn started; stable, so each keeps its age order.
+    ordered = sorted(spawned, key=lambda a: (not a.running, not a.fresh))
+    return tuple(_agent_line(a) for a in ordered if (a.kind == SPAWNED_SHELL) == shells)
 
 
 @dataclass(frozen=True, slots=True)
@@ -561,8 +563,8 @@ def status_row(view: ChatView, status: str) -> Row:
     else:
         state, lead = "still", status.capitalize()
     counts = (
-        _counted(shells, "shell", "shells", "running"),
         _counted(running, "agent", "agents", "running"),
+        _counted(shells, "shell", "shells", "running"),
         _counted(queued, "message", "messages", "queued"),
     )
     sentence = "".join(f"{part}. " for part in (lead, *counts) if part).strip()
