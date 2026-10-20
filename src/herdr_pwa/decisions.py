@@ -168,7 +168,8 @@ def answer_digits(prompt: BlockedPrompt) -> tuple[str, ...]:
     """The digit each option row sends, or none when no row has earned one."""
     if not prompt.options or prompt.shape not in TAPPABLE_SHAPES:
         return ()
-    if _options_refused(prompt):
+    # Measured live: beside a preview a digit only moves the cursor, so it is no answer.
+    if prompt.digits_move or _options_refused(prompt):
         return ()
     numbers = [option.number for option in prompt.options]
     if not all(1 <= number <= MAX_TAPPABLE_OPTION for number in numbers):

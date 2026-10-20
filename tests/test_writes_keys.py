@@ -5,7 +5,10 @@ from pathlib import Path
 import pytest
 from pydantic import JsonValue
 
+from herdr_pwa.decisions import answer_digits as decided_digits
+from herdr_pwa.decisions import decide_screen
 from herdr_pwa.engine import BlockedPrompt, EngineUnavailable, KeyHint
+from herdr_pwa.panetext import as_text_read
 from herdr_pwa.writes.answer import KeyAsk, KeySent, StartingKeyAsk, send_key, send_starting_key
 from herdr_pwa.writes.keys import (
     allowed_keys,
@@ -268,6 +271,30 @@ def test_digits_are_offered_only_for_a_live_single_choice_menu_printed_whole() -
     checklist = BlockedPrompt.parse(capture("capture-blocked-multiselect-checklist"))
     assert answer_digits(checklist) == ()
     assert answer_digits(None) == ()
+
+
+def _vendored(name: str) -> BlockedPrompt:
+    """A vendored claude screen, read as the app reads a colour capture."""
+    raw = (FIXTURES / "foreign" / "collie" / f"claude--{name}.txt").read_text(encoding="utf-8")
+    return BlockedPrompt.from_reads(as_text_read(raw), lambda: raw)
+
+
+def test_rows_beside_a_preview_earn_no_digit_and_every_printed_key_stays() -> None:
+    """Measured live: there a digit only moves the cursor, and Enter is what answers."""
+    preview = _vendored("select-preview")
+    assert [o.label for o in preview.options] == ["Boxy", "Rounded", "Minimal"]
+    assert answer_digits(preview) == ()
+    assert decided_digits(preview) == ()
+    assert allowed_keys(preview) == {"esc", "up", "down", "enter", "ctrl-c"}
+    assert {h.key for h in decide_screen(preview).answer_hints} == {"enter", "up", "down", "esc"}
+
+
+def test_a_plain_question_and_a_checklist_still_answer_on_their_digits() -> None:
+    plain = _vendored("select-menu")
+    assert answer_digits(plain) == decided_digits(plain) == ("1", "2", "3", "4", "5")
+    assert key_ends_question(plain, "2")
+    checklist = BlockedPrompt.parse(capture("capture-blocked-multiselect-checklist"))
+    assert decided_digits(checklist) == ("1", "2", "3", "4", "5", "6")
 
 
 def test_the_allowed_set_is_the_pad_the_footer_and_earned_digits() -> None:

@@ -620,6 +620,8 @@ class BlockedPrompt(BaseModel):
     body: str = ""
     drew_rows: bool = False
     asked: bool = False
+    digits_move: bool = False
+    """True when the rows sit beside a preview, where a digit moves the cursor and answers nothing."""
 
     @field_validator("target", mode="before")
     @classmethod
@@ -730,7 +732,7 @@ class BlockedPrompt(BaseModel):
             hints=tuple(hint for hint in hints if not hint.hands_off),
             handoffs=tuple(hint for hint in hints if hint.hands_off),
         )
-        return _located(parsed, screen.colour, _option_lines(parsed, run, buttons_at))
+        return _located(parsed, screen, _option_lines(parsed, run, buttons_at))
 
     @classmethod
     def from_reads(
@@ -770,6 +772,8 @@ class _Screen:
     text: str
     colour: tuple[str, ...]
     """Per line, the ANSI the same read drew it with -- on the dialog's own lines only."""
+    beside: bool = False
+    """Whether a preview box was cut away from beside the rows."""
 
 
 def _prepared(text: str, ansi: str = "") -> _Screen:
@@ -778,12 +782,79 @@ def _prepared(text: str, ansi: str = "") -> _Screen:
     A drawn panel is the screen; its rows lost their sides here, so the border
     no longer marks any of them, and no colour is carried into it.
     """
-    barred = [bool(_EDGE_RE.match(line)) for line in text.splitlines()]
+    drawn = text.splitlines()
+    rows = _beside_rows(drawn)
+    barred = [bool(_EDGE_RE.match(line)) for line in rows]
     # Padded to the pane's width or not, a row reads the same: a blank row of spaces is no rule.
-    lines = [_EDGE_RE.sub(r"\1", line).rstrip() for line in text.splitlines()]
+    lines = [_EDGE_RE.sub(r"\1", line).rstrip() for line in rows]
     if (panel := _panel_screen(lines)) is not None:
         return _Screen(panel, [False] * len(panel), "\n".join(panel), ("",) * len(panel))
-    return _Screen(_reframed(lines), barred, text, _dialog_colour(text, ansi, barred))
+    colour = _dialog_colour(text, ansi, barred)
+    return _Screen(_reframed(lines), barred, text, colour, beside=rows != drawn)
+
+
+_SIDE_TOP_RE = re.compile(r"\S\s{2,}(?P<corner>[┌╭])[─━]")
+"""A box opening on an option row, right of its label: the preview beside the rows."""
+
+# A tall preview is drawn folded, a tee row across it saying how many lines it hid.
+_SIDE_EDGE = "│┃├┝"
+
+_SIDE_BOTTOM = "└╰"
+
+
+def _side_column(line: str) -> int | None:
+    """The column a preview box beside *line*'s option opens at, or ``None``."""
+    if OPTION_RE.match(line) is None or (m := _SIDE_TOP_RE.search(line)) is None:
+        return None
+    return m.start("corner")
+
+
+def _side_bottom(rows: list[str], top: int, column: int) -> int | None:
+    """The row the box opened at *column* on ``rows[top]`` closes on, or ``None``."""
+    for i in range(top + 1, len(rows)):
+        mark = rows[i][column : column + 1]
+        if mark and mark in _SIDE_BOTTOM:
+            return i
+        if not mark or mark not in _SIDE_EDGE:
+            return None
+    return None
+
+
+def _beside_rows(rows: list[str]) -> list[str]:
+    """*rows* with a preview box drawn beside the options, and the column under it, cut away.
+
+    claude draws an option's preview as a box right of the rows when the question
+    carries previews, with a ``Notes:`` line under it and its last choice, an
+    unnumbered ``Chat about this``, below the next rule. While the note box holds
+    the keys, which claude says by adding its editor key to the footer, the rows
+    are not what a key reaches, so that screen is left as read.
+    """
+    at = next((i for i in range(len(rows) - 1, -1, -1) if _side_column(rows[i]) is not None), None)
+    if at is None or any(hint.hands_off for hint in _hints(_footer_lines(rows))):
+        return rows
+    column = _side_column(rows[at]) or 0
+    bottom = _side_bottom(rows, at, column)
+    if bottom is None:
+        return rows
+    return _cut_side(rows, range(at, bottom + 1), column)
+
+
+def _cut_side(rows: list[str], box: range, column: int) -> list[str]:
+    """*rows* cut at *column* from *box* down to the next rule, and only chrome kept below it."""
+    cut = list(rows)
+    below = len(rows)
+    for i in range(box.start, len(rows)):
+        if _DIVIDER_RE.match(rows[i]):
+            below = i + 1
+            break
+        if i >= box.stop and rows[i][:column].strip():
+            return rows
+        cut[i] = rows[i][:column].rstrip()
+    # The row under the rule is the dialog's own unnumbered choice, which only the arrows reach.
+    for i in range(below, len(rows)):
+        if not _is_inert(rows[i]):
+            cut[i] = ""
+    return cut
 
 
 def _dialog_colour(text: str, ansi: str, barred: list[bool]) -> tuple[str, ...]:
@@ -1000,10 +1071,12 @@ def _focused_index(bgs: list[str]) -> int:
     return odd[0] if len(odd) == _FOCUS_ODD else -1
 
 
-def _located[P: BlockedPrompt](prompt: P, colour: tuple[str, ...], rows: tuple[int, ...]) -> P:
-    """The same prompt with the focused choice read off the line each choice was parsed from."""
+def _located[P: BlockedPrompt](prompt: P, screen: _Screen, rows: tuple[int, ...]) -> P:
+    """The same prompt with what the drawing says of its rows: which is focused, what a digit does."""
     if not prompt.options:
         return prompt
+    colour = screen.colour
+    prompt = _with(prompt, digits_move=screen.beside)
     bgs = [
         _label_bg(colour[at], option.label) for option, at in zip(prompt.options, rows, strict=True)
     ]
