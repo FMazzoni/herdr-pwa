@@ -100,6 +100,46 @@ def test_a_shell_a_subagent_stops_is_read_though_the_main_log_is_still(tmp_path:
     assert _tasks(cache.read(found))["bnested04"].done
 
 
+SHELL_ENDS: Final = FIXTURES / "transcript" / "notices" / "shell-ends.jsonl"
+
+
+def _copy_ends(tmp_path: Path) -> Path:
+    shutil.copytree(SHELL_ENDS.parent / "shell-ends", tmp_path / "log" / "shell-ends")
+    return Path(shutil.copy(SHELL_ENDS, tmp_path / "log" / SHELL_ENDS.name))
+
+
+def test_a_subagent_shell_ends_by_the_notice_the_session_log_queued(tmp_path: Path) -> None:
+    shell = _tasks(tally_claude(_copy_ends(tmp_path)).tally)["bqueued01"]
+    assert (shell.kind, shell.description) == ("shell", "Run the suite")
+    assert shell.done
+    assert not shell.failed
+    # The enqueue and the remove carry one notice; the later stamp is the one kept.
+    assert shell.ended == "2026-10-20T10:05:00.100Z"
+
+
+def test_a_shell_killed_from_outside_the_harness_ends_failed(tmp_path: Path) -> None:
+    shell = _tasks(tally_claude(_copy_ends(tmp_path)).tally)["bkilled02"]
+    assert shell.done
+    assert shell.failed
+
+
+def test_a_shell_no_notice_names_still_runs(tmp_path: Path) -> None:
+    tasks = _tasks(tally_claude(_copy_ends(tmp_path)).tally)
+    assert not tasks["brun00003"].done
+    assert [t.task for t in tasks.values() if t.kind == "shell" and not t.done] == ["brun00003"]
+
+
+def test_a_queued_notice_appended_later_ends_its_shell(tmp_path: Path) -> None:
+    log = _copy_ends(tmp_path)
+    cache = UsageCache()
+    found = Located(Source.of(WORKING_SESSION, agent_kind="claude"), log)
+    assert not _tasks(cache.read(found))["brun00003"].done
+    queued = SHELL_ENDS.read_text().splitlines()[-1].replace("bkilled02", "brun00003")
+    with log.open("a") as handle:
+        handle.write(queued + "\n")
+    assert _tasks(cache.read(found))["brun00003"].done
+
+
 def test_the_cache_holds_as_many_logs_as_the_herd_has_agents(tmp_path: Path) -> None:
     cache = UsageCache(files=2)
     cache.fit(4)

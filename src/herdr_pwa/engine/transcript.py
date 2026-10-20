@@ -45,6 +45,7 @@ from herdr_pwa.engine.notices import (
     ApiError,
     CommandOutput,
     Hidden,
+    Injected,
     PeerMessage,
     RecordOrigin,
     ShellCommand,
@@ -2036,13 +2037,21 @@ def _end(agent: SpawnedAgent, at: str, *, failed: bool) -> None:
     _settle(agent)
 
 
+def _queued_notice(record: ClaudeRecord) -> Injected | None:
+    # Measured: a subagent's shell ends only here in the session's own log; enqueue and remove
+    # carry the same notice, and ending a task twice at once changes nothing.
+    if record.type != "queue-operation" or record.operation not in (_ENQUEUE, _REMOVE):
+        return None
+    return injected(None, record.content or "", human=False)
+
+
 def _ending(record: ClaudeRecord) -> TaskNotice | PeerMessage | None:
     """What *record* says ended a background agent or shell: its notice, or an agent's report.
 
     Measured: an agent that hands back while its own work runs is told "waiting", and once
     handed back its run is over, so no "finished" ever follows.
     """
-    found = _delivered(record)
+    found = _delivered(record) or _queued_notice(record)
     content = record.message.content if record.message is not None else None
     if found is None and record.type == "user" and isinstance(content, str):
         found = injected(record.origin, content, human=_is_human(record))
