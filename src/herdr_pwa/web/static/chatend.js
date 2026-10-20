@@ -291,6 +291,10 @@
     pinned: function () {
       return pin.pinned;
     },
+    // Pinned, or left on a tall question's top by a landing: a change of the room lands it again.
+    following: function () {
+      return pin.pinned || onQuestion;
+    },
     toEnd: toEnd,
     barBottom: barBottom,
     ownScroll: ownScroll,
