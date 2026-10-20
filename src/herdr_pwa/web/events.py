@@ -229,11 +229,16 @@ class Hub:
         fresh = False
         try:
             while self._listeners:
-                marks = await asyncio.to_thread(self._look, self._viewed(), fresh=fresh)
-                stale = changed(self._marks, marks) if self._marks else set[str]()
-                self._marks = marks
-                if stale:
-                    self.publish(stale)
+                # One bad look never ends the watcher: a live page has turned its own polling off.
+                try:
+                    marks = await asyncio.to_thread(self._look, self._viewed(), fresh=fresh)
+                except Exception:
+                    log.exception("the event watcher's look failed")
+                else:
+                    stale = changed(self._marks, marks) if self._marks else set[str]()
+                    self._marks = marks
+                    if stale:
+                        self.publish(stale)
                 self.looks += 1
                 fresh = await self._sleep()
         finally:

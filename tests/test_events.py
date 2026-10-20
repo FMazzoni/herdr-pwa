@@ -11,7 +11,7 @@ import pytest
 from fastapi import FastAPI
 
 from herdr_pwa.engine import Snapshot
-from herdr_pwa.web.events import Hub, Listener, changed, herd_marks, topics_of
+from herdr_pwa.web.events import Hub, Listener, Marks, changed, herd_marks, topics_of
 from tests.catalogue import long_chat
 from tests.waiting import until_async
 from tests.webfakes import (
@@ -293,6 +293,39 @@ def test_a_herd_change_reaches_the_feed_and_the_agent(tmp_path: Path) -> None:
         return heard
 
     assert set(asyncio.run(scenario())) == {"feed", f"agent:{IDLE}"}
+
+
+def test_a_look_that_raises_is_logged_and_a_later_change_still_reaches_the_page(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    hub, rig = _hub(tmp_path)
+    looked = hub._look  # pyright: ignore[reportPrivateUsage]
+    calls: list[int] = []
+
+    def flaky(viewed: frozenset[str], *, fresh: bool) -> Marks:
+        calls.append(1)
+        if len(calls) == 2:
+            raise RuntimeError("a store the look reads broke")
+        return looked(viewed, fresh=fresh)
+
+    hub._look = flaky  # pyright: ignore[reportPrivateUsage]
+
+    async def scenario() -> list[str]:
+        listener = hub.join(frozenset({"feed", f"agent:{IDLE}"}))
+        stream = hub.stream(listener)
+        await _looked(hub, 2)
+        frame = snapshot_frame()
+        for agent in agents_of(frame):
+            if IDLE in json.dumps(agent):
+                agent["agent_status"] = "blocked"
+        rig.wire.replies[SNAPSHOT] = frame
+        rig.clock.sleep(60.0)
+        heard = await _said(stream, f"agent:{IDLE}")
+        await hub.close()
+        return heard
+
+    assert set(asyncio.run(scenario())) == {"feed", f"agent:{IDLE}"}
+    assert "the event watcher's look failed" in caplog.text
 
 
 # The route
