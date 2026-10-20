@@ -134,6 +134,12 @@ IDLE = (
 SIGNED_OFF = "  Want me to fix the README and the gate, then commit?\n\n\u273b Baked for 53s\n"
 # A shell-style git segment: '?' marks untracked files, as a git-aware prompt line draws it.
 DIRTY_STATUS = IDLE.replace("herdr-pwa [main]", "herdr-pwa on main [!?]")
+# Mid-work, the agent list under the status line keeps the composer from being recognised.
+DIRTY_WORKING = (
+    (Path(__file__).resolve().parent / "fixtures" / "capture-working-claude" / "detection.txt")
+    .read_text(encoding="utf-8")
+    .replace("herdr-pwa [main]", "herdr-pwa on main [!?]")
+)
 
 DIALOG_OR_NOT = [
     (
@@ -196,6 +202,11 @@ DIALOG_OR_NOT = [
         DIRTY_STATUS,
         NO_DIALOG,
     ),
+    (
+        "a working pane whose status line carries a '?', with the agent list drawn under it",
+        DIRTY_WORKING,
+        NO_DIALOG,
+    ),
 ]
 
 
@@ -225,3 +236,68 @@ def test_the_capture_corpus_obeys_that_rule() -> None:
                 "divergence is the pre-existing defect PARSER-FALLBACK.patch "
                 "carries, kept out of this diff on purpose"
             )
+
+
+# Built on the layout of codex's question box: the answered questions are recapped above it.
+COUNTED = (
+    f"{RULE}\n"
+    "\u2022 Questions 2/2 answered\n"
+    "  \u2022 Which branch should the release go out from?\n"
+    "    answer: main\n"
+    "  \u2022 Should the changelog name every fix?\n"
+    "    answer: Only the user-facing ones\n"
+    "\n"
+    "\n"
+    "  Question 1/1 (1 unanswered)\n"
+    "  Pick the version number for this release.\n"
+    "\n"
+    "  \u203a 1. 0.9.1 (Recommended)  A patch: nothing changed shape.\n"
+    "    2. 0.10.0               A minor: the settings file gained a key.\n"
+    "    3. None of the above    Optionally, add details in notes (tab).\n"
+    "\n"
+    "  tab to add notes | enter to submit answer | esc to interrupt\n"
+)
+
+
+def test_a_counted_question_is_asked_without_a_question_mark():
+    """The counter heads what is asked; the recap's '?'s above it were answered already."""
+    prompt = BlockedPrompt.parse(COUNTED)
+    assert prompt.asked
+    assert prompt.question == "Pick the version number for this release."
+
+
+def _boxed(row: str) -> str:
+    return f"│ {row:<46} │"
+
+
+_WIDE = "─" * 48
+# omp's radio glyph, from a Nerd Font's private use area.
+_RADIO = chr(0xF10C)
+# Built on the layout of omp's Ask dialog: a cornered box parted by inner rules, read trimmed.
+CORNERED = "\n".join(
+    [
+        "  Gathering what the release needs in one batch",
+        "",
+        f"╭─ Ask {_WIDE[6:]}╮",
+        _boxed(" version    notes    channel"),
+        _boxed(" Submit"),
+        _boxed("Which channel should the build go to?"),
+        f"├{_WIDE}┤",
+        _boxed(f"  {_RADIO} Stable (Recommended)"),
+        _boxed("      Everyone gets it on the next check."),
+        _boxed(f"  {_RADIO} Beta"),
+        _boxed("      Only testers who opted in."),
+        _boxed(""),
+        f"├{_WIDE}┤",
+        _boxed("Enter select · n note · ↑/↓ move · Esc cancel"),
+        f"╰{_WIDE}╯",
+    ]
+)
+
+
+def test_a_cornered_box_with_inner_rules_asks_what_its_first_section_asks():
+    """The inner rules part the box's sections; the box opens at its top corner, as at a rule."""
+    prompt = BlockedPrompt.parse(CORNERED)
+    assert prompt.asked
+    assert prompt.question.splitlines()[-1] == "Which channel should the build go to?"
+    assert prompt.identity
