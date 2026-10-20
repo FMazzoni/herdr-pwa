@@ -15,6 +15,8 @@
   var root = document.documentElement;
   var pin = { pinned: true, lastY: window.scrollY, reader: false };
   var swapEnd = false;
+  // This script left the page on a tall question's top, and nothing has moved it since.
+  var onQuestion = false;
   var swapMark = null;
   var touching = false;
   var readerScrolledAt = 0;
@@ -42,6 +44,10 @@
       event[name] = extra[name];
     }
     pin = hp.logic.pin(pin, event);
+    // Only a swap, or a scroll that was not the reader's, leaves the page where the landing put it.
+    if (type !== "swapped" && (type !== "scroll" || pin.reader)) {
+      onQuestion = false;
+    }
   }
 
   // This script moved the page: the scroll event that follows is not the reader's.
@@ -89,6 +95,7 @@
     if (readUnits().length) {
       window.scrollTo(0, endY());
       pinOn("landed");
+      onQuestion = !pin.pinned;
     }
   }
 
@@ -251,8 +258,8 @@
     if (!detail.shouldSwap) {
       return;
     }
-    // Only the agent view follows its end; the feed is read from the top.
-    swapEnd = !!document.getElementById("agent-view") && pin.pinned;
+    // Only the agent view follows its end, and a page left on a tall question's top follows it too.
+    swapEnd = !!document.getElementById("agent-view") && (pin.pinned || onQuestion);
     swapMark = swapEnd ? null : mark();
   });
 

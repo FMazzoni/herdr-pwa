@@ -9,7 +9,9 @@ from scripts.chatend import (
     late_style,
     pane_tab,
     plan_coming_tab,
+    plan_printing_tab,
     question_arrives,
+    question_printed_after,
 )
 from tests.browser.conftest import Served
 
@@ -33,3 +35,8 @@ def test_a_tall_question_that_arrives_at_the_end_lands_with_its_top_under_the_ba
     ctx: WalkCtx,
 ) -> None:
     assert question_arrives(ctx) == []
+
+
+@pytest.mark.parametrize("tab", [plan_printing_tab("tall plan printed after")], ids=["pane"])
+def test_a_tall_question_stays_in_view_when_the_pane_draws_lines_in_above_it(ctx: WalkCtx) -> None:
+    assert question_printed_after(ctx) == []
