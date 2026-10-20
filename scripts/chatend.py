@@ -1,7 +1,8 @@
 """Drive the Chat and Pane tabs in headless Firefox: each opens on its newest line, follows new
 lines while the reader is at the end, and leaves a reader who scrolled up where they were. An
 agent that is asking lands at the end too, its question after the newest line and on the first
-screen, and a reader who scrolled up from it is offered the way back; a link to the Pane opens
+screen, even under a view with no line to land on, and a reader who scrolled up from it is
+offered the way back; a link to the Pane opens
 it the same way, from either tab. A tool's
 result the reader opened stays open across a poll, and the page does not move under them. A
 burst of tool calls lands folded, its failure in plain sight, and a fold the reader opened
@@ -737,6 +738,48 @@ def pane_door(ctx: WalkCtx) -> list[str]:
     if seen.get("length") != was.get("length"):
         problems.append(f"{tab.name}: the link pushed a history entry, so back is not the feed")
     return problems
+
+
+# The answer region once the view's own read has drawn, whatever it drew.
+UNREAD = r"""
+const busy = document.querySelector(".htmx-request, .htmx-swapping, .htmx-settling");
+const region = document.getElementById("answer");
+const view = document.getElementById("agent-view");
+if (busy || document.readyState !== "complete" || !view || view.querySelector(".boot")
+    || !region || !region.querySelector(".banner--held")) return null;
+const jump = document.getElementById("hp-jump");
+const box = region.getBoundingClientRect();
+return { gap: document.documentElement.scrollHeight - innerHeight - scrollY,
+  scrollable: document.documentElement.scrollHeight > innerHeight,
+  pinned: !!(window.hp && hp.chatend && hp.chatend.pinned()), pill: !!jump && !jump.hidden,
+  top: box.top, bottom: box.bottom, under: document.querySelector(".topbar").getBoundingClientRect().bottom,
+  dock: (document.getElementById("agent-tray") || document.getElementById("composer"))
+    .getBoundingClientRect().top };
+"""
+
+
+def unread_question(ctx: WalkCtx) -> list[str]:
+    """A question the app could not read, under a view with no line to land on (the pane's read
+    failed, or the log is empty), still waits at the end, in view above the dock."""
+    driver, tab = ctx.driver, ctx.tab
+    ctx.open()
+    if not _read_until(driver, UNREAD, bool):
+        return [f"{tab.name}: never drew its view and the banner for its question"]
+    settle(driver)
+    seen = driver.script(UNREAD)
+    seen = seen if isinstance(seen, dict) else {}
+    if not seen.get("scrollable"):
+        return [f"{tab.name}: fits on one screen, so it proves nothing"]
+    top, low = _num(seen, "top"), _num(seen, "bottom")
+    if _num(seen, "gap") > DRIFT or not seen.get("pinned") or seen.get("pill"):
+        way = "shown" if seen.get("pill") else "hidden"
+        gap = f"{_num(seen, 'gap'):.0f}px"
+        return [
+            f"{tab.name}: landed {gap} above the end, pinned={seen.get('pinned')}, way back {way}"
+        ]
+    if top < _num(seen, "under") or low > _num(seen, "dock") + 0.5:
+        return [f"{tab.name}: the question sits at {top:.0f}..{low:.0f}px, not above the dock"]
+    return []
 
 
 def _tool_chat(turns: int) -> list[dict[str, JsonValue]]:
@@ -1882,6 +1925,7 @@ def _tabs() -> tuple[tuple[Tab, Walk], ...]:
     last_reply = f"Reply {TURNS - 1}:"
     [plan] = pick(["agent-answer-plan"])
     [ticks] = pick(["agent-answer-multiselect"])
+    [unread] = pick(["agent-unreadable"])
     [strip] = pick(["usage-chat"])
     tool = State("tool result", chat.path, "", runner(snapshot_frame), _tool_chat(TURNS))
     folds = State("tool burst", chat.path, "", runner(snapshot_frame), _burst_chat(BURST))
@@ -1925,6 +1969,11 @@ def _tabs() -> tuple[tuple[Tab, Walk], ...]:
         (Tab("pane question waiting", asking_pane, "", _print), waiting_pill),
         (Tab("pane door from chat", replace(ticks, path=chat.path), "", _print), pane_door),
         (Tab("pane door from pane", ticks, "", _print), pane_door),
+        (Tab("unread question on chat", unread, "", _print, 320, 568), unread_question),
+        (
+            Tab("unread question on pane", replace(unread, path=pane.path), "", _print, 320, 568),
+            unread_question,
+        ),
         (Tab("tall plan", plan, "", _print, width=320, height=568), tall_question),
         (plan_coming_tab("tall plan arrives"), question_arrives),
         (plan_printing_tab("tall plan printed"), question_printed),
