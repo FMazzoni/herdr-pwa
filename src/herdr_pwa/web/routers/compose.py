@@ -282,7 +282,6 @@ def _prompt(session: SessionId, post: Posted) -> HTMLResponse:
         values.get("text", ""),
         expected_target=expected(values),
         drawn_against=values.get("screen", "").strip(),
-        confirmed=ticked(values, "confirm"),
         again=ticked(values, "again"),
     )
     result = send_prompt(post.writer, ask)
@@ -292,7 +291,7 @@ def _prompt(session: SessionId, post: Posted) -> HTMLResponse:
             "agent": _after(web, session, prior),
             "text": ask.text,
             "screen": result.screen,
-            # Kept through a later refusal, or a confirm after it would lose the word "again".
+            # Kept through a later refusal, or the retry after it would lose the word "again".
             "again": result.asks_again or ask.again,
             "held": result.refusal is Refusal.QUESTION_SHOWING,
         }
@@ -397,13 +396,7 @@ def _door_writes(router: APIRouter, writes: WriteRoutes) -> None:
         values = post.values
         target = address_of(pane)
         text = values.get("text", "")
-        ask = FirstPromptAsk(
-            target,
-            text,
-            drawn_against=values.get("screen", "").strip(),
-            confirmed=ticked(values, "confirm"),
-        )
-        result = send_first_prompt(post.writer, ask)
+        result = send_first_prompt(post.writer, FirstPromptAsk(target, text))
         return _door(web, target, _Knock(result, text=text))
 
     @router.post("/starting/{pane}/keys")
@@ -436,7 +429,7 @@ def _door(web: WebState, pane: PaneId, knock: _Knock) -> HTMLResponse:
     agent = web.client.snapshot().by_target(pane)
     result = knock.result
     if isinstance(result, Refused):
-        # Which form the refusal answers, so a held interrupt never arms the prompt's confirm.
+        # Which key the refusal answers, so a held interrupt arms only that key's button.
         context = {**_door_context(pane, agent, knock.text), "key": knock.key}
         return refused(web.pages, Redraw("starting.html", context, as_page=True), result)
     return web.pages.page("starting.html", {**_door_context(pane, agent), "sent": result})

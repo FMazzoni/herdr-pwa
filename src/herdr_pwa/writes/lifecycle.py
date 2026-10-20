@@ -27,7 +27,7 @@ from herdr_pwa.engine import (
 )
 from herdr_pwa.settings import Settings
 from herdr_pwa.validation import MODEL_ID
-from herdr_pwa.writes.guard import destructive_reason, unsendable
+from herdr_pwa.writes.guard import unsendable
 from herdr_pwa.writes.outcome import Evidence, Outcome, Pacing, audit_result
 from herdr_pwa.writes.prompt import (
     LAUNCH_READS,
@@ -106,8 +106,6 @@ class StartRequest:
     model: str = ""
     # On the command line for a harness that takes one there, else typed once it listens.
     prompt: str = ""
-    # The destructive-prompt confirm, given against this form before anything was created.
-    confirmed: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -282,12 +280,9 @@ def _form_refusal(
 
 def _prompt_refusal(request: StartRequest) -> Refused | None:
     # Checked before anything is created, so a prompt that cannot go never leaves a half-start.
-    if not request.prompt.strip():
-        return None
-    if unsendable(request.prompt) is False:
+    if request.prompt.strip() and unsendable(request.prompt) is False:
         return Refused(Refusal.TOO_LONG, "created")
-    reason = "" if request.confirmed else destructive_reason(request.prompt)
-    return Refused(Refusal.CONFIRM, "created", reason=reason) if reason else None
+    return None
 
 
 def _abandon(client: HerdrClient, pane: str) -> None:

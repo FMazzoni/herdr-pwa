@@ -1557,15 +1557,6 @@ TAPPED: Final = (
         act=_type_and_send("run the tests again"),
     ),
     State(
-        "destructive-confirm",
-        AGENT,
-        "#composer [role=alert]",
-        runner(lambda: herd(p4="idle"), capture(IDLE)),
-        title="Destructive input: held for a second tap",
-        armed="#composer textarea",
-        act=_type_and_send("rm -rf build && git push --force"),
-    ),
-    State(
         "agent-unverified",
         AGENT,
         # The idle screen never shows the prompt, so it is sent unverified: the door to look.

@@ -212,7 +212,7 @@ class Refused:
     verb: str = "sent"
     # Why, for the operator log; never shown to the caller.
     detail: str = ""
-    # A confirm's own reason (the destructive verb, the workspace's cost).
+    # A confirm's own reason (the workspace's cost).
     reason: str = ""
     # The screen digest a retry or a confirm must carry back.
     screen: str = ""

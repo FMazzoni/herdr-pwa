@@ -101,7 +101,6 @@ def _new(post: Posted) -> Response:
         cwd=values.get("cwd", ""),
         model=values.get("model", "").strip(),
         prompt=values.get("prompt", ""),
-        confirmed=ticked(values, "confirm"),
     )
     result = start_agent(post.writer, ask, which=web.which)
     if isinstance(result, Refused):
