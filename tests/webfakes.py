@@ -202,6 +202,8 @@ def build_rig(
         "tailscaled_socket": tmp_path / "no-tailscaled.sock",
         # The background loop is driven by hand in its own tests, never by a request test.
         "push_notifier": False,
+        # TestClient addresses every request to this name, as serve addresses the MagicDNS one.
+        "public_host": "testserver",
         **overrides,
     }
     settings = Settings.model_validate(fields)

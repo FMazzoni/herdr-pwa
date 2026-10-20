@@ -5,6 +5,7 @@ import ipaddress
 import logging
 import os
 import sys
+from dataclasses import dataclass
 from typing import Final
 
 import uvicorn
@@ -77,10 +78,31 @@ def _model_line(kind: str, models: tuple[str, ...]) -> str:
     return f"  {kind}: none declared ({models_env(kind)}), so the form offers no model"
 
 
+@dataclass(frozen=True, slots=True)
+class HostLine:
+    """What doctor says of the served name, and whether one is known."""
+
+    line: str
+    known: bool
+
+
+def served_host_line(settings: Settings, api: tailscale.LocalApi) -> HostLine:
+    """The Host a header identity must carry, resolved as ``serve`` resolves it."""
+    source = "HP_PUBLIC_HOST" if settings.public_host else "tailscaled's MagicDNS name"
+    try:
+        host = auth.served_host(settings.public_host, api)
+    except tailscale.LocalApiError as exc:
+        return HostLine(
+            f"served host: unknown, so every Tailscale identity is refused ({exc})  FAIL", False
+        )
+    return HostLine(f"served host: {host} (from {source}); any other Host is refused", True)
+
+
 def doctor(settings: Settings, seams: Seams) -> int:
     """Check the runner's protocol against the pin and the service's code against the disk.
 
-    Non-zero on protocol drift, a silent runner, or a tree that moved since the service started.
+    Non-zero on protocol drift, a silent runner, a tree that moved since the service started,
+    or no served name to accept identities on.
     """
     engine = engine_settings(settings)
     lines = [f"pinned protocol: {EXPECTED_PROTOCOL}"]
@@ -104,7 +126,9 @@ def doctor(settings: Settings, seams: Seams) -> int:
     lines.extend(model_lines(service_models(settings.state_dir.expanduser()), settings))
     tree = check_tree(settings.state_dir.expanduser())
     lines.append(tree.line)
-    healthy = live == EXPECTED_PROTOCOL and not tree.stale
+    host = served_host_line(settings, seams.local_api(settings.tailscaled_socket))
+    lines.append(host.line)
+    healthy = live == EXPECTED_PROTOCOL and not tree.stale and host.known
     lines.append("doctor: OK" if healthy else "doctor: FAIL")
     seams.write("\n".join(lines) + "\n")
     return 0 if healthy else 1
@@ -165,11 +189,29 @@ def assert_loopback_bind(host: str) -> None:
 SHUTDOWN_GRACE: Final = 3
 
 
+def _learned_host(settings: Settings, api: tailscale.LocalApi) -> str:
+    try:
+        return auth.served_host(settings.public_host, api)
+    except tailscale.LocalApiError as exc:
+        reason = str(exc)
+    # Fail closed: an unknown name would otherwise mean accepting any Host, rebinding included.
+    log.error(
+        "Refusing every Tailscale identity: HP_PUBLIC_HOST is not set and this node's "
+        "MagicDNS name could not be learned (%s)",
+        reason,
+    )
+    return ""
+
+
 def serve(settings: Settings, port: int | None, seams: Seams) -> None:
     """Refuse a reachable bind or an unsafe assumed login, then serve the app."""
     assert_loopback_bind(settings.host)
     access = auth.Access(tailnet_login=settings.tailnet_login, assume_login=settings.assume_login)
-    auth.assert_assumed_login_safe(access, seams.local_api(settings.tailscaled_socket))
+    api = seams.local_api(settings.tailscaled_socket)
+    auth.assert_assumed_login_safe(access, api)
+    settings = settings.model_copy(update={"public_host": _learned_host(settings, api)})
+    if settings.public_host:
+        log.info("Tailscale identities are accepted on Host %r only", settings.public_host)
     warning = auth.unpinned_warning(access)
     if warning:
         log.warning(warning)

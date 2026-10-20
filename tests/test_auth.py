@@ -16,19 +16,22 @@ from herdr_pwa.auth import (
     MissingOriginError,
     NonLoopbackHostError,
     OriginMismatchError,
+    ServedHostUnknownError,
+    WrongHostError,
     assert_assumed_login_safe,
     authorize,
     check_same_origin,
     identify,
     serve_is_active,
+    served_host,
     unpinned_warning,
 )
-from herdr_pwa.tailscale import SERVE_CONFIG_PATH, LocalApi
-from tests.fakes import NODE, Canned, tailscaled
+from herdr_pwa.tailscale import SERVE_CONFIG_PATH, STATUS_PATH, LocalApi, LocalApiError
+from tests.fakes import NODE, Canned, status_route, tailscaled
 
 LOGIN = "you@example.com"
-PINNED = Access(tailnet_login=LOGIN)
-ASSUMED = Access(assume_login=LOGIN)
+PINNED = Access(tailnet_login=LOGIN, served_host=NODE)
+ASSUMED = Access(assume_login=LOGIN, served_host=NODE)
 HOST = NODE
 ORIGIN = f"https://{NODE}"
 
@@ -188,6 +191,69 @@ def test_an_assumed_login_write_is_still_origin_checked() -> None:
 
 def test_the_pinned_path_is_not_confined_to_loopback() -> None:
     assert authorize(through_ingress(), access=PINNED).login == LOGIN
+
+
+@pytest.mark.parametrize(
+    "host", [NODE, NODE.upper(), f"{NODE}.", f"{NODE}:443", f"{NODE.upper()}.:443", f" {NODE} "]
+)
+def test_a_header_identity_on_the_served_name_passes(host: str) -> None:
+    for method in ("GET", "POST"):
+        headers = through_ingress(Host=host, Origin=f"https://{host.strip()}")
+        assert authorize(headers, access=PINNED, method=method).login == LOGIN
+
+
+@pytest.mark.parametrize(
+    "host",
+    [
+        "evil.example:8772",
+        "evil.example",
+        "127.0.0.1:8772",
+        "localhost",
+        f"{NODE}:8443",
+        f"{NODE}.evil.example",
+        f"evil.{NODE}",
+        "",
+    ],
+)
+def test_a_header_identity_on_any_other_host_is_refused_reads_included(host: str) -> None:
+    # A DNS-rebinding page controls Host and Origin alike, so only the name tells it apart.
+    for method in ("GET", "HEAD", "POST"):
+        with pytest.raises(WrongHostError) as caught:
+            _ = authorize(
+                through_ingress(Host=host, Origin=f"http://{host}"), access=PINNED, method=method
+            )
+        assert caught.value.status_code == 403
+        assert repr(host) in caught.value.log_detail
+
+
+def test_with_no_served_name_every_header_identity_is_refused() -> None:
+    for host in (NODE, "testserver", "evil.example:8772"):
+        with pytest.raises(ServedHostUnknownError) as caught:
+            _ = authorize(through_ingress(Host=host), access=Access(tailnet_login=LOGIN))
+        assert caught.value.status_code == 403
+
+
+def test_the_served_name_leaves_the_assumed_login_on_loopback() -> None:
+    assert authorize({"Host": "127.0.0.1:8772"}, access=ASSUMED).is_assumed
+    with pytest.raises(NonLoopbackHostError):
+        _ = authorize({"Host": NODE}, access=ASSUMED)
+
+
+def test_a_configured_served_name_is_used_without_asking_tailscaled(tmp_path: Path) -> None:
+    with tailscaled(tmp_path) as fake:
+        assert served_host(f" {NODE.upper()}. ", fake.api) == NODE
+        assert fake.requests == []
+
+
+def test_the_served_name_is_learned_from_tailscaled_status(tmp_path: Path) -> None:
+    with tailscaled(tmp_path, canned=status_route()) as fake:
+        assert served_host("", fake.api) == NODE
+        assert [(r.method, r.path) for r in fake.requests] == [("GET", STATUS_PATH)]
+
+
+def test_an_unlearnable_served_name_raises_rather_than_guessing(tmp_path: Path) -> None:
+    with pytest.raises(LocalApiError):
+        _ = served_host("", LocalApi(tmp_path / "missing.sock"))
 
 
 SERVE_SHAPES: list[tuple[str, object, bool]] = [

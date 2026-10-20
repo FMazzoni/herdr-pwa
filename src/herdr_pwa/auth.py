@@ -1,7 +1,9 @@
 """The identity gate: who is asking, and whether their write came from this origin.
 
 Any local uid can forge the identity header byte for byte, because ``tailscale serve``
-proxies from loopback; this module trusts every local process and says so.
+proxies from loopback; this module trusts every local process and says so. A browser cannot:
+a header identity counts only when the Host is this node's served name, which a DNS-rebinding
+page cannot send.
 """
 
 import hmac
@@ -67,6 +69,18 @@ class NonLoopbackHostError(AuthError):
     reason: ClassVar[str] = "non_loopback_host"
 
 
+class WrongHostError(AuthError):
+    """A header identity addressed by a name other than this node's served one."""
+
+    reason: ClassVar[str] = "wrong_host"
+
+
+class ServedHostUnknownError(AuthError):
+    """A header identity while the served name is unknown, so no Host can be trusted."""
+
+    reason: ClassVar[str] = "served_host_unknown"
+
+
 class AssumedLoginUnsafeError(AuthError):
     """An assumed login where serve is active, or where that cannot be decided."""
 
@@ -80,6 +94,8 @@ class Access:
 
     tailnet_login: str = ""
     assume_login: str = ""
+    # The one Host a header identity may arrive on, as ``host_name`` gives it; empty refuses all.
+    served_host: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -191,14 +207,50 @@ def check_loopback_host(headers: Mapping[str, str]) -> None:
         )
 
 
+def host_name(host: str) -> str:
+    """A Host or DNS name as compared: lowercased, with no trailing dot and no ``:443``."""
+    name = host.strip().lower().removesuffix(":443")
+    return name.removesuffix(".")
+
+
+def check_served_host(headers: Mapping[str, str], served_host: str) -> None:
+    """Refuse a header identity whose Host is not this node's served name (DNS rebinding)."""
+    if not served_host:
+        raise ServedHostUnknownError(
+            "This app does not know its own MagicDNS name, so it refuses every Tailscale "
+            "identity. Set HP_PUBLIC_HOST or fix tailscaled, then restart it.",
+            log_detail="the served name was not learned at startup and HP_PUBLIC_HOST is unset",
+        )
+    host = _lower(headers).get("host", "")
+    if host_name(host) != served_host:
+        raise WrongHostError(
+            "Refusing a request addressed to a name that is not this app's; open it through its "
+            "MagicDNS name.",
+            log_detail=f"Host {host!r} is not the served {served_host!r}; maybe DNS rebinding",
+        )
+
+
 def authorize(headers: Mapping[str, str], *, access: Access, method: str = "GET") -> Identity:
     """Authenticate every request, reads included, then origin-check any write."""
     identity = identify(headers, access)
     if identity.is_assumed:
         check_loopback_host(headers)
+    else:
+        check_served_host(headers, access.served_host)
     if method.strip().upper() not in SAFE_METHODS:
         check_same_origin(headers)
     return identity
+
+
+def served_host(configured: str, api: tailscale.LocalApi) -> str:
+    """The name header identities must arrive on: ``HP_PUBLIC_HOST``, else this node's MagicDNS.
+
+    Raises:
+        LocalApiError: nothing is configured and tailscaled could not name this node.
+    """
+    if configured.strip():
+        return host_name(configured)
+    return host_name(tailscale.magicdns(api))
 
 
 def _serve_config_body(api: tailscale.LocalApi) -> str:

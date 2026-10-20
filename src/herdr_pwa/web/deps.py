@@ -67,7 +67,9 @@ class WebState:
     def access(self) -> auth.Access:
         """Who the settings let in."""
         return auth.Access(
-            tailnet_login=self.settings.tailnet_login, assume_login=self.settings.assume_login
+            tailnet_login=self.settings.tailnet_login,
+            assume_login=self.settings.assume_login,
+            served_host=auth.host_name(self.settings.public_host),
         )
 
 
