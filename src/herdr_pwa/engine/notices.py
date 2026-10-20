@@ -90,6 +90,11 @@ class TaskNotice:
         return _KINDS[found.group(1)] if found else "Task"
 
     @property
+    def named(self) -> bool:
+        """Whether its summary is one of the measured shapes, so ``kind`` was read, not assumed."""
+        return _SUMMARY.match(self.summary) is not None
+
+    @property
     def detail(self) -> str:
         """The agent's description or the command run, out of the summary; else the summary."""
         found = _SUMMARY.match(self.summary)
