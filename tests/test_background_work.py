@@ -1,5 +1,6 @@
 """Work an agent started that runs on once its turn is over: background shells and agents."""
 
+import os
 import shutil
 from datetime import UTC, datetime
 from pathlib import Path
@@ -150,14 +151,14 @@ def test_the_process_start_is_read_from_the_panes_claude(tmp_path: Path) -> None
     (proc / "7").mkdir(parents=True)
     (proc / "stat").write_text("cpu 1 2 3\nbtime 1000\n")
     # Field 22, starttime in clock ticks since boot; the name holds a space and a parenthesis.
-    fields = ["S", *["0"] * 18, "500"]
+    fields = ["S", *["0"] * 18, str(5 * os.sysconf("SC_CLK_TCK"))]
     (proc / "7" / "stat").write_text(f"7 (claude (x)) {' '.join(fields)} 0 0\n")
 
     class Panes:
         def pane_pids(self, pane_id: str) -> tuple[int, ...]:
             return (3, 7) if pane_id == "w1:p1" else ()
 
-    starts = ProcessStarts(Panes(), proc=proc, ticks=100, clock=lambda: 0.0)
+    starts = ProcessStarts(Panes(), proc=proc, clock=lambda: 0.0)
     assert starts.started("w1:p1") == 1005.0
     assert starts.started("w9:p9") is None
 

@@ -2,10 +2,9 @@
 
 import logging
 import os
+from collections.abc import Callable
 from pathlib import Path
 from typing import Final, Protocol
-
-from herdr_pwa.clock import Clock
 
 log = logging.getLogger(__name__)
 
@@ -58,13 +57,12 @@ class ProcessStarts:
         panes: PaneProcesses,
         *,
         proc: Path,
-        clock: Clock,
-        ticks: int | None = None,
+        clock: Callable[[], float],
     ) -> None:
         self._panes: PaneProcesses = panes
         self._proc: Path = proc
-        self._clock: Clock = clock
-        self._ticks: int = ticks if ticks is not None else os.sysconf("SC_CLK_TCK")
+        self._clock: Callable[[], float] = clock
+        self._ticks: int = os.sysconf("SC_CLK_TCK")
         self._held: dict[str, tuple[float, float | None]] = {}
 
     def started(self, pane_id: str) -> float | None:
