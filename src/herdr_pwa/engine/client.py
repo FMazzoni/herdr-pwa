@@ -239,7 +239,7 @@ class HerdrClient:
         )
 
     def close(self) -> None:
-        """Release the connection. The client stays usable and will redial."""
+        """Release whatever the transport holds open; the client stays usable."""
         self.transport.close()
 
     def forget_protocol(self) -> None:

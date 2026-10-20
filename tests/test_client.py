@@ -3,6 +3,7 @@
 import ast
 import inspect
 import json
+import socket
 import subprocess
 import sys
 from collections.abc import Callable
@@ -852,12 +853,15 @@ def test_the_warn_once_flag_resets_with_a_fresh_instance(
     assert caplog.text.lower().count(f"protocol {DRIFTED}") == 1
 
 
-def test_a_client_built_with_nothing_opens_nothing() -> None:
+def test_a_client_built_with_nothing_opens_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
     """Construction must not dial: a service that starts before the runner must not die at import."""
+
+    def no_socket(*_args: object) -> socket.socket:
+        raise AssertionError("building a client opened a socket")
+
+    monkeypatch.setattr(socket, "socket", no_socket)
     fresh = HerdrClient(replace(SETTINGS, socket_path=Path("/nonexistent/x.sock")))
-    wire_ = fresh.transport
-    assert isinstance(wire_, SocketTransport)
-    assert wire_._sock is None  # pyright: ignore[reportPrivateUsage]
+    assert isinstance(fresh.transport, SocketTransport)
 
 
 def test_there_is_no_module_level_protocol_state_left() -> None:

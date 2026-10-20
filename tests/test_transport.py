@@ -159,6 +159,22 @@ def serve(path: Path, handler: Handler, request: pytest.FixtureRequest) -> FakeH
     return fake
 
 
+class Tracked(SocketTransport):
+    """A transport that keeps every socket it made, so a test can see each one was closed."""
+
+    def __init__(self, path: Path, *, timeout: float = FAST) -> None:
+        super().__init__(path, timeout=timeout)
+        self.opened: list[socket.socket] = []
+
+    def _new_socket(self) -> socket.socket:
+        self.opened.append(super()._new_socket())
+        return self.opened[-1]
+
+    @property
+    def still_open(self) -> list[socket.socket]:
+        return [s for s in self.opened if s.fileno() != -1]
+
+
 def transport(
     path: Path,
     *,
@@ -506,13 +522,14 @@ def test_a_timeout_destroys_the_connection(sock_path: Path, request: pytest.Fixt
             conn.sendall(_line(ok(req, conn)))
 
     serve(sock_path, handler, request)
-    wire = transport(sock_path, timeout=0.15)
+    wire = Tracked(sock_path, timeout=0.15)
     try:
         with pytest.raises(EngineTimeout):
             wire.call("agent.get", {"target": "w1:p3"})
     finally:
         release.set()
-    assert wire._sock is None  # pyright: ignore[reportPrivateUsage]
+    assert len(wire.opened) == 1
+    assert wire.still_open == []
     wire.close()
 
 
@@ -683,13 +700,13 @@ def test_a_frame_with_no_terminator_is_cut_off_rather_than_buffered_forever(
                 return
 
     serve(sock_path, handler, request)
-    wire = transport(sock_path, timeout=2.0)
+    wire = Tracked(sock_path, timeout=2.0)
     # A small bound, so the endless line overruns it in two frames rather than thousands.
     wire.max_frame_bytes = 8192
     with pytest.raises(InvalidResponse) as exc:
         wire.call("session.snapshot", {})
     assert "terminator" in exc.value.message
-    assert wire._buffer == b""  # pyright: ignore[reportPrivateUsage]
+    assert wire.still_open == []
     wire.close()
 
 
@@ -777,11 +794,11 @@ def test_a_stream_that_only_answers_other_ids_is_declared_out_of_step(
         return _line({"id": "wrong", "result": {"type": "ok"}}) * (MAX_STRAY_FRAMES + 2)
 
     serve(sock_path, handler, request)
-    wire = transport(sock_path)
+    wire = Tracked(sock_path)
     with pytest.raises(InvalidResponse) as exc:
         wire.call("session.snapshot", {})
     assert "out of step" in exc.value.message
-    assert wire._sock is None  # pyright: ignore[reportPrivateUsage]
+    assert wire.still_open == []
     wire.close()
 
 
@@ -936,6 +953,43 @@ def test_concurrent_callers_each_get_their_own_reply(server: FakeHerdr, sock_pat
     # Sixteen connections, not one: herdr never allowed reuse; the pairing above is the subject.
     assert server.connections == 16
     wire.close()
+
+
+def test_calls_from_many_threads_are_in_flight_at_once(
+    sock_path: Path, request: pytest.FixtureRequest
+) -> None:
+    """A slow read must not queue a key tap behind it: each call has its own connection."""
+    callers = 4
+    # Answers only once every caller is inside the runner at the same time.
+    together = threading.Barrier(callers, timeout=2.0)
+
+    def handler(req: dict[str, JsonValue], conn: socket.socket) -> dict[str, JsonValue] | None:
+        try:
+            together.wait()
+        except threading.BrokenBarrierError:
+            return None
+        return ok(req, conn)
+
+    serve(sock_path, handler, request)
+    wire = transport(sock_path, timeout=3.0)
+    outcomes: list[str] = []
+    lock = threading.Lock()
+
+    def ask(n: int) -> None:
+        try:
+            wire.call("agent.get", {"target": str(n)})
+            outcome = "ok"
+        except EngineError as exc:
+            outcome = type(exc).__name__
+        with lock:
+            outcomes.append(outcome)
+
+    threads = [threading.Thread(target=ask, args=(n,)) for n in range(callers)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=10)
+    assert outcomes == ["ok"] * callers, "the calls were served one at a time"
 
 
 # --------------------------------------------------------------------------

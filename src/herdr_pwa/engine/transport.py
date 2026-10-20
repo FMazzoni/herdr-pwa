@@ -1,4 +1,4 @@
-"""The wire: one AF_UNIX connection to the runner, and the error taxonomy."""
+"""The wire: AF_UNIX connections to the runner, and the error taxonomy."""
 
 import errno
 import itertools
@@ -8,8 +8,7 @@ import os
 import socket
 import threading
 import time
-import weakref
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from pathlib import Path
 from secrets import token_hex
 from typing import Final, NamedTuple, Protocol, runtime_checkable
@@ -60,39 +59,6 @@ _CHUNK: Final = 65536
 EVENT_SUBSCRIBE: Final = "events.subscribe"
 
 _EXHAUSTED: Final = frozenset({errno.EMFILE, errno.ENFILE})
-
-
-# --------------------------------------------------------------------------
-# Fork safety
-# --------------------------------------------------------------------------
-
-_LIVE: "weakref.WeakSet[SocketTransport]" = weakref.WeakSet()
-
-_REGISTRY_LOCK: Final = threading.Lock()
-
-
-def _before_fork() -> None:
-    _REGISTRY_LOCK.acquire()
-
-
-def _after_fork_in_parent() -> None:
-    _REGISTRY_LOCK.release()
-
-
-def _after_fork_in_child() -> None:
-    """Re-mint every transport this child inherited, then release the registry."""
-    try:
-        for wire in list(_LIVE):
-            wire.adopt_fork()
-    finally:
-        _REGISTRY_LOCK.release()
-
-
-os.register_at_fork(
-    before=_before_fork,
-    after_in_parent=_after_fork_in_parent,
-    after_in_child=_after_fork_in_child,
-)
 
 
 class EngineError(Exception):
@@ -242,6 +208,21 @@ def decode_frame(line: bytes) -> WireReply:
     return WireReply(payload, result, body)
 
 
+def _next_frame(
+    buffer: bytearray, recv: Callable[[], bytes], *, limit: int, too_long: str
+) -> bytes:
+    """Cut one newline-terminated frame off *buffer*, reading more as needed, never past *limit*."""
+    while True:
+        end = buffer.find(b"\n")
+        if end >= 0:
+            line = bytes(buffer[:end])
+            del buffer[: end + 1]
+            return line
+        if len(buffer) > limit:
+            raise InvalidResponse(too_long)
+        buffer += recv()
+
+
 def _confirms_subscription(reply: WireReply) -> bool:
     result = reply.result
     return isinstance(result, ResponseResult) and isinstance(
@@ -288,7 +269,10 @@ class Transport(Protocol):
 
 
 class SocketTransport:
-    """Newline-delimited JSON-RPC over one long-lived AF_UNIX connection."""
+    """Newline-delimited JSON-RPC over AF_UNIX, one fresh connection per call.
+
+    Calls run in parallel: the lock guards only the id counter and the backoff fields.
+    """
 
     def __init__(
         self,
@@ -302,33 +286,27 @@ class SocketTransport:
         self.max_frame_bytes = MAX_FRAME_BYTES
         self._clock = clock
         self._lock = threading.Lock()
-        self._sock: socket.socket | None = None
-        self._buffer = b""
         self._pid = os.getpid()
         self._prefix = self._mint_prefix()
         self._ids = itertools.count(1)
         self._backoff = 0.0
         self._retry_at = 0.0
-        with _REGISTRY_LOCK:
-            _LIVE.add(self)
 
     @staticmethod
     def _mint_prefix() -> str:
         return f"herdr-pwa:{os.getpid()}:{token_hex(4)}"
 
     def adopt_fork(self) -> None:
-        """Become this process's own transport: new lock, new ids, no socket."""
+        """Become this process's own transport: a lock no parent thread holds, and new ids."""
         self._lock = threading.Lock()
         self._pid = os.getpid()
         self._prefix = self._mint_prefix()
         self._ids = itertools.count(1)
         self._backoff = 0.0
         self._retry_at = 0.0
-        self._drop()
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
-        state = "open" if self._sock is not None else "closed"
-        return f"{type(self).__name__}(path={str(self.path)!r}, {state})"
+        return f"{type(self).__name__}(path={str(self.path)!r})"
 
     # -- public ------------------------------------------------------------
 
@@ -342,33 +320,24 @@ class SocketTransport:
     ) -> WireReply:
         """Issue one request, return its decoded reply, raise on anything else."""
         budget = self.timeout if timeout is None else timeout
-        if self._pid != os.getpid():  # forked without the hook running
+        # The budget starts when the caller asks, not when some shared resource frees up.
+        call = _Call(method, self._clock() + budget, budget, idempotent)
+        # A forked child may inherit the lock mid-hold; nothing here forks, so a pid check is enough.
+        if self._pid != os.getpid():
             self.adopt_fork()
         with self._lock:
-            reply = self._call_locked(method, params, budget, idempotent=idempotent)
+            request_id = f"{self._prefix}:{next(self._ids)}"
+        reply = self._exchange(params, call, request_id)
         raise_for_error_frame(reply)
         return reply
 
     def close(self) -> None:
-        """Drop the connection. Idempotent, and safe to call while healthy."""
-        with self._lock:
-            self._drop()
+        """Release nothing: every call opens and closes its own connection. Idempotent."""
 
     # -- the exchange ------------------------------------------------------
 
-    def _call_locked(
-        self, method: str, params: Frame, budget: float, *, idempotent: bool
-    ) -> WireReply:
+    def _exchange(self, params: Frame, call: _Call, request_id: str) -> WireReply:
         """One exchange; never retried, since one request per connection is what herdr speaks."""
-        call = _Call(method, self._clock() + budget, budget, idempotent)
-        try:
-            return self._exchange(params, call)
-        finally:
-            # One request per connection, because that is what herdr speaks.
-            self._drop()
-
-    def _exchange(self, params: Frame, call: _Call) -> WireReply:
-        request_id = f"{self._prefix}:{next(self._ids)}"
         frame = json.dumps(
             {"id": request_id, "method": call.method, "params": params},
             separators=(",", ":"),
@@ -381,25 +350,38 @@ class SocketTransport:
                 size=len(frame),
                 limit=MAX_REQUEST_BYTES,
             )
-        sock = self._connect(call)
-        self._arm(sock, call)
-        try:
-            sock.sendall(frame + b"\n")
-        except TimeoutError as exc:
-            raise EngineTimeout(f"{call.method} could not be sent within {call.budget}s") from exc
-        except OSError as exc:
-            raise EngineUnavailable(f"{call.method} could not be sent: {exc}") from exc
-        # The whole frame is out, newline and all; from here a failure cannot say nothing ran.
-        try:
-            return self._receive(sock, request_id, call)
-        except EngineError as exc:
-            exc.after_send = not call.idempotent
-            raise
+        # One request per connection, because that is what herdr speaks.
+        with self._connect(call) as sock:
+            self._arm(sock, call)
+            try:
+                sock.sendall(frame + b"\n")
+            except TimeoutError as exc:
+                raise EngineTimeout(
+                    f"{call.method} could not be sent within {call.budget}s"
+                ) from exc
+            except OSError as exc:
+                raise EngineUnavailable(f"{call.method} could not be sent: {exc}") from exc
+            # The whole frame is out, newline and all; from here a failure cannot say nothing ran.
+            try:
+                return self._receive(sock, request_id, call)
+            except EngineError as exc:
+                exc.after_send = not call.idempotent
+                raise
 
     def _receive(self, sock: socket.socket, request_id: str, call: _Call) -> WireReply:
         """Read frames until the one addressed to ``request_id`` arrives."""
+        buffer = bytearray()
+        too_long = (
+            f"reply to {call.method} exceeded {self.max_frame_bytes} bytes with no frame terminator"
+        )
         for _ in range(MAX_STRAY_FRAMES):
-            reply = self._decode(self._read_frame(sock, call))
+            line = _next_frame(
+                buffer,
+                lambda: self._recv(sock, call),
+                limit=self.max_frame_bytes,
+                too_long=too_long,
+            )
+            reply = self._decode(line)
             if reply.payload.get("id") == request_id:
                 return reply
             log.warning(
@@ -412,20 +394,6 @@ class SocketTransport:
             "ids; "
             "the connection is out of step and is being dropped"
         )
-
-    def _read_frame(self, sock: socket.socket, call: _Call) -> bytes:
-        """One newline-terminated frame, or a typed error. Never unbounded."""
-        while True:
-            line, sep, rest = self._buffer.partition(b"\n")
-            if sep:
-                self._buffer = rest
-                return line
-            if len(self._buffer) > self.max_frame_bytes:
-                raise InvalidResponse(
-                    f"reply to {call.method} exceeded {self.max_frame_bytes} bytes "
-                    "with no frame terminator"
-                )
-            self._buffer += self._recv(sock, call)
 
     def _recv(self, sock: socket.socket, call: _Call) -> bytes:
         """One non-empty chunk of the reply, with every failure typed."""
@@ -447,14 +415,13 @@ class SocketTransport:
     # -- the connection ----------------------------------------------------
 
     def _connect(self, call: _Call) -> socket.socket:
-        """The live connection, opening one if there is none."""
-        if self._sock is not None:
-            return self._sock
-        now = self._clock()
-        if now < self._retry_at:
+        """A new connection of this call's own, unless a recent failure says not to dial yet."""
+        with self._lock:
+            now, retry_at = self._clock(), self._retry_at
+        if now < retry_at:
             raise EngineUnavailable(
                 f"no connection to the runner at {self.path}; not retrying for "
-                f"another {self._retry_at - now:.1f}s",
+                f"another {retry_at - now:.1f}s",
                 code="engine_unavailable",
             )
         self._check_budget(call, now)
@@ -473,10 +440,9 @@ class SocketTransport:
                 self._penalise()
                 raise EngineUnavailable(self._why_unreachable(exc)) from exc
             raise
-        self._backoff = 0.0
-        self._retry_at = 0.0
-        self._sock = sock
-        self._buffer = b""
+        with self._lock:
+            self._backoff = 0.0
+            self._retry_at = 0.0
         return sock
 
     def _new_socket(self) -> socket.socket:
@@ -492,17 +458,9 @@ class SocketTransport:
         return _why_unreachable(self.path, exc)
 
     def _penalise(self) -> None:
-        self._backoff = min(max(self._backoff * 2, BACKOFF_BASE), BACKOFF_CAP)
-        self._retry_at = self._clock() + self._backoff
-
-    def _drop(self) -> None:
-        """Destroy the connection and everything buffered on it."""
-        sock, self._sock, self._buffer = self._sock, None, b""
-        if sock is not None:
-            try:
-                sock.close()
-            except OSError:  # pragma: no cover - close rarely fails
-                log.debug("closing the runner socket failed", exc_info=True)
+        with self._lock:
+            self._backoff = min(max(self._backoff * 2, BACKOFF_BASE), BACKOFF_CAP)
+            self._retry_at = self._clock() + self._backoff
 
     def _arm(self, sock: socket.socket, call: _Call) -> None:
         """Re-arm the socket timeout from what is left of the call's budget."""
@@ -541,7 +499,7 @@ class EventStream:
         self.max_frame_bytes = max_frame_bytes
         self._lock = threading.Lock()
         self._sock: socket.socket | None = None
-        self._buffer = b""
+        self._buffer = bytearray()
         self._closed = False
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
@@ -670,17 +628,12 @@ class EventStream:
     # -- reading -----------------------------------------------------------
 
     def _read_frame(self, sock: socket.socket) -> bytes:
-        """One newline-terminated frame, or a typed error. Never unbounded."""
-        while True:
-            line, sep, rest = self._buffer.partition(b"\n")
-            if sep:
-                self._buffer = rest
-                return line
-            if len(self._buffer) > self.max_frame_bytes:
-                raise InvalidResponse(
-                    f"an event frame exceeded {self.max_frame_bytes} bytes with no terminator"
-                )
-            self._buffer += self._recv(sock)
+        return _next_frame(
+            self._buffer,
+            lambda: self._recv(sock),
+            limit=self.max_frame_bytes,
+            too_long=f"an event frame exceeded {self.max_frame_bytes} bytes with no terminator",
+        )
 
     def _recv(self, sock: socket.socket) -> bytes:
         """One non-empty chunk of the stream, with every failure typed."""
@@ -703,7 +656,7 @@ class EventStream:
     def _drop(self) -> None:
         """Destroy the connection and everything buffered on it."""
         with self._lock:
-            sock, self._sock, self._buffer = self._sock, None, b""
+            sock, self._sock, self._buffer = self._sock, None, bytearray()
         if sock is not None:
             try:
                 sock.close()
