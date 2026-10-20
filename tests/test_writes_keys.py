@@ -481,3 +481,16 @@ def test_up_and_down_do_not_count_as_answers_on_a_buttons_screen() -> None:
 
 def capture_ansi(name: str) -> str:
     return (FIXTURES / name / "visible.ansi").read_text(encoding="utf-8")
+
+
+def _unasked_run(label: str) -> BlockedPrompt:
+    return BlockedPrompt.parse(f"───\nPick one\n\n\u276f 1. {label}\n  2. Delete\n")
+
+
+def test_relabelling_a_row_no_option_names_still_moves_the_token() -> None:
+    """A cursor run with no question names no options, yet Enter answers it on the cursor's row."""
+    kept = _unasked_run("Keep")
+    assert (kept.options, "enter" in allowed_keys(kept)) == ((), True)
+    assert control_token(kept) != control_token(_unasked_run("Wipe"))
+    # A counter ticking inside a label is the same question.
+    assert control_token(_unasked_run("Keep (3s)")) == control_token(_unasked_run("Keep (2s)"))
