@@ -264,3 +264,40 @@ def test_a_counted_question_is_asked_without_a_question_mark():
     prompt = BlockedPrompt.parse(COUNTED)
     assert prompt.asked
     assert prompt.question == "Pick the version number for this release."
+
+
+def _boxed(row: str) -> str:
+    return f"│ {row:<46} │"
+
+
+_WIDE = "─" * 48
+# omp's radio glyph, from a Nerd Font's private use area.
+_RADIO = chr(0xF10C)
+# Built on the layout of omp's Ask dialog: a cornered box parted by inner rules, read trimmed.
+CORNERED = "\n".join(
+    [
+        "  Gathering what the release needs in one batch",
+        "",
+        f"╭─ Ask {_WIDE[6:]}╮",
+        _boxed(" version    notes    channel"),
+        _boxed(" Submit"),
+        _boxed("Which channel should the build go to?"),
+        f"├{_WIDE}┤",
+        _boxed(f"  {_RADIO} Stable (Recommended)"),
+        _boxed("      Everyone gets it on the next check."),
+        _boxed(f"  {_RADIO} Beta"),
+        _boxed("      Only testers who opted in."),
+        _boxed(""),
+        f"├{_WIDE}┤",
+        _boxed("Enter select · n note · ↑/↓ move · Esc cancel"),
+        f"╰{_WIDE}╯",
+    ]
+)
+
+
+def test_a_cornered_box_with_inner_rules_asks_what_its_first_section_asks():
+    """The inner rules part the box's sections; the box opens at its top corner, as at a rule."""
+    prompt = BlockedPrompt.parse(CORNERED)
+    assert prompt.asked
+    assert prompt.question.splitlines()[-1] == "Which channel should the build go to?"
+    assert prompt.identity

@@ -783,7 +783,7 @@ def _prepared(text: str, ansi: str = "") -> _Screen:
     lines = [_EDGE_RE.sub(r"\1", line).rstrip() for line in text.splitlines()]
     if (panel := _panel_screen(lines)) is not None:
         return _Screen(panel, [False] * len(panel), "\n".join(panel), ("",) * len(panel))
-    return _Screen(lines, barred, text, _dialog_colour(text, ansi, barred))
+    return _Screen(_reframed(lines), barred, text, _dialog_colour(text, ansi, barred))
 
 
 def _dialog_colour(text: str, ansi: str, barred: list[bool]) -> tuple[str, ...]:
@@ -1117,6 +1117,44 @@ def _panel_screen(lines: list[str]) -> list[str] | None:
     if not any(OPTION_RE.match(line) for line in inside):
         return None
     return _upto_last_option(inside) + _panel_footer(lines[bottom + 1 :])
+
+
+_BOX_BOTTOM_RE = re.compile(r"^\s*[╰└╚][─━═]*[╯┘╝]$")
+
+_BOX_TEE_RE = re.compile(r"^\s*[├┝┠╞╟][─━═]*[┤┥┨╡╢]$")
+"""A rule across a drawn box, which parts its sections as a blank row would."""
+
+_BOX_RULE = "─" * 4
+
+
+def _closing_box(lines: list[str]) -> range | None:
+    """The rows inside a box parted by inner rules that closes the screen, or ``None``."""
+    end = len(lines)
+    while end and not lines[end - 1].strip():
+        end -= 1
+    if not end or not _BOX_BOTTOM_RE.match(lines[end - 1]):
+        return None
+    top = next((i for i in range(end - 2, -1, -1) if _PANEL_TOP_RE.match(lines[i])), None)
+    if top is None:
+        return None
+    inside = range(top + 1, end - 1)
+    # Only the shape measured: a box with no inner rule is left as the grammar read it before.
+    return inside if any(_BOX_TEE_RE.match(lines[i]) for i in inside) else None
+
+
+def _reframed(lines: list[str]) -> list[str]:
+    """*lines*, with a box closing the screen redrawn as the rule and gaps the grammar reads.
+
+    omp draws its Ask dialog as a cornered box parted by inner rules; its top
+    opens the dialog as claude's rule does, and each inner rule parts a section.
+    """
+    if (box := _closing_box(lines)) is None:
+        return lines
+    inside = [
+        "" if _BOX_TEE_RE.match(row) else _unboxed(row) for row in lines[box.start : box.stop]
+    ]
+    # The bottom stays: a footer is the dialog's own only on the screen's last row.
+    return [*lines[: box.start - 1], _BOX_RULE, *inside, *lines[box.stop :]]
 
 
 def _upto_last_option(inside: list[str]) -> list[str]:
