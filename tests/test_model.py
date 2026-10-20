@@ -1497,9 +1497,28 @@ PREVIEW_STEP = (
 
 def test_the_strip_is_seen_when_the_rows_are_not() -> None:
     """With no run to anchor on, the strip is still the asking box's top line."""
-    p = BlockedPrompt.parse(PREVIEW_STEP)
+    p = BlockedPrompt.parse(PREVIEW_STEP.replace("\u276f 1.", "  1."))
     assert p.options == ()
     assert _steps(p) == (0, ("Layout", "Theme"))
+
+
+def test_rows_beside_a_preview_box_are_read_without_the_box() -> None:
+    """The box, its Notes line and the unnumbered row under the rule are not part of any label."""
+    p = BlockedPrompt.parse(PREVIEW_STEP)
+    assert p.shape is MenuShape.SINGLE_CHOICE
+    assert [(o.number, o.label) for o in p.options] == [(1, "Grid"), (2, "List")]
+    assert p.question == "Which layout should we use?"
+    assert _steps(p) == (0, ("Layout", "Theme"))
+
+
+def test_an_open_note_box_leaves_the_rows_unread() -> None:
+    """claude offers its editor key only while the note box holds the keys, and a digit then types."""
+    footer = "Enter to select · ↑/↓ to navigate · Tab to switch questions · Esc to cancel"
+    typing = PREVIEW_STEP.replace("press n to add notes", "Add notes on this design…").replace(
+        "Tab to switch questions", "ctrl+g to edit in nano · Tab to switch questions"
+    )
+    assert footer not in typing
+    assert BlockedPrompt.parse(typing).options == ()
 
 
 def test_a_question_mark_in_the_transcript_is_not_the_dialog_asking() -> None:

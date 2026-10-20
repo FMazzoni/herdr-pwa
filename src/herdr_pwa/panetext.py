@@ -549,33 +549,64 @@ def _screen_width(rows: list[str]) -> int:
     return max((cells(row.rstrip()) for row in rows), default=0)
 
 
-def _label_row(rows: list[str], label: str) -> tuple[int, int]:
-    """The last row ending in ``label``, as ``(row index, start column)``."""
-    found = (-1, 0)
+_BESIDE_BOX_RE = re.compile(r"\s{2,}[┌╭│┃└╰]")
+"""The gap and the side of a box drawn right of a row, as a preview beside an option is."""
+
+
+@dataclass(frozen=True, slots=True)
+class _Placed:
+    """Where a label sits: its row, its start column, its row's text and the room it had."""
+
+    index: int
+    column: int
+    text: str
+    width: int
+
+
+def _ends_in(row: str, label: str) -> tuple[str, int] | None:
+    """*row* up to where it ends in *label*, and the room a box beside it left, or ``None``."""
+    body = row.rstrip()
+    if body.endswith(label):
+        return body, 0
+    at = body.find(label)
+    while at >= 0:
+        end = at + len(label)
+        if (box := _BESIDE_BOX_RE.match(body, end)) is not None:
+            # Beside a box, the row's room ends where the box begins.
+            return body[:end], cells(body[: box.end() - 1])
+        at = body.find(label, at + 1)
+    return None
+
+
+def _label_row(rows: list[str], label: str) -> _Placed | None:
+    """The last row ending in ``label``, or in ``label`` beside a drawn box."""
+    found = None
     for index, row in enumerate(rows):
-        body = row.rstrip()
+        if (ended := _ends_in(row, label)) is None:
+            continue
+        body, room = ended
         start = len(body) - len(label)
-        if start > 0 and body.endswith(label) and body[start - 1].isspace():
-            found = (index, start)
+        if start > 0 and body[start - 1].isspace():
+            found = _Placed(index, start, body, room)
     return found
 
 
-def _continues(rows: list[str], index: int, column: int, width: int) -> bool:
+def _continues(rows: list[str], placed: _Placed, width: int) -> bool:
     """Is ``rows[index + 1]`` the rest of a row the terminal ran out of columns for?"""
-    below = rows[index + 1] if index + 1 < len(rows) else ""
+    below = rows[placed.index + 1] if placed.index + 1 < len(rows) else ""
     word = below.split()
-    if not word or len(below) - len(below.lstrip()) != column:
+    if not word or len(below) - len(below.lstrip()) != placed.column:
         return False
-    return cells(rows[index].rstrip()) + 1 + cells(word[0]) > width
+    return cells(placed.text) + 1 + cells(word[0]) > (placed.width or width)
 
 
 def printed_whole(screen: str, label: str) -> bool:
     """Did ``screen`` print ``label`` entire, on one row, with nothing continuing it?"""
     rows = screen.splitlines()
-    index, column = _label_row(rows, label)
-    if index < 0:
+    placed = _label_row(rows, label)
+    if placed is None:
         return False
-    return not _continues(rows, index, column, _screen_width(rows))
+    return not _continues(rows, placed, _screen_width(rows))
 
 
 def is_clean_prose(text: str) -> bool:

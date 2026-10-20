@@ -65,12 +65,41 @@ PARKED: dict[str, str] = {
     ),
 }
 
-# claude wizard steps drawn with a preview panel: no run is read, and the strip above it now is.
-STRIP_SEEN = (
-    "foreign/collie/claude--wizard-preview-note-attached.txt",
-    "foreign/collie/claude--wizard-preview-q1.txt",
-    "foreign/collie/claude--wizard-preview-wrapped-label.txt",
-)
+# claude questions drawn with a preview box beside their rows, and what each now reads.
+_ROWS_READ: dict[str, JsonValue] = {"corroborated": True, "drew_rows": True, "asked": True}
+PREVIEWED: dict[str, dict[str, dict[str, JsonValue]]] = {
+    "foreign/collie/claude--select-preview.txt": {
+        "verdict": {
+            "shape": "single-choice",
+            "options": 3,
+            "digits": ["1", "2", "3"],
+            "rows_answer": True,
+        },
+        "render": {**_ROWS_READ, "is_choice": True, "numbers": [1, 2, 3], "answer_hints": ["esc"]},
+    },
+    "foreign/collie/claude--select-preview-note-attached.txt": {
+        "verdict": {
+            "shape": "single-choice",
+            "options": 3,
+            "digits": ["1", "2", "3"],
+            "rows_answer": True,
+        },
+        "render": {**_ROWS_READ, "is_choice": True, "numbers": [1, 2, 3], "answer_hints": ["esc"]},
+    },
+    "foreign/collie/claude--wizard-preview-q1.txt": {
+        "verdict": {"shape": "single-choice", "options": 2, "digits": ["1", "2"], "steps": [0, 2]},
+        "render": {**_ROWS_READ, "is_choice": True, "numbers": [1, 2]},
+    },
+    "foreign/collie/claude--wizard-preview-note-attached.txt": {
+        "verdict": {"shape": "single-choice", "options": 2, "digits": ["1", "2"], "steps": [0, 2]},
+        "render": {**_ROWS_READ, "is_choice": True, "numbers": [1, 2]},
+    },
+    # Row 1's label wraps inside its column, so the rows are read but earn no digit.
+    "foreign/collie/claude--wizard-preview-wrapped-label.txt": {
+        "verdict": {"shape": "single-choice", "options": 2, "steps": [0, 2]},
+        "render": {**_ROWS_READ, "is_choice": True, "numbers": [1, 2]},
+    },
+}
 
 # Every deliberate divergence from the ledger, by entry id, with the reason it is better.
 DIVERGENCES: dict[str, str] = {
@@ -91,12 +120,12 @@ DIVERGENCES: dict[str, str] = {
         "test_a_parked_cursor_reads_as_the_cursor_on_a_row holds the rest of each entry.",
     ),
     **dict.fromkeys(
-        STRIP_SEEN,
-        "The screen draws claude's step strip above its question, and the old app looked for "
-        "it only below the last rule, which on a screen with no run read is the 'Chat about "
-        "this' row. The strip says the question is one step of two, which is what keeps a "
-        "tap from claiming the whole set is answered. "
-        "test_a_strip_seen_without_rows_is_all_that_leaves_the_ledger holds the rest.",
+        PREVIEWED,
+        "claude draws an option's preview as a box beside the rows, and the old app read the "
+        "box's sides as text after the last row, so no run was read and the question offered "
+        "only its printed keys. The rows are now read with the box cut away, and on a wizard "
+        "step the strip above them says the question is one step of two. "
+        "test_a_preview_beside_the_rows_is_all_that_leaves_the_ledger holds the rest.",
     ),
     **dict.fromkeys(
         (
@@ -366,14 +395,14 @@ def test_a_parked_cursor_reads_as_the_cursor_on_a_row(capture_id: str, twin: str
     assert parked.identity == on_a_row.identity
 
 
-@pytest.mark.parametrize("capture_id", STRIP_SEEN)
-def test_a_strip_seen_without_rows_is_all_that_leaves_the_ledger(capture_id: str) -> None:
+@pytest.mark.parametrize("capture_id", PREVIEWED)
+def test_a_preview_beside_the_rows_is_all_that_leaves_the_ledger(capture_id: str) -> None:
     prompt = BlockedPrompt.parse(_decoded(capture_id))
-    decision = decide_screen(prompt)
     expected = copy.deepcopy({k: v for k, v in _obj(SCREENS[capture_id]).items() if k != "input"})
-    assert _obj(expected["verdict"])["steps"] is None
-    _obj(expected["verdict"])["steps"] = [0, 2]
-    assert _screen_json(decision, prompt) == expected
+    assert _obj(expected["verdict"])["options"] == 0
+    for part, fields in PREVIEWED[capture_id].items():
+        _obj(expected[part]).update(fields)
+    assert _screen_json(decide_screen(prompt), prompt) == expected
 
 
 def _herd_found(herd_id: str) -> tuple[dict[str, JsonValue], dict[str, JsonValue]]:

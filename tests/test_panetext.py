@@ -719,6 +719,17 @@ def test_a_description_row_is_not_a_continuation_when_the_word_would_have_fit() 
     assert printed_whole(wide, "Force-push") is True
 
 
+def test_a_label_beside_a_box_has_only_the_room_left_of_the_box() -> None:
+    """A preview drawn right of the rows bounds them, so a wrap there is a wrap."""
+    screen = (
+        "\u276f 1. Grid of equal-width cards    ┌────────┐\n"
+        "     with a fixed gutter          │ [a][b] │\n"
+        "  2. List                         └────────┘\n" + "-" * 120 + "\n"
+    )
+    assert printed_whole(screen, "Grid of equal-width cards") is False
+    assert printed_whole(screen, "List") is True
+
+
 def test_the_input_box_starts_at_its_top_border_and_a_dialog_has_none() -> None:
     fixtures = Path(__file__).parent / "fixtures"
     idle = (fixtures / "capture-idle-claude-prompt" / "detection.txt").read_text().splitlines()
