@@ -549,7 +549,7 @@ def _screen_width(rows: list[str]) -> int:
     return max((cells(row.rstrip()) for row in rows), default=0)
 
 
-_BESIDE_BOX_RE = re.compile(r"\s{2,}[┌╭│┃└╰]")
+_BESIDE_BOX_RE = re.compile(r"\s{2,}[┌╭│┃├┝└╰]")
 """The gap and the side of a box drawn right of a row, as a preview beside an option is."""
 
 

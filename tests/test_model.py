@@ -23,6 +23,7 @@ from herdr_pwa.engine import (
     as_session_id,
     rank,
 )
+from herdr_pwa.panetext import printed_whole
 from herdr_pwa.protocol import EXPECTED_PROTOCOL
 from tests.engine_seam import is_key_hint
 
@@ -1509,6 +1510,18 @@ def test_rows_beside_a_preview_box_are_read_without_the_box() -> None:
     assert [(o.number, o.label) for o in p.options] == [(1, "Grid"), (2, "List")]
     assert p.question == "Which layout should we use?"
     assert _steps(p) == (0, ("Layout", "Theme"))
+
+
+def test_rows_beside_a_folded_preview_are_read() -> None:
+    """A tall preview is drawn folded, with a tee row across it, and the rows beside it still count."""
+    folded = PREVIEW_STEP.replace(
+        "  2. List        │ [a] [b]  │\n",
+        "  2. List        │ [a] [b]  │\n  3. Cards       ├── ✂ ─────┤\n",
+    )
+    p = BlockedPrompt.parse(folded)
+    assert [o.label for o in p.options] == ["Grid", "List", "Cards"]
+    # Each label is whole beside the fold too, so each row is one a digit may name.
+    assert all(printed_whole(p.raw, o.label) for o in p.options)
 
 
 def test_an_open_note_box_leaves_the_rows_unread() -> None:

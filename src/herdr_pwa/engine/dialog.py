@@ -790,7 +790,8 @@ def _prepared(text: str, ansi: str = "") -> _Screen:
 _SIDE_TOP_RE = re.compile(r"\S\s{2,}(?P<corner>[┌╭])[─━]")
 """A box opening on an option row, right of its label: the preview beside the rows."""
 
-_SIDE_EDGE = "│┃"
+# A tall preview is drawn folded, a tee row across it saying how many lines it hid.
+_SIDE_EDGE = "│┃├┝"
 
 _SIDE_BOTTOM = "└╰"
 
