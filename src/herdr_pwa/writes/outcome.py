@@ -92,6 +92,14 @@ class _Run:
     moved: int = 0
     moved_to: str = ""
     flickered: bool = False
+    graced: bool = False
+
+    def take_grace(self) -> bool:
+        # One uncorroborated gone or moved frame earns one more look, and only one.
+        if self.graced or not (self.gone or self.moved):
+            return False
+        self.graced = True
+        return True
 
     def note(self, saw: Evidence, poll: Poll) -> None:
         # A flicker is a transition, gone and then waiting again, not a value.
@@ -146,7 +154,6 @@ def watch(read: Callable[[], Poll], *, aimed: str, ends: bool, pacing: Pacing) -
         settled = _settled(seen, ends=ends)
         if settled is not None:
             return settled
-        # A deadline that lands on one uncorroborated gone or moved frame takes one more look.
-        if pacing.clock() >= deadline and not (seen.gone or seen.moved):
+        if pacing.clock() >= deadline and not seen.take_grace():
             return _spent(seen, ends=ends)
         pacing.sleep(interval)
