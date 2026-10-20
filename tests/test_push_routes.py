@@ -42,7 +42,7 @@ def test_subscribe_stores_the_device_and_echoes_it_as_confirmation(tmp_path: Pat
 
 def test_unsubscribe_forgets_only_that_device(tmp_path: Path) -> None:
     rig = build_rig(tmp_path)
-    other = "https://push.example.net/other"
+    other = "https://fcm.googleapis.com/fcm/send/other"
     for body in (raw_subscription(), raw_subscription(other)):
         _ = rig.http.post("/push/subscribe", headers=SAME_ORIGIN, json=body)
     answer = rig.http.post("/push/unsubscribe", headers=SAME_ORIGIN, json={"endpoint": ENDPOINT})
