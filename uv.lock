@@ -768,6 +768,7 @@ dependencies = [
     { name = "pygit2" },
     { name = "pygments" },
     { name = "pywebpush" },
+    { name = "requests" },
     { name = "segno" },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -796,6 +797,7 @@ requires-dist = [
     { name = "pygit2", specifier = ">=1.20.1" },
     { name = "pygments", specifier = ">=2.21.0" },
     { name = "pywebpush", specifier = ">=2.0" },
+    { name = "requests", specifier = ">=2.32" },
     { name = "segno", specifier = ">=1.6" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34" },
 ]

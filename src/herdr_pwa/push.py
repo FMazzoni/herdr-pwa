@@ -9,9 +9,11 @@ import unicodedata
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, Final, Literal, Protocol, Self, cast
+from typing import Annotated, Final, Literal, Protocol, Self, TypedDict, Unpack, cast
+from urllib.parse import urlsplit
 
 import pywebpush
+import requests
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from pydantic import (
@@ -49,6 +51,20 @@ MAX_AGENT_CHARS = 64
 # Push services reject roughly 4 KiB after encryption.
 MAX_PAYLOAD_BYTES = 3072
 MAX_ENDPOINT_CHARS = 2048
+# Each tick sends to every device in turn, so the count bounds how long a fan-out can take.
+MAX_DEVICES = 10
+# Seconds one send may wait to connect, and again to read; a stalled service must not hold the loop.
+SEND_TIMEOUT = 10.0
+# A fan-out that has spent this long skips its remaining devices, bounding the notifier's lock.
+FAN_OUT_BUDGET = 30.0
+# The browsers' push services; anything else is a host the box would be told to post to.
+PUSH_SERVICES: Final = (
+    "push.apple.com",
+    "fcm.googleapis.com",
+    "android.googleapis.com",
+    "push.services.mozilla.com",
+    "notify.windows.com",
+)
 LINK_PLACEHOLDER = "[link]"
 # RFC 2606 names never resolve; Apple answers 403 BadJwtToken to a contact under one.
 RESERVED_TLDS = frozenset({"invalid", "example", "test", "localhost", "local"})
@@ -239,11 +255,23 @@ def load_or_create_vapid_keys(state_dir: Path, *, clock: Clock = time.time) -> V
 _ENDPOINT_RE = re.compile(r"^https://[^\s/@]+(?:/\S*)?$")
 
 
+def _is_push_service(host: str) -> bool:
+    return any(host == base or host.endswith(f".{base}") for base in PUSH_SERVICES)
+
+
 def _checked_endpoint(endpoint: str) -> str:
     if not _ENDPOINT_RE.match(endpoint):
         raise ValueError("endpoint must be an https:// URL")
     if len(endpoint) > MAX_ENDPOINT_CHARS:
         raise ValueError(f"endpoint is over the {MAX_ENDPOINT_CHARS} character cap")
+    parts = urlsplit(endpoint)
+    try:
+        port = parts.port
+    except ValueError:
+        port = -1
+    # An IP literal, localhost or a LAN name fails this too: the post would reach the box's network.
+    if not _is_push_service(parts.hostname or "") or port not in {None, 443}:
+        raise ValueError("endpoint is not on a browser push service")
     return endpoint
 
 
@@ -337,9 +365,17 @@ class SubscriptionStore:
         return out
 
     def add(self, subscription: Subscription) -> Subscription:
-        """Store a device; the same endpoint again updates its keys and keeps its stamp."""
+        """Store a device; the same endpoint again updates its keys and keeps its stamp.
+
+        Raises:
+            SubscriptionError: the store already holds ``MAX_DEVICES`` other devices.
+        """
         current = self.list_all()
         previous = next((one for one in current if one.endpoint == subscription.endpoint), None)
+        if previous is None and len(current) >= MAX_DEVICES:
+            raise SubscriptionError(
+                f"already {len(current)} devices, the most this server sends to; remove one first"
+            )
         stamp = int(self._clock()) if previous is None else previous.added_at
         stored = subscription.model_copy(update={"added_at": stamp})
         self._save([*(one for one in current if one.endpoint != stored.endpoint), stored])
@@ -444,19 +480,47 @@ class Deliver(Protocol):
     def __call__(self, subscription: Subscription, data: str) -> None: ...
 
 
+class _SendOptions(TypedDict):
+    vapid_private_key: str
+    vapid_claims: dict[str, str | int]
+    ttl: int
+    timeout: float
+    requests_session: requests.Session
+
+
 class _WebPush(Protocol):
     def __call__(
         self,
         subscription_info: dict[str, str | dict[str, str]],
         data: str,
-        vapid_private_key: str,
-        vapid_claims: dict[str, str | int],
-        ttl: int,
+        **options: Unpack[_SendOptions],
     ) -> object: ...
 
 
 # pywebpush's own signature leaves the subscription mapping's types unknown.
 _webpush = cast("_WebPush", pywebpush.webpush)
+
+
+class _NoRedirects(requests.Session):
+    """A session that hands back a redirect as the answer instead of following it."""
+
+    def get_redirect_target(self, resp: requests.Response) -> str | None:
+        """Never a target: a push service has no reason to send the box elsewhere."""
+        _ = resp
+        return None
+
+
+def _refusal(exc: Exception) -> DeliveryError:
+    if not isinstance(exc, WebPushException):
+        return DeliveryError(f"{type(exc).__name__}: {exc}")
+    response = cast("requests.Response | None", exc.response)
+    if response is None:
+        return DeliveryError(str(exc), status=exc.status_code)
+    # The body is the service's (or a redirect target's) text, so it never reaches the record.
+    return DeliveryError(
+        f"push service answered {response.status_code} {response.reason}",
+        status=response.status_code,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -469,19 +533,19 @@ class WebPushSender:
 
     def __call__(self, subscription: Subscription, data: str) -> None:
         """Encrypt and post; a refusal becomes DeliveryError with the push service's status."""
-        try:
-            _ = _webpush(
-                subscription_info=subscription.push_info(),
-                data=data,
-                ttl=self.ttl,
-                vapid_private_key=self.keys.private_key,
-                vapid_claims={"sub": self.subject},
-            )
-        except Exception as exc:
-            refused = exc if isinstance(exc, WebPushException) else None
-            detail = f"{type(exc).__name__}: {exc}" if refused is None else str(exc)
-            status = None if refused is None else refused.status_code
-            raise DeliveryError(detail, status=status) from exc
+        with _NoRedirects() as session:
+            try:
+                _ = _webpush(
+                    subscription_info=subscription.push_info(),
+                    data=data,
+                    ttl=self.ttl,
+                    vapid_private_key=self.keys.private_key,
+                    vapid_claims={"sub": self.subject},
+                    timeout=SEND_TIMEOUT,
+                    requests_session=session,
+                )
+            except Exception as exc:
+                raise _refusal(exc) from exc
 
 
 def arm_sender(keys: VapidKeys, *, subject: str, ttl: int) -> WebPushSender:
@@ -611,34 +675,45 @@ class Outlet:
     health: DeliveryLog
 
 
+def _one(data: str, subscription: Subscription, outlet: Outlet, *, now: float) -> str:
+    if subscription.expired(now):
+        # Dead by its own expirationTime, as a 404 or 410 would say after a wasted send.
+        _prune(outlet.store, subscription)
+        outlet.health.pruned()
+        return "pruned"
+    try:
+        outlet.deliver(subscription, data)
+    except DeliveryError as exc:
+        if exc.gone:
+            _prune(outlet.store, subscription)
+            outlet.health.pruned()
+            return "pruned"
+        log.warning("push failed: %s", exc)
+        outlet.health.failed(str(exc))
+        return "failed"
+    outlet.health.sent()
+    return "sent"
+
+
 def fan_out(
     data: str, subscriptions: Sequence[Subscription], outlet: Outlet, *, now: float
 ) -> FanOut:
     """Send to every device: prune the gone, record each outcome, never let one stop the rest.
 
     *now* is wall time from the caller's clock, for subscriptions that expire by their own date.
+    Past ``FAN_OUT_BUDGET`` seconds the devices not yet tried are skipped and counted failed.
     """
-    deliver, store, health = outlet.deliver, outlet.store, outlet.health
-    sent = failed = pruned = 0
-    for subscription in subscriptions:
-        if subscription.expired(now):
-            # Dead by its own expirationTime, as a 404 or 410 would say after a wasted send.
-            _prune(store, subscription)
-            health.pruned()
-            pruned += 1
-            continue
-        try:
-            deliver(subscription, data)
-        except DeliveryError as exc:
-            if exc.gone:
-                _prune(store, subscription)
-                health.pruned()
-                pruned += 1
-                continue
-            log.warning("push failed: %s", exc)
-            health.failed(str(exc))
-            failed += 1
-            continue
-        health.sent()
-        sent += 1
-    return FanOut(sent=sent, failed=failed, pruned=pruned)
+    outcomes: list[str] = []
+    started = time.monotonic()
+    for index, subscription in enumerate(subscriptions):
+        if time.monotonic() - started > FAN_OUT_BUDGET:
+            skipped = len(subscriptions) - index
+            outlet.health.failed(f"fan-out over {FAN_OUT_BUDGET:g}s: skipped {skipped} devices")
+            outcomes += ["failed"] * skipped
+            break
+        outcomes.append(_one(data, subscription, outlet, now=now))
+    return FanOut(
+        sent=outcomes.count("sent"),
+        failed=outcomes.count("failed"),
+        pruned=outcomes.count("pruned"),
+    )

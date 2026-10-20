@@ -86,12 +86,16 @@ def test_the_subscription_store_loads_and_round_trips_its_shape(tmp_path: Path) 
     [device] = store.list_all()
     assert device.push_info() == {"endpoint": entry["endpoint"], "keys": entry["keys"]}
     assert (device.added_at, device.expiration_time) == (1792009470, None)
-    _ = store.add(push.Subscription.model_validate(subscription_entry("https://fcm.example/x")))
+    _ = store.add(
+        push.Subscription.model_validate(
+            subscription_entry("https://fcm.googleapis.com/fcm/send/x")
+        )
+    )
     stored = OBJECT.validate_json(path.read_text())
     assert stored["version"] == 1
     assert stored["subscriptions"] == [
         entry,
-        {**subscription_entry("https://fcm.example/x"), "added_at": int(NOW)},
+        {**subscription_entry("https://fcm.googleapis.com/fcm/send/x"), "added_at": int(NOW)},
     ]
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
 

@@ -1,8 +1,13 @@
 import base64
 import json
 import os
+import socket
 import stat
-from collections.abc import Callable
+import threading
+import time
+from collections.abc import Callable, Generator
+from contextlib import contextmanager
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import cast
 
@@ -29,6 +34,7 @@ from herdr_pwa.push import (
     SubjectError,
     Subscription,
     SubscriptionError,
+    SubscriptionKeys,
     SubscriptionStore,
     VapidKeyError,
     WebPushSender,
@@ -45,7 +51,7 @@ from herdr_pwa.push import (
 from herdr_pwa.settings import Settings
 from tests.fakes import Clock
 
-ENDPOINT = "https://push.example.invalid/one"
+ENDPOINT = "https://fcm.googleapis.com/fcm/send/one"
 SUBJECT = "mailto:someone@herdr.example.org"
 
 
@@ -198,10 +204,10 @@ def test_resubscribing_a_device_updates_its_keys_and_keeps_its_stamp(tmp_path: P
 
 def test_remove_forgets_one_device_and_is_idempotent(store: SubscriptionStore) -> None:
     _ = store.add(subscribed())
-    _ = store.add(subscribed("https://push.example.invalid/two"))
+    _ = store.add(subscribed("https://fcm.googleapis.com/fcm/send/two"))
     assert store.remove(ENDPOINT)
     assert not store.remove(ENDPOINT)
-    assert [one.endpoint for one in store.list_all()] == ["https://push.example.invalid/two"]
+    assert [one.endpoint for one in store.list_all()] == ["https://fcm.googleapis.com/fcm/send/two"]
 
 
 @pytest.mark.parametrize(
@@ -209,14 +215,14 @@ def test_remove_forgets_one_device_and_is_idempotent(store: SubscriptionStore) -
     [
         None,
         [],
-        {"endpoint": "http://push.example.invalid/x", "keys": {}},
+        {"endpoint": "http://fcm.googleapis.com/fcm/send/x", "keys": {}},
         {"endpoint": ENDPOINT},
         {"endpoint": ENDPOINT, "keys": {"p256dh": "AAAA", "auth": "AAAA"}},
         {
             **raw_subscription(),
             "keys": {"p256dh": b64u(bytes([2]) + bytes(64)), "auth": b64u(bytes(16))},
         },
-        raw_subscription("https://push.example.invalid/" + "x" * 2100),
+        raw_subscription("https://fcm.googleapis.com/fcm/send/" + "x" * 2100),
         {**raw_subscription(), "expirationTime": "soon"},
     ],
 )
@@ -245,7 +251,7 @@ def test_a_failed_write_keeps_the_previous_store(store: SubscriptionStore) -> No
     # A directory where the temporary file must go makes the write itself fail.
     store.path.with_name(store.path.name + ".tmp").mkdir()
     with pytest.raises(IsADirectoryError):
-        _ = store.add(subscribed("https://push.example.invalid/two"))
+        _ = store.add(subscribed("https://fcm.googleapis.com/fcm/send/two"))
     assert store.path.read_text() == before
 
 
@@ -357,15 +363,18 @@ def test_a_subscription_past_its_expiration_is_pruned_without_a_send(tmp_path: P
     store = SubscriptionStore(tmp_path)
     ms = clock() * 1000
     expired = {**raw_subscription(), "expirationTime": ms}
-    live = {**raw_subscription("https://push.example.invalid/live"), "expirationTime": ms + 1}
-    for raw in (expired, live, raw_subscription("https://push.example.invalid/forever")):
+    live = {
+        **raw_subscription("https://fcm.googleapis.com/fcm/send/live"),
+        "expirationTime": ms + 1,
+    }
+    for raw in (expired, live, raw_subscription("https://fcm.googleapis.com/fcm/send/forever")):
         _ = store.add(Subscription.model_validate(raw))
     devices = Devices({})
     health = DeliveryLog(tmp_path, clock=clock)
     outcome = fan_out("{}", store.list_all(), Outlet(devices, store, health), now=clock())
     assert devices.reached == [
-        "https://push.example.invalid/live",
-        "https://push.example.invalid/forever",
+        "https://fcm.googleapis.com/fcm/send/live",
+        "https://fcm.googleapis.com/fcm/send/forever",
     ]
     assert (outcome.sent, outcome.pruned) == (2, 1)
     assert ENDPOINT not in [one.endpoint for one in store.list_all()]
@@ -379,7 +388,9 @@ def test_one_failing_device_does_not_stop_the_others_and_the_gone_are_pruned(
 ) -> None:
     clock = Clock()
     store = SubscriptionStore(tmp_path)
-    endpoints = [f"https://push.example.invalid/{n}" for n in ("gone", "broken", "fine", "expired")]
+    endpoints = [
+        f"https://fcm.googleapis.com/fcm/send/{n}" for n in ("gone", "broken", "fine", "expired")
+    ]
     for endpoint in endpoints:
         _ = store.add(subscribed(endpoint))
     devices = Devices(
@@ -430,3 +441,152 @@ def test_a_sender_failure_carries_the_push_services_status() -> None:
     wrapped = DeliveryError(str(error), status=error.status_code)
     assert wrapped.gone
     assert WebPushSender.__call__.__doc__
+
+
+@pytest.mark.parametrize(
+    "endpoint",
+    [
+        "https://web.push.apple.com/QAbc-123",
+        "https://fcm.googleapis.com/fcm/send/abc:def",
+        "https://updates.push.services.mozilla.com/wpush/v2/gAAA",
+        "https://wns2-par02p.notify.windows.com/w/?token=AAAA",
+        "https://fcm.googleapis.com:443/fcm/send/abc",
+    ],
+)
+def test_the_browsers_push_services_are_accepted(endpoint: str) -> None:
+    assert subscribed(endpoint).endpoint == endpoint
+
+
+@pytest.mark.parametrize(
+    "endpoint",
+    [
+        "https://127.0.0.1/",
+        "https://10.0.0.7/push",
+        "https://192.168.1.20/push",
+        "https://[::1]/push",
+        "https://169.254.169.254/latest/meta-data",
+        "https://localhost/push",
+        "https://printer.local/push",
+        "https://metadata.google.internal/push",
+        "https://fcm.googleapis.com.attacker.example/push",
+        "https://evilfcm.googleapis.com/push",
+        "https://fcm.googleapis.com:8443/fcm/send/abc",
+    ],
+)
+def test_an_endpoint_off_the_push_services_is_refused(endpoint: str) -> None:
+    with pytest.raises(ValidationError, match="not on a browser push service"):
+        _ = subscribed(endpoint)
+
+
+def test_an_eleventh_device_is_refused_but_a_known_one_still_updates(
+    store: SubscriptionStore,
+) -> None:
+    endpoints = [f"https://fcm.googleapis.com/fcm/send/{n}" for n in range(push.MAX_DEVICES)]
+    for endpoint in endpoints:
+        _ = store.add(subscribed(endpoint))
+    with pytest.raises(SubscriptionError, match="remove one first"):
+        _ = store.add(subscribed("https://fcm.googleapis.com/fcm/send/eleventh"))
+    _ = store.add(subscribed(endpoints[0], auth=bytes(16)))
+    assert [one.endpoint for one in store.list_all()] == [*endpoints[1:], endpoints[0]]
+
+
+def unchecked(endpoint: str) -> Subscription:
+    # A local endpoint the validator refuses, built raw so the sender itself is what is tested.
+    point = (
+        ec.generate_private_key(ec.SECP256R1())
+        .public_key()
+        .public_bytes(Encoding.X962, PublicFormat.UncompressedPoint)
+    )
+    keys = SubscriptionKeys.model_validate({"p256dh": b64u(point), "auth": b64u(bytes(16))})
+    return Subscription.model_construct(endpoint=endpoint, keys=keys)
+
+
+def a_sender(tmp_path: Path) -> WebPushSender:
+    return arm_sender(load_or_create_vapid_keys(tmp_path), subject=SUBJECT, ttl=60)
+
+
+def test_a_push_service_that_never_answers_fails_within_the_timeout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(push, "SEND_TIMEOUT", 0.5)
+    with socket.create_server(("127.0.0.1", 0)) as silent:
+        port = cast("tuple[str, int]", silent.getsockname())[1]
+        started = time.monotonic()
+        with pytest.raises(DeliveryError) as refused:
+            a_sender(tmp_path)(unchecked(f"https://127.0.0.1:{port}/push"), "{}")
+    assert time.monotonic() - started < 5
+    assert refused.value.status is None
+
+
+@contextmanager
+def answering(status: int, headers: dict[str, str], body: bytes) -> Generator[list[str]]:
+    seen: list[str] = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:
+            seen.append(self.path)
+            self.send_response(status)
+            for name, value in headers.items():
+                self.send_header(name, value)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            _ = self.wfile.write(body)
+
+        def log_message(self, format: str, *args: object) -> None:  # noqa: A002 - the base names it
+            del format, args
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        seen.append(f"http://127.0.0.1:{server.server_address[1]}")
+        yield seen
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_a_redirect_is_the_answer_and_is_never_followed(tmp_path: Path) -> None:
+    with (
+        answering(204, {}, b"") as target,
+        answering(307, {"Location": f"{target[0]}/elsewhere"}, b"moved") as service,
+    ):
+        with pytest.raises(DeliveryError) as refused:
+            a_sender(tmp_path)(unchecked(f"{service[0]}/push"), "{}")
+        assert service[1:] == ["/push"]
+        assert target[1:] == []
+    assert refused.value.status == 307
+
+
+def test_a_refusal_keeps_the_status_and_reason_and_never_the_body(tmp_path: Path) -> None:
+    with (
+        answering(500, {}, b"internal-detail-from-the-service") as service,
+        pytest.raises(DeliveryError) as refused,
+    ):
+        a_sender(tmp_path)(unchecked(f"{service[0]}/push"), "{}")
+    assert str(refused.value) == "push service answered 500 Internal Server Error"
+    assert refused.value.status == 500
+
+
+def test_a_fan_out_past_its_budget_skips_the_rest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clock = Clock()
+    store = SubscriptionStore(tmp_path)
+    endpoints = [f"https://fcm.googleapis.com/fcm/send/{n}" for n in range(3)]
+    reached: list[str] = []
+
+    def slow(subscription: Subscription, data: str) -> None:
+        del data
+        reached.append(subscription.endpoint)
+        # The first send used the whole budget.
+        monkeypatch.setattr(push, "FAN_OUT_BUDGET", -1.0)
+
+    health = DeliveryLog(tmp_path, clock=clock)
+    devices = [subscribed(endpoint) for endpoint in endpoints]
+    outcome = fan_out("{}", devices, Outlet(slow, store, health), now=clock())
+    assert reached == endpoints[:1]
+    assert (outcome.sent, outcome.failed) == (1, 2)
+    record = health.load()
+    assert record is not None
+    assert "skipped 2 devices" in record.last_error
