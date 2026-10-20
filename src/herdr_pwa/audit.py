@@ -10,12 +10,12 @@ import secrets
 import stat
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from types import TracebackType
-from typing import Annotated, Literal, Self, TypedDict
+from typing import Annotated, Literal, NotRequired, Self, TypedDict
 
 from pydantic import Field, TypeAdapter, ValidationError
 
@@ -57,6 +57,9 @@ class Attempt(TypedDict):
     actor_via: str
     client_ip: str
     forwarded_for: str
+    # Absent from records written before they were kept; a forged write shows its own names here.
+    host: NotRequired[str]
+    origin: NotRequired[str]
     payload: str | None
     payload_chars: int
     payload_truncated: bool
@@ -114,11 +117,22 @@ class Origin:
     via: str
     client_ip: str = ""
     forwarded_for: str = ""
+    # The Host and Origin headers the request carried, as sent.
+    host: str = ""
+    origin: str = ""
 
     @classmethod
-    def of(cls, identity: Identity, *, client_ip: str = "", forwarded_for: str = "") -> Self:
+    def of(cls, identity: Identity, *, client_ip: str = "", headers: Mapping[str, str]) -> Self:
         """The origin of a request that ``auth.authorize`` admitted as this identity."""
-        return cls(identity.login, identity.via, client_ip, forwarded_for)
+        lowered = {key.lower(): value for key, value in headers.items()}
+        return cls(
+            identity.login,
+            identity.via,
+            client_ip,
+            lowered.get("x-forwarded-for", ""),
+            lowered.get("host", ""),
+            lowered.get("origin", ""),
+        )
 
 
 def _iso(at: float) -> str:
@@ -231,6 +245,8 @@ class AuditLog:
             "actor_via": origin.via,
             "client_ip": origin.client_ip,
             "forwarded_for": origin.forwarded_for,
+            "host": origin.host,
+            "origin": origin.origin,
             "payload": payload,
             "payload_chars": len(write.payload),
             "payload_truncated": truncated,
@@ -352,7 +368,10 @@ def describe(record: Record) -> str:
     if record["phase"] == OUTCOME:
         return f"{head} -> {record['result']}"
     where = record["forwarded_for"] or record["client_ip"] or "?"
-    who = f"{record['actor']} via {record['actor_via']} from {where}"
+    host = record.get("host", "")
+    who = f"{record['actor']} via {record['actor_via']} from {where}" + (
+        f" to {host}" if host else ""
+    )
     return f"{head} {who}  {_shown(record)}"
 
 
