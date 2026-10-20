@@ -15,7 +15,8 @@
   </nav>
 {%- endmacro %}
 
-{# The way to the Pane tab wherever this app cannot show the rows: a link, never a direction. #}
+{# The way to the Pane tab wherever this app cannot show the rows: a link, never a direction.
+   No fragment: the Pane lands itself at its end, where a jump to the view's top would undo it. #}
 {% macro pane_door(agent, label, cls) -%}
-<a class="{{ cls }}" href="/agent/{{ agent.session|urlencode }}?tab=pane#agent-view" {{ replace() }}>{{ label }}</a>
+<a class="{{ cls }}" href="/agent/{{ agent.session|urlencode }}?tab=pane" {{ replace() }}>{{ label }}</a>
 {%- endmacro %}

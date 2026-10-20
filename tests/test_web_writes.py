@@ -476,14 +476,14 @@ def test_a_checklist_says_why_its_rows_are_not_buttons_and_links_the_pane(
     assert "Submit is the last row" in text
     assert '<span class="key__name">Enter</span> <span class="key__verb">tick</span>' in text
     assert "Enter to select" not in text, "its hints only repeat the keys under the rows"
-    assert f'href="/agent/{S1}?tab=pane#agent-view"' in text
+    assert f'href="/agent/{S1}?tab=pane"' in text
     assert 'name="key" value="1"' not in text
 
 
 def test_a_multi_select_names_the_pane_as_the_same_door_every_other_state_uses(
     tmp_path: Path,
 ) -> None:
-    door = f'href="/agent/{S1}?tab=pane#agent-view" data-hp-replace>'
+    door = f'href="/agent/{S1}?tab=pane" data-hp-replace>'
     unread = _blocked_on(tmp_path / "unread", "").http.get(f"/agent/{S1}/answer").text
     nothing_ticked = capture("capture-blocked-multiselect-checklist").replace("[✔]", "[ ]")
     text = _blocked_on(tmp_path / "multi", nothing_ticked).http.get(f"/agent/{S1}/answer").text
@@ -498,7 +498,7 @@ def test_an_unverified_prompt_offers_the_pane_door_not_a_direction(tmp_path: Pat
     w = idle(tmp_path)
     response = w.http.post(f"/agent/{S1}/prompt", data={"text": "hello there"}, headers=ORIGIN)
     assert "Sent, unverified: the pane did not show it." in response.text
-    door = f'href="/agent/{S1}?tab=pane#agent-view" data-hp-replace>'
+    door = f'href="/agent/{S1}?tab=pane" data-hp-replace>'
     assert f'<a class="banner__go" {door}Look at the Pane</a>' in response.text
     assert "Pane tab" not in response.text, "a link, not a direction"
 
@@ -510,7 +510,7 @@ def test_an_unverified_first_prompt_offers_the_pane_door_on_the_agent_page(
     banner = re.search(r'<p class="banner banner--held">.*?</p>', page, re.S)
     assert banner is not None, "the carried prompt's banner"
     assert "Your first prompt was sent, but the pane did not show it." in banner[0]
-    door = f'href="/agent/{S1}?tab=pane#agent-view" data-hp-replace>'
+    door = f'href="/agent/{S1}?tab=pane" data-hp-replace>'
     assert f'<a class="banner__go" {door}Look at the Pane</a>' in banner[0]
     assert "Read the Pane" not in page, "a link, not a direction"
 
@@ -519,7 +519,7 @@ def test_a_question_that_cannot_be_read_says_so_with_a_way_to_the_pane(tmp_path:
     w = _blocked_on(tmp_path, "")
     text = w.http.get(f"/agent/{S1}/answer").text
     assert "its question could not be read here" in text
-    assert f'href="/agent/{S1}?tab=pane#agent-view"' in text
+    assert f'href="/agent/{S1}?tab=pane"' in text
 
 
 def test_a_key_that_left_the_question_up_says_so_and_does_not_claim_an_answer(

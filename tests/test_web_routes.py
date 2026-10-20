@@ -329,7 +329,7 @@ def test_chat_for_a_harness_with_no_transcript_offers_the_pane_door(tmp_path: Pa
     note = re.search(r'<p class="empty">.*?</p>', body, re.S)
     assert note is not None, "an empty log says why"
     assert "keeps no transcript this app can read" in note[0]
-    door = f'href="/agent/{WORKING_SESSION}?tab=pane#agent-view" data-hp-replace>'
+    door = f'href="/agent/{WORKING_SESSION}?tab=pane" data-hp-replace>'
     assert f'<a class="chat__go" {door}Look at the Pane</a>' in note[0]
     assert "see Pane" not in body, "a link, not a direction"
 

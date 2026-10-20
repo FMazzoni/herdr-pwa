@@ -1,7 +1,8 @@
 """Drive the Chat and Pane tabs in headless Firefox: each opens on its newest line, follows new
 lines while the reader is at the end, and leaves a reader who scrolled up where they were. An
 agent that is asking lands at the end too, its question after the newest line and on the first
-screen, and a reader who scrolled up from it is offered the way back. A tool's
+screen, and a reader who scrolled up from it is offered the way back; a link to the Pane opens
+it the same way, from either tab. A tool's
 result the reader opened stays open across a poll, and the page does not move under them. A
 burst of tool calls lands folded, its failure in plain sight, and a fold the reader opened
 stays open while calls are added to it.
@@ -21,7 +22,7 @@ import contextlib
 import json
 import re
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from firefox import Bench, Marionette, phone_window
@@ -690,6 +691,52 @@ def waiting_pill(ctx: WalkCtx) -> list[str]:
     if not _until(lambda: _num(_jump(driver), "gap") <= DRIFT and not _jump(driver).get("shown")):
         return [f"{tab.name}: the way back to the question did not land at the end"]
     return []
+
+
+# Marks this document, so a new one shows the tap opened a page rather than jumped in this one.
+DOOR_TAP = r"""
+window.__hpDoorLeft = true;
+const door = document.querySelector("#answer .answer__go");
+if (door) setTimeout(() => door.click(), 0);
+return { door: !!door, length: history.length };
+"""
+DOOR_DRAWN = 'return document.querySelector("#answer .answer__go") !== null;'
+DOOR_LANDED = r"""
+const jump = document.getElementById("hp-jump");
+const busy = document.querySelector(".htmx-request, .htmx-swapping, .htmx-settling");
+const arrived = location.search === "?tab=pane" && (!window.__hpDoorLeft || location.hash !== "");
+return { arrived: arrived && document.readyState === "complete" && !busy
+    && !!document.querySelector("#agent-view .pane__line") && !!document.getElementById("answer"),
+  gap: document.documentElement.scrollHeight - innerHeight - scrollY,
+  pinned: !!(window.hp && hp.chatend && hp.chatend.pinned()),
+  pill: !!jump && !jump.hidden, length: history.length };
+"""
+
+
+def pane_door(ctx: WalkCtx) -> list[str]:
+    """The answer note's link to the Pane opens it as any opening does: at the end, following
+    it, with no way back offered, and in place of the page it was tapped on."""
+    driver, tab = ctx.driver, ctx.tab
+    ctx.open()
+    if not _until(lambda: bool(driver.script(DOOR_DRAWN))):
+        return [f"{tab.name}: never drew the link to the Pane"]
+    settle(driver)
+    tapped = driver.script(DOOR_TAP)
+    was = tapped if isinstance(tapped, dict) else {}
+    if not _read_until(driver, DOOR_LANDED, lambda s: bool(s.get("arrived"))):
+        return [f"{tab.name}: the link never opened the Pane"]
+    settle(driver)
+    seen = driver.script(DOOR_LANDED)
+    seen = seen if isinstance(seen, dict) else {}
+    problems: list[str] = []
+    if _num(seen, "gap") > DRIFT or not seen.get("pinned") or seen.get("pill"):
+        problems.append(
+            f"{tab.name}: the Pane opened {_num(seen, 'gap'):.0f}px above its end, "
+            f"pinned={seen.get('pinned')}, the way back {'shown' if seen.get('pill') else 'hidden'}"
+        )
+    if seen.get("length") != was.get("length"):
+        problems.append(f"{tab.name}: the link pushed a history entry, so back is not the feed")
+    return problems
 
 
 def _tool_chat(turns: int) -> list[dict[str, JsonValue]]:
@@ -1876,6 +1923,8 @@ def _tabs() -> tuple[tuple[Tab, Walk], ...]:
         (Tab("pane question", asking_pane, "", _print), asked),
         (Tab("chat question waiting", asking_chat, last_reply, _say), waiting_pill),
         (Tab("pane question waiting", asking_pane, "", _print), waiting_pill),
+        (Tab("pane door from chat", replace(ticks, path=chat.path), "", _print), pane_door),
+        (Tab("pane door from pane", ticks, "", _print), pane_door),
         (Tab("tall plan", plan, "", _print, width=320, height=568), tall_question),
         (plan_coming_tab("tall plan arrives"), question_arrives),
         (plan_printing_tab("tall plan printed"), question_printed),
