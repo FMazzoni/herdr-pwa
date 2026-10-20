@@ -799,7 +799,8 @@ textarea { resize: vertical; min-height: 4.5em; }
 /* The tapped control stays lit while the rest of the region waits for its answer. */
 .htmx-request > .button[disabled] { opacity: 1; border-color: var(--accent); color: var(--accent); }
 .htmx-request > .button .option__n { border-color: var(--accent); color: var(--accent); }
-.htmx-request .option__sending { display: block; }
+/* Only under the tapped row's own request: a poll of the whole region is not a send. */
+.htmx-request > .button .option__sending { display: block; }
 /* Rows a tap answers are one grouped list, a hairline between rows, as a native choice list:
    the numeral in the accent, a chevron to say the row acts. */
 .options--list { gap: 0; background: var(--surface); border: var(--line-1) solid var(--rule); border-radius: var(--radius-3); overflow: hidden; }

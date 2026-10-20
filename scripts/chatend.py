@@ -34,6 +34,7 @@ from tests.catalogue import (
     AGENT,
     BLOCKED,
     MENU,
+    PLAN,
     State,
     build,
     capture,
@@ -48,6 +49,7 @@ from tests.waiting import STEP as POLL
 from tests.waiting import eventually
 from tests.webfakes import (
     READ,
+    SNAPSHOT,
     WORKING_SESSION,
     Rig,
     assistant_says,
@@ -277,6 +279,12 @@ def asking_pane_tab(name: str) -> Tab:
     """The Pane tab of an agent asking a question under a terminal taller than the screen."""
     blocked = runner(lambda: herd(**BLOCKED), long_pane(LINES) + capture(MENU))
     return Tab(name, State("asking pane", _pane().path, "", blocked), "", _print)
+
+
+def plan_coming_tab(name: str) -> Tab:
+    """The Pane tab at 320px with the plan on its screen while herdr still reports it working."""
+    working = runner(snapshot_frame, long_pane(LINES) + capture(PLAN))
+    return Tab(name, State("plan coming", _pane().path, "", working), "", _print, 320, 568)
 
 
 def _scrolled_up_stays(ctx: WalkCtx) -> list[str]:
@@ -570,6 +578,34 @@ def tall_question(ctx: WalkCtx) -> list[str]:
         return []
     where = f"between the bar ({under:.0f}px) and the dock ({dock:.0f}px)"
     return [f"{tab.name}: the question's first line sits at {top:.0f}px, not {where}"]
+
+
+def question_arrives(ctx: WalkCtx) -> list[str]:
+    """A question taller than the room that arrives while the reader is at the end lands as one
+    loaded with the page does: its first line just under the bar. The screen already shows it, so
+    only the answer region redraws."""
+    driver, tab = ctx.driver, ctx.tab
+    ctx.open()
+    seen = _wait_for(driver, tab.newest)
+    if not seen or _num(seen, "gap") > DRIFT:
+        return [f"{tab.name}: never landed at the end before the question came"]
+    ctx.rig.wire.replies[SNAPSHOT] = herd(**BLOCKED)
+    # The app holds a snapshot for a while; the rig's clock moves past that.
+    ctx.rig.clock.sleep(60.0)
+    driver.script(POKE)
+    if not _until(lambda: bool(_tall(driver))):
+        return [f"{tab.name}: the question never arrived"]
+    settle(driver)
+    found: dict[str, object] = {}
+    if not _until(lambda: bool(found.update(_tall(driver)) or found)):
+        return [f"{tab.name}: never settled"]
+    if not found.get("tall"):
+        return [f"{tab.name}: the answer fits between the bar and the dock, so it proves nothing"]
+    top, under, dock = _num(found, "top"), _num(found, "under"), _num(found, "dock")
+    if top >= under - DRIFT and top + _num(found, "line") <= dock:
+        return []
+    where = f"between the bar ({under:.0f}px) and the dock ({dock:.0f}px)"
+    return [f"{tab.name}: the question that arrived sits at {top:.0f}px, not {where}"]
 
 
 JUMP = r"""
@@ -1788,6 +1824,7 @@ def _tabs() -> tuple[tuple[Tab, Walk], ...]:
         (Tab("chat question waiting", asking_chat, last_reply, _say), waiting_pill),
         (Tab("pane question waiting", asking_pane, "", _print), waiting_pill),
         (Tab("tall plan", plan, "", _print, width=320, height=568), tall_question),
+        (plan_coming_tab("tall plan arrives"), question_arrives),
         (
             Tab("tall multiselect", ticks, "", _print, width=430, height=932, scale=2.0),
             tall_question,

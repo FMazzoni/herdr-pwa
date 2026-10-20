@@ -6,8 +6,9 @@
 <meta name="color-scheme" content="dark light">
 <meta name="referrer" content="same-origin">
 <meta name="hp-build" content="{{ build }}">
-{# Eval off and no injected indicator <style>, so htmx lives inside the CSP. #}
-<meta name="htmx-config" content='{"includeIndicatorStyles":false,"allowEval":false,"allowScriptTags":false}'>
+{# Eval off and no injected indicator <style>, so htmx lives inside the CSP. A swapped element
+   wears its own class from the start: WebKit resets the scroll when a size container's class flips mid-settle. #}
+<meta name="htmx-config" content='{"includeIndicatorStyles":false,"allowEval":false,"allowScriptTags":false,"attributesToSettle":["style","width","height"]}'>
 <title>{% block title %}herdr{% endblock %}</title>
 <meta name="theme-color" content="#141D28">
 <link rel="icon" href="{{ asset('icon.svg') }}" type="image/svg+xml">
