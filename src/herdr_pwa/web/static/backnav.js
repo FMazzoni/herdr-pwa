@@ -1,8 +1,13 @@
 /* herdr-pwa: Back belongs to the herd. Only the feed's own links push; every other move replaces
  * the entry it leaves, and a page leaves only once its event stream is closed, so it can be kept
- * in the back-forward cache. */
+ * in the back-forward cache. An agent page's entry restores no scroll. */
 (function (hp) {
   "use strict";
+
+  // WebKit's restored scroll reads as the reader's, and its replace keeps the entry: each page sets its own.
+  if ("scrollRestoration" in window.history) {
+    window.history.scrollRestoration = document.getElementById("agent-view") ? "manual" : "auto";
+  }
 
   /* ---- Back belongs to the herd ----
    * The feed is the root: only its own links push. Every other move replaces the
