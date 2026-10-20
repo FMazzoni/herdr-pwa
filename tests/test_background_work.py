@@ -6,6 +6,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Final
 
+import pytest
+
 from herdr_pwa.decisions import Fetched, Overlay, Pending, decide_herd
 from herdr_pwa.engine import (
     Agent,
@@ -138,6 +140,70 @@ def test_a_queued_notice_appended_later_ends_its_shell(tmp_path: Path) -> None:
     with log.open("a") as handle:
         handle.write(queued + "\n")
     assert _tasks(cache.read(found))["brun00003"].done
+
+
+LATE_ENDS: Final = FIXTURES / "transcript" / "notices" / "shell-late-ends.jsonl"
+# The prompt and the six launches; every line after them ends a shell.
+LATE_HEAD: Final = 13
+# Each shell that ends, and whether it ended any way but completed.
+LATE_FAILED: Final = {
+    "bwait0001": False,
+    "bmoved002": True,
+    "bkill0003": True,
+    "bstop0004": False,
+    "btask0005": True,
+}
+
+
+def _late_lines() -> list[str]:
+    return LATE_ENDS.read_text().splitlines(keepends=True)
+
+
+def _late_budget(budget: str) -> int:
+    head = len("".join(_late_lines()[:LATE_HEAD]).encode())
+    return {"whole": 1 << 30, "launches": head, "none": 1}[budget]
+
+
+def _late_shells(tally: SessionUsage) -> dict[str, SpawnedAgent]:
+    return {k: v for k, v in _tasks(tally).items() if v.kind == "shell"}
+
+
+def _assert_late_ends(tally: SessionUsage) -> None:
+    shells = _late_shells(tally)
+    assert sorted(shells) == sorted([*LATE_FAILED, "brun00006"])
+    assert {k: v.failed for k, v in shells.items() if v.done} == LATE_FAILED
+    assert shells["bmoved002"].description == "Run the suite"
+    assert shells["btask0005"].description == "Poll the queue"
+    assert not shells["brun00006"].done
+
+
+@pytest.mark.parametrize("budget", ["whole", "launches", "none"])
+def test_every_way_a_shell_ends_closes_it_wherever_the_byte_budget_ran_out(
+    tmp_path: Path, budget: str
+) -> None:
+    log = Path(shutil.copy(LATE_ENDS, tmp_path / LATE_ENDS.name))
+    live = tally_claude(log, max_bytes=_late_budget(budget))
+    assert live.tally.partial == (budget != "whole")
+    _assert_late_ends(live.tally)
+
+
+@pytest.mark.parametrize("budget", ["whole", "launches", "none"])
+def test_every_way_a_shell_ends_closes_it_when_appended_later(tmp_path: Path, budget: str) -> None:
+    lines = _late_lines()
+    log = tmp_path / LATE_ENDS.name
+    log.write_text("".join(lines[:LATE_HEAD]))
+    cache = UsageCache(max_bytes=_late_budget(budget))
+    found = Located(Source.of(WORKING_SESSION, agent_kind="claude"), log)
+    assert not any(shell.done for shell in _late_shells(cache.read(found)).values())
+    with log.open("a") as handle:
+        handle.write("".join(lines[LATE_HEAD:]))
+    _assert_late_ends(cache.read(found))
+
+
+def test_a_spent_budget_still_counts_only_the_messages_inside_it(tmp_path: Path) -> None:
+    log = Path(shutil.copy(LATE_ENDS, tmp_path / LATE_ENDS.name))
+    assert tally_claude(log, max_bytes=_late_budget("none")).tally.messages == 0
+    assert tally_claude(log, max_bytes=_late_budget("launches")).tally.messages == 6
 
 
 def test_the_cache_holds_as_many_logs_as_the_herd_has_agents(tmp_path: Path) -> None:

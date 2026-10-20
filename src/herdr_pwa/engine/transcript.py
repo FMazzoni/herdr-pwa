@@ -1997,8 +1997,9 @@ _SPAWN_MARKS: Final = (
 _HELD_CALLS: Final = 64
 # What TaskStop says it stopped, as the tally's kinds.
 _STOPPED: Final = {"local_bash": SPAWNED_SHELL, "local_agent": SPAWNED_AGENT}
-# What a notice's summary calls each kind that ends here.
-_NOTICE_KINDS: Final = {"Agent": SPAWNED_AGENT, "Command": SPAWNED_SHELL}
+# What a notice's summary calls each kind that ends here; measured, every "Task ... was stopped
+# by main session" names a shell a subagent left running, and no TaskStop result names it.
+_NOTICE_KINDS: Final = {"Agent": SPAWNED_AGENT, "Command": SPAWNED_SHELL, "Task": SPAWNED_SHELL}
 _BASH: Final = "Bash"
 
 
@@ -2055,8 +2056,10 @@ def _ending(record: ClaudeRecord) -> TaskNotice | PeerMessage | None:
     content = record.message.content if record.message is not None else None
     if found is None and record.type == "user" and isinstance(content, str):
         found = injected(record.origin, content, human=_is_human(record))
-    if isinstance(found, TaskNotice) and found.kind in _NOTICE_KINDS and not found.waiting:
-        return found
+    if isinstance(found, TaskNotice):
+        # A summary of no measured shape (a monitor's) names no kind this tally keeps.
+        ends = found.named and found.kind in _NOTICE_KINDS and not found.waiting
+        return found if ends else None
     return found if isinstance(found, PeerMessage) and found.report else None
 
 
@@ -2189,15 +2192,23 @@ def _tally_log(path: Path, live: LiveTally, *, newest: bool, start: int = 0) -> 
             if not raw.endswith(b"\n"):
                 # A line still being written is read once it is whole.
                 break
-            live.budget -= len(raw)
-            if live.budget < 0:
-                live.tally.partial = True
-                live.budget = 0
-                return end
             end += len(raw)
-            if _worth(raw):
-                _tally_line(raw, live, newest=newest)
+            _tally_raw(raw, live, newest=newest)
     return end
+
+
+def _tally_raw(raw: bytes, live: LiveTally, *, newest: bool) -> None:
+    """Add one whole line to *live*: all of it inside the byte budget, its background work past it."""
+    live.budget -= len(raw)
+    if live.budget >= 0:
+        if _worth(raw):
+            _tally_line(raw, live, newest=newest)
+        return
+    live.tally.partial = True
+    live.budget = 0
+    # Measured: a shell's end lands anywhere in a long log, so a spent budget may never hide it.
+    if _spawns(raw):
+        _tally_spawned(_record(raw), live)
 
 
 def _tally_prompt(
@@ -2264,8 +2275,6 @@ def tally_claude(path: Path, *, max_bytes: int = MAX_USAGE_BYTES) -> LiveTally:
             live.tally.latest = latest
         if index == 0:
             live.end = end
-        if live.tally.partial:
-            break
     _tally_nested(path, live)
     live.tally.state = HistoryState.ok if live.tally.messages else HistoryState.empty
     return live
@@ -2273,9 +2282,8 @@ def tally_claude(path: Path, *, max_bytes: int = MAX_USAGE_BYTES) -> LiveTally:
 
 def grow_claude(live: LiveTally, path: Path) -> None:
     """Add what was appended to the newest log, and to its agents' logs, since *live* read them."""
-    if not live.tally.partial:
-        live.end = _tally_log(path, live, newest=True, start=live.end)
-        live.tally.state = HistoryState.ok if live.tally.messages else HistoryState.empty
+    live.end = _tally_log(path, live, newest=True, start=live.end)
+    live.tally.state = HistoryState.ok if live.tally.messages else HistoryState.empty
     # An agent's shell ends in that agent's log while the session's own is still.
     _tally_nested(path, live)
 
