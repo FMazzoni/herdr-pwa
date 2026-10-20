@@ -46,12 +46,14 @@ class _PerScreen:
             if held is not None and held[:2] == (agent.revision, agent.status):
                 self._held.move_to_end(agent.session)
                 return held.found
-            found = decide(held is not None and held.found)
+        # Outside the lock, so one session's pane or transcript read never queues another's.
+        found = decide(held is not None and held.found)
+        with self._lock:
             self._held[agent.session] = _Verdict(agent.revision, agent.status, found)
             self._held.move_to_end(agent.session)
             while len(self._held) > self._max:
                 _ = self._held.popitem(last=False)
-            return found
+        return found
 
 
 class Stalls:

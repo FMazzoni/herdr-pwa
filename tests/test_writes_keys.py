@@ -1,5 +1,6 @@
 """Tapping a key: only what the freshly read screen offers, at the agent holding the session now."""
 
+import itertools
 from pathlib import Path
 
 import pytest
@@ -20,6 +21,7 @@ from herdr_pwa.writes.keys import (
 from herdr_pwa.writes.outcome import (
     ANSWER_BUDGET,
     ANSWER_INTERVAL,
+    MOVE_BUDGET,
     MOVE_INTERVAL,
     UNREADABLE,
     Evidence,
@@ -463,6 +465,30 @@ def test_a_screen_that_stays_unreadable_is_accepted_at_the_budget_and_claims_not
     seen, clock = _watch(UNREADABLE)
     assert (seen.outcome, seen.evidence, seen.prompt) == (Outcome.ACCEPTED, Evidence.UNREAD, None)
     assert sum(clock.slept) >= ANSWER_BUDGET, "watched to the end of the budget"
+
+
+def _changing(n: int) -> BlockedPrompt:
+    return BlockedPrompt.parse(f"───\nStep {n}: which one?\n\n\u276f 1. Yes\n  2. No\n")
+
+
+@pytest.mark.parametrize("ends", [True, False])
+def test_a_screen_that_shows_a_new_question_on_every_read_still_ends(ends: bool) -> None:
+    """Each frame is one uncorroborated move, so only a hard stop ends the watch."""
+    clock = FakeClock()
+    reads = itertools.count()
+
+    def read() -> Poll:
+        n = next(reads)
+        if n > 200:
+            raise AssertionError("the watch kept polling an ever-moving screen")
+        return _changing(n)
+
+    interval, budget = (ANSWER_INTERVAL, ANSWER_BUDGET) if ends else (MOVE_INTERVAL, MOVE_BUDGET)
+    seen = watch(read, aimed=ASKED.identity, ends=ends, pacing=Pacing(clock.sleep, clock))
+    assert seen.outcome is (Outcome.UNCONFIRMED if ends else Outcome.ACCEPTED)
+    # The look that finds the deadline passed, then one grace look an interval later.
+    reached = next(n for n in itertools.count(1) if n * interval >= budget - 1e-9)
+    assert clock.slept == [interval] * (reached + 1), "one grace look past the deadline, no more"
 
 
 # The opencode permission dialog: buttons answered sideways, offered from what
