@@ -38,11 +38,12 @@ PROBE = """() => {
   };
 }"""
 
-# Where a jump to #agent-view leaves the page: its top at the top of the screen, or the end.
-FRAGMENT = """() => {
-  const top = document.getElementById("agent-view").getBoundingClientRect().top + scrollY;
-  return Math.round(Math.min(top, document.documentElement.scrollHeight - innerHeight));
-}"""
+# The furthest the page can scroll: where a page that lands itself stands.
+END = "() => Math.round(document.documentElement.scrollHeight - innerHeight)"
+
+OPENED = """() => location.search === "?tab=pane"
+  && (!window.__hpDoorLeft || location.hash !== "") && document.readyState === "complete"
+"""
 
 # A link a person taps, pushed as the feed's own links are; fixed, so the tap scrolls nothing.
 LINK = """(href) => {
@@ -141,17 +142,19 @@ def replaced(walk: Walk, state: State) -> None:
 
 
 def pane_door(walk: Walk, state: State) -> None:
-    """The Chat tab's link to the Pane names #agent-view: no restore may undo that jump."""
-    walk.page.goto(walk.base + f"{AGENT}?tab=chat")
+    """The answer note's link to the Pane, from ``state``'s tab: the Pane lands at its end."""
+    drive(walk.page, state, walk.base + state.path)
     _ = walk.settle("#answer .answer__go")
+    length = TypeAdapter(int).validate_python(walk.page.evaluate("() => history.length"))
+    walk.page.evaluate("() => { window.__hpDoorLeft = true; }")
     walk.page.click("#answer .answer__go")
-    walk.page.wait_for_url(f"**{state.path}#agent-view")
-    seen = walk.settle(state.ready)
-    target = TypeAdapter(int).validate_python(walk.page.evaluate(FRAGMENT))
-    if seen.y != target:
-        walk.problems.append(
-            f"{walk.name}: the Pane link stood at {seen.y}, not #agent-view's {target}"
-        )
+    # A new document, or this one jumped to a fragment: either way the tap has taken.
+    walk.page.wait_for_function(OPENED)
+    seen = walk.settle("#agent-view .pane__line")
+    end = TypeAdapter(int).validate_python(walk.page.evaluate(END))
+    walk.landed(seen, seen.model_copy(update={"y": end}), "the Pane link")
+    if walk.page.evaluate("() => history.length") != length:
+        walk.problems.append(f"{walk.name}: the Pane link pushed a history entry")
 
 
 # A file read from the top, not opened at a line, so only the browser can bring the reader back.
@@ -159,12 +162,16 @@ WHOLE_FILE = replace(
     pick(["files-code"])[0], path=f"{AGENT}/files?path=src/app/server.py", ready=".src"
 )
 
+# A question whose rows are not buttons, so its note links to the Pane.
+MULTISELECT = pick(["agent-answer-multiselect"])[0]
+
 WALKS: tuple[tuple[str, State, Callable[[Walk, State], None]], ...] = (
     ("reload pane question", pick(["agent-answer-multiselect"])[0], reloaded),
     ("reload long chat", pick(["chat-long"])[0], reloaded),
     ("forward into an agent", pick(["agent-answer-multiselect"])[0], forward),
     ("replaced by a file", WHOLE_FILE, replaced),
-    ("pane link", pick(["agent-answer-multiselect"])[0], pane_door),
+    ("pane link from chat", replace(MULTISELECT, path=f"{AGENT}?tab=chat"), pane_door),
+    ("pane link on the pane", MULTISELECT, pane_door),
 )
 
 
