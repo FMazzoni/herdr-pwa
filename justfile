@@ -42,6 +42,11 @@ sheet *ARGS:
 compare *ARGS:
     uv run python scripts/compare.py {{ARGS}}
 
+# WebKit as an iPhone: reload a Chat and a Pane, walk forward into one, and reload a page that replaced
+# one; each lands where it lands when opened. For eyes, not a gate (Firefox restores before landing).
+reload *ARGS:
+    uv run python scripts/reload.py {{ARGS}}
+
 # The browser the shots use; a dev tool, fetched into ~/.cache/ms-playwright, never committed.
 webkit:
     uv run playwright install webkit
