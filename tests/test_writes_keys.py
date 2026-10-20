@@ -136,6 +136,18 @@ def test_controls_drawn_from_another_screen_are_refused_with_the_current_one(
     assert r.herd.writes(SEND_KEYS) == []
 
 
+@pytest.mark.parametrize("drawn_from", ["", "  "])
+def test_a_key_sent_with_no_screen_token_is_refused_as_stale(
+    tmp_path: Path, drawn_from: str
+) -> None:
+    """A control that carries no fingerprint proves no question, so it is never let through."""
+    r = blocked_rig(tmp_path)
+    result = refused(send_key(r.writer, KeyAsk(S1, "1", drawn_from=drawn_from)))
+    assert (result.refusal, result.status) == (Refusal.SCREEN_CHANGED, 409)
+    assert result.screen == FINGERPRINT
+    assert r.herd.writes(SEND_KEYS) == []
+
+
 def test_interrupt_takes_two_taps_and_skips_the_fingerprint(tmp_path: Path) -> None:
     r = blocked_rig(tmp_path)
     first = refused(send_key(r.writer, KeyAsk(S1, "ctrl-c", drawn_from="moving")))
@@ -494,3 +506,40 @@ def test_relabelling_a_row_no_option_names_still_moves_the_token() -> None:
     assert control_token(kept) != control_token(_unasked_run("Wipe"))
     # A counter ticking inside a label is the same question.
     assert control_token(_unasked_run("Keep (3s)")) == control_token(_unasked_run("Keep (2s)"))
+
+
+def _menu(rows: int) -> BlockedPrompt:
+    listed = "\n".join(f"{'\u276f' if n == 1 else ' '} {n}. Option {n}" for n in range(1, rows + 1))
+    footer = "Enter to select · ↑/↓ to navigate · Esc to cancel"
+    return BlockedPrompt.parse(f"───\nWhich one should I use?\n\n{listed}\n\n{footer}\n")
+
+
+def test_a_menu_past_nine_rows_earns_no_digit_at_all() -> None:
+    """A tenth row's digit is two keystrokes, and the first one answers row 1."""
+    assert answer_digits(_menu(9)) == tuple(str(n) for n in range(1, 10))
+    ten = _menu(10)
+    assert (ten.shape.value, len(ten.options)) == ("single-choice", 10)
+    assert answer_digits(ten) == ()
+    assert not {"1", "10"} & allowed_keys(ten)
+
+
+def test_an_empty_key_is_never_allowed_even_when_a_hint_names_one() -> None:
+    blank = BlockedPrompt.parse(PERMISSION).model_copy(
+        update={"hints": (KeyHint(key="", verb="select"),)}
+    )
+    assert "" not in allowed_keys(blank)
+
+
+def test_a_row_inside_a_stepper_moves_to_the_next_step_rather_than_ending_it() -> None:
+    wizard = _vendored("wizard-q1")
+    assert wizard.stepper is not None
+    assert "1" in answer_digits(wizard)
+    assert not key_ends_question(wizard, "1")
+    assert not key_ends_question(wizard, "enter")
+
+
+@pytest.mark.parametrize("typed", ["ENTER", " 1 ", "Esc"])
+def test_a_key_is_matched_case_and_space_blind(tmp_path: Path, typed: str) -> None:
+    r = blocked_rig(tmp_path)
+    _ = sent(send_key(r.writer, KeyAsk(S1, typed, drawn_from=FINGERPRINT)))
+    assert r.herd.writes(SEND_KEYS) == [{"target": "w1:p3", "keys": [typed.strip().lower()]}]

@@ -253,6 +253,14 @@ def test_a_stale_control_is_409_and_redrawn_from_the_screen_now(tmp_path: Path) 
     assert w.herd.writes("agent.send_keys") == []
 
 
+def test_a_key_posted_with_no_screen_field_is_409(tmp_path: Path) -> None:
+    w = blocked(tmp_path)
+    response = w.http.post(f"/agent/{S1}/keys", data={"key": "1"}, headers=ORIGIN)
+    assert response.status_code == 409
+    assert FINGERPRINT in response.text
+    assert w.herd.writes("agent.send_keys") == []
+
+
 def test_interrupt_asks_twice(tmp_path: Path) -> None:
     w = blocked(tmp_path)
     first = w.http.post(f"/agent/{S1}/keys", data={"key": "ctrl-c"}, headers=ORIGIN)
