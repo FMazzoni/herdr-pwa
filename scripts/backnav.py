@@ -48,6 +48,7 @@ CLICK = (
     "const el = document.querySelector(arguments[0]); setTimeout(() => el.click(), 0); return !!el;"
 )
 CONTROLLED = "return !!(navigator.serviceWorker && navigator.serviceWorker.controller);"
+RESTORATION = "return history.scrollRestoration;"
 # Set on the page that is about to be left; only a back-forward cache restore keeps the window.
 MARK_PERSISTED = """
 window.__hpPersisted = false;
@@ -124,6 +125,14 @@ class Walk:
         if not eventually(lambda: bool(self.driver.script(CONTROLLED)), SETTLE_SECONDS):
             self.problems.append(f"{self.name}: the service worker never took control of the feed")
 
+    def restores(self, mode: str, page: str) -> None:
+        """The entry ``page`` is on must restore its scroll as ``mode`` says."""
+        found = self.driver.script(RESTORATION)
+        if found != mode:
+            self.problems.append(
+                f"{self.name}: {page} sets scroll restoration {found!r}, not {mode!r}"
+            )
+
     def back_to_feed(self, after: str) -> dict[str, object]:
         """Go back once; the feed is the only acceptable landing."""
         self.driver.script("setTimeout(() => history.back(), 0);")
@@ -168,6 +177,8 @@ def tabs_and_end(walk: Walk) -> None:
     agent = f"/agent/{S1}"
     walk.click(f'a.card__link[href="{agent}"]')
     walk.depth(walk.wait(agent, TABS), 1, "opening an agent")
+    # The agent page lands itself; a restored scroll would read as the reader's own.
+    walk.restores("manual", "the agent page")
     walk.click(f'{TABS} a.tab[href$="?tab=pane"]')
     walk.depth(
         walk.wait(agent, f"{TABS} .tab--on[href$='?tab=pane']", "?tab=pane"), 1, "the Pane tab"
@@ -185,6 +196,7 @@ def tabs_and_end(walk: Walk) -> None:
         walk.problems.append(
             f"{walk.name}: the feed came back by a reload, not from the back-forward cache"
         )
+    walk.restores("auto", "the feed")
 
 
 def write_sheet(walk: Walk) -> None:
@@ -226,6 +238,8 @@ def files_tab(walk: Walk, fake: FakeHerd, home: Path) -> None:
     walk.click(f'{TABS} a.tab[href$="/files"]')
     # The tab opens on Changes, under the agent's own bar with its Files tab lit.
     walk.depth(walk.wait(base, FILES_ON), 1, "the Files tab")
+    # A replace keeps the agent page's entry, so the Files page must set its own mode back.
+    walk.restores("auto", "the Files tab, which replaced the agent page")
     walk.click('main.files .flist a.frow[href*="server.py"]')
     walk.depth(walk.wait(f"{base}/diff", f"{FILES_ON}"), 1, "opening a change")
     walk.click("main.files a.files__change")
