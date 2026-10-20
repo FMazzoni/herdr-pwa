@@ -426,13 +426,22 @@ class _Queued(BaseModel):
 
 
 class _Launch(BaseModel):
-    """A tool result's ``toolUseResult``, as far as it says a background agent was started."""
+    """A tool result's ``toolUseResult``, as far as it says background work started or stopped."""
 
     model_config = ConfigDict(extra="ignore")
 
     status: Text = None
     agent_id: Text = Field(default=None, validation_alias="agentId")
     description: Text = None
+    # A Bash call sent to the background, by its flag, its timeout or the person.
+    shell: Text = Field(default=None, validation_alias="backgroundTaskId")
+    # A message that woke an agent which had ended.
+    resumed: Text = Field(
+        default=None, validation_alias=AliasChoices("resumedAgentId", "revivedAgentId")
+    )
+    # TaskStop's result: the task it stopped and whether that was a shell or an agent.
+    stopped: Text = Field(default=None, validation_alias="task_id")
+    stopped_kind: Text = Field(default=None, validation_alias="task_type")
 
 
 class ClaudeRecord(BaseModel):
@@ -1847,16 +1856,25 @@ class ModelSpend(Spend):
     ref: ModelRef
 
 
+# What a session started in the background: another agent, or a shell running a command.
+SPAWNED_AGENT: Final = "agent"
+SPAWNED_SHELL: Final = "shell"
+
+
 class SpawnedAgent(BaseModel):
-    """An agent the session started in the background, by the task id its records name."""
+    """Work the session started in the background, an agent or a shell, by the task id its
+    records name."""
 
     task: str
+    kind: str = SPAWNED_AGENT
     description: str = ""
     started: str = ""
     # When a notice said it was over; a notice that it waits on its own work does not count.
     done: bool = False
     ended: str = ""
     failed: bool = False
+    # When a message last woke it after it ended; it runs again until a later ending.
+    resumed: str = ""
 
 
 class SessionUsage(Spend):
@@ -1955,34 +1973,71 @@ class LiveTally(BaseModel):
     budget: int = 0
     # Where the newest log's last whole line ends.
     end: int = 0
+    # The newest Bash calls by tool_use id, so a result sent to the background is named.
+    calls: dict[str, str] = Field(default_factory=dict[str, str])
+    # Where each of the session's subagent logs was last read to.
+    nested: dict[str, int] = Field(default_factory=dict[str, int])
 
 
-# Measured: a background agent's launch result, and its notices however they were delivered.
-_SPAWN_MARKS: Final = (b'"async_launched"', b"<task-notification>", b'"queued_command"')
+# Measured: a background agent's launch result, and its notices however they were delivered;
+# a Bash call and the result that sends it to the background; a resume; a stop.
+_SPAWN_MARKS: Final = (
+    b'"async_launched"',
+    b"<task-notification>",
+    b'"queued_command"',
+    b'"name":"Bash"',
+    b'"name": "Bash"',
+    b'"backgroundTaskId"',
+    b'"resumedAgentId"',
+    b'"revivedAgentId"',
+    b'"task_type"',
+)
+# A call is answered within a few records; past this many an unanswered one is forgotten.
+_HELD_CALLS: Final = 64
+# What TaskStop says it stopped, as the tally's kinds.
+_STOPPED: Final = {"local_bash": SPAWNED_SHELL, "local_agent": SPAWNED_AGENT}
+# What a notice's summary calls each kind that ends here.
+_NOTICE_KINDS: Final = {"Agent": SPAWNED_AGENT, "Command": SPAWNED_SHELL}
+_BASH: Final = "Bash"
+
+
+def _spawns(raw: bytes) -> bool:
+    return any(mark in raw for mark in _SPAWN_MARKS)
 
 
 def _worth(raw: bytes) -> bool:
-    """Whether a line can carry usage, a prompt or a spawned agent; nothing else is parsed."""
+    """Whether a line can carry usage, a prompt or background work; nothing else is parsed."""
     if b'"usage"' in raw or b'"promptSource"' in raw or b'"origin"' in raw:
         return True
-    return any(mark in raw for mark in _SPAWN_MARKS)
+    return _spawns(raw)
 
 
 _ASYNC_LAUNCHED: Final = "async_launched"
 
 
-def _spawned(tally: SessionUsage, task: str) -> SpawnedAgent:
+def _spawned(tally: SessionUsage, task: str, kind: str = SPAWNED_AGENT) -> SpawnedAgent:
     """*task*'s entry in *tally*, added when this is the first record naming it."""
     for agent in tally.agents:
         if agent.task == task:
             return agent
-    agent = SpawnedAgent(task=task)
+    agent = SpawnedAgent(task=task, kind=kind)
     tally.agents.append(agent)
     return agent
 
 
+def _settle(agent: SpawnedAgent) -> None:
+    # Logs are read newest first, then their ancestors, so the latest stamps decide, not the order.
+    agent.done = bool(agent.ended) and agent.ended >= agent.resumed
+
+
+def _end(agent: SpawnedAgent, at: str, *, failed: bool) -> None:
+    if not agent.ended or at > agent.ended:
+        agent.ended, agent.failed = at, failed
+    _settle(agent)
+
+
 def _ending(record: ClaudeRecord) -> TaskNotice | PeerMessage | None:
-    """What *record* says ended a background agent: its notice, or its hand-back report.
+    """What *record* says ended a background agent or shell: its notice, or an agent's report.
 
     Measured: an agent that hands back while its own work runs is told "waiting", and once
     handed back its run is over, so no "finished" ever follows.
@@ -1991,7 +2046,7 @@ def _ending(record: ClaudeRecord) -> TaskNotice | PeerMessage | None:
     content = record.message.content if record.message is not None else None
     if found is None and record.type == "user" and isinstance(content, str):
         found = injected(record.origin, content, human=_is_human(record))
-    if isinstance(found, TaskNotice) and found.kind == "Agent" and not found.waiting:
+    if isinstance(found, TaskNotice) and found.kind in _NOTICE_KINDS and not found.waiting:
         return found
     return found if isinstance(found, PeerMessage) and found.report else None
 
@@ -2006,22 +2061,114 @@ def _launched(record: ClaudeRecord, tally: SessionUsage) -> bool:
     return True
 
 
-def _tally_spawned(record: ClaudeRecord, tally: SessionUsage) -> None:
-    """Add a background agent's launch or its ending to *tally*, if *record* is one."""
-    if _launched(record, tally):
+def _shell_name(block: _Block) -> str:
+    args = block.input
+    given = (args.description or args.command or "") if args is not None else ""
+    lines = given.strip().splitlines()
+    return lines[0] if lines else ""
+
+
+def _note_calls(record: ClaudeRecord, live: LiveTally) -> None:
+    """Hold each Bash call's name until its result says whether it went to the background."""
+    if record.type != "assistant":
+        return
+    for block in _blocks(record):
+        if block.type == "tool_use" and block.name == _BASH and block.id:
+            live.calls[block.id] = _shell_name(block)
+    while len(live.calls) > _HELD_CALLS:
+        live.calls.pop(next(iter(live.calls)))
+
+
+def _shell_launched(record: ClaudeRecord, live: LiveTally) -> bool:
+    launch = record.tool_use_result
+    if launch is None or not launch.shell:
+        return False
+    shell = _spawned(live.tally, launch.shell, SPAWNED_SHELL)
+    shell.kind = SPAWNED_SHELL
+    answered = [b.tool_use_id for b in _blocks(record) if b.type == "tool_result" and b.tool_use_id]
+    named = [live.calls.pop(call, "") for call in answered]
+    shell.description = next((name for name in named if name), shell.description)
+    shell.started = record.timestamp or shell.started
+    return True
+
+
+def _resumed(record: ClaudeRecord, tally: SessionUsage) -> bool:
+    launch = record.tool_use_result
+    at = record.timestamp or ""
+    if launch is None or not launch.resumed or not at:
+        return False
+    agent = _spawned(tally, launch.resumed)
+    agent.resumed = max(agent.resumed, at)
+    _settle(agent)
+    return True
+
+
+def _stopped(record: ClaudeRecord, tally: SessionUsage) -> bool:
+    launch = record.tool_use_result
+    kind = _STOPPED.get(launch.stopped_kind or "") if launch is not None else None
+    if launch is None or kind is None or not launch.stopped:
+        return False
+    _end(_spawned(tally, launch.stopped, kind), record.timestamp or "", failed=False)
+    return True
+
+
+def _started_or_stopped(record: ClaudeRecord, live: LiveTally) -> bool:
+    tally = live.tally
+    if _launched(record, tally) or _shell_launched(record, live):
+        return True
+    return _resumed(record, tally) or _stopped(record, tally)
+
+
+def _tally_spawned(record: ClaudeRecord, live: LiveTally) -> None:
+    """Add a background agent's or shell's launch, resume or ending to *live*, if *record* is one."""
+    _note_calls(record, live)
+    if _started_or_stopped(record, live):
         return
     found = _ending(record)
     if found is None or not found.task:
         return
-    agent = _spawned(tally, found.task)
     notice = found if isinstance(found, TaskNotice) else None
+    kind = _NOTICE_KINDS[notice.kind] if notice is not None else SPAWNED_AGENT
+    agent = _spawned(live.tally, found.task, kind)
     if notice is not None and not agent.description:
         agent.description = notice.detail
-    at = record.timestamp or ""
-    # Logs are read newest first, then their ancestors: the latest ending stands.
-    if not agent.done or at > agent.ended:
-        agent.done, agent.ended = True, at
-        agent.failed = notice is not None and notice.failed
+    _end(agent, record.timestamp or "", failed=notice is not None and notice.failed)
+
+
+def _nested_logs(path: Path) -> list[Path]:
+    """The logs of the agents *path*'s session started, which Claude Code keeps beside it."""
+    directory = path.with_suffix("") / "subagents"
+    try:
+        return sorted(directory.glob("agent-*.jsonl"))
+    except OSError:
+        return []
+
+
+def _tally_nested_log(path: Path, live: LiveTally) -> None:
+    """Add the background work in one subagent log's whole lines appended since it was read."""
+    key = path.name
+    start = live.nested.get(key, 0)
+    with path.open("rb") as handle:
+        if handle.seek(0, 2) < start:
+            # Rewritten, not appended to: read it again whole.
+            start = 0
+        handle.seek(start)
+        for raw in handle:
+            if not raw.endswith(b"\n"):
+                break
+            start += len(raw)
+            if _spawns(raw):
+                _tally_spawned(_record(raw), live)
+    live.nested[key] = start
+
+
+def _tally_nested(path: Path, live: LiveTally) -> None:
+    """Add what the session's own agents started; their usage is not the session's, so only that."""
+    for log in _nested_logs(path):
+        try:
+            _tally_nested_log(log, live)
+        except OSError:
+            continue
 
 
 def _tally_log(path: Path, live: LiveTally, *, newest: bool, start: int = 0) -> int:
@@ -2040,7 +2187,7 @@ def _tally_log(path: Path, live: LiveTally, *, newest: bool, start: int = 0) -> 
                 return end
             end += len(raw)
             if _worth(raw):
-                _tally_line(raw, live.tally, live.seen, newest=newest)
+                _tally_line(raw, live, newest=newest)
     return end
 
 
@@ -2056,12 +2203,13 @@ def _tally_prompt(
         tally.prompts += 1
 
 
-def _tally_line(raw: bytes, tally: SessionUsage, seen: set[str], *, newest: bool) -> None:
-    """Add one record to *tally*: its message unless already counted, or the prompt it is."""
+def _tally_line(raw: bytes, live: LiveTally, *, newest: bool) -> None:
+    """Add one record to *live*: its message unless already counted, or the prompt it is."""
     record = _record(raw)
+    tally, seen = live.tally, live.seen
     if newest and record.timestamp:
         tally.last_at = record.timestamp
-    _tally_spawned(record, tally)
+    _tally_spawned(record, live)
     if record.type == "user" and not record.is_meta and _is_human(record):
         _tally_prompt(record, tally, seen, newest=newest)
         return
@@ -2109,16 +2257,18 @@ def tally_claude(path: Path, *, max_bytes: int = MAX_USAGE_BYTES) -> LiveTally:
             live.end = end
         if live.tally.partial:
             break
+    _tally_nested(path, live)
     live.tally.state = HistoryState.ok if live.tally.messages else HistoryState.empty
     return live
 
 
 def grow_claude(live: LiveTally, path: Path) -> None:
-    """Add what was appended to the newest log since *live* last read it."""
-    if live.tally.partial:
-        return
-    live.end = _tally_log(path, live, newest=True, start=live.end)
-    live.tally.state = HistoryState.ok if live.tally.messages else HistoryState.empty
+    """Add what was appended to the newest log, and to its agents' logs, since *live* read them."""
+    if not live.tally.partial:
+        live.end = _tally_log(path, live, newest=True, start=live.end)
+        live.tally.state = HistoryState.ok if live.tally.messages else HistoryState.empty
+    # An agent's shell ends in that agent's log while the session's own is still.
+    _tally_nested(path, live)
 
 
 def _tally_lineage(path: Path, *, max_bytes: int) -> SessionUsage:

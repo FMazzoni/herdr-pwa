@@ -704,6 +704,45 @@ def _crowded_at(rig: Rig) -> None:
     write_transcript(rig.settings.state_dir.parent / "transcripts", WORKING_SESSION, crowded_chat())
 
 
+# What an idle agent left running: a dev server, a watcher, a long build, as their calls name them.
+BACKGROUND_SHELLS: Final = (
+    ("Serve the docs on port 4000", "npm run docs -- --port 4000"),
+    ("", "uv run python scripts/shots.py --watch --states chat-idle-shells chat-idle-both"),
+    ("Build the release bundle", "npm run build"),
+)
+
+
+def _shell(
+    n: int, description: str, command: str, seconds_ago: float
+) -> list[dict[str, JsonValue]]:
+    """A Bash call sent to the background, and the result that names its task id."""
+    args: dict[str, JsonValue] = {"command": command, "run_in_background": True}
+    if description:
+        args["description"] = description
+    result = _result(n, f"Command running in background with ID: bg{n}.", seconds_ago)
+    result["toolUseResult"] = {"stdout": "", "stderr": "", "backgroundTaskId": f"bg{n}"}
+    return [_call(n, "Bash", args, seconds_ago + 1), result]
+
+
+def background_chat(shells: int, agents: int) -> list[dict[str, JsonValue]]:
+    """A finished turn that left ``shells`` shells and ``agents`` agents running behind it."""
+    records = [_at(human_says("Start the docs server and the watchers.", uuid="sh"), 900)]
+    for n, (description, command) in enumerate(BACKGROUND_SHELLS[:shells], start=1):
+        records.extend(_shell(n, description, command, 880 - 60 * n))
+    for n, (agent, description) in enumerate(SPAWNED_WORKERS[:agents], start=10):
+        records.extend(_launch(n, agent, description, 700 - n))
+    records.append(_at(assistant_says("All started; they run on.", uuid="sa"), 600, "sm9"))
+    return records
+
+
+def _background_at(shells: int, agents: int) -> Prime:
+    def prime(rig: Rig) -> None:
+        roots = rig.settings.state_dir.parent / "transcripts"
+        write_transcript(roots, WORKING_SESSION, background_chat(shells, agents))
+
+    return prime
+
+
 def _turn_at(stage: str) -> Prime:
     """Write the turn as the state is built, so its stamps are seconds old when shot."""
 
@@ -2082,6 +2121,48 @@ TURNS: Final = (
         runner(_working_as("idle")),
         prime=_turn_at("done"),
         title="Chat with an idle agent whose last turn is over",
+    ),
+    State(
+        "chat-idle-shells",
+        f"{AGENT}?tab=chat",
+        "#agent-tray .tray__row--background",
+        runner(_working_as("idle")),
+        prime=_background_at(2, 0),
+        title="Idle, with two shells it started still running: the row says so",
+    ),
+    State(
+        "chat-idle-agent",
+        f"{AGENT}?tab=chat",
+        "#agent-tray .tray__row--background",
+        runner(_working_as("idle")),
+        prime=_background_at(0, 1),
+        title="Idle, with an agent it started still running",
+    ),
+    State(
+        "chat-idle-both",
+        f"{AGENT}?tab=chat",
+        "#agent-tray .tray__row--background",
+        runner(_working_as("idle")),
+        prime=_background_at(3, 2),
+        title="Idle, with shells and agents it started still running",
+    ),
+    State(
+        "chat-idle-both-sheet",
+        f"{AGENT}?tab=chat",
+        "#agent-tray details[open] .spawned",
+        runner(_working_as("idle")),
+        prime=_background_at(3, 2),
+        title="The sheet of an idle agent: the shells and agents still running, by name and time",
+        armed="#agent-tray .tray__row",
+        act=_click("#agent-tray .tray__row"),
+    ),
+    State(
+        "feed-idle-background",
+        "/",
+        "#feed-list .card__status--background",
+        runner(_working_as("idle")),
+        prime=_background_at(2, 1),
+        title="The feed: an idle agent with work still running says background, not idle",
     ),
     State(
         "chat-needs-you",

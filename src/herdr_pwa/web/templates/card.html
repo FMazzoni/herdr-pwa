@@ -1,7 +1,8 @@
 {% import "_ui.html" as ui %}
 {% set title = card_title(row) %}
 {% call ui.card(row.effective_status.value, href=("/agent/" ~ (row.session|urlencode)) if row.session else none, key=row.target) %}
-    {{ ui.card_top(row.effective_status.value, title or row.harness or row.target) }}
+    {#- Idle or done, but what it started still runs: said quietly in place of the status word. #}
+    {{ ui.card_top(row.effective_status.value, title or row.harness or row.target, background=card_background(row) if card_background is defined else false) }}
     <span class="card__meta">
       {% if title and row.harness %}<span class="card__harness">{{ row.harness }}</span>{% endif %}
       {% if row.workspace %}<span class="card__ws">{{ row.workspace }}</span>{% endif %}

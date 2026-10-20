@@ -18,6 +18,7 @@ from herdr_pwa.engine import (
     UsageCache,
 )
 from herdr_pwa.notify_state import SeenLedger
+from herdr_pwa.process_start import ProcessStarts
 from herdr_pwa.settings import Settings
 from herdr_pwa.web.failures import PageHidden
 from herdr_pwa.web.render import Pages
@@ -52,6 +53,8 @@ class WebState:
     wall: Clock = field(default=time.time)
     # What the phone has shown; absent with push off, and then nothing is ever read.
     seen: SeenLedger | None = None
+    # When each pane's agent process started; absent, work a dead process left is counted too.
+    starts: ProcessStarts | None = None
 
     def snapshot(self) -> CachedValue[Snapshot]:
         """The shared snapshot, fetched only if nobody else is fetching it."""
