@@ -82,13 +82,14 @@ class Drawn(Enum):
 
 def drawn_question(screen: str) -> Drawn:
     """What this screen draws that a typed prompt would answer instead."""
-    # A question takes the input box's place, so above an empty box is only what was said.
-    if idle_composer(screen.splitlines()):
-        return Drawn.NOTHING
     prompt = BlockedPrompt.parse(screen)
+    # A recognised dialog wins: hermes draws its dialogs above a live input box.
     if prompt.answerable or prompt.is_choice or prompt.shape is not MenuShape.NONE:
         return Drawn.DIALOG
-    return Drawn.ROWS if prompt.drew_rows else Drawn.NOTHING
+    # Bare rows above an empty input box were said, not asked: a question takes the box's place.
+    if not prompt.drew_rows or idle_composer(screen.splitlines()):
+        return Drawn.NOTHING
+    return Drawn.ROWS
 
 
 def asks_a_question(screen: str) -> bool:
@@ -110,6 +111,18 @@ KEYED: Final = (
     "herdr says this agent is {herdr} and its own record shows nothing waiting, but the screen "
     "draws a dialog with keys of its own."
 )
+RECORDED: Final = (
+    "herdr says this agent is {herdr} and the screen shows no question, but its own record holds "
+    "a call still waiting on an answer."
+)
+HELD_BOTH: Final = (
+    "herdr says this agent is waiting and its own record holds a call still waiting on an answer, "
+    "though the screen shows no question."
+)
+INSISTED: Final = (
+    "herdr said this agent was waiting on a question, but the screen showed none, so this was "
+    "sent on your second tap."
+)
 SCREEN_ALONE: Final = (
     "The screen looked like a question, but herdr says this agent is {herdr} and its own record "
     "shows nothing waiting, so this was sent."
@@ -127,25 +140,57 @@ class QuestionCall:
     record: bool | None = None
     # Which signal disagreed with the call, in words for the person; empty when none did.
     doubt: str = ""
+    # A refusal a second deliberate send may override: only herdr's word stood against it.
+    overridable: bool = False
 
 
 def question_call(
-    screen: str, herdr: AgentStatus, record: Callable[[], bool | None]
+    screen: str, herdr: AgentStatus, record: Callable[[], bool | None], *, insisted: bool = False
 ) -> QuestionCall:
-    """Refuse a prompt where the signals there are agree a question waits; name any that did not."""
+    """Refuse a prompt where the signals there are agree a question waits; name any that did not.
+
+    Args:
+        insisted: The person sent it again after a refusal herdr's word alone made.
+    """
     drawn = drawn_question(screen)
-    on_screen = drawn is not Drawn.NOTHING
     if herdr is AgentStatus.UNKNOWN:
         # A shell, or a harness herdr has no word for: the screen is all there is.
-        return QuestionCall(refuse=on_screen, herdr=herdr, screen=drawn)
+        return QuestionCall(refuse=drawn is not Drawn.NOTHING, herdr=herdr, screen=drawn)
+    if drawn is Drawn.NOTHING:
+        return _unasked(herdr, record, insisted=insisted)
     if herdr is AgentStatus.BLOCKED:
-        # A Return typed into a dialog the parse missed would answer it, so herdr's wait holds.
-        doubt = "" if on_screen else HERDR_ALONE
-        return QuestionCall(refuse=True, herdr=herdr, screen=drawn, doubt=doubt)
-    if not on_screen:
-        return QuestionCall(refuse=False, herdr=herdr, screen=drawn)
+        return QuestionCall(refuse=True, herdr=herdr, screen=drawn)
     # Read only here: the one call the harness's record decides.
     return _recorded(drawn, herdr, record())
+
+
+def _unasked(
+    herdr: AgentStatus, record: Callable[[], bool | None], *, insisted: bool
+) -> QuestionCall:
+    nothing = Drawn.NOTHING
+    # A working agent's running call is no question, and its screen is not read for one.
+    if herdr is AgentStatus.WORKING:
+        return QuestionCall(refuse=False, herdr=herdr, screen=nothing)
+    # herdr reads Claude's screen with the same box rule, so the record is the vote that differs.
+    pending = record()
+    if herdr is not AgentStatus.BLOCKED:
+        doubt = RECORDED.format(herdr=herdr) if pending else ""
+        return QuestionCall(
+            refuse=bool(pending), herdr=herdr, screen=nothing, record=pending, doubt=doubt
+        )
+    if pending:
+        return QuestionCall(
+            refuse=True, herdr=herdr, screen=nothing, record=pending, doubt=HELD_BOTH
+        )
+    # A herdr stuck on its wait must not lock the agent out: a second deliberate send passes.
+    return QuestionCall(
+        refuse=not insisted,
+        herdr=herdr,
+        screen=nothing,
+        record=pending,
+        doubt=INSISTED if insisted else HERDR_ALONE,
+        overridable=not insisted,
+    )
 
 
 def _recorded(drawn: Drawn, herdr: AgentStatus, pending: bool | None) -> QuestionCall:

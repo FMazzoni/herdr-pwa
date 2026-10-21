@@ -69,7 +69,7 @@ class _Send:
     drawn_against: str
     # A working agent's screen moves, so no digest is issued for it to carry back.
     issue: bool
-    # Sent anyway after an attempt whose outcome is unknown; said in so many words.
+    # Sent anyway after an attempt whose outcome is unknown, or past herdr's lone wait; said so.
     again: bool = False
     # What herdr said of the agent, and its harness, whose own record may settle a question.
     status: AgentStatus = AgentStatus.UNKNOWN
@@ -98,7 +98,7 @@ def screen_claim(screen: str) -> str:
 
 def _asked(writer: Writer, send: _Send, screen: str) -> QuestionCall:
     source = Source.of(send.session, agent_kind=send.kind, root=writer.stores or None)
-    call = question_call(screen, send.status, lambda: awaits_answer(source))
+    call = question_call(screen, send.status, lambda: awaits_answer(source), insisted=send.again)
     if call.doubt:
         log.warning(
             "question signals disagree on %s: herdr=%s screen=%s record=%s refused=%s",
@@ -114,7 +114,9 @@ def _asked(writer: Writer, send: _Send, screen: str) -> QuestionCall:
 def _preflight(send: _Send, screen: str, unsure: Unsure, asked: QuestionCall) -> Refused | None:
     # A question is no screen to type against, and answering it changes it: it issues no digest.
     if asked.refuse:
-        return Refused(Refusal.QUESTION_SHOWING, _VERB, reason=asked.doubt)
+        return Refused(
+            Refusal.QUESTION_SHOWING, _VERB, reason=asked.doubt, overridable=asked.overridable
+        )
     digest = screen_digest(screen) if send.issue else ""
     if send.drawn_against and send.drawn_against != screen_digest(screen):
         return Refused(Refusal.SCREEN_CHANGED, _VERB, screen=digest)

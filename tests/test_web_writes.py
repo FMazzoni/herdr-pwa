@@ -21,7 +21,7 @@ from herdr_pwa.panetext import as_text_read
 from herdr_pwa.settings import Settings
 from herdr_pwa.web.app import create_app
 from herdr_pwa.web.seams import Seams
-from herdr_pwa.writes.guard import HERDR_ALONE, SCREEN_ALONE
+from herdr_pwa.writes.guard import HERDR_ALONE, INSISTED, SCREEN_ALONE
 from herdr_pwa.writes.keys import control_token
 from herdr_pwa.writes.lifecycle import on_path
 from herdr_pwa.writes.outcome import Pacing
@@ -129,7 +129,7 @@ def test_a_prompt_at_a_question_is_409_and_keeps_the_text(tmp_path: Path) -> Non
     assert w.herd.writes("agent.prompt") == []
 
 
-def test_a_refusal_herdr_alone_makes_says_so(tmp_path: Path) -> None:
+def test_a_refusal_herdr_alone_makes_says_so_and_yields_to_a_second_tap(tmp_path: Path) -> None:
     herd = FakeHerd()
     herd.put(P3, S1, status="blocked")
     herd.screens[P3] = [SETTLED]
@@ -137,6 +137,15 @@ def test_a_refusal_herdr_alone_makes_says_so(tmp_path: Path) -> None:
     response = w.http.post(f"/agent/{S1}/prompt", data={"text": "go on"}, headers=ORIGIN)
     assert response.status_code == 409
     assert HERDR_ALONE in response.text
+    assert 'name="again" value="1"' in response.text, "the second tap is offered"
+    assert "Send again anyway" in response.text
+    assert "composer--held" not in response.text, "Send stays on"
+    assert w.herd.writes("agent.prompt") == []
+    herd.screens[P3] = [SETTLED, echoed("\u276f go on")]
+    again = w.http.post(f"/agent/{S1}/prompt", data={"text": "go on", "again": "1"}, headers=ORIGIN)
+    assert again.status_code == 200
+    assert INSISTED in again.text
+    assert w.herd.writes("agent.prompt") == [{"target": "w1:p3", "text": "go on"}]
 
 
 # One Bash call and its result: a Claude Code log with nothing left waiting.

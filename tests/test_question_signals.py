@@ -10,9 +10,12 @@ from pydantic import JsonValue
 
 from herdr_pwa.engine import AgentStatus, Source, awaits_answer
 from herdr_pwa.writes.guard import (
+    HELD_BOTH,
     HERDR_ALONE,
+    INSISTED,
     KEYED,
     OVERRULED,
+    RECORDED,
     SCREEN_ALONE,
     UNSETTLED,
     Drawn,
@@ -49,21 +52,20 @@ def _rows(herdr: AgentStatus, *calls: tuple[Drawn, bool | None, bool, bool, str]
 
 
 DIALOG, ROWED, NOTHING = Drawn.DIALOG, Drawn.ROWS, Drawn.NOTHING
-STOPS = (AgentStatus.IDLE, AgentStatus.DONE, AgentStatus.WORKING)
+ASKED = (DIALOG, ROWED)
+EACH = (True, False, None)
 # The whole table, every combination of the three signals.
 TABLE_ROWS: list[Row] = [
     *_rows(
         AgentStatus.BLOCKED,
-        *(
-            (drawn, record, True, False, "")
-            for drawn in (DIALOG, ROWED)
-            for record in (True, False, None)
-        ),
-        *((NOTHING, record, True, False, HERDR_ALONE) for record in (True, False, None)),
+        *((drawn, record, True, False, "") for drawn in ASKED for record in EACH),
+        (NOTHING, True, True, True, HELD_BOTH),
+        (NOTHING, False, True, True, HERDR_ALONE),
+        (NOTHING, None, True, True, HERDR_ALONE),
     ),
     *(
         row
-        for herdr in STOPS
+        for herdr in (AgentStatus.IDLE, AgentStatus.DONE, AgentStatus.WORKING)
         for row in _rows(
             herdr,
             (DIALOG, True, True, True, OVERRULED),
@@ -72,17 +74,24 @@ TABLE_ROWS: list[Row] = [
             (ROWED, True, True, True, OVERRULED),
             (ROWED, False, False, True, SCREEN_ALONE),
             (ROWED, None, True, True, UNSETTLED),
-            *((NOTHING, record, False, False, "") for record in (True, False, None)),
         )
     ),
+    *(
+        row
+        for herdr in (AgentStatus.IDLE, AgentStatus.DONE)
+        for row in _rows(
+            herdr,
+            (NOTHING, True, True, True, RECORDED),
+            (NOTHING, False, False, True, ""),
+            (NOTHING, None, False, True, ""),
+        )
+    ),
+    # A working agent's running call is normal, so its record is not read for an empty screen.
+    *_rows(AgentStatus.WORKING, *((NOTHING, record, False, False, "") for record in EACH)),
     *_rows(
         AgentStatus.UNKNOWN,
-        *(
-            (drawn, record, True, False, "")
-            for drawn in (DIALOG, ROWED)
-            for record in (True, False, None)
-        ),
-        *((NOTHING, record, False, False, "") for record in (True, False, None)),
+        *((drawn, record, True, False, "") for drawn in ASKED for record in EACH),
+        *((NOTHING, record, False, False, "") for record in EACH),
     ),
 ]
 
@@ -114,6 +123,65 @@ def test_the_decision_table(row: Row) -> None:
     assert (call.refuse, bool(reads)) == (row.refuse, row.read)
     assert call.doubt == row.doubt.format(herdr=row.herdr)
     assert (call.herdr, call.screen) == (row.herdr, row.screen)
+
+
+@pytest.mark.parametrize("record", [False, None])
+def test_a_lone_herdr_wait_is_overridden_by_a_second_deliberate_send(record: bool | None) -> None:
+    first = question_call(SETTLED, AgentStatus.BLOCKED, lambda: record)
+    assert (first.refuse, first.overridable, first.doubt) == (True, True, HERDR_ALONE)
+    second = question_call(SETTLED, AgentStatus.BLOCKED, lambda: record, insisted=True)
+    assert (second.refuse, second.overridable, second.doubt) == (False, False, INSISTED)
+
+
+@pytest.mark.parametrize("screen", [ASKING, ROWS])
+def test_insisting_never_overrides_a_question_the_screen_or_record_shows(screen: str) -> None:
+    for herdr in AgentStatus:
+        assert question_call(screen, herdr, lambda: None, insisted=True).refuse
+    held = question_call(SETTLED, AgentStatus.BLOCKED, lambda: True, insisted=True)
+    assert (held.refuse, held.overridable) == (True, False)
+    recorded = question_call(SETTLED, AgentStatus.IDLE, lambda: True, insisted=True)
+    assert (recorded.refuse, recorded.overridable) == (True, False)
+
+
+# The review's attacks: a dialog the parse recognised, above an empty-looking input box.
+R = "\u2500" * 40
+APPROVAL = (FIXTURES / "hermes" / "stopped-approval.txt").read_text(encoding="utf-8")
+CLARIFY = (FIXTURES / "hermes" / "blocked-clarify.txt").read_text(encoding="utf-8")
+CONFIRM = (FIXTURES / "hermes" / "blocked-slash-confirm.txt").read_text(encoding="utf-8")
+HEREDOC = f"""\u25cf I'll write it.
+{R}
+ Bash command
+
+   cat > note.md <<'EOF'
+   {"\u2500" * 30}
+   >
+   {"\u2500" * 30}
+   EOF
+ Do you want to proceed?
+ \u276f 1. Yes
+   2. No
+ Esc to cancel
+"""
+BARE_BOX = {
+    "hermes-approval": (APPROVAL, "\u26a0 \u276f"),
+    "hermes-clarify": (CLARIFY, "? \u276f"),
+    "hermes-slash-confirm": (CONFIRM, "\u26a0 \u276f type 1/2/3, or use \u2191/\u2193 then Enter"),
+}
+
+
+@pytest.mark.parametrize("name", list(BARE_BOX))
+@pytest.mark.parametrize("herdr", [AgentStatus.DONE, AgentStatus.IDLE])
+def test_a_hermes_dialog_above_a_bare_prompt_still_refuses(name: str, herdr: AgentStatus) -> None:
+    screen, marker = BARE_BOX[name]
+    assert marker in screen, "the premise: the capture draws its prompt with a marker"
+    bare = screen.replace(marker, "\u276f")
+    assert drawn_question(bare) is Drawn.DIALOG
+    assert question_call(bare, herdr, lambda: None).refuse
+
+
+def test_a_bash_permission_whose_command_draws_a_box_still_refuses() -> None:
+    assert drawn_question(HEREDOC) is Drawn.DIALOG
+    assert question_call(HEREDOC, AgentStatus.IDLE, lambda: False).refuse
 
 
 def test_a_call_names_every_signal_it_was_made_on() -> None:

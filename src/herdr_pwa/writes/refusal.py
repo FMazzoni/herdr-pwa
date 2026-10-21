@@ -221,12 +221,14 @@ class Refused:
     verb: str = "sent"
     # Why, for the operator log; never shown to the caller.
     detail: str = ""
-    # A confirm's own reason (the workspace's cost).
+    # Shown after the sentence: a confirm's own reason (the workspace's cost), or which signal disagreed.
     reason: str = ""
     # The screen digest a retry or a confirm must carry back.
     screen: str = ""
     # The question as read inside this request, so controls are redrawn against it.
     prompt: BlockedPrompt | None = None
+    # Only herdr's word refused it, so the next send may say, in so many words, that it insists.
+    overridable: bool = False
 
     @property
     def status(self) -> int:
@@ -246,7 +248,7 @@ class Refused:
     @property
     def asks_again(self) -> bool:
         """True when the next send of this text has to say, in so many words, that it is again."""
-        return self.unsure or self.refusal is Refusal.RESEND
+        return self.unsure or self.overridable or self.refusal is Refusal.RESEND
 
     @property
     def held(self) -> bool:
