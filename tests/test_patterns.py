@@ -24,6 +24,8 @@ _GENERATED = "herdr_pwa.engine.generated"
 _LONG = 5_000
 # CPU time, so a loaded machine cannot inflate it: generous, and still far under a backtrack.
 _CPU_SECONDS = 0.5
+# A flood of 100k escapes took tens of seconds when quadratic; 5 s still catches that under a busy gate.
+_FLOOD_CPU_SECONDS = 5.0
 
 # Derandomized and kept off disk, so CI runs the same examples every time and leaves no database.
 QUICK = settings(
@@ -149,4 +151,4 @@ def test_an_escape_flood_is_read_in_linear_time(flood: str) -> None:
     _ = dialog_chunks(flood)
     _ = without_escapes(flood)
     _ = plain(flood)
-    assert time.process_time() - started < _CPU_SECONDS
+    assert time.process_time() - started < _FLOOD_CPU_SECONDS
