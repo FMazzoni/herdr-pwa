@@ -82,7 +82,7 @@ def test_concurrent_misses_coalesce_onto_one_fetch(monkeypatch: pytest.MonkeyPat
         try:
             ready.wait(5)  # nobody starts until everybody can
             results.append(cache.get(load))
-        except BaseException as exc:
+        except BaseException as exc:  # noqa: BLE001 - carried to the test thread, which fails on it
             failures.append(exc)
 
     threads = [threading.Thread(target=caller) for _ in range(CALLERS)]
@@ -130,7 +130,7 @@ def test_followers_take_the_leaders_failure_rather_than_retrying(
         ready.wait(5)
         try:
             cache.get(load)
-        except BaseException as exc:
+        except BaseException as exc:  # noqa: BLE001 - carried to the test thread, which fails on it
             raised.append(exc)
 
     threads = [threading.Thread(target=caller) for _ in range(CALLERS)]

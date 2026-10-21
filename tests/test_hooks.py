@@ -121,7 +121,7 @@ def test_a_tag_outside_v_is_refused_on_a_commit_already_pushed(rig: Rig) -> None
         pytest.param("notes.txt", "plain\n", "Add notes", f"{MARKER}@example.com", id="email"),
     ],
 )
-def test_a_denied_identifier_is_refused(
+def test_a_denied_identifier_is_refused(  # noqa: PLR0913, PLR0917 - pytest passes each parametrize column as its own argument
     rig: Rig, name: str, text: str, message: str, email: str
 ) -> None:
     if email:

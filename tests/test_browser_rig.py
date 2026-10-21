@@ -70,7 +70,7 @@ def _queues_behind(path: Path, launched: threading.Event, start: Callable[[], No
             start()
         except _StopError:
             pass
-        except BaseException as exc:
+        except BaseException as exc:  # noqa: BLE001 - carried to the test thread, which fails on it
             failures.append(exc)
 
     with _other_job(path):

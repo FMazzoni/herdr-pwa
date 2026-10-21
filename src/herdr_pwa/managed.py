@@ -67,6 +67,6 @@ class ManagedHerd:
     def _pids(self, pane_id: str) -> tuple[int, ...]:
         try:
             return self._panes.pane_pids(pane_id)
-        except Exception:  # any runner failure reads as unmanaged, which still buzzes
+        except Exception:  # noqa: BLE001 - the engine's error type is a layer up; any failure reads as unmanaged, which still buzzes
             log.debug("no process info for %s; treating it as unmanaged", pane_id)
             return ()

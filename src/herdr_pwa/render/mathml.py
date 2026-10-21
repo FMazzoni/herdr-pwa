@@ -72,8 +72,7 @@ def _parse(tex: str, *, block: bool) -> MdNode | None:
         if "<!" in xml:
             return None
         root = ET.fromstring(xml)  # noqa: S314
-    # latex2mathml raises a dozen kinds on malformed TeX, and the source is always the fallback.
-    except Exception:
+    except Exception:  # noqa: BLE001 - latex2mathml raises a dozen kinds on bad TeX; the source is the fallback
         return None
     if _unknown_command(root):
         return None

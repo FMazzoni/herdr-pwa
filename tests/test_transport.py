@@ -596,7 +596,7 @@ def test_every_wait_in_a_call_is_armed_from_its_one_deadline(
 
 
 @pytest.mark.filterwarnings("ignore:This process .* is multi-threaded")
-def test_a_forked_child_gets_its_own_ids_and_its_own_connection(
+def test_a_forked_child_gets_its_own_ids_and_its_own_connection(  # noqa: PLR0915 - a fork scenario whose steps only make sense in order
     server: FakeHerdr, sock_path: Path
 ) -> None:
     """A preforking server must not hand two workers one stream and one id space."""
@@ -610,7 +610,7 @@ def test_a_forked_child_gets_its_own_ids_and_its_own_connection(
         try:
             wire.call("agent.list", {})
             os.write(write_fd, f"{wire._prefix}".encode())  # pyright: ignore[reportPrivateUsage]
-        except BaseException:
+        except BaseException:  # noqa: BLE001 - any failure in the child becomes its exit status
             status = 1
         os._exit(status)
 

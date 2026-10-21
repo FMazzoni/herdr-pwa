@@ -52,7 +52,7 @@ def settings_for(tmp_path: Path) -> Settings:
     )
 
 
-def test_a_scripted_phone_pairs_installs_subscribes_and_is_pushed_to(tmp_path: Path) -> None:
+def test_a_scripted_phone_pairs_installs_subscribes_and_is_pushed_to(tmp_path: Path) -> None:  # noqa: PLR0915 - one scripted phone, end to end
     with tailscaled(tmp_path, canned=status_route(), serve_config={}) as fake:
         paired = pair(fake.api, port=8772)
         assert fake.serve_config == {
