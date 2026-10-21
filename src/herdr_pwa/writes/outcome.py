@@ -16,7 +16,6 @@ class Outcome(StrEnum):
     ACCEPTED = "accepted"
     CONFIRMED = "confirmed"
     UNCONFIRMED = "unconfirmed"
-    PARTIALLY_APPLIED = "partially_applied"
 
 
 class Evidence(StrEnum):

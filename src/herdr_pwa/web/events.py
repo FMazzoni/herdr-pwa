@@ -185,7 +185,7 @@ class Hub:
         """The bytes of one page's stream, until it closes, ages out or the page goes."""
         try:
             # A comment first, so the headers and the first byte pass any buffering proxy.
-            yield b": open\nretry: 5000\n\n"
+            yield b": open\n\n"
             while not listener.closed:
                 if self._clock() - listener.joined > self._config.lifetime:
                     # Said apart from a lost stream, so the page reconnects without redrawing all.

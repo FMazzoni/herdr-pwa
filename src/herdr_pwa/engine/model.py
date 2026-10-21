@@ -12,7 +12,6 @@ from typing import Final, Self, cast
 from pydantic import BaseModel, ConfigDict, computed_field
 
 from herdr_pwa.ids import PaneId, SessionId, WorkspaceId
-from herdr_pwa.protocol import EXPECTED_PROTOCOL as _EXPECTED_PROTOCOL
 
 type _Raw = Mapping[str, object]
 
@@ -55,9 +54,6 @@ def _panes(value: object) -> list[_Raw]:
 def screen_digest(screen: str) -> str:
     """A change detector for one rendered terminal screen."""
     return hashlib.sha256(screen.encode("utf-8", "replace")).hexdigest()[:16]
-
-
-EXPECTED_PROTOCOL: Final = _EXPECTED_PROTOCOL
 
 
 # A UUID's hex groups, as its canonical form spells them (RFC 9562, section 4).
@@ -339,13 +335,12 @@ class Snapshot(BaseModel):
 
     protocol: int = 0
     version: str = ""
-    expected_protocol: int = EXPECTED_PROTOCOL
     agents: tuple[Agent, ...] = ()
     workspaces: tuple[Workspace, ...] = ()
     focused_pane_id: str | None = None
 
     @classmethod
-    def from_raw(cls, raw: _Raw, *, expected_protocol: int | None = None) -> Self:
+    def from_raw(cls, raw: _Raw) -> Self:
         """Build from the inner ``snapshot`` object of a runner payload."""
         workspaces = tuple(Workspace.from_raw(w) for w in _records(raw.get("workspaces")))
         by_id = {w.workspace_id: w for w in workspaces}
@@ -359,9 +354,6 @@ class Snapshot(BaseModel):
             {
                 "protocol": _to_int(raw.get("protocol") or 0),
                 "version": str(raw.get("version") or ""),
-                "expected_protocol": (
-                    EXPECTED_PROTOCOL if expected_protocol is None else expected_protocol
-                ),
                 "agents": tuple(agents),
                 "workspaces": workspaces,
                 "focused_pane_id": raw.get("focused_pane_id"),

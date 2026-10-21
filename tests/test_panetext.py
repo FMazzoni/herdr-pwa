@@ -298,9 +298,6 @@ class _Recorder:
         }
         return as_reply({"id": "x", "result": {"type": "pane_read", "read": read}})
 
-    def close(self) -> None:
-        return None
-
     @property
     def reads(self) -> list[dict[str, JsonValue]]:
         return [params for method, params in self.calls if method.endswith("read")]

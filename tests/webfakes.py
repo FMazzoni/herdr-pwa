@@ -128,9 +128,6 @@ class FakeWire:
             hook(self)
         return as_reply(reply(params) if callable(reply) else copy.deepcopy(reply))
 
-    def close(self) -> None:
-        return None
-
 
 # How long a held write waits for its release before answering anyway, so no server thread
 # outlives the browser run that left it held.

@@ -48,8 +48,6 @@ OPENCODE_ROOT: Final = "~/.local/share/opencode"
 
 OPENCODE_DB: Final = "opencode.db"
 
-OPENCODE_STORAGE_ROOT: Final = f"{OPENCODE_ROOT}/storage"
-
 _ID: Final = re.compile(r"(?:ses|msg|prt)_[A-Za-z0-9]+")
 
 _QUIET_TYPES: Final = frozenset(

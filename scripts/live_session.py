@@ -101,8 +101,6 @@ def api(session: str, method: str, params: Frame | None = None, *, check: bool =
         if check:
             raise
         return {}
-    finally:
-        link.close()
 
 
 def result(payload: Frame) -> dict[str, Any]:
