@@ -25,9 +25,9 @@ DENIED_UNDER_HOME: Final = (
     ".docker",
     ".kube",
 )
-# Names that may hold a secret: shown only after a tap that says so.
+# Names that may hold a secret, shown only after a tap; DOTALL, since a name may hold a \n.
 _SECRET: Final = re.compile(
-    r"""(?ix) ^(
+    r"""(?isx) ^(
         \.env.* | id_.* | credentials.* | secrets\..*
       | \.npmrc | \.pypirc | \.htpasswd | \.netrc | \.git-credentials
       | .*\.(pem | key | p12 | pfx | kdbx)
