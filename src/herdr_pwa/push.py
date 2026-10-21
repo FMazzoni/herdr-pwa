@@ -5,7 +5,6 @@ import json
 import logging
 import re
 import threading
-import time
 import unicodedata
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -34,7 +33,7 @@ from pydantic import (
 from pywebpush import WebPushException
 
 from herdr_pwa import statedir
-from herdr_pwa.clock import Clock, ago
+from herdr_pwa.clock import MonoClock, WallClock, ago, mono_now, wall_now
 from herdr_pwa.panetext import without_escapes
 from herdr_pwa.patterns import Rx
 from herdr_pwa.validation import is_not_json, or_default, summary
@@ -213,7 +212,7 @@ def _vapid_problem(path: Path, exc: OSError | ValidationError) -> str:
     return f"{path}: {summary(exc)}"
 
 
-def _minted(path: Path, *, clock: Clock) -> _VapidFile:
+def _minted(path: Path, *, clock: WallClock) -> _VapidFile:
     key = ec.generate_private_key(ec.SECP256R1())
     private_raw = key.private_numbers().private_value.to_bytes(32, "big")
     public_raw = key.public_key().public_bytes(Encoding.X962, PublicFormat.UncompressedPoint)
@@ -234,7 +233,7 @@ def _minted(path: Path, *, clock: Clock) -> _VapidFile:
     return minted
 
 
-def load_or_create_vapid_keys(state_dir: Path, *, clock: Clock = time.time) -> VapidKeys:
+def load_or_create_vapid_keys(state_dir: Path, *, clock: WallClock = wall_now) -> VapidKeys:
     """The keypair, created once with O_EXCL and reused forever after.
 
     Raises:
@@ -343,9 +342,9 @@ class _StoreDocument(BaseModel):
 class SubscriptionStore:
     """Every subscribed device in one 0600 JSON file, keyed by endpoint."""
 
-    def __init__(self, state_dir: Path, *, clock: Clock = time.time) -> None:
+    def __init__(self, state_dir: Path, *, clock: WallClock = wall_now) -> None:
         self._state_dir: Path = state_dir
-        self._clock: Clock = clock
+        self._clock: WallClock = clock
         # The routes and the notifier's pruning thread both rewrite the file from what they read.
         self._lock: threading.Lock = threading.Lock()
 
@@ -657,9 +656,9 @@ def health_line(record: DeliveryRecord | None, *, now: float) -> str:
 class DeliveryLog:
     """Every delivery outcome, written to disk as it happens so another process can read it."""
 
-    def __init__(self, state_dir: Path, *, clock: Clock = time.time) -> None:
+    def __init__(self, state_dir: Path, *, clock: WallClock = wall_now) -> None:
         self.path: Path = state_dir / HEALTH_FILENAME
-        self._clock: Clock = clock
+        self._clock: WallClock = clock
         self._current: DeliveryRecord | None = None
 
     def load(self) -> DeliveryRecord | None:
@@ -725,7 +724,7 @@ class Outlet:
     health: DeliveryLog
     limits: PushLimits = PUSH_LIMITS
     # What the budget is measured on.
-    clock: Clock = time.monotonic
+    clock: MonoClock = mono_now
 
 
 def _one(data: str, subscription: Subscription, outlet: Outlet, *, now: float) -> str:

@@ -91,7 +91,7 @@ def build_loop(tmp_path: Path, notify: NotifyConfig | None = None) -> Loop:
     wire = FakeWire({SNAPSHOT: snapshot_frame(), READ: read_frame("Proceed with the edit?")})
     engine = EngineSettings(socket_path=tmp_path / "no.sock", command_timeout=1.0)
     client = HerdrClient(engine, transport=wire, clock=clock)
-    stores = PushStores.open(tmp_path / "state", clock=clock)
+    stores = PushStores.open(tmp_path / "state", clock=clock.wall)
     sender = Sender()
     # No desk hold unless a test asks for one: a held alert would hide what the tick decided.
     chosen = notify or NotifyConfig(debounce=0.0, desk_window=0.0)
@@ -102,7 +102,7 @@ def build_loop(tmp_path: Path, notify: NotifyConfig | None = None) -> Loop:
         ),
         stores=stores,
         config=config,
-        seams=Seams(wall=clock, deliver=sender),
+        seams=Seams(wall=clock.wall, deliver=sender),
     )
     return Loop(notifier, wire, clock, sender, stores)
 

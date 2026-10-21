@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from pydantic import JsonValue, TypeAdapter
 
+from herdr_pwa.clock import MonoTime
 from herdr_pwa.engine import (
     CachedSnapshot,
     EngineUnavailable,
@@ -26,8 +27,8 @@ class Clock:
     def __init__(self, now: float = 1000.0) -> None:
         self.now = now
 
-    def __call__(self) -> float:
-        return self.now
+    def __call__(self) -> MonoTime:
+        return MonoTime(self.now)
 
     def advance(self, seconds: float) -> None:
         self.now += seconds

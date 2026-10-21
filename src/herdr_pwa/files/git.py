@@ -2,7 +2,6 @@
 
 import logging
 import os
-import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,7 +11,7 @@ from typing import Final, cast
 import pygit2
 from pygit2.enums import DeltaStatus, DiffFind, DiffOption, RepositoryOpenFlag
 
-from herdr_pwa.clock import Clock
+from herdr_pwa.clock import MonoClock, mono_now
 
 log = logging.getLogger(__name__)
 
@@ -192,7 +191,7 @@ def _listed(repo: pygit2.Repository) -> tuple[Path, ...]:
 class Git:
     """Reads a repository in-process, caching each answer for a few seconds."""
 
-    def __init__(self, clock: Clock = time.monotonic) -> None:
+    def __init__(self, clock: MonoClock = mono_now) -> None:
         self._clock = clock
         self._memo: dict[tuple[str, ...], tuple[float, object]] = {}
 

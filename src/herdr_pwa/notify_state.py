@@ -4,7 +4,6 @@ seen, and which kinds of alert the user lets through. Every file is 0600 in the 
 
 import logging
 import threading
-import time
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Annotated, Final, Literal, Protocol
@@ -21,7 +20,7 @@ from pydantic import (
 )
 
 from herdr_pwa import statedir
-from herdr_pwa.clock import Clock
+from herdr_pwa.clock import WallClock, wall_now
 from herdr_pwa.ids import SessionId
 from herdr_pwa.push import EVENT_BLOCKED, EVENT_DONE, PushEvent
 from herdr_pwa.validation import or_default
@@ -70,11 +69,11 @@ class StatusLedger:
     """The last status each agent was seen in, on disk so a restart is not a buzz storm."""
 
     def __init__(
-        self, state_dir: Path, *, max_age: float = 900.0, clock: Clock = time.time
+        self, state_dir: Path, *, max_age: float = 900.0, clock: WallClock = wall_now
     ) -> None:
         self.path: Path = state_dir / LEDGER_FILENAME
         self._max_age: float = max_age
-        self._clock: Clock = clock
+        self._clock: WallClock = clock
 
     def load(self) -> dict[str, str] | None:
         """The prior to diff against, or None for absent, corrupt or stale: prime instead."""
@@ -129,9 +128,9 @@ class _SeenFile(_StateFile):
 class SeenLedger:
     """Which finished work the phone has not opened yet; herdr's done only covers the desk."""
 
-    def __init__(self, state_dir: Path, *, clock: Clock = time.time) -> None:
+    def __init__(self, state_dir: Path, *, clock: WallClock = wall_now) -> None:
         self.path: Path = state_dir / SEEN_FILENAME
-        self._clock: Clock = clock
+        self._clock: WallClock = clock
         self._lock: threading.Lock = threading.Lock()
         self._records: dict[str, SeenRecord] | None = None
         self._dirty: bool = False
@@ -260,9 +259,9 @@ class _InterruptsFile(_StateFile):
 class InterruptStore:
     """The preferences on the box at 0600, because one push fans out to every device."""
 
-    def __init__(self, state_dir: Path, *, clock: Clock = time.time) -> None:
+    def __init__(self, state_dir: Path, *, clock: WallClock = wall_now) -> None:
         self.path: Path = state_dir / INTERRUPTS_FILENAME
-        self._clock: Clock = clock
+        self._clock: WallClock = clock
         # The preference routes rewrite it from worker threads, each from what it read.
         self._lock: threading.Lock = threading.Lock()
 

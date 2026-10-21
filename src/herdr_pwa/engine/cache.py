@@ -4,19 +4,16 @@ from __future__ import annotations
 
 import logging
 import threading
-import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Final, cast
 
-from herdr_pwa.clock import Clock
+from herdr_pwa.clock import MonoClock, mono_now
 from herdr_pwa.engine.model import Snapshot
 from herdr_pwa.engine.transport import EngineUnavailable
 
 log = logging.getLogger(__name__)
 
-
-_CLOCK: Final = time.monotonic
 
 _SNAPSHOT: Final = "snapshot"
 
@@ -69,7 +66,7 @@ class _Fetch:
 class SnapshotCache:
     """One shared value per fact per app, refreshed lazily, with misses coalesced."""
 
-    def __init__(self, *, ttl: float, clock: Clock = _CLOCK) -> None:
+    def __init__(self, *, ttl: float, clock: MonoClock = mono_now) -> None:
         """Build a cache with its TTL and its clock, both injected."""
         self._ttl = ttl
         self._clock = clock

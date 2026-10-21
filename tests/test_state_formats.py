@@ -15,6 +15,7 @@ from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from pydantic import JsonValue, TypeAdapter
 
 from herdr_pwa import audit, devreport, push
+from herdr_pwa.clock import WallTime
 from herdr_pwa.ids import SessionId
 from herdr_pwa.notify_state import Interrupts, InterruptStore, SeenLedger, StatusLedger
 from tests.fakes import Clock
@@ -75,7 +76,7 @@ def test_the_vapid_file_loads_and_is_never_rewritten(tmp_path: Path) -> None:
 
 
 def test_a_minted_vapid_file_has_the_keys_the_previous_build_wrote(tmp_path: Path) -> None:
-    keys = push.load_or_create_vapid_keys(tmp_path / "state", clock=lambda: NOW)
+    keys = push.load_or_create_vapid_keys(tmp_path / "state", clock=lambda: WallTime(NOW))
     assert keys_of(keys.path) == keys_of(written(tmp_path / "old.json", vapid_document()))
     assert stat.S_IMODE(keys.path.stat().st_mode) == 0o600
 

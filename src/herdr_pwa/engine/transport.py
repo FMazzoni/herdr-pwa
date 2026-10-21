@@ -7,7 +7,6 @@ import logging
 import os
 import socket
 import threading
-import time
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from pathlib import Path
 from secrets import token_hex
@@ -15,7 +14,7 @@ from typing import Final, NamedTuple, Protocol, runtime_checkable
 
 from pydantic import BaseModel, JsonValue, TypeAdapter, ValidationError
 
-from herdr_pwa.clock import Clock
+from herdr_pwa.clock import MonoClock, mono_now
 from herdr_pwa.engine.generated import ErrorBody, SuccessResponse
 from herdr_pwa.engine.generated.success_response import (
     ResponseResult,
@@ -279,7 +278,7 @@ class SocketTransport:
         path: Path | str,
         *,
         timeout: float,
-        clock: Clock = time.monotonic,
+        clock: MonoClock = mono_now,
     ) -> None:
         self.path = Path(path)
         self.timeout = timeout

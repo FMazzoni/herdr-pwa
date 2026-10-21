@@ -18,6 +18,7 @@ from pathlib import Path
 import pytest
 from pydantic import JsonValue, TypeAdapter
 
+from herdr_pwa.clock import MonoClock, MonoTime, mono_now
 from herdr_pwa.engine import (
     EngineError,
     EngineTimeout,
@@ -179,7 +180,7 @@ def transport(
     path: Path,
     *,
     timeout: float = FAST,
-    clock: Callable[[], float] = time.monotonic,
+    clock: MonoClock = mono_now,
 ) -> SocketTransport:
     return SocketTransport(path, timeout=timeout, clock=clock)
 
@@ -583,7 +584,7 @@ def test_every_wait_in_a_call_is_armed_from_its_one_deadline(
         def _new_socket(self) -> socket.socket:
             return Recording(socket.AF_UNIX, socket.SOCK_STREAM)
 
-    wire = Watched(sock_path, timeout=budget, clock=lambda: next(reads) * budget / 20)
+    wire = Watched(sock_path, timeout=budget, clock=lambda: MonoTime(next(reads) * budget / 20))
     wire.call("agent.list", {})  # answered, and hung up on, like every call
     armed.clear()
     with pytest.raises(EngineTimeout) as caught:  # the second one is never answered at all
@@ -883,8 +884,8 @@ class Clock:
     def __init__(self) -> None:
         self.now = 1000.0
 
-    def __call__(self) -> float:
-        return self.now
+    def __call__(self) -> MonoTime:
+        return MonoTime(self.now)
 
 
 def test_connect_failures_back_off_instead_of_dialling_every_poll(

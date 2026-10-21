@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 from pydantic import JsonValue, TypeAdapter
 from starlette.routing import BaseRoute
 
+from herdr_pwa.clock import MonoTime, WallTime
 from herdr_pwa.engine import EngineError, EngineSettings, HerdrClient, WireReply
 from herdr_pwa.settings import Settings
 from herdr_pwa.web.app import create_app
@@ -161,15 +162,19 @@ class Hold:
 # Mutable: a clock the test moves by setting it.
 @dataclass(slots=True)
 class Clock:
-    """A clock the test moves by hand."""
+    """A monotonic clock the test moves by hand."""
 
     now: float = 1000.0
     # How far each read moves it; nonzero is a clock that runs by itself, one tick per look.
     step: float = 0.0
 
-    def __call__(self) -> float:
+    def __call__(self) -> MonoTime:
         self.now += self.step
-        return self.now
+        return MonoTime(self.now)
+
+    def wall(self) -> WallTime:
+        """The same hand read as wall time, for a rig that runs both clocks on it."""
+        return WallTime(self.now)
 
     def sleep(self, seconds: float) -> None:
         """Wait by moving the clock, so a watched write settles without real time passing."""

@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from herdr_pwa.clock import Clock, Sleep
+from herdr_pwa.clock import MonoClock, Sleep, WallClock, mono_now, wall_now
 from herdr_pwa.engine import EngineSettings, HerdrClient
 from herdr_pwa.managed import PROC
 from herdr_pwa.push import PUSH_LIMITS, Deliver, PushLimits
@@ -27,9 +27,9 @@ class Seams:
     """
 
     # Intervals, deadlines and cache ages.
-    clock: Clock = time.monotonic
+    clock: MonoClock = mono_now
     # Stamps written to disk, and how long ago one was.
-    wall: Clock = time.time
+    wall: WallClock = wall_now
     # The runner client's retry and poll waits.
     sleep: Sleep = time.sleep
     # What a write's read-back waits run on.

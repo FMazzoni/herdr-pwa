@@ -758,7 +758,7 @@ def test_a_fan_out_past_its_budget_skips_the_rest(tmp_path: Path) -> None:
 
     health = DeliveryLog(tmp_path, clock=clock)
     devices = [subscribed(endpoint) for endpoint in endpoints]
-    outlet = Outlet(slow, store, health, clock=elapsed)
+    outlet = Outlet(slow, store, health, clock=elapsed.mono)
     outcome = fan_out("{}", devices, outlet, now=clock())
     assert reached == endpoints[:1]
     assert (outcome.sent, outcome.failed) == (1, 2)

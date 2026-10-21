@@ -1,6 +1,5 @@
 """What every router is handed: the app's shared state and its request guards."""
 
-import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -10,7 +9,7 @@ from fastapi import Request
 
 from herdr_pwa import auth
 from herdr_pwa.audit import AuditLog
-from herdr_pwa.clock import Clock
+from herdr_pwa.clock import MonoClock, WallClock, mono_now, wall_now
 from herdr_pwa.engine import (
     CachedValue,
     HerdrClient,
@@ -46,7 +45,7 @@ class WebState:
     stalls: Stalls
     # Where a harness's executable is found, for what the new-agent form offers.
     which: Which
-    clock: Clock = field(default=time.monotonic)
+    clock: MonoClock = field(default=mono_now)
     # What a write's read-back waits run on; injected so route tests never sleep.
     pacing: Pacing = field(default_factory=Pacing)
     # The viewed transcripts, held parsed so a refresh reads only what was appended.
@@ -54,7 +53,7 @@ class WebState:
     # The viewed agents' usage tallies, grown by what their logs appended.
     usage: UsageCache = field(default_factory=UsageCache)
     # Wall time, for how long ago a stamp in a transcript was; injected so tests hold it still.
-    wall: Clock = field(default=time.time)
+    wall: WallClock = field(default=wall_now)
     # What the phone has shown; absent with push off, and then nothing is ever read.
     seen: SeenLedger | None = None
     # When each pane's agent process started; absent, work a dead process left is counted too.

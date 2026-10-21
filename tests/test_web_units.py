@@ -11,6 +11,7 @@ from pydantic import JsonValue
 
 from herdr_pwa import cli, statedir
 from herdr_pwa.cli import doctor
+from herdr_pwa.clock import WallTime
 from herdr_pwa.decisions import AgentRow, decide_screen
 from herdr_pwa.engine import (
     AgentStatus,
@@ -291,7 +292,9 @@ def _doctor(
     def factory(engine: EngineSettings) -> HerdrClient:
         return HerdrClient(engine, transport=wire)
 
-    code = doctor(settings, Seams(wall=lambda: now, client_factory=factory, write=out.append))
+    code = doctor(
+        settings, Seams(wall=lambda: WallTime(now), client_factory=factory, write=out.append)
+    )
     return code, "".join(out)
 
 
@@ -319,7 +322,9 @@ def _doctor_on(settings: Settings) -> tuple[int, str]:
     def factory(engine: EngineSettings) -> HerdrClient:
         return HerdrClient(engine, transport=wire)
 
-    code = doctor(settings, Seams(wall=lambda: 0.0, client_factory=factory, write=out.append))
+    code = doctor(
+        settings, Seams(wall=lambda: WallTime(0.0), client_factory=factory, write=out.append)
+    )
     return code, "".join(out)
 
 
@@ -344,8 +349,8 @@ def test_doctor_says_when_push_last_sent_failed_and_held_back(tmp_path: Path) ->
     frame = FakeWire({SNAPSHOT: _frame(EXPECTED_PROTOCOL)})
     assert "push: nothing delivered or attempted yet" in _doctor(tmp_path, frame)[1]
     now = 1_800_000_000.0
-    DeliveryLog(tmp_path, clock=lambda: now - 3 * 3600).failed("BadJwtToken")
-    DeliveryLog(tmp_path, clock=lambda: now - 200).sent()
+    DeliveryLog(tmp_path, clock=lambda: WallTime(now - 3 * 3600)).failed("BadJwtToken")
+    DeliveryLog(tmp_path, clock=lambda: WallTime(now - 200)).sent()
     code, out = _doctor(tmp_path, frame, now)
     assert code == 0
     assert "push: last sent 3m ago · last error 3h ago (BadJwtToken) · last quieted never" in out

@@ -8,6 +8,7 @@ from typing import Final
 
 import pytest
 
+from herdr_pwa.clock import MonoTime
 from herdr_pwa.decisions import Fetched, Overlay, Pending, decide_herd
 from herdr_pwa.engine import (
     Agent,
@@ -268,7 +269,7 @@ def test_the_process_start_is_read_from_the_panes_claude(tmp_path: Path) -> None
         def pane_pids(self, pane_id: str) -> tuple[int, ...]:
             return (3, 7) if pane_id == "w1:p1" else ()
 
-    starts = ProcessStarts(Panes(), proc=proc, clock=lambda: 0.0)
+    starts = ProcessStarts(Panes(), proc=proc, clock=lambda: MonoTime(0.0))
     assert starts.started(PaneId("w1:p1")) == 1005.0
     assert starts.started(PaneId("w9:p9")) is None
 

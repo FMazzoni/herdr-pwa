@@ -11,7 +11,7 @@ from typing import Final, NamedTuple, TypeVar, cast, get_args
 from pydantic import BaseModel, ValidationError
 
 from herdr_pwa import panetext
-from herdr_pwa.clock import Clock, Sleep
+from herdr_pwa.clock import MonoClock, Sleep, mono_now
 from herdr_pwa.engine.config import EngineSettings
 from herdr_pwa.engine.dialog import BlockedPrompt
 from herdr_pwa.engine.generated import request as wire_request
@@ -212,7 +212,7 @@ class HerdrClient:
         settings: EngineSettings,
         *,
         transport: Transport | None = None,
-        clock: Clock = time.monotonic,
+        clock: MonoClock = mono_now,
         sleep: Sleep = time.sleep,
     ) -> None:
         self.settings = settings

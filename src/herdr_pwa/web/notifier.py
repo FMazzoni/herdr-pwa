@@ -4,12 +4,11 @@ import asyncio
 import contextlib
 import logging
 import threading
-import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Final, Protocol, Self
 
-from herdr_pwa.clock import Clock
+from herdr_pwa.clock import MonoClock, WallClock, wall_now
 from herdr_pwa.decisions import Overlay
 from herdr_pwa.engine import (
     CONTEXT_FULL,
@@ -95,7 +94,7 @@ class PushStores:
     state_dir: Path
 
     @classmethod
-    def open(cls, state_dir: Path, *, clock: Clock = time.time) -> Self:
+    def open(cls, state_dir: Path, *, clock: WallClock = wall_now) -> Self:
         """Load or create the VAPID key; a corrupt one raises rather than orphaning devices."""
         return cls(
             keys=load_or_create_vapid_keys(state_dir, clock=clock),
@@ -167,10 +166,10 @@ class Notifier:
             stores.keys, subject=config.subject, ttl=config.ttl, limits=seams.push_limits
         )
         self._limits: PushLimits = seams.push_limits
-        self._elapsed: Clock = seams.clock
+        self._elapsed: MonoClock = seams.clock
         self._config: LoopConfig = config
         clock = seams.wall
-        self._clock: Clock = clock
+        self._clock: WallClock = clock
         self._managed: ManagedHerd = ManagedHerd(herd.reader, proc=seams.proc)
         ledger = StatusLedger(stores.state_dir, max_age=config.ledger_max_age, clock=clock)
         hooks = Hooks(
