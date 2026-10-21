@@ -631,6 +631,14 @@ def test_a_push_service_that_never_answers_fails_within_the_timeout(tmp_path: Pa
             a_sender(tmp_path, limits)(unchecked(f"https://127.0.0.1:{port}/push"), "{}")
     assert time.monotonic() - started < 5
     assert refused.value.status is None
+    # The library's text names the endpoint; the record keeps only fixed words.
+    assert str(refused.value) == "push service not reached (ReadTimeout)"
+
+
+def test_a_refusal_before_posting_keeps_none_of_the_librarys_text() -> None:
+    wrapped = push._refusal(WebPushException("https://fcm.googleapis.com/fcm/send/secret"))  # pyright: ignore[reportPrivateUsage] - the refusal's words are the unit under test
+    assert "secret" not in str(wrapped)
+    assert wrapped.status is None
 
 
 @contextmanager

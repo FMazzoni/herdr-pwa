@@ -542,11 +542,12 @@ class _NoRedirects(requests.Session):
 
 
 def _refusal(exc: Exception) -> DeliveryError:
+    # An HTTP library's text can carry the endpoint URL, a device capability, so only fixed words go on.
     if not isinstance(exc, WebPushException):
-        return DeliveryError(f"{type(exc).__name__}: {exc}")
+        return DeliveryError(f"push service not reached ({type(exc).__name__})")
     response = cast("requests.Response | None", exc.response)
     if response is None:
-        return DeliveryError(str(exc), status=exc.status_code)
+        return DeliveryError("push not sent: pywebpush refused it before posting")
     # The body is the service's (or a redirect target's) text, so it never reaches the record.
     return DeliveryError(
         f"push service answered {response.status_code} {response.reason}",
