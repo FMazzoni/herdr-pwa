@@ -23,7 +23,7 @@ from pydantic import (
 from herdr_pwa import statedir
 from herdr_pwa.clock import Clock
 from herdr_pwa.ids import SessionId
-from herdr_pwa.push import EVENT_BLOCKED, EVENT_DONE
+from herdr_pwa.push import EVENT_BLOCKED, EVENT_DONE, PushEvent
 from herdr_pwa.validation import or_default
 
 log = logging.getLogger(__name__)
@@ -240,7 +240,7 @@ class Interrupts(BaseModel):
         """The do-not-disturb window is still in the future."""
         return self.dnd_until > now
 
-    def allows(self, event: str, *, now: float) -> bool:
+    def allows(self, event: PushEvent, *, now: float) -> bool:
         """May this event be sent now? Only the standing blocked preference can silence blocked."""
         if event == EVENT_BLOCKED:
             # Do-not-disturb is deliberately not consulted: needs-you is the app's purpose.

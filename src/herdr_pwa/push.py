@@ -42,6 +42,8 @@ log = logging.getLogger(__name__)
 VAPID_FILENAME: Final = "vapid.json"
 SUBSCRIPTIONS_FILENAME: Final = "subscriptions.json"
 HEALTH_FILENAME: Final = "push-health.json"
+# What a push says happened: the two that notify, and the retraction of either.
+type PushEvent = Literal["blocked", "done", "clear"]
 EVENT_BLOCKED: Final = "blocked"
 EVENT_DONE: Final = "done"
 EVENT_CLEAR: Final = "clear"
@@ -456,7 +458,7 @@ def sanitise(text: str, *, limit: int) -> str:
 class Notice:
     """What one notification says, before sanitising; the agent is the session to deep-link."""
 
-    event: str
+    event: PushEvent
     title: str
     body: str
     agent: str = ""

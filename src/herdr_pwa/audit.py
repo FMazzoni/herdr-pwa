@@ -20,7 +20,7 @@ from typing import Annotated, Final, Literal, NotRequired, Self, TypedDict
 from pydantic import Field, TypeAdapter, ValidationError
 
 from herdr_pwa import statedir
-from herdr_pwa.auth import Identity
+from herdr_pwa.auth import Identity, Via
 from herdr_pwa.clock import Clock
 from herdr_pwa.statedir import FILE_MODE
 
@@ -114,7 +114,7 @@ class Origin:
     """Who is asking and from where; neither address is treated as identity."""
 
     actor: str
-    via: str
+    via: Via
     client_ip: str = ""
     forwarded_for: str = ""
     # The Host and Origin headers the request carried, as sent.
