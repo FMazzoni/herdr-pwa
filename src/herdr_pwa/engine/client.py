@@ -263,7 +263,7 @@ class HerdrClient:
         reply: WireReply = self.transport.call(
             method,
             # A json-mode dump is JSON by construction, and the schema pins params to an object.
-            cast(Frame, dumped["params"]),
+            cast("Frame", dumped["params"]),
             timeout=self._resolve_timeout(timeout),
             idempotent=not writes,
         )
@@ -297,7 +297,7 @@ class HerdrClient:
             raise InvalidResponse(
                 f"{method} answered {type(root).__name__} where {arm.__name__} was expected"
             )
-        member = cast(BaseModel, getattr(root, key))
+        member = cast("BaseModel", getattr(root, key))
         return root, member.model_dump(mode="json", exclude_none=True)
 
     def _arm(self, reply: _Reply, arm: type[_Arm]) -> _Arm:

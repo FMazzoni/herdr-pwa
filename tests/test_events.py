@@ -111,7 +111,7 @@ def _hub(tmp_path: Path, *, lifetime: float = 600.0, clients: int = 16) -> tuple
     )
     app = rig.http.app
     assert isinstance(app, FastAPI)
-    hub = cast(object, app.state.events)
+    hub = cast("object", app.state.events)
     assert isinstance(hub, Hub)
     return hub, rig
 

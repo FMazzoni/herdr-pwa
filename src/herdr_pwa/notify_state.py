@@ -232,8 +232,8 @@ class Interrupts(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    blocked: Annotated[StrictBool, or_default(True)] = True
-    done: Annotated[StrictBool, or_default(False)] = False
+    blocked: Annotated[StrictBool, or_default(default=True)] = True
+    done: Annotated[StrictBool, or_default(default=False)] = False
     dnd_until: Annotated[StrictFloat, or_default(0.0), AfterValidator(_not_negative)] = 0.0
 
     def snoozed(self, now: float) -> bool:

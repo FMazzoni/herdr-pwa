@@ -706,7 +706,7 @@ def _requests_issued_by(verb: ast.FunctionDef) -> set[str]:
         if isinstance(node, ast.Attribute) and node.attr.endswith("Request")
     }
     # The AST names the attribute; the generated module is what it names.
-    return {method_of(cast(type[BaseModel], getattr(wire_request, name))) for name in types}
+    return {method_of(cast("type[BaseModel]", getattr(wire_request, name))) for name in types}
 
 
 def test_every_write_verb_is_registered_as_a_write() -> None:
@@ -917,11 +917,11 @@ def test_a_session_id_cannot_reach_a_write_verb(tmp_path: Path) -> None:
     probe = tmp_path / "probe.py"
     probe.write_text(PROBE)
     report = _pyright(probe)
-    diagnostics = [obj(d) for d in cast(list[JsonValue], at(report, "generalDiagnostics"))]
+    diagnostics = [obj(d) for d in cast("list[JsonValue]", at(report, "generalDiagnostics"))]
     errors = [d for d in diagnostics if d["severity"] == "error"]
-    assert {cast(int, at(d, "range", "start", "line")) + 1 for d in errors} == PROBE_ERROR_LINES, (
-        f"expected an error on each probe line, got {errors}"
-    )
+    assert {
+        cast("int", at(d, "range", "start", "line")) + 1 for d in errors
+    } == PROBE_ERROR_LINES, f"expected an error on each probe line, got {errors}"
     assert all(d["rule"] == "reportArgumentType" for d in errors)
 
 

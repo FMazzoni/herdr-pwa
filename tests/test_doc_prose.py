@@ -82,12 +82,12 @@ def _blocks(text: str) -> Iterator[Block]:
         line = raw.strip()
         starts = line.startswith(("#", "|", "- ", "1. ")) or re.match(r"^\d+\. ", line)
         if (not line or starts) and lines:
-            yield Block(section, " ".join(lines), False)
+            yield Block(section, " ".join(lines), is_row=False)
             lines = []
         if line.startswith("#"):
             section = line
         elif line.startswith("|"):
-            yield Block(section, line, True)
+            yield Block(section, line, is_row=True)
         elif line:
             lines.append(re.sub(r"^(- |\d+\. )", "", line))
 

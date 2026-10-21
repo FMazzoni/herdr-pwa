@@ -34,7 +34,7 @@ FETCHED_ON_LOAD = 'hx-trigger="load"'
 def _web(rig: Rig) -> WebState:
     app = rig.http.app
     assert isinstance(app, FastAPI)
-    web = cast(object, app.state.web)
+    web = cast("object", app.state.web)
     assert isinstance(web, WebState)
     return web
 

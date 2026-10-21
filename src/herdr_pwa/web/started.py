@@ -3,7 +3,7 @@
 import errno
 import hashlib
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Final
@@ -34,7 +34,7 @@ class TreeCheck:
     """The line ``doctor`` prints about the tree, and whether it is a failure."""
 
     line: str
-    stale: bool
+    stale: bool = field(kw_only=True)
 
 
 def fingerprint(directory: Path) -> str:
@@ -78,13 +78,15 @@ def check_tree(state_dir: Path) -> TreeCheck:
     """Compare the tree the service started from with what that directory holds now."""
     started = started_tree(state_dir)
     if started is None:
-        return TreeCheck("service tree: never recorded, so a stale service is not ruled out", False)
+        return TreeCheck(
+            "service tree: never recorded, so a stale service is not ruled out", stale=False
+        )
     when = datetime.fromtimestamp(started.at, UTC).strftime("%Y-%m-%d %H:%M UTC")
     head = f"service tree at {started.directory}, started {when} from {started.fingerprint}"
     try:
         now = fingerprint(Path(started.directory))
     except OSError as exc:
-        return TreeCheck(f"{head}: unreadable now ({exc.strerror})  FAIL", True)
+        return TreeCheck(f"{head}: unreadable now ({exc.strerror})  FAIL", stale=True)
     if now != started.fingerprint:
-        return TreeCheck(f"{head}: now {now}, so it serves old code; restart it  FAIL", True)
-    return TreeCheck(f"{head}: unchanged  ok", False)
+        return TreeCheck(f"{head}: now {now}, so it serves old code; restart it  FAIL", stale=True)
+    return TreeCheck(f"{head}: unchanged  ok", stale=False)

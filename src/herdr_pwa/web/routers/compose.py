@@ -1,6 +1,6 @@
 """Writes to one agent: a prompt, a tapped key, an end; and the by-address door of a starting one."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Annotated, Final
 from urllib.parse import quote
@@ -181,7 +181,7 @@ class Said:
     kind: str
     what: str
     why: str
-    unsure: bool = False
+    unsure: bool = field(default=False, kw_only=True)
 
 
 _LOOK: Final = "Look at the Pane before tapping again; nothing is sent twice."
@@ -199,10 +199,10 @@ _SAID: Final[MappingProxyType[tuple[Outcome, Evidence], Said]] = MappingProxyTyp
             "unsure",
             "Sent {key}, and a different question is up.",
             "Read it before you answer it.",
-            True,
+            unsure=True,
         ),
         (Outcome.UNCONFIRMED, Evidence.UNMOVED): Said(
-            "unsure", "Sent {key}, but the question is still showing.", _LOOK, True
+            "unsure", "Sent {key}, but the question is still showing.", _LOOK, unsure=True
         ),
         (Outcome.ACCEPTED, Evidence.UNMOVED): Said(
             "sent", "Sent {key}.", "The question is still up."
@@ -212,7 +212,7 @@ _SAID: Final[MappingProxyType[tuple[Outcome, Evidence], Said]] = MappingProxyTyp
         ),
     }
 )
-_UNCERTAIN: Final = Said("unsure", "Sent {key}, unconfirmed.", _LOOK, True)
+_UNCERTAIN: Final = Said("unsure", "Sent {key}, unconfirmed.", _LOOK, unsure=True)
 
 
 def key_name(key: str) -> str:
@@ -226,7 +226,9 @@ def said(sent: KeySent) -> Said:
     """The words for what a sent key is known to have done, never more than was seen."""
     shape = _SAID.get((sent.outcome, sent.evidence), _UNCERTAIN)
     name = key_name(sent.key)
-    return Said(shape.kind, shape.what.format(key=name), shape.why.format(key=name), shape.unsure)
+    return Said(
+        shape.kind, shape.what.format(key=name), shape.why.format(key=name), unsure=shape.unsure
+    )
 
 
 def _lookup(web: WebState, session: SessionId) -> Agent | None:

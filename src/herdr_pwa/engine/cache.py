@@ -96,15 +96,15 @@ class SnapshotCache:
             shelf = self._shelves.setdefault(key, _Shelf())
             hit = self._hit_locked(shelf, max_age)
             if hit is not None:
-                return cast(CachedValue[T], hit)
+                return cast("CachedValue[T]", hit)
             fetch = shelf.in_flight
             leader = fetch is None
             if fetch is None:
                 fetch = shelf.in_flight = _Fetch()
         if not leader:
-            return cast(CachedValue[T], self._follow(fetch))
+            return cast("CachedValue[T]", self._follow(fetch))
         try:
-            return cast(CachedValue[T], self._fetch(shelf, load, fetch))
+            return cast("CachedValue[T]", self._fetch(shelf, load, fetch))
         finally:
             # A BaseException (shutdown, cancelled worker) must not strand followers; no-op once published.
             self._abandon(shelf, fetch)

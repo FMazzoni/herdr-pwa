@@ -255,8 +255,8 @@ def check() -> int:
                 stale.append(name)
                 sys.stdout.writelines(
                     difflib.unified_diff(
-                        have.splitlines(True),
-                        want.splitlines(True),
+                        have.splitlines(keepends=True),
+                        want.splitlines(keepends=True),
                         fromfile=f"committed/{name}",
                         tofile=f"regenerated/{name}",
                     )

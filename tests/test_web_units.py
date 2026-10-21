@@ -461,9 +461,11 @@ def test_a_sent_key_is_said_in_the_screens_own_words() -> None:
 
     assert [key_name(k) for k in ("1", "enter", "ctrl-c")] == ["option 1", "Enter", "Ctrl+C"]
     pane = as_pane_id("w1:p3")
-    gone = said(KeySent(pane, "2", Outcome.CONFIRMED, Evidence.GONE, True, None))
+    gone = said(KeySent(pane, "2", Outcome.CONFIRMED, Evidence.GONE, ended=True, prompt=None))
     assert (gone.kind, gone.what, gone.unsure) == ("sent", "Answered.", False)
-    flicker = said(KeySent(pane, "enter", Outcome.ACCEPTED, Evidence.FLICKER, True, None))
+    flicker = said(
+        KeySent(pane, "enter", Outcome.ACCEPTED, Evidence.FLICKER, ended=True, prompt=None)
+    )
     assert (flicker.kind, flicker.what, flicker.unsure) == (
         "unsure",
         "Sent Enter, unconfirmed.",
