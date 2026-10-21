@@ -1,6 +1,5 @@
 import ast
 import inspect
-import os
 from dataclasses import replace
 from pathlib import Path
 
@@ -91,11 +90,10 @@ def test_garbage_on_the_wire_is_an_error_not_a_traceback(tmp_path: Path) -> None
         _ = magicdns(fake.api)
 
 
+@pytest.mark.nonroot
 def test_permission_denied_names_the_operator_fix(tmp_path: Path) -> None:
     with tailscaled(tmp_path, canned=status_route()) as fake:
         fake.socket_path.chmod(0o000)
-        if os.access(fake.socket_path, os.W_OK):
-            pytest.skip("running as root: socket permissions are not enforced")
         with pytest.raises(LocalApiError, match="operator"):
             _ = magicdns(fake.api)
         fake.socket_path.chmod(0o600)

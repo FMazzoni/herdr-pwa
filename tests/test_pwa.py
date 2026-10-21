@@ -2,7 +2,6 @@
 
 import hashlib
 import re
-import shutil
 import struct
 import subprocess
 from pathlib import Path
@@ -125,7 +124,7 @@ def test_the_worker_swaps_itself_only_when_the_page_asks() -> None:
 
 def observed() -> dict[str, JsonValue]:
     result = subprocess.run(  # noqa: S603 - fixed argv, our own files
-        ["node", str(HARNESS), str(WORKER)],  # noqa: S607 - node from PATH, skipped when absent
+        ["node", str(HARNESS), str(WORKER)],  # noqa: S607 - node from PATH, marked as needed
         capture_output=True,
         text=True,
         timeout=60,
@@ -135,10 +134,7 @@ def observed() -> dict[str, JsonValue]:
     return _DOCUMENT.validate_json(result.stdout)
 
 
-needs_node = pytest.mark.skipif(shutil.which("node") is None, reason="the harness needs node")
-
-
-@needs_node
+@pytest.mark.node
 def test_the_running_worker_never_answers_for_agent_state_and_never_stores_a_document() -> None:
     seen = observed()
     intercepted = seen["intercepted"]
@@ -162,7 +158,7 @@ def test_the_running_worker_never_answers_for_agent_state_and_never_stores_a_doc
     assert seen["installCacheModes"] == ["reload"]
 
 
-@needs_node
+@pytest.mark.node
 def test_the_running_worker_swaps_only_on_the_pages_message() -> None:
     seen = observed()
     assert seen["skipWaitingBeforeMessage"] is False
@@ -170,7 +166,7 @@ def test_the_running_worker_swaps_only_on_the_pages_message() -> None:
     assert seen["skipWaitingOnRequest"] is True
 
 
-@needs_node
+@pytest.mark.node
 def test_a_push_shows_the_servers_text_and_a_tap_opens_that_agent() -> None:
     seen = observed()
     shown = seen["blockedNotification"]
@@ -195,7 +191,7 @@ def test_a_push_shows_the_servers_text_and_a_tap_opens_that_agent() -> None:
     assert seen["pingUrl"] == "/"
 
 
-@needs_node
+@pytest.mark.node
 def test_a_push_is_quiet_when_on_screen_or_told_so_and_never_dropped() -> None:
     seen = observed()
     assert seen["onScreen"] == {"shown": True, "silent": True, "renotify": False}
@@ -207,13 +203,13 @@ def test_a_push_is_quiet_when_on_screen_or_told_so_and_never_dropped() -> None:
     assert seen["unreadableTitle"] == "herdr"
 
 
-@needs_node
+@pytest.mark.node
 def test_a_tap_url_is_never_built_from_a_string_that_is_not_a_session() -> None:
     seen = observed()
     assert (seen["hostileUrl"], seen["paneUrl"], seen["hostilePaneUrl"]) == ("/", "/", "/")
 
 
-@needs_node
+@pytest.mark.node
 def test_a_tap_opens_an_opencode_or_hermes_agent_by_its_own_session_id() -> None:
     seen = observed()
     assert (seen["opencodeUrl"], seen["hermesUrl"]) == (
@@ -223,7 +219,7 @@ def test_a_tap_opens_an_opencode_or_hermes_agent_by_its_own_session_id() -> None
     assert (seen["opencodeOnScreenSilent"], seen["opencodeFromHerdSilent"]) == (True, False)
 
 
-@needs_node
+@pytest.mark.node
 def test_a_rotated_subscription_re_registers_itself() -> None:
     seen = observed()
     assert seen["resubscribePosts"] == ["/push/key", "/push/subscribe", "/push/unsubscribe"]

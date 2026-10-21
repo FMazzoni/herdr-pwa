@@ -50,6 +50,8 @@ TAGS: Final = frozenset(
     }
 )
 VOID_TAGS: Final = frozenset({"hr", "br"})
+# The page owns its one h1, so a document's headings sit a level below it; app.css draws them alike.
+_HEADING_BELOW: Final = MappingProxyType({f"h{n}": f"h{min(n + 1, 6)}" for n in range(1, 7)})
 CLASSES: Final = frozenset(
     {
         *("table-scroll", "align-center", "align-right", "cell-whole", "cell-token", "math-block"),
@@ -260,7 +262,7 @@ def _element(node: SyntaxTreeNode, children: list[MdNode]) -> list[MdNode]:
     if node.tag in ("th", "td") and "cell-whole" not in cls:
         # The geometry gate holds no cell narrower than its widest word; the table scrolls instead.
         children = _kept_whole(children)
-    element = MdNode(node.tag, cls=cls, children=tuple(children))
+    element = MdNode(_HEADING_BELOW.get(node.tag, node.tag), cls=cls, children=tuple(children))
     if node.tag == "table":
         # A table wider than the turn scrolls in this box; the page never moves sideways.
         return [MdNode("div", cls="table-scroll", children=(element,))]

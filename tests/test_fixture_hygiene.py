@@ -84,8 +84,7 @@ def test_no_request_id_is_real() -> None:
 
 def _commits(candidates: set[str]) -> set[str]:
     git = shutil.which("git")
-    if git is None or not (REPO / ".git").exists():
-        pytest.skip("needs a git checkout of this repo")
+    assert git is not None, "the git marker guards every caller"
     lines = "".join(f"{candidate}\n" for candidate in sorted(candidates))
     # git answers one line per name, in order, and a name it cannot find reads "<name> missing".
     command = [git, "-C", str(REPO), "cat-file", "--batch-check=%(objecttype)"]
@@ -98,6 +97,7 @@ def _commits(candidates: set[str]) -> set[str]:
     }
 
 
+@pytest.mark.git
 def test_no_fixture_cites_a_commit_of_this_repo() -> None:
     # A cited commit means the text came from a real run here, not a synthetic one.
     cited: dict[str, str] = {}

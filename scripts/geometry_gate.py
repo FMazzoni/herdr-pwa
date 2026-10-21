@@ -13,7 +13,6 @@ ROOT: Final = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from scripts.firefox import available, held, version  # noqa: E402 - after the sys.path line that makes it importable
-from tests.catalogue import CAPTURES  # noqa: E402 - after the sys.path line that makes it importable
 
 # Per user rather than per worktree: a fresh worktree whose guarded files match a tree already
 # measured reuses that receipt. A cache of a result, never a record anyone reviews.
@@ -28,21 +27,21 @@ class GateConfig:
 
     @property
     def walks(self) -> Path:
-        """One receipt per browser test that passed, under the tree's fingerprint, so pytest skips it."""
+        """One receipt per browser test that passed, under the tree's fingerprint, so pytest reuses it."""
         return self.receipts / "walks"
 
 
 CONFIG: Final = GateConfig()
 
-# Everything that decides what the browser lays out, plus the harness itself.
+# All the browser lays out from, and the harness: too wide costs a re-run, too narrow a false green.
 GUARDED: Final = (
-    "src/herdr_pwa/web",
-    "src/herdr_pwa/panetext.py",
+    "src/herdr_pwa",
+    "pyproject.toml",
+    "uv.lock",
+    "tests/conftest.py",
+    "tests/fixtures",
     "tests/webfakes.py",
     "tests/catalogue.py",
-    "tests/fixtures/snapshot.example.json",
-    # Every captured screen a catalogue state draws.
-    *(f"tests/fixtures/{name}/detection.txt" for name in CAPTURES),
     "scripts/firefox.py",
     "scripts/geometry.py",
     "scripts/affordance.py",
@@ -93,7 +92,7 @@ def walk_receipt(current: str, test: str, config: GateConfig = CONFIG) -> Path:
 
 
 def record_walk(current: str, test: str, seconds: float, config: GateConfig = CONFIG) -> None:
-    """Leave the receipt that lets ``test`` be skipped until ``current`` changes."""
+    """Leave the receipt that lets ``test`` be reused until ``current`` changes."""
     path = walk_receipt(current, test, config)
     path.parent.mkdir(parents=True, exist_ok=True)
     body = {"fingerprint": current, "test": test, "seconds": round(seconds, 1)}
@@ -119,7 +118,7 @@ def run(current: str, config: GateConfig = CONFIG) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Skip on a fresh receipt, else take the lock and run."""
+    """Reuse a fresh receipt, else take the lock and run."""
     parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     parser.add_argument("--force", action="store_true", help="run even if a receipt exists")
     args = parser.parse_args(argv)
@@ -131,11 +130,11 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     current = fingerprint()
     if receipt(current).is_file() and not args.force:
-        print(f"geometry green for {current}")
+        print(f"geometry reused the receipt for {current}")
         return 0
     with held():
         if receipt(current).is_file() and not args.force:
-            print(f"geometry green for {current} (another run covered it while we waited)")
+            print(f"geometry reused the receipt for {current}, written while we waited")
             return 0
         return run(current)
 

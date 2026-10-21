@@ -981,15 +981,12 @@ def test_a_second_request_on_one_connection_is_refused(server: FakeHerdr, sock_p
     assert len(server.requests) == 1, "the second request reached the fake"
 
 
+@pytest.mark.live
 @pytest.mark.usefixtures("server")
 def test_live_the_runner_hangs_up_exactly_like_the_fake(sock_path: Path) -> None:
     """The one live check in this module: does the fake still lie?"""
     path = live_socket()
-    if path is None:
-        pytest.skip(
-            f"no live runner at {LIVE_SOCKET} (run `just live-session`); "
-            "the rest of this module is offline"
-        )
+    assert path is not None, f"no live runner at {LIVE_SOCKET} (run `just live-session`)"
 
     live = hang_up_behaviour(path)
     mocked = hang_up_behaviour(sock_path)  # the same probe, against the fake
@@ -1033,11 +1030,11 @@ def _line_of(path: Path, size: int, timeout: float = 15.0) -> str:
         conn.close()
 
 
+@pytest.mark.live
 def test_live_the_request_line_ceiling_is_still_where_it_was_measured() -> None:
     """The second live check: is :data:`MAX_REQUEST_BYTES` still true?"""
     path = live_socket()
-    if path is None:
-        pytest.skip(f"no live runner at {LIVE_SOCKET} (run `just live-session`)")
+    assert path is not None, f"no live runner at {LIVE_SOCKET} (run `just live-session`)"
     at_limit = _line_of(path, MAX_REQUEST_BYTES)
     over = _line_of(path, MAX_REQUEST_BYTES + 1)
     assert (at_limit, over) in {

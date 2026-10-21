@@ -156,12 +156,23 @@ def test_with_scripts_off_the_feed_links_the_servers_own_list(tmp_path: Path) ->
 H1 = re.compile(r"<h1[\s>]")
 
 
+# Files-markdown among them: a document's own # heading sits below the page's.
 @pytest.mark.parametrize("state", STATES, ids=[s.name for s in STATES])
 def test_every_page_has_exactly_one_page_heading(state: State, tmp_path: Path) -> None:
-    page = build(state, tmp_path).http.get(state.path, follow_redirects=False)
-    if not page.text.lower().startswith("<!doctype html"):
-        pytest.skip("not a page: a refusal or a redirect")
+    # A files link redirects to its folder's own address, the page the phone lands on.
+    page = build(state, tmp_path).http.get(state.path, follow_redirects=True)
+    assert page.text.lower().startswith("<!doctype html")
     assert len(H1.findall(page.text)) == 1
+
+
+def test_a_heading_in_a_turn_is_not_a_second_page_heading(tmp_path: Path) -> None:
+    turn = "# Plan\n\n###### Last step\n\nship it"
+    write_transcript(tmp_path / "transcripts", WORKING_SESSION, [assistant_says(turn)])
+    page = build_rig(tmp_path).http.get(f"/agent/{WORKING_SESSION}?tab=chat").text
+    assert page.lower().startswith("<!doctype html")
+    assert ">Plan</h2>" in page
+    assert ">Last step</h6>" in page
+    assert len(H1.findall(page)) == 1
 
 
 def test_who_spoke_is_said_in_words(tmp_path: Path) -> None:
