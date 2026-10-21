@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import get_args
 
 import pytest
 from pydantic import JsonValue, TypeAdapter
 
 from herdr_pwa.engine import (
     HERDR_KINDS,
+    HarnessKind,
     HistoryState,
     Source,
     Speaker,
@@ -439,6 +441,9 @@ def test_a_provider_with_no_adapter_simply_has_no_history(
 def test_the_registry_is_keyed_by_each_adapters_own_kind() -> None:
     """One registry: the kinds are the adapters' own, and every one is a kind herdr runs."""
     assert harness_kinds() == ("claude", "opencode", "hermes")
+    # The type names the same set, so a new adapter cannot land with its kind left untyped.
+    named = HarnessKind.__value__  # pyright: ignore[reportAny] - typeshed types an alias's value as Any
+    assert get_args(named) == harness_kinds()
     for kind in harness_kinds():
         harness = harness_of(kind)
         assert harness is not None

@@ -7,7 +7,7 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
-from typing import ClassVar, Final, NamedTuple, Protocol
+from typing import ClassVar, Final, Literal, NamedTuple, Protocol
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
@@ -28,6 +28,8 @@ from herdr_pwa.validation import Text
 
 # Every kind herdr itself can run, whether or not a harness here reads it.
 HERDR_KINDS: Final = tuple(target.value for target in IntegrationTarget)
+# The kinds a harness here reads; herdr runs more, and reports any kind as a plain string.
+type HarnessKind = Literal["claude", "opencode", "hermes"]
 
 # A path, or the string an env var carries.
 type OneRoot = str | os.PathLike[str]
@@ -552,7 +554,7 @@ class Harness:
     """What one harness is and can do. Callers ask these, never the kind's name."""
 
     # herdr's name for it, the key the registry is looked up by.
-    kind: str
+    kind: HarnessKind
     launch: StartRecipe
     # One append-only JSONL per session, paged by byte, so the caches grow by what was appended.
     byte_frontier: bool = False
@@ -646,9 +648,9 @@ def harness_of(agent_kind: str | None) -> Harness | None:
     return adapter.harness if adapter is not None else None
 
 
-def harness_kinds() -> tuple[str, ...]:
+def harness_kinds() -> tuple[HarnessKind, ...]:
     """Every kind with an adapter here, in the order the new-agent form offers them."""
-    return tuple(_adapters)
+    return tuple(adapter.harness.kind for adapter in _adapters.values())
 
 
 def has_byte_frontier(agent_kind: str | None) -> bool:

@@ -13,6 +13,7 @@ from herdr_pwa.audit import CLOSE, PROMPT, START, Write
 from herdr_pwa.engine import (
     AgentStatus,
     EngineError,
+    HarnessKind,
     HerdrClient,
     Launch,
     NewTab,
@@ -159,7 +160,7 @@ def on_path(name: str) -> str | None:
     return found_in(name, os.environ.get("PATH", os.defpath).split(os.pathsep))
 
 
-def offered_kinds(which: Which) -> tuple[str, ...]:
+def offered_kinds(which: Which) -> tuple[HarnessKind, ...]:
     """The harnesses this app knows how to launch that are on this machine's PATH."""
     return tuple(kind for kind in harness_kinds() if which(_binary(kind)))
 
