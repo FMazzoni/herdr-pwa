@@ -34,7 +34,7 @@ from pydantic import (
 from pywebpush import WebPushException
 
 from herdr_pwa import statedir
-from herdr_pwa.clock import MonoClock, WallClock, ago, mono_now, wall_now
+from herdr_pwa.clock import MonoClock, WallClock, WallTime, ago, mono_now, wall_now
 from herdr_pwa.panetext import without_escapes
 from herdr_pwa.patterns import Rx
 from herdr_pwa.validation import is_not_json, or_default, summary
@@ -317,7 +317,7 @@ class Subscription(BaseModel):
     expiration_time: Annotated[StrictFloat | None, Field(alias="expirationTime")] = None
     added_at: Annotated[StrictInt, or_default(0)] = 0
 
-    def expired(self, now: float) -> bool:
+    def expired(self, now: WallTime) -> bool:
         """Past its ``expirationTime`` (epoch milliseconds), after which the push service drops it."""
         return self.expiration_time is not None and self.expiration_time <= now * 1000
 
@@ -472,7 +472,7 @@ class Notice:
     quiet: bool = False
 
 
-def build_payload(notice: Notice, *, now: float) -> dict[str, object]:
+def build_payload(notice: Notice, *, now: WallTime) -> dict[str, object]:
     """The notification the service worker renders, every text field sanitised and capped."""
     if notice.event not in {EVENT_BLOCKED, EVENT_DONE}:
         raise PushError(f"unknown event {notice.event!r}: only blocked and done notify")
@@ -491,7 +491,7 @@ def build_payload(notice: Notice, *, now: float) -> dict[str, object]:
     }
 
 
-def build_clear(*, now: float, tag: str = HERD_TAG) -> dict[str, object]:
+def build_clear(*, now: WallTime, tag: str = HERD_TAG) -> dict[str, object]:
     """The retraction: take the slot down and raise nothing."""
     return {"v": 1, "event": EVENT_CLEAR, "agent": "", "tag": tag, "ts": int(now)}
 
@@ -645,12 +645,12 @@ class DeliveryRecord(BaseModel):
         return self.sent == 0 and self.failed > 0
 
 
-def _ago(at: float, now: float) -> str:
+def _ago(at: float, now: WallTime) -> str:
     # A zero stamp is the record's word for "this never happened".
     return ago(now - at) if at else "never"
 
 
-def health_line(record: DeliveryRecord | None, *, now: float) -> str:
+def health_line(record: DeliveryRecord | None, *, now: WallTime) -> str:
     """Delivery as doctor prints it: when push last sent, last failed, and last held one back."""
     if record is None:
         return "push: nothing delivered or attempted yet"
@@ -737,7 +737,7 @@ class Outlet:
     clock: MonoClock = mono_now
 
 
-def _one(data: str, subscription: Subscription, outlet: Outlet, *, now: float) -> str:
+def _one(data: str, subscription: Subscription, outlet: Outlet, *, now: WallTime) -> str:
     if subscription.expired(now):
         # Dead by its own expirationTime, as a 404 or 410 would say after a wasted send.
         _prune(outlet.store, subscription)
@@ -758,7 +758,7 @@ def _one(data: str, subscription: Subscription, outlet: Outlet, *, now: float) -
 
 
 def fan_out(
-    data: str, subscriptions: Sequence[Subscription], outlet: Outlet, *, now: float
+    data: str, subscriptions: Sequence[Subscription], outlet: Outlet, *, now: WallTime
 ) -> FanOut:
     """Send to every device: prune the gone, record each outcome, never let one stop the rest.
 

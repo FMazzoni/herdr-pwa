@@ -6,7 +6,7 @@ from datetime import datetime
 from types import MappingProxyType
 from typing import Final
 
-from herdr_pwa.clock import ago, brief, duration, duration_said
+from herdr_pwa.clock import WallTime, ago, brief, duration, duration_said
 from herdr_pwa.engine import (
     SPAWNED_AGENT,
     Harness,
@@ -133,7 +133,7 @@ def tokens_said(count: int) -> str:
     return str(count)
 
 
-def _seconds_since(stamp: str, now: float) -> float | None:
+def _seconds_since(stamp: str, now: WallTime) -> float | None:
     """How long ago an ISO 8601 stamp was, or None when it is unreadable or in the future."""
     try:
         moment = datetime.fromisoformat(stamp).timestamp()
@@ -161,7 +161,7 @@ class TurnTimes:
 NO_TIMES: Final = TurnTimes()
 
 
-def turn_times(usage: SessionUsage, now: float) -> TurnTimes:
+def turn_times(usage: SessionUsage, now: WallTime) -> TurnTimes:
     """The newest turn's clock from the tally the strip reads, at wall-clock *now*."""
     ran = _seconds_since(usage.turn_started, now) if usage.turn_started else None
     quiet = _seconds_since(usage.last_at, now) if usage.last_at else None
@@ -186,7 +186,7 @@ def _fresh(agent: SpawnedAgent, turn_started: str) -> bool:
     return bool(turn_started) and (agent.resumed or agent.started) >= turn_started
 
 
-def _spawned_time(agent: SpawnedAgent, now: float, turn_started: str) -> SpawnedTime:
+def _spawned_time(agent: SpawnedAgent, now: WallTime, turn_started: str) -> SpawnedTime:
     # A resumed agent's run is the one since it was woken.
     since = _seconds_since(agent.resumed or agent.started, now)
     if agent.done:
@@ -215,7 +215,7 @@ def _this_turn(agent: SpawnedAgent, turn_started: str, since: float | None) -> b
 
 
 def spawned_times(
-    usage: SessionUsage, now: float, *, since: float | None = None
+    usage: SessionUsage, now: WallTime, *, since: float | None = None
 ) -> tuple[SpawnedTime, ...]:
     """The tally's background agents and shells: running first, then those ended this turn.
 
@@ -258,7 +258,7 @@ class Reading:
     status: str
     usage: SessionUsage
     # Wall-clock seconds, injected, so the strip says how long ago against a held clock.
-    now: float
+    now: WallTime
 
     @property
     def kind(self) -> str:

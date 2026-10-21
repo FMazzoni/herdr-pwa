@@ -9,6 +9,7 @@ import pytest
 from pydantic import JsonValue, TypeAdapter
 
 from herdr_pwa import statedir
+from herdr_pwa.clock import WallTime
 from herdr_pwa.ids import PaneId, SessionId
 from herdr_pwa.managed import ManagedHerd, carries_mark
 from herdr_pwa.notify import (
@@ -176,7 +177,7 @@ def test_only_the_focused_pane_inside_the_desk_window_is_held() -> None:
     held = slot.update([Change(A, EVENT_BLOCKED, agent(A)), Change(B, EVENT_BLOCKED, agent(B))])
     assert held is not None
     assert [a.session for a in held.alerts] == [B]
-    assert slot.next_due() == clock() + 30
+    assert slot.next_due() == clock.mono() + 30
     clock.advance(30)
     released = slot.update()
     assert released is not None
@@ -334,11 +335,11 @@ def test_turning_managed_quieting_off_notifies_every_finish(tmp_path: Path) -> N
 
 def test_do_not_disturb_never_silences_blocked_and_never_a_clear() -> None:
     snoozed = Interrupts(blocked=True, done=True, dnd_until=2000)
-    assert snoozed.allows(EVENT_BLOCKED, now=1000)
-    assert not snoozed.allows(EVENT_DONE, now=1000)
-    assert snoozed.allows(EVENT_DONE, now=3000)
-    assert Interrupts(blocked=False, done=False).allows(EVENT_CLEAR, now=0)
-    assert not Interrupts(blocked=False).allows(EVENT_BLOCKED, now=0)
+    assert snoozed.allows(EVENT_BLOCKED, now=WallTime(1000))
+    assert not snoozed.allows(EVENT_DONE, now=WallTime(1000))
+    assert snoozed.allows(EVENT_DONE, now=WallTime(3000))
+    assert Interrupts(blocked=False, done=False).allows(EVENT_CLEAR, now=WallTime(0))
+    assert not Interrupts(blocked=False).allows(EVENT_BLOCKED, now=WallTime(0))
     assert (Interrupts().blocked, Interrupts().done) == (True, False)
 
 

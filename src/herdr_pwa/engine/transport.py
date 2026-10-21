@@ -14,7 +14,7 @@ from typing import Final, NamedTuple, Protocol, runtime_checkable
 
 from pydantic import BaseModel, JsonValue, TypeAdapter, ValidationError
 
-from herdr_pwa.clock import MonoClock, mono_now
+from herdr_pwa.clock import MonoClock, MonoTime, mono_now
 from herdr_pwa.engine.generated import ErrorBody, SuccessResponse
 from herdr_pwa.engine.generated.success_response import (
     ResponseResult,
@@ -241,7 +241,7 @@ class _Call(NamedTuple):
     # A read whose answer is lost did nothing; a write's may have run.
     idempotent: bool = True
 
-    def remaining(self, now: float) -> float:
+    def remaining(self, now: MonoTime) -> float:
         return self.deadline - now
 
 
@@ -460,7 +460,7 @@ class SocketTransport:
         """Re-arm the socket timeout from what is left of the call's budget."""
         sock.settimeout(self._check_budget(call, self._clock()))
 
-    def _check_budget(self, call: _Call, now: float) -> float:
+    def _check_budget(self, call: _Call, now: MonoTime) -> float:
         """What is left of the call's budget, or :class:`EngineTimeout`."""
         remaining = call.remaining(now)
         if remaining <= 0:

@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 from pydantic import JsonValue, TypeAdapter
 
+from herdr_pwa.clock import MonoTime
 from herdr_pwa.decisions import (
     CURSOR_KEYS,
     DISCONNECTED_AFTER,
@@ -421,7 +422,7 @@ def _herd_found(herd_id: str) -> tuple[dict[str, JsonValue], dict[str, JsonValue
             snapshot.agents,
             prompts=prompts,
             overlay=Overlay(unread),
-            fetched=Fetched(NOW, taken_at, error),
+            fetched=Fetched(MonoTime(NOW), taken_at, error),
         )
         freshness.append(
             {
@@ -432,7 +433,7 @@ def _herd_found(herd_id: str) -> tuple[dict[str, JsonValue], dict[str, JsonValue
             }
         )
     herd = decide_herd(
-        snapshot.agents, prompts=prompts, overlay=Overlay(unread), fetched=Fetched(NOW)
+        snapshot.agents, prompts=prompts, overlay=Overlay(unread), fetched=Fetched(MonoTime(NOW))
     )
     expected = {k: v for k, v in entry.items() if k != "input"}
     return _herd_json(herd, prompt_ids, prompts, freshness), expected

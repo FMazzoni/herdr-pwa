@@ -2,6 +2,7 @@
 
 from collections.abc import Iterable
 
+from herdr_pwa.clock import WallTime
 from herdr_pwa.decisions import Overlay, Pending, effective_status
 from herdr_pwa.engine import (
     SPAWNED_SHELL,
@@ -18,7 +19,7 @@ from herdr_pwa.web.stats import SpawnedTime, spawned_times
 
 
 def background_times(
-    web: WebState, pane: PaneId, usage: SessionUsage, now: float
+    web: WebState, pane: PaneId, usage: SessionUsage, now: WallTime
 ) -> tuple[SpawnedTime, ...]:
     """*usage*'s background work as the page lists it, bounded by when *pane*'s process started."""
     # The runner is asked only when something is still open, which is rare.

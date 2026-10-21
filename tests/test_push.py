@@ -23,6 +23,7 @@ from pydantic import ValidationError
 from pywebpush import WebPushException
 
 from herdr_pwa import push, statedir
+from herdr_pwa.clock import WallTime
 from herdr_pwa.push import (
     EVENT_BLOCKED,
     EVENT_CLEAR,
@@ -452,7 +453,9 @@ def test_a_link_cut_by_the_scan_cap_is_dropped_and_the_cut_marked(padding: int) 
 
 
 def test_the_title_and_body_are_capped() -> None:
-    payload = build_payload(Notice(event=EVENT_BLOCKED, title="t" * 200, body="b" * 500), now=0)
+    payload = build_payload(
+        Notice(event=EVENT_BLOCKED, title="t" * 200, body="b" * 500), now=WallTime(0)
+    )
     assert len(str(payload["title"])) == 60
     assert len(str(payload["body"])) == 180
     assert str(payload["body"]).endswith("…")
@@ -460,19 +463,19 @@ def test_the_title_and_body_are_capped() -> None:
 
 def test_a_body_that_was_only_a_link_falls_back() -> None:
     notice = Notice(event=EVENT_DONE, title="x", body="https://evil.example", fallback="herdr")
-    assert build_payload(notice, now=0)["body"] == "herdr"
+    assert build_payload(notice, now=WallTime(0))["body"] == "herdr"
 
 
 def test_only_blocked_and_done_are_notifications_and_clear_raises_nothing() -> None:
     with pytest.raises(PushError):
-        _ = build_payload(Notice(event=EVENT_CLEAR, title="", body=""), now=0)
-    clear = build_clear(now=5)
+        _ = build_payload(Notice(event=EVENT_CLEAR, title="", body=""), now=WallTime(0))
+    clear = build_clear(now=WallTime(5))
     assert (clear["event"], clear["tag"], "title" in clear) == (EVENT_CLEAR, "herd", False)
 
 
 def test_the_encoded_payload_is_compact_and_always_fits() -> None:
     notice = Notice(event=EVENT_BLOCKED, title="ü" * 200, body="ü" * 5000, agent="ü" * 200)
-    encoded = encode_payload(build_payload(notice, now=0))
+    encoded = encode_payload(build_payload(notice, now=WallTime(0)))
     assert ", " not in encoded
     assert len(encoded.encode()) <= MAX_PAYLOAD_BYTES
     with pytest.raises(PushError):
@@ -493,7 +496,7 @@ def test_pywebpush_signs_and_encrypts_with_this_key(
     device = {"endpoint": ENDPOINT, "keys": {"p256dh": b64u(point), "auth": b64u(bytes(16))}}
     subscription = Subscription.model_validate(device)
     data = encode_payload(
-        build_payload(Notice(event=EVENT_BLOCKED, title="t", body="secret"), now=0)
+        build_payload(Notice(event=EVENT_BLOCKED, title="t", body="secret"), now=WallTime(0))
     )
     # pywebpush leaves its subscription mapping untyped.
     sign = cast("Callable[..., object]", pywebpush.webpush)

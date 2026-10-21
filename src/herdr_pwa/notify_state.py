@@ -18,7 +18,7 @@ from pydantic import (
 )
 
 from herdr_pwa import statedir
-from herdr_pwa.clock import WallClock, wall_now
+from herdr_pwa.clock import WallClock, WallTime, wall_now
 from herdr_pwa.ids import SessionId
 from herdr_pwa.push import EVENT_BLOCKED, EVENT_DONE, PushEvent
 from herdr_pwa.validation import or_default
@@ -148,7 +148,7 @@ class SeenLedger:
                 self._observe_one(records, agent, now)
             self._trim(records)
 
-    def _observe_one(self, records: dict[str, SeenRecord], agent: SeenAgent, now: float) -> None:
+    def _observe_one(self, records: dict[str, SeenRecord], agent: SeenAgent, now: WallTime) -> None:
         if not agent.session:
             return
         record = records.get(agent.session)
@@ -233,11 +233,11 @@ class Interrupts(BaseModel):
     done: Annotated[StrictBool, or_default(default=False)] = False
     dnd_until: Annotated[StrictFloat, or_default(0.0), AfterValidator(_not_negative)] = 0.0
 
-    def snoozed(self, now: float) -> bool:
+    def snoozed(self, now: WallTime) -> bool:
         """The do-not-disturb window is still in the future."""
         return self.dnd_until > now
 
-    def allows(self, event: PushEvent, *, now: float) -> bool:
+    def allows(self, event: PushEvent, *, now: WallTime) -> bool:
         """May this event be sent now? Only the standing blocked preference can silence blocked."""
         if event == EVENT_BLOCKED:
             # Do-not-disturb is deliberately not consulted: needs-you is the app's purpose.
@@ -293,6 +293,6 @@ class InterruptStore:
         with self._lock:
             return self.save(self.load().model_copy(update={"dnd_until": until}))
 
-    def current(self) -> tuple[Interrupts, float]:
+    def current(self) -> tuple[Interrupts, WallTime]:
         """The policy and the clock reading it is judged against, taken together."""
         return self.load(), self._clock()

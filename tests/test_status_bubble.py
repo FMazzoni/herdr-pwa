@@ -9,7 +9,7 @@ from typing import cast
 from fastapi import FastAPI
 from pydantic import BaseModel, JsonValue, TypeAdapter
 
-from herdr_pwa.clock import elapsed
+from herdr_pwa.clock import WallTime, elapsed
 from herdr_pwa.decisions import QUIET_AFTER, gone_quiet, needs_you
 from herdr_pwa.engine import (
     AgentStatus,
@@ -47,7 +47,7 @@ from tests.webfakes import (
 ROOT = Path(__file__).resolve().parents[1]
 STATIC = ROOT / "src" / "herdr_pwa" / "web" / "static"
 FRAGMENT = {"HX-Request": "true"}
-NOW = datetime(2026, 10, 16, 12, 0, tzinfo=UTC).timestamp()
+NOW = WallTime(datetime(2026, 10, 16, 12, 0, tzinfo=UTC).timestamp())
 
 
 class _Spans(BaseModel):

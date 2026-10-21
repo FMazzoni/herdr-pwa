@@ -6,6 +6,7 @@ import threading
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Final
 
 from fastapi import APIRouter, FastAPI
 from fastapi.routing import APIRoute
@@ -159,6 +160,10 @@ class Hold:
             self.then(wire)
 
 
+# Far apart, as the real clocks are, so a swapped reading makes an absurd age.
+WALL_OFFSET: Final = 1_700_000_000.0
+
+
 # Mutable: a clock the test moves by setting it.
 @dataclass(slots=True)
 class Clock:
@@ -173,8 +178,8 @@ class Clock:
         return MonoTime(self.now)
 
     def wall(self) -> WallTime:
-        """The same hand read as wall time, for a rig that runs both clocks on it."""
-        return WallTime(self.now)
+        """The same hand on the wall clock, offset so a reading swapped for monotonic time shows."""
+        return WallTime(self.now + WALL_OFFSET)
 
     def sleep(self, seconds: float) -> None:
         """Wait by moving the clock, so a watched write settles without real time passing."""

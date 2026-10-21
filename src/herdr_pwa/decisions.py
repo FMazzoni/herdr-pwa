@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Final
 
-from herdr_pwa.clock import ago
+from herdr_pwa.clock import MonoTime, ago
 from herdr_pwa.engine import (
     CONTEXT,
     Agent,
@@ -441,7 +441,7 @@ class Fetched:
         error: The last refresh's failure class, while the feed serves an older snapshot.
     """
 
-    now: float
+    now: MonoTime
     taken_at: float | None = None
     error: str | None = None
 

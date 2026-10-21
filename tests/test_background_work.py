@@ -8,7 +8,7 @@ from typing import Final
 
 import pytest
 
-from herdr_pwa.clock import MonoTime
+from herdr_pwa.clock import MonoTime, WallTime
 from herdr_pwa.decisions import Fetched, Overlay, Pending, decide_herd
 from herdr_pwa.engine import (
     Agent,
@@ -222,7 +222,7 @@ def test_the_cache_holds_as_many_logs_as_the_herd_has_agents(tmp_path: Path) -> 
 
 # ---- What the page lists ----
 
-NOW: Final = datetime(2026, 10, 20, 11, 0, tzinfo=UTC).timestamp()
+NOW: Final = WallTime(datetime(2026, 10, 20, 11, 0, tzinfo=UTC).timestamp())
 
 
 def test_a_shell_started_before_the_running_process_belongs_to_a_dead_one() -> None:
@@ -399,11 +399,11 @@ def test_pending_cards_sort_to_the_top_of_idle_and_keep_their_order() -> None:
     herd.append(_agent(5, AgentStatus.WORKING, 1))
     pending = {str(herd[2].session): Pending(agents=1), str(herd[3].session): Pending(shells=2)}
     overlay = Overlay(pending=pending)
-    rows = decide_herd(herd, prompts={}, overlay=overlay, fetched=Fetched(0.0)).rows
+    rows = decide_herd(herd, prompts={}, overlay=overlay, fetched=Fetched(MonoTime(0.0))).rows
     assert [str(r.target) for r in rows] == ["w1:p5", "w1:p3", "w1:p4", "w1:p1", "w1:p2"]
     assert rows[1].pending == Pending(agents=1)
     # Only an idle card is marked; herdr's other states keep their place.
     assert rows[0].pending == Pending()
     # With nothing pending the order is the one the feed always had.
-    plain = decide_herd(herd, prompts={}, overlay=Overlay(), fetched=Fetched(0.0)).rows
+    plain = decide_herd(herd, prompts={}, overlay=Overlay(), fetched=Fetched(MonoTime(0.0))).rows
     assert [str(r.target) for r in plain] == ["w1:p5", "w1:p1", "w1:p2", "w1:p3", "w1:p4"]

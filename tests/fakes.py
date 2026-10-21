@@ -9,6 +9,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
+from typing import Final
 
 from herdr_pwa.clock import MonoTime, WallTime
 from herdr_pwa.ids import PaneId, SessionId
@@ -173,6 +174,10 @@ def status_route(
     return {("GET", STATUS_PATH): Canned(status=status, body=body)}
 
 
+# Far apart, as the real clocks are, so a swapped reading makes an absurd age.
+MONO_OFFSET: Final = 900_000.0
+
+
 class Clock:
     """A wall clock tests move by hand; nothing here sleeps."""
 
@@ -184,8 +189,8 @@ class Clock:
         return WallTime(self.now)
 
     def mono(self) -> MonoTime:
-        """The same hand read as monotonic time, for a rig that runs both clocks on it."""
-        return MonoTime(self.now)
+        """The same hand on the monotonic clock, offset so a reading swapped for wall time shows."""
+        return MonoTime(self.now - MONO_OFFSET)
 
     def advance(self, seconds: float) -> None:
         """Move time forward."""
