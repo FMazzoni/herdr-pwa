@@ -402,7 +402,7 @@ def test_send_keys_requires_a_key() -> None:
     eng, wire = build()
     with pytest.raises(InvalidRequest) as caught:
         eng.send_keys(Seat(P3))
-    assert isinstance(caught.value, EngineError | ValueError)  # pyright: ignore[reportUnnecessaryIsInstance] - the check is the point: the error must stay in the taxonomy
+    assert isinstance(caught.value, EngineError | ValueError)
     assert caught.value.code == "invalid_request"
     assert wire.calls == []
 
@@ -412,7 +412,7 @@ def test_an_unknown_read_source_is_an_engine_error_not_a_bare_valueerror() -> No
     eng, wire = build()
     with pytest.raises(InvalidRequest) as caught:
         eng.read(P3, ReadOptions(source="visable"))
-    assert isinstance(caught.value, EngineError)  # pyright: ignore[reportUnnecessaryIsInstance] - the check is the point: the error must stay in the taxonomy
+    assert isinstance(caught.value, EngineError)
     assert caught.value.code == "invalid_request"
     assert wire.calls == []
 
