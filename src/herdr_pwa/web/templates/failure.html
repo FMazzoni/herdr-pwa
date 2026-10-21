@@ -4,6 +4,6 @@
      {% if poll_url %}data-hp-poll="{{ poll_url }}" hx-get="{{ poll_url }}" hx-target="this" hx-swap="outerHTML" hx-trigger="every {{ cadence }}s"{% endif %}>
   {{ ui.banner("failure", what=failure.headline, why=detail) }}
   {% if poll_url %}
-  <p class="empty">Nothing is shown rather than nothing being there.<br>Retrying every {{ cadence }}s.</p>
+  <p class="empty">Nothing shows because this couldn't be read, not because there's nothing here.<br>Retrying every {{ cadence }}s.</p>
   {% endif %}
 </div>

@@ -15,7 +15,7 @@
       <select name="kind">{% for kind in kinds %}<option value="{{ kind }}"{% if kind == values.get('kind') %} selected{% endif %}>{{ kind }}</option>{% endfor %}</select>
     {% endcall %}
     {% for missing in stranded %}<p class="field__note">{{ missing.kind }} is installed at {{ missing.stranded }} but isn't on this service's PATH, so it can't be started from here.</p>{% endfor %}
-    <p class="field__note">opencode starts with bash set to ask, so it stops and asks before running a command.</p>
+    <p class="field__note">opencode starts with bash set to ask: it stops and asks you before it runs any shell command.</p>
     {% if models %}
     {% call ui.field("Model (optional)") %}<input name="model" value="{{ values.get('model', '') }}" list="models">{% endcall %}
     <datalist id="models">{% for kind, names in models.items() %}{% for name in names %}<option value="{{ name }}">{{ kind }}</option>{% endfor %}{% endfor %}</datalist>
@@ -27,7 +27,7 @@
     {% call ui.field("Directory") %}<input name="cwd" value="{{ values.get('cwd', '') }}" list="cwds" required>{% endcall %}
     <datalist id="cwds">{% for cwd in cwds %}<option value="{{ cwd }}"></option>{% endfor %}</datalist>
     {% call ui.field("First prompt (optional)") %}<textarea name="prompt" rows="3" maxlength="4000">{{ values.get('prompt', '') }}</textarea>{% endcall %}
-    <p class="field__note">Typed once the agent is listening. opencode and hermes only name themselves once prompted, so a prompt here opens them straight on their page.</p>
+    <p class="field__note">The app types this in once the agent is ready. opencode and hermes only report their session after a first prompt, so give one here and the app opens their page straight away.</p>
     {{ ui.button("Start") }}
   </form>
 </main>
