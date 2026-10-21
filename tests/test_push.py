@@ -294,6 +294,37 @@ def test_ordinary_questions_are_not_mangled(text: str) -> None:
     assert sanitise(text, limit=MAX_BODY_CHARS) == text
 
 
+@pytest.mark.parametrize(
+    ("text", "cleaned"),
+    [
+        ("(see https://evil.example/pay)", "(see [link]"),
+        ("run -evil.example.com now", "run -[link] now"),
+        ("a..evil.example.com", "a..[link]"),
+        ("x.com.evil.example/pay", "[link]"),
+    ],
+)
+def test_a_link_inside_punctuation_is_still_found(text: str, cleaned: str) -> None:
+    assert sanitise(text, limit=MAX_BODY_CHARS) == cleaned
+
+
+# One unbroken word made the old pattern rescan the rest of it from every letter: 18 s at 20k.
+ADVERSARIAL = ("a" * 100_000, "a." * 50_000, "a-" * 50_000, "1a" * 50_000, "a.." * 33_333)
+
+
+@pytest.mark.parametrize("text", ADVERSARIAL, ids=["word", "dots", "dashes", "digits", "breaks"])
+def test_scanning_for_links_is_linear_in_the_text(text: str) -> None:
+    started = time.perf_counter()
+    _ = push._URL_RE.sub(LINK_PLACEHOLDER, text)  # pyright: ignore[reportPrivateUsage]
+    assert time.perf_counter() - started < 0.1
+
+
+def test_a_long_notice_is_cut_before_it_is_scanned() -> None:
+    started = time.perf_counter()
+    cleaned = sanitise("a" * 100_000, limit=MAX_BODY_CHARS)
+    assert time.perf_counter() - started < 0.1
+    assert cleaned == "a" * (MAX_BODY_CHARS - 1) + "…"
+
+
 def test_the_title_and_body_are_capped() -> None:
     payload = build_payload(Notice(event=EVENT_BLOCKED, title="t" * 200, body="b" * 500), now=0)
     assert len(str(payload["title"])) == 60
@@ -482,6 +513,12 @@ def test_the_browsers_push_services_are_accepted(endpoint: str) -> None:
 def test_an_endpoint_off_the_push_services_is_refused(endpoint: str) -> None:
     with pytest.raises(ValidationError, match="not on a browser push service"):
         _ = subscribed(endpoint)
+
+
+def test_an_endpoint_ending_in_a_newline_is_refused() -> None:
+    # A pattern's ``$`` also matches before a final newline: https://docs.python.org/3/library/re.html
+    with pytest.raises(ValidationError, match="must be an https:// URL"):
+        _ = subscribed(f"{ENDPOINT}\n")
 
 
 def test_an_eleventh_device_is_refused_but_a_known_one_still_updates(

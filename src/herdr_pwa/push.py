@@ -252,7 +252,7 @@ def load_or_create_vapid_keys(state_dir: Path, *, clock: Clock = time.time) -> V
     return document.keys(path)
 
 
-_ENDPOINT_RE = re.compile(r"^https://[^\s/@]+(?:/\S*)?$")
+_ENDPOINT_RE = re.compile(r"https://[^\s/@]+(?:/\S*)?")
 
 
 def _is_push_service(host: str) -> bool:
@@ -260,10 +260,10 @@ def _is_push_service(host: str) -> bool:
 
 
 def _checked_endpoint(endpoint: str) -> str:
-    if not _ENDPOINT_RE.match(endpoint):
-        raise ValueError("endpoint must be an https:// URL")
     if len(endpoint) > MAX_ENDPOINT_CHARS:
         raise ValueError(f"endpoint is over the {MAX_ENDPOINT_CHARS} character cap")
+    if not _ENDPOINT_RE.fullmatch(endpoint):
+        raise ValueError("endpoint must be an https:// URL")
     parts = urlsplit(endpoint)
     try:
         port = parts.port
@@ -403,26 +403,45 @@ _ANSI_RE = re.compile(
 _LINKY_TLDS = "com|net|org|io|dev|ai|co|me|app|sh|xyz|gg|to|ly"
 # Schemes with no // that still navigate or execute.
 _BARE_SCHEMES = "data|javascript|vbscript|file|blob|tel|mailto|sms|intent|market"
+# Each run is entered only at its start, so a scan is linear: one from every letter took 18 s on 20k.
 _URL_RE = re.compile(
     rf"""(?ix)
     (?:
-        [a-z][a-z0-9+.\-]*://\S+
+        # A scheme, entered where its run starts; digits before the first letter go with it.
+        (?<![a-z0-9+.\-]) (?P<scheme_lead>[+.\-]*+) (?:[0-9][0-9+.\-]*+)? [a-z][a-z0-9+.\-]*+ ://\S+
       | (?:{_BARE_SCHEMES}):\S*
       | www\.\S+
-      | [a-z0-9][a-z0-9\-]*(?:\.[a-z0-9\-]+)*\.(?:{_LINKY_TLDS})\b(?:[/?\#]\S*)?
-      | [a-z0-9][a-z0-9\-]*(?:\.[a-z0-9\-]+)+/\S*
+        # A host, entered where its run starts or after a "..", which no host crosses.
+      | (?: (?<![a-z0-9.\-]) | (?<=\.\.) ) (?P<host_lead>(?: - | \.(?!\.) )*+)
+        (?:
+            www\.\S+
+          | (?:{_BARE_SCHEMES}):\S*
+          | [a-z0-9][a-z0-9\-]*+
+            (?:
+                (?:\.[a-z0-9\-]++)++ /\S*
+              | (?:\.[a-z0-9\-]++)* \.(?:{_LINKY_TLDS})\b (?:[/?\#]\S*)?
+            )
+        )
     )
     """
 )
+# Text past this is never scanned: a lock screen shows a few hundred characters at most.
+_MAX_SCANNED = 4096
 _INVISIBLE = frozenset({"Cc", "Cf", "Cs", "Co"})
+
+
+def _unlinked(found: re.Match[str]) -> str:
+    # A run's leading punctuation was matched only so the scan could enter there.
+    return (found["scheme_lead"] or found["host_lead"] or "") + LINK_PLACEHOLDER
 
 
 def sanitise(text: str, *, limit: int) -> str:
     """Agent output reduced to what is safe on a lock screen: no escapes, controls or links."""
     cleaned = _ANSI_RE.sub("", text)
     cleaned = "".join(" " if unicodedata.category(ch) in _INVISIBLE else ch for ch in cleaned)
+    cleaned = " ".join(cleaned.split())[:_MAX_SCANNED]
     # An autolinked lock screen is a phishing primitive.
-    cleaned = " ".join(_URL_RE.sub(LINK_PLACEHOLDER, cleaned).split())
+    cleaned = " ".join(_URL_RE.sub(_unlinked, cleaned).split())
     if len(cleaned) > limit:
         cleaned = cleaned[: max(limit - 1, 0)].rstrip() + "…"
     return cleaned
