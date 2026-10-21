@@ -106,6 +106,13 @@ type = "acyclic_siblings"
 ancestors = ["herdr_pwa"]
 depth = 0
 
+# The engine's modules import each other one way only, so a submodule never sees another half-built.
+[[tool.importlinter.contracts]]
+name = "No import cycles between the engine's modules"
+type = "acyclic_siblings"
+ancestors = ["herdr_pwa.engine"]
+depth = 0
+
 [[tool.importlinter.contracts]]
 name = "Outside the engine, only its facade"
 type = "protected"
@@ -118,21 +125,6 @@ name = "No import cycles between the Claude reader's modules"
 type = "acyclic_siblings"
 ancestors = ["herdr_pwa.engine.claude"]
 depth = 0
-
-# Named apart from the layers, so a reader of the Claude package sees what it may never reach.
-[[tool.importlinter.contracts]]
-name = "The Claude reader imports nothing above the engine"
-type = "forbidden"
-source_modules = ["herdr_pwa.engine.claude"]
-forbidden_modules = [
-    "herdr_pwa.cli",
-    "herdr_pwa.web",
-    "herdr_pwa.writes",
-    "herdr_pwa.notify",
-    "herdr_pwa.files",
-    "herdr_pwa.decisions",
-    "herdr_pwa.render",
-]
 
 # The adapters build on transcript.py and the facade registers them, so it never imports one.
 [[tool.importlinter.contracts]]

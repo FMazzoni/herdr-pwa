@@ -287,7 +287,7 @@ def _for_kind(entry: str, kind: str) -> str:
 def search_roots(
     root: TranscriptRoots = None,
     *,
-    kind: str = "claude",
+    kind: str,
     default: Sequence[str],
 ) -> list[Path]:
     """Every configured transcript root for *kind*, in search order, deduplicated."""
