@@ -42,8 +42,8 @@ LONG_CELLS = {
     "tests/fixtures/README.md": 18,
 }
 
-FENCE = re.compile(r"^```.*?^```", re.M | re.S)
-COMMENT = re.compile(r"<!--.*?-->|<[^>\n]+>", re.S)
+FENCE = re.compile(r"^```.*?^```", re.MULTILINE | re.DOTALL)
+COMMENT = re.compile(r"<!--.*?-->|<[^>\n]+>", re.DOTALL)
 CODE = re.compile(r"`[^`\n]+`")
 LINK = re.compile(r"\]\([^)]*\)")
 ACRONYM = re.compile(r"\b[A-Z]{2,}(?=s?\b)")

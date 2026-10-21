@@ -326,7 +326,7 @@ def test_chat_for_a_harness_with_no_transcript_offers_the_pane_door(tmp_path: Pa
     working["agent"] = "cursor"
     rig = build_rig(tmp_path, {SNAPSHOT: frame, READ: read_frame("")})
     body = rig.http.get(f"/agent/{WORKING_SESSION}/chat", headers=FRAGMENT).text
-    note = re.search(r'<p class="empty">.*?</p>', body, re.S)
+    note = re.search(r'<p class="empty">.*?</p>', body, re.DOTALL)
     assert note is not None, "an empty log says why"
     assert "keeps no transcript this app can read" in note[0]
     door = f'href="/agent/{WORKING_SESSION}?tab=pane" data-hp-replace>'
