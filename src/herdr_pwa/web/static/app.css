@@ -1125,6 +1125,12 @@ body:has(#composer:focus-within) .stats { display: none; }
 .tabs.subtabs { grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0 0 var(--space-4); }
 .subtabs .tab__label { padding: 0 var(--space-2); }
 
+/* The phone losing the box: one line across the foot of the sticky bar, under any strip. */
+.topbar:has(> .unreachable:not([hidden])) { flex-wrap: wrap; row-gap: 0; }
+.unreachable { flex: 1 0 100%; min-width: 0; margin: 0 calc(-1 * var(--gutter-right)) 0 calc(-1 * var(--gutter-left)); padding: var(--space-3) var(--gutter-right) var(--space-3) var(--gutter-left); border-top: var(--line-1) solid var(--rule); font-size: var(--text-small); color: var(--ink-2); }
+.unreachable[hidden] { display: none; }
+.unreachable__what { font-weight: 600; color: var(--blocked); }
+
 /* ---- The stats strip ----
    One quiet line under the bar on Chat, Pane and Files, inside the sticky header so it never
    scrolls away; a tap opens what it sums. It keeps to one line at every Text Size: the facts

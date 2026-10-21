@@ -113,22 +113,30 @@
     }
     stream = null;
     live = false;
-    missed = true;
+    // A rotation at the stream's lifetime told the page everything up to its end.
+    missed = missed || !mine.rotated;
     polling(true);
-    if (!document.hidden) {
-      var retry = hp.logic.backoff(retryMs);
-      retryTimer = window.setTimeout(connect, retry.wait);
-      retryMs = retry.next;
+    if (document.hidden) {
+      return;
     }
+    if (mine.rotated) {
+      retryTimer = window.setTimeout(connect, 0);
+      return;
+    }
+    var retry = hp.logic.backoff(retryMs);
+    retryTimer = window.setTimeout(connect, retry.wait);
+    retryMs = retry.next;
   }
 
   // Each whole event block in what has arrived; the rest waits for the next progress.
-  function heardSoFar(text, from) {
+  function heardSoFar(mine, text, from) {
     var arrived = hp.logic.blocks(text, from);
     arrived.blocks.forEach(function (block) {
       var topic = hp.logic.staleTopic(block);
       if (topic) {
         stale(topic);
+      } else if (hp.logic.rotates(block)) {
+        mine.rotated = true;
       }
     });
     return arrived.from;
@@ -150,7 +158,7 @@
       return "topic=" + encodeURIComponent(topic);
     }).join("&");
     var xhr = new XMLHttpRequest();
-    var mine = { abort: function () { xhr.abort(); } };
+    var mine = { rotated: false, abort: function () { xhr.abort(); } };
     var read = 0;
     stream = mine;
     xhr.open("GET", "/events?" + query);
@@ -162,7 +170,7 @@
     };
     xhr.onprogress = function () {
       if (stream === mine && xhr.status === 200) {
-        read = heardSoFar(xhr.responseText, read);
+        read = heardSoFar(mine, xhr.responseText, read);
       }
     };
     xhr.onloadend = function () {
@@ -183,6 +191,54 @@
   });
   document.addEventListener("DOMContentLoaded", connect);
   window.addEventListener("pagehide", closeStream);
+
+  /* ---- The phone losing the box ----
+   * A read that gets no answer leaves its region showing what it drew last, which would read as
+   * live. The region is marked stale and the bar says when the box was last heard from; the next
+   * read that lands takes both away. */
+  var heardAt = new Date();
+
+  function clock(at) {
+    return ("0" + at.getHours()).slice(-2) + ":" + ("0" + at.getMinutes()).slice(-2);
+  }
+
+  function readRegion(detail) {
+    var elt = detail && detail.elt;
+    return hp.isRead(detail) && elt && elt.closest ? elt.closest("[data-hp-poll]") : null;
+  }
+
+  function unheard(event) {
+    var region = readRegion(event.detail);
+    var bar = document.getElementById("hp-unreachable");
+    if (!region || !bar) {
+      return;
+    }
+    region.classList.add("is-stale");
+    region.setAttribute("data-hp-unheard", "");
+    document.getElementById("hp-unreachable-at").textContent = clock(heardAt);
+    bar.hidden = false;
+  }
+  document.addEventListener("htmx:sendError", unheard);
+  document.addEventListener("htmx:timeout", unheard);
+  // The app's own failure screens are admitted as swaps (app.js); what is left came from no app.
+  document.addEventListener("htmx:responseError", unheard);
+
+  // Before the swap: afterRequest fires on the element an outerHTML swap has just detached.
+  hp.bus.on("swap:capture", function (detail) {
+    if (detail.isError || !readRegion(detail)) {
+      return;
+    }
+    heardAt = new Date();
+    var marked = document.querySelectorAll("[data-hp-unheard]");
+    for (var i = 0; i < marked.length; i++) {
+      marked[i].classList.remove("is-stale");
+      marked[i].removeAttribute("data-hp-unheard");
+    }
+    var bar = document.getElementById("hp-unreachable");
+    if (bar) {
+      bar.hidden = true;
+    }
+  });
 
   /* bfcache restore and iOS standalone resume skip visibilitychange. The restored
    * DOM is whatever was on screen when the page was left, so it says so until the

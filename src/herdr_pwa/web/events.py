@@ -185,6 +185,8 @@ class Hub:
             yield b": open\nretry: 5000\n\n"
             while not listener.closed:
                 if self._clock() - listener.joined > self._config.lifetime:
+                    # Said apart from a lost stream, so the page reconnects without redrawing all.
+                    yield b"event: rotate\ndata: lifetime\n\n"
                     return
                 yield await self._next(listener)
         finally:

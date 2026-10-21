@@ -162,6 +162,10 @@ test("events: a stale block names its topic; anything else names none", () => {
   assert.equal(logic.staleTopic("event: stale"), null);
   assert.equal(logic.staleTopic(": keepalive"), null);
   assert.equal(logic.staleTopic("event: hello\ndata: feed"), null);
+  assert.equal(logic.staleTopic("event: rotate\ndata: lifetime"), null);
+  assert.equal(logic.rotates("event: rotate\ndata: lifetime"), true);
+  assert.equal(logic.rotates("event: stale\ndata: feed"), false);
+  assert.equal(logic.rotates(": hb"), false);
   assert.deepEqual(plain(logic.eventOf("data: one\ndata: two")), { kind: "message", data: "two" });
 });
 

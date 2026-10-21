@@ -184,6 +184,8 @@ def test_a_stream_opens_with_a_comment_beats_while_quiet_and_ends_with_its_lifet
     chunks = asyncio.run(asyncio.wait_for(scenario(), WAIT))
     assert chunks[0].startswith(b": open\n")
     assert b": hb\n\n" in chunks
+    # A lifetime's end is said as such, so the page does not take it for a lost stream.
+    assert chunks[-1] == b"event: rotate\ndata: lifetime\n\n"
     assert hub.listeners == 0
 
 
