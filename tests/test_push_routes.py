@@ -1,10 +1,12 @@
 """Every push route over the app: what it answers, what it stores, and what it refuses."""
 
+import asyncio
 import json
 from pathlib import Path
 
 import pytest
 
+from herdr_pwa import statedir
 from herdr_pwa.notify_state import InterruptStore, SeenLedger
 from herdr_pwa.push import SubscriptionStore, load_or_create_vapid_keys
 from tests.test_push import ENDPOINT, raw_subscription
@@ -69,6 +71,30 @@ def test_a_malformed_body_is_a_400_with_a_reason(tmp_path: Path, route: str, bod
     assert answer.status_code == 400
     assert answer.json()["error"]
     assert not SubscriptionStore(rig.settings.state_dir).list_all()
+
+
+@pytest.mark.parametrize(("route", "body"), WRITES)
+def test_a_write_keeps_its_disk_work_off_the_event_loop(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, route: str, body: dict[str, object]
+) -> None:
+    rig = build_rig(tmp_path)
+    _ = rig.http.post("/push/subscribe", headers=SAME_ORIGIN, json=raw_subscription())
+    write = statedir.write_secret
+    on_loop: list[bool] = []
+
+    def watched(path: Path, text: str, *, exclusive: bool = False) -> None:
+        # An fsync on the loop's thread stalls every stream the server holds open.
+        try:
+            _ = asyncio.get_running_loop()
+            on_loop.append(True)
+        except RuntimeError:
+            on_loop.append(False)
+        write(path, text, exclusive=exclusive)
+
+    monkeypatch.setattr(statedir, "write_secret", watched)
+    assert rig.http.post(route, headers=SAME_ORIGIN, json=body).status_code == 200
+    assert on_loop
+    assert not any(on_loop)
 
 
 def test_preferences_default_to_blocked_on_and_done_off(tmp_path: Path) -> None:

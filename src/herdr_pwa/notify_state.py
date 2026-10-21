@@ -263,6 +263,8 @@ class InterruptStore:
     def __init__(self, state_dir: Path, *, clock: Clock = time.time) -> None:
         self.path: Path = state_dir / INTERRUPTS_FILENAME
         self._clock: Clock = clock
+        # The preference routes rewrite it from worker threads, each from what it read.
+        self._lock: threading.Lock = threading.Lock()
 
     def load(self) -> Interrupts:
         """What is on disk, or the defaults; an unreadable store is not fatal."""
@@ -276,21 +278,23 @@ class InterruptStore:
 
     def set_kinds(self, *, blocked: bool | None = None, done: bool | None = None) -> Interrupts:
         """Change which kinds may ever fire, leaving the snooze alone."""
-        current = self.load()
-        return self.save(
-            current.model_copy(
-                update={
-                    "blocked": current.blocked if blocked is None else blocked,
-                    "done": current.done if done is None else done,
-                }
+        with self._lock:
+            current = self.load()
+            return self.save(
+                current.model_copy(
+                    update={
+                        "blocked": current.blocked if blocked is None else blocked,
+                        "done": current.done if done is None else done,
+                    }
+                )
             )
-        )
 
     def snooze(self, seconds: float) -> Interrupts:
         """Start, or end at 0, a do-not-disturb window clamped to twelve hours."""
         span = min(max(0.0, seconds), float(MAX_DND_SECONDS))
         until = self._clock() + span if span else 0.0
-        return self.save(self.load().model_copy(update={"dnd_until": until}))
+        with self._lock:
+            return self.save(self.load().model_copy(update={"dnd_until": until}))
 
     def current(self) -> tuple[Interrupts, float]:
         """The policy and the clock reading it is judged against, taken together."""
