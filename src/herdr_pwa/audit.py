@@ -1,4 +1,4 @@
-"""Every write the runner is asked to make, recorded before it is made; reads are not."""
+"""Every write the runner is asked to make, logged first; reads, subscriptions, refusals are not."""
 
 import json
 import logging

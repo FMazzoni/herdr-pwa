@@ -13,7 +13,7 @@ from herdr_pwa.web.render import Pages
 
 # Answered with no identity at all: a liveness probe has none, and says nothing about the herd.
 OPEN_PATHS: Final = frozenset({"/healthz"})
-# A 4000-character prompt urlencodes to 48 KiB at most, and a keepalive device report to 64 KiB.
+# A 4000-char prompt urlencodes to 48 KiB and a device report to 64 KiB; push routes cap tighter.
 MAX_BODY_BYTES: Final = 64 * 1024
 TOO_LARGE: Final = f"body is over {MAX_BODY_BYTES} bytes"
 

@@ -266,7 +266,7 @@ class Transport(Protocol):
 
 
 class SocketTransport:
-    """Newline-delimited JSON-RPC over AF_UNIX, one fresh connection per call, calls in parallel."""
+    """JSON-RPC lines over AF_UNIX, a connection per call; the lock guards only ids and backoff."""
 
     def __init__(
         self,

@@ -335,7 +335,7 @@ def is_key_hint(line: str) -> bool:
 
 
 def _footer_lines(lines: list[str]) -> list[str]:
-    """The key-hint footer on the viewport's last lines, where a blocked dialog's read ends."""
+    """The key-hint footer on the viewport's last lines only: a bar below offers no dialog key."""
     end = len(lines)
     while end and not lines[end - 1].strip():
         end -= 1
@@ -459,7 +459,7 @@ def _steps(line: str) -> Stepper | None:
 
 
 def _stepper(lines: list[str], stop: int) -> Stepper | None:
-    """The nearest stepper strip above ``lines[:stop]``, known by its arrows around a step box."""
+    """The nearest stepper above ``lines[:stop]``: arrows round a step box, a shape prose lacks."""
     for index in range(stop - 1, -1, -1):
         if _STEPPER_RE.fullmatch(lines[index].strip()):
             return _steps(lines[index].strip())
@@ -843,7 +843,7 @@ def _cut_side(rows: list[str], box: range, column: int) -> list[str]:
 
 
 def _dialog_colour(text: str, ansi: str, barred: list[bool]) -> tuple[str, ...]:
-    """The ANSI of each dialog line, ``""`` elsewhere: a code span there looks focused."""
+    """Each dialog line's ANSI, from the text's own read only: a code span outside looks focused."""
     lines = text.splitlines()
     nothing = ("",) * len(lines)
     drawn = ansi.splitlines()

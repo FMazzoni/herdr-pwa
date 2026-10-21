@@ -1,4 +1,4 @@
-"""What the notifier remembers across restarts: prior statuses, what was seen, what may buzz."""
+"""What the notifier keeps across restarts, each file 0600: statuses, what was seen, what buzzes."""
 
 import logging
 import threading

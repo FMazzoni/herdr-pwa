@@ -1,4 +1,4 @@
-"""The identity gate: any local uid can forge the header, so it counts only on this node's Host."""
+"""The identity gate: local uids are trusted (any can forge it); a browser only on this Host."""
 
 import hmac
 from collections.abc import Mapping

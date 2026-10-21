@@ -20,7 +20,7 @@ type ClientFactory = Callable[[EngineSettings], HerdrClient]
 
 @dataclass(frozen=True, slots=True)
 class Seams:
-    """Time, the runner, the push service, tailscaled, the files it reads and the terminal."""
+    """Time, the runner, push, files and the terminal; nothing below an entry point owns its own."""
 
     # Intervals, deadlines and cache ages.
     clock: MonoClock = mono_now

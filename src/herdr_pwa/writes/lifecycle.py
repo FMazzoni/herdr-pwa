@@ -320,7 +320,7 @@ def _launch(writer: Writer, request: StartRequest, name: str) -> _Launched | Ref
     if harness is None:
         return Refused(Refusal.BAD_KIND, "created")
     prompt = request.prompt if harness.takes_prompt and request.prompt.strip() else ""
-    # herdr types the launch into this tab's shell; a null HISTFILE keeps the prompt out (bash(1)).
+    # herdr types the launch into this tab's shell only; null HISTFILE keeps it out (bash(1)).
     env = {**harness.env, "HISTFILE": ""} if prompt else harness.env
     try:
         pane = writer.client.create_tab(

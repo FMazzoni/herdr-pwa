@@ -167,7 +167,7 @@ def agent_now(
     resolution = snap.resolve_session(session, expected_target=expected_target)
     if resolution.presence is Presence.GONE or resolution.agent is None:
         return Refused(Refusal.GONE, verb, detail=resolution.message)
-    # herdr's session check cannot see a record a nested harness overwrote, so this one looks.
+    # herdr checks a record a nested harness can overwrite; then keys would reach another agent.
     said = doubt(resolution.agent, writer.witness)
     if said:
         log.warning("write refused at %s: %s", resolution.agent.target, said)
@@ -206,6 +206,6 @@ def one_at_a_time[T](
     memory: WriteMemory, key: str, verb: str, write: Callable[[], T]
 ) -> T | Refused:
     """Run ``write`` unless another write to the same ``key`` is still in flight; then refuse."""
-    # Refused, not queued: the second tap was aimed at what the first changes, and must look again.
+    # Refused, not queued: the second tap aimed at what the first changes; a queue pins a thread.
     with memory.in_flight.hold(key) as mine:
         return write() if mine else Refused(Refusal.IN_FLIGHT, verb)

@@ -79,7 +79,7 @@ class LocalReader:
         self.root = root
 
     def _confined(self, fd: int) -> None:
-        # What was opened, so a symlink swapped in since the check is caught; no /proc, no proof.
+        # What was opened, so a swapped-in symlink is caught; no /proc is no proof, so refuse.
         try:
             opened = Path(f"/proc/self/fd/{fd}").readlink()
         except OSError as exc:

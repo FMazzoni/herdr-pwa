@@ -26,7 +26,7 @@ LAYOUT_TTL: Final = 30.0
 EMPTY_TREE: Final = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 # A .git file, a worktree's gitdir file or a commondir file is one line holding a path.
 GITFILE_BYTES: Final = 4096
-# libgit2 runs no command a repository names; submodules stay shut and nothing is written back.
+# libgit2 runs no repo-named filter, fsmonitor, hook or textconv; submodules shut, no locks taken.
 _READ: Final = DiffOption.IGNORE_SUBMODULES
 _STATUS: Final = _READ | DiffOption.INCLUDE_TYPECHANGE
 _UNTRACKED: Final = _STATUS | DiffOption.INCLUDE_UNTRACKED | DiffOption.RECURSE_UNTRACKED_DIRS
