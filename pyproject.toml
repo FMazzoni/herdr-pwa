@@ -99,6 +99,16 @@ layers = [
     "audit : pairing : devreport : facts : glyphs : patterns : notify_state : push : auth : tailscale : settings : statedir : clock : managed : panetext : process_start : protocol : validation : ids",
 ]
 
+# The view composes the status, which reads the turns; an import the other way is a cycle.
+[[tool.importlinter.contracts]]
+name = "The chat view builds on its status, which builds on its turns"
+type = "layers"
+layers = [
+    "herdr_pwa.web.chat_view",
+    "herdr_pwa.web.chat_status",
+    "herdr_pwa.web.chat",
+]
+
 # The foundations layer is non-independent, so this is what keeps its modules from a cycle.
 [[tool.importlinter.contracts]]
 name = "No import cycles between the top-level modules"

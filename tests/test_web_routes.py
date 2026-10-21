@@ -22,7 +22,8 @@ from herdr_pwa.engine import (
 )
 from herdr_pwa.files.roots import root_id
 from herdr_pwa.protocol import WRITE_METHODS
-from herdr_pwa.web.chat import WORKING_VERBS, Turning, chat_view
+from herdr_pwa.web.chat_status import WORKING_VERBS, Turning
+from herdr_pwa.web.chat_view import chat_view
 from herdr_pwa.web.security import CSP
 from tests.filefakes import make_repo, stand_in
 from tests.webfakes import (

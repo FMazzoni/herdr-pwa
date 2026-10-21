@@ -22,7 +22,8 @@ from herdr_pwa.engine import (
     locate_log,
 )
 from herdr_pwa.web.background import background_times
-from herdr_pwa.web.chat import ChatView, Turning, chat_view, status_row
+from herdr_pwa.web.chat_status import Turning
+from herdr_pwa.web.chat_view import ChatView, chat_view, status_row
 from herdr_pwa.web.deps import WebState, hidden_tick, viewer_guard
 from herdr_pwa.web.herd import agent_status, asked_by, find_agent
 from herdr_pwa.web.naming import page_title

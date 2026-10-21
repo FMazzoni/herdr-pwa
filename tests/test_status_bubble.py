@@ -19,15 +19,14 @@ from herdr_pwa.engine import (
     TranscriptPage,
     TranscriptTurn,
 )
-from herdr_pwa.web.chat import (
+from herdr_pwa.web.chat_status import (
     WORKING_MOTION,
     WORKING_PALETTE,
     WORKING_VERBS,
-    ChatView,
     Turning,
-    chat_view,
     turn_verb,
 )
+from herdr_pwa.web.chat_view import ChatView, chat_view
 from herdr_pwa.web.events import Hub
 from herdr_pwa.web.stats import TurnTimes, turn_times
 from tests.catalogue import PERMISSION, TURN_WORKED_SECONDS, capture, turn_chat

@@ -24,7 +24,8 @@ from herdr_pwa.engine import (
 )
 from herdr_pwa.process_start import ProcessStarts
 from herdr_pwa.web.background import pending_of
-from herdr_pwa.web.chat import Turning, chat_view, status_row
+from herdr_pwa.web.chat_status import Turning
+from herdr_pwa.web.chat_view import chat_view, status_row
 from herdr_pwa.web.stats import SpawnedTime, TurnTimes, spawned_times
 from tests.catalogue import FIXTURES, LeftRunning, background_chat
 from tests.engine_seam import TaskNotice, injected, tally_claude
