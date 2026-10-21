@@ -8,6 +8,7 @@ import threading
 import unicodedata
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from http import HTTPStatus
 from pathlib import Path
 from typing import Annotated, Final, Literal, Protocol, Self, TypedDict, Unpack, cast
 from urllib.parse import urlsplit
@@ -550,9 +551,16 @@ def _refusal(exc: Exception) -> DeliveryError:
         return DeliveryError("push not sent: pywebpush refused it before posting")
     # The body is the service's (or a redirect target's) text, so it never reaches the record.
     return DeliveryError(
-        f"push service answered {response.status_code} {response.reason}",
-        status=response.status_code,
+        f"push service answered {_phrase(response.status_code)}", status=response.status_code
     )
+
+
+def _phrase(status: int) -> str:
+    # The service's own reason text is as untrusted as its body, so the phrase is the stdlib's.
+    try:
+        return f"{status} {HTTPStatus(status).phrase}"
+    except ValueError:
+        return str(status)
 
 
 @dataclass(frozen=True, slots=True)
@@ -590,8 +598,9 @@ class WebPushSender:
                     timeout=self.timeout,
                     requests_session=session,
                 )
-            except Exception as exc:
-                raise _refusal(exc) from exc
+            except Exception as exc:  # noqa: BLE001 - any failure becomes a refusal without its text
+                # from None: the library's exception names the endpoint, and a traceback prints it.
+                raise _refusal(exc) from None
 
 
 def arm_sender(

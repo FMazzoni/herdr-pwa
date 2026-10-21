@@ -695,13 +695,15 @@ def test_a_refusal_before_posting_keeps_none_of_the_librarys_text() -> None:
 
 
 @contextmanager
-def answering(status: int, headers: dict[str, str], body: bytes) -> Generator[list[str]]:
+def answering(
+    status: int, headers: dict[str, str], body: bytes, reason: str | None = None
+) -> Generator[list[str]]:
     seen: list[str] = []
 
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self) -> None:
             seen.append(self.path)
-            self.send_response(status)
+            self.send_response(status, reason)
             for name, value in headers.items():
                 self.send_header(name, value)
             self.send_header("Content-Length", str(len(body)))
@@ -742,6 +744,30 @@ def test_a_refusal_keeps_the_status_and_reason_and_never_the_body(tmp_path: Path
         a_sender(tmp_path)(unchecked(f"{service[0]}/push"), "{}")
     assert str(refused.value) == "push service answered 500 Internal Server Error"
     assert refused.value.status == 500
+
+
+PLANTED = "https://planted.example/device-secret"
+
+
+def test_no_text_from_the_service_or_the_library_reaches_the_record_or_the_log(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    store = SubscriptionStore(tmp_path / "state", clock=Clock())
+    health = DeliveryLog(tmp_path / "state", clock=Clock())
+    # The reason phrase and the body are the service's text; pywebpush quotes both in its error.
+    with answering(500, {}, PLANTED.encode(), reason=f"see {PLANTED}") as service:
+        device = unchecked(f"{service[0]}/push")
+        with pytest.raises(DeliveryError) as refused:
+            a_sender(tmp_path)(device, "{}")
+        outlet = Outlet(a_sender(tmp_path), store, health)
+        outcome = fan_out("{}", [device], outlet, now=Clock()())
+    assert outcome.failed == 1
+    assert refused.value.__cause__ is None
+    assert refused.value.__suppress_context__
+    record = health.load()
+    assert record is not None
+    assert record.last_error == "push service answered 500 Internal Server Error"
+    assert "planted" not in caplog.text
 
 
 def test_a_fan_out_past_its_budget_skips_the_rest(tmp_path: Path) -> None:
