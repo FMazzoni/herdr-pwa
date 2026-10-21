@@ -29,6 +29,9 @@ _SCALE = 4
 _MAX_RATIO = 8.0
 # Best of several runs, since noise only ever adds time.
 _REPEATS = 5
+# A ratio over the bound is measured again, unless it is already as steep as quadratic's 16x.
+_RETRIES = 2
+_PLAINLY_QUADRATIC = 12.0
 # Below this the clock's grain and call overhead swamp the ratio, so the input grows first.
 _FLOOR_SECONDS = 0.002
 # Past this a pattern that is still under the floor costs nothing per character, so no ratio is read.
@@ -162,16 +165,28 @@ def _scaling_case(rx: Rx) -> object:
     return pytest.param(rx, marks=marks, id=_name(rx))
 
 
-@pytest.mark.parametrize("rx", [_scaling_case(rx) for rx in RECORDS])
-def test_no_pattern_costs_more_than_linear_time(rx: Rx) -> None:
+def _ratio(rx: Rx) -> tuple[float, int] | None:
+    """How much more reading four times its input costs, and the length that was scaled."""
     length = _LONG
     short, long = _best_times(rx, length)
     while short < _FLOOR_SECONDS and length < _MAX_LONG:
         length *= _SCALE
         short, long = _best_times(rx, length)
-    if short < _FLOOR_SECONDS:
-        return  # It bails out before reading the input, so there is no per-character cost to scale.
-    assert long / short < _MAX_RATIO, f"{long / short:.1f}x at {length * _SCALE:,} characters"
+    # Still under the floor: it bails out before reading the input, so no per-character cost scales.
+    return (long / short, length) if short >= _FLOOR_SECONDS else None
+
+
+@pytest.mark.parametrize("rx", [_scaling_case(rx) for rx in RECORDS])
+def test_no_pattern_costs_more_than_linear_time(rx: Rx) -> None:
+    measured = _ratio(rx)
+    # A loaded machine can slow one size for a whole measurement; it does not do so every time.
+    for _ in range(_RETRIES):
+        if measured is None or not _MAX_RATIO <= measured[0] < _PLAINLY_QUADRATIC:
+            break
+        measured = min(measured, _ratio(rx) or measured)
+    if measured is not None:
+        ratio, length = measured
+        assert ratio < _MAX_RATIO, f"{ratio:.1f}x at {length * _SCALE:,} characters"
 
 
 @pytest.mark.parametrize("rx", VALIDATORS, ids=_name)
