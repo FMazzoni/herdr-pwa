@@ -1,14 +1,15 @@
 import ast
 import inspect
 import os
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from herdr_pwa import auth, pairing, tailscale
 from herdr_pwa.settings import Settings
-from herdr_pwa.tailscale import STATUS_PATH, LocalApi, LocalApiError, magicdns, self_login
-from tests.fakes import GOOD_STATUS, LOGIN, NODE, Canned, status_route, tailscaled
+from herdr_pwa.tailscale import STATUS_PATH, LocalApi, LocalApiError, magicdns
+from tests.fakes import GOOD_STATUS, NODE, Canned, status_route, tailscaled
 
 
 def test_magicdns_strips_the_trailing_dot_and_reads_only_status(tmp_path: Path) -> None:
@@ -17,11 +18,6 @@ def test_magicdns_strips_the_trailing_dot_and_reads_only_status(tmp_path: Path) 
         assert [(r.method, r.path) for r in fake.requests] == [("GET", STATUS_PATH)]
         # LocalAPI's CSRF guard: anything else is refused by tailscaled.
         assert fake.requests[0].headers["host"] == "local-tailscaled.sock"
-
-
-def test_self_login_reads_the_user_table_by_the_stringified_id(tmp_path: Path) -> None:
-    with tailscaled(tmp_path, canned=status_route()) as fake:
-        assert self_login(fake.api) == LOGIN
 
 
 @pytest.mark.parametrize(
@@ -47,15 +43,6 @@ def test_a_status_without_a_usable_name_is_an_actionable_error(
         _ = magicdns(fake.api)
 
 
-def test_self_login_says_so_when_there_is_no_login(tmp_path: Path) -> None:
-    document: dict[str, object] = {**GOOD_STATUS, "User": {}}
-    with (
-        tailscaled(tmp_path, canned=status_route(document)) as fake,
-        pytest.raises(LocalApiError, match="LoginName"),
-    ):
-        _ = self_login(fake.api)
-
-
 @pytest.mark.parametrize(
     ("status", "message"), [(403, "operator"), (401, "operator"), (500, "HTTP 500")]
 )
@@ -68,8 +55,10 @@ def test_an_error_status_is_named(tmp_path: Path, status: int, message: str) -> 
 
 
 def test_a_missing_socket_says_install_tailscale(tmp_path: Path) -> None:
-    with pytest.raises(LocalApiError, match="Install Tailscale"):
-        _ = magicdns(LocalApi(tmp_path / "missing.sock"))
+    missing = tmp_path / "missing.sock"
+    with pytest.raises(LocalApiError, match="Install Tailscale") as caught:
+        _ = magicdns(LocalApi(missing))
+    assert str(caught.value).startswith(f"No tailscaled socket at {str(missing)!r}.")
 
 
 def test_a_refused_socket_says_start_tailscaled(tmp_path: Path) -> None:
@@ -84,9 +73,16 @@ def test_a_hung_daemon_times_out(tmp_path: Path) -> None:
     canned = {("GET", STATUS_PATH): Canned(hang=True)}
     with (
         tailscaled(tmp_path, canned=canned) as fake,
-        pytest.raises(LocalApiError, match="Timed out"),
+        pytest.raises(LocalApiError, match=r"Timed out after 0\.1s"),
     ):
         _ = magicdns(LocalApi(fake.socket_path, timeout=0.1))
+
+
+def test_the_fakes_client_outwaits_a_slow_answer(tmp_path: Path) -> None:
+    # A loaded box once made the fake answer later than a tight client budget allowed.
+    late = {("GET", STATUS_PATH): replace(status_route()[("GET", STATUS_PATH)], late=1.0)}
+    with tailscaled(tmp_path, canned=late) as fake:
+        assert magicdns(fake.api) == NODE
 
 
 def test_garbage_on_the_wire_is_an_error_not_a_traceback(tmp_path: Path) -> None:

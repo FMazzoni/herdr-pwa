@@ -27,6 +27,7 @@ def _parser() -> MarkdownIt:
     md.enable(["strikethrough", "table", "linkify"])
     # Only a URL with its scheme: fuzzy matching makes README.md a link to Moldova.
     linkify = LinkifyIt()
+    # linkify-it-py ships no annotations for set().
     linkify.set({"fuzzy_link": False, "fuzzy_email": False, "fuzzy_ip": False})  # pyright: ignore[reportUnknownMemberType]
     md.linkify = linkify
     # No space inside the dollars and no digit after the closing one, so "$5 and $10" is money.

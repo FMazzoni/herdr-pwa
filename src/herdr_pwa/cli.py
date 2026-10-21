@@ -233,6 +233,14 @@ def device_report(settings: Settings, seams: Seams, session: str = "") -> int:
     return 0
 
 
+class _Args(argparse.Namespace):
+    # argparse.Namespace is untyped; these declare what the subcommands below can set.
+    command: str = ""
+    port: int | None = None
+    session: str = ""
+    check: bool = False
+
+
 def main(argv: list[str] | None = None) -> int:
     """Parse arguments and run the chosen command."""
     parser = argparse.ArgumentParser(prog="herdr-pwa")
@@ -246,21 +254,17 @@ def main(argv: list[str] | None = None) -> int:
     )
     report_cmd = sub.add_parser("device-report", help="print the latest phone device report")
     report_cmd.add_argument("--session", default="", help="a session id instead of the latest")
-    args = parser.parse_args(argv)
+    args = parser.parse_args(argv, namespace=_Args())
     settings = Settings()
     seams = Seams()
-    command: str = args.command  # pyright: ignore[reportAny]
-    if command == "doctor":
+    if args.command == "doctor":
         return doctor(settings, seams)
-    if command == "device-report":
-        session: str = args.session  # pyright: ignore[reportAny]
-        return device_report(settings, seams, session)
-    if command == "pair":
-        check: bool = args.check  # pyright: ignore[reportAny]
-        return pair(settings, seams, publish=not check)
-    port: int | None = args.port  # pyright: ignore[reportAny]
+    if args.command == "device-report":
+        return device_report(settings, seams, args.session)
+    if args.command == "pair":
+        return pair(settings, seams, publish=not args.check)
     try:
-        serve(settings, port, seams)
+        serve(settings, args.port, seams)
     # A key or audit log that cannot be used stops the box serving; say why, not a traceback.
     except (auth.AuthError, NonLoopbackBindError, VapidKeyError, AuditUnavailableError) as exc:
         sys.stderr.write(f"serve: {exc}\n")

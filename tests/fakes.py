@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 
+from herdr_pwa.ids import PaneId, SessionId
 from herdr_pwa.tailscale import SERVE_CONFIG_PATH, STATUS_PATH, LocalApi, serve_config
 
 NODE = "host.tailnet.ts.net"
@@ -24,13 +25,15 @@ GOOD_STATUS: dict[str, object] = {
 
 @dataclass
 class Canned:
-    """One fixed answer; ``raw`` bypasses HTTP framing and ``hang`` never answers."""
+    """One fixed answer; ``raw`` bypasses HTTP framing, ``hang`` never answers, ``late`` stalls."""
 
     status: int = 200
     body: str = ""
     etag: str = ""
     raw: bytes | None = None
     hang: bool = False
+    # Seconds the answer waits, as a loaded box would make it.
+    late: float = 0.0
 
 
 @dataclass
@@ -56,8 +59,10 @@ class FakeTailscaled:
 
     @property
     def api(self) -> LocalApi:
-        """A client pointed at this fake, with a short timeout."""
-        return LocalApi(self.socket_path, timeout=0.5)
+        """A client pointed at this fake, with a generous ceiling."""
+        # The fake answers at once, so the budget is only reached on a loaded box; a hang test
+        # builds its own LocalApi with a short timeout.
+        return LocalApi(self.socket_path, timeout=30.0)
 
     def etag(self) -> str:
         """The ETag the current serve config is served with."""
@@ -97,6 +102,8 @@ def _handler(fake: FakeTailscaled) -> type[BaseHTTPRequestHandler]:
             if canned.hang:
                 _ = fake.released.wait(5.0)
                 return
+            if canned.late:
+                _ = fake.released.wait(canned.late)
             if canned.raw is not None:
                 _ = self.wfile.write(canned.raw)
                 self.close_connection = True
@@ -179,13 +186,17 @@ class Clock:
         self.now += seconds
 
 
+_SESSION = SessionId("5e550001-0000-0000-0000-000000000000")
+_PANE = PaneId("w1:p1")
+
+
 @dataclass(frozen=True)
 class Agent:
     """One agent in the shape the engine reports, as far as the notifier reads it."""
 
-    session: str = "5e550001-0000-0000-0000-000000000000"
+    session: SessionId = _SESSION
     status: str = "working"
-    target: str = "w1:p1"
+    target: PaneId = _PANE
     title: str = "fix the parser"
     workspace: str = "herdr"
     project: str = "herdr-pwa"

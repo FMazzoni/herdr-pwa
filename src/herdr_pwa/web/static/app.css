@@ -952,7 +952,7 @@ html.is-keyboard { background: var(--surface); }
   container-type: inline-size;
 }
 .tray [hidden] { display: none; }
-/* One of a pair sharing a cell: it keeps its room, so showing the other moves nothing (G2, G3). */
+/* One of a pair sharing a cell keeps its room, so showing the other moves nothing under a finger. */
 .tray [data-hp-off] { visibility: hidden; }
 .tray__sheet { flex: 1; min-width: 0; }
 /* The whole row is the sheet's 44px handle. Ranked: the dot and the counts always, then the time,

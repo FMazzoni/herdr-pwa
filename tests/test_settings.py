@@ -23,7 +23,8 @@ def test_env_overrides(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
 
 def test_access_and_push_defaults_fail_safe() -> None:
     settings = Settings()
-    assert settings.state_dir != Path.home() / ".config" / "herdr-pwa"
+    # Its own directory, never the previous build's ~/.config/herdr-pwa.
+    assert settings.state_dir == Path.home() / ".config" / "herdr-pwa-v2"
     assert (settings.tailnet_login, settings.assume_login, settings.push_subject) == ("", "", "")
     assert (settings.audit_max_bytes, settings.audit_payload_chars) == (5 * 1024 * 1024, 512)
     assert settings.push_ledger_max_age == 900

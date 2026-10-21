@@ -8,7 +8,7 @@ import pytest
 from pydantic import JsonValue
 
 from herdr_pwa.decisions import Overlay, context_stalled, read_status, reads_stall
-from herdr_pwa.engine import AgentStatus, Snapshot, TranscriptTurn
+from herdr_pwa.engine import AgentStatus, SessionId, Snapshot, TranscriptTurn
 from herdr_pwa.engine.notices import CONTEXT_FULL
 from herdr_pwa.engine.transcript import parse_claude_line
 from herdr_pwa.web.events import changed, herd_marks
@@ -31,7 +31,7 @@ from tests.webfakes import (
 )
 
 FRAGMENT = {"HX-Request": "true"}
-S = IDLE_SESSION
+S = SessionId(IDLE_SESSION)
 # The fixture, by index: 0 a prompt, 1 the answer, 2 the first refusal, 3-8 retries each woken by
 # a task notice or a peer message, 9 a typed prompt, 10 its refusal, 11 /compact, 12 on limits.
 FIRST_REFUSAL = 3
@@ -115,7 +115,7 @@ def test_a_stalled_agent_needs_you_whatever_herdr_calls_its_stop(
     herdr: AgentStatus, shown: AgentStatus
 ) -> None:
     assert read_status(herdr, S, Overlay(stalled=frozenset({S}))) is shown
-    assert read_status(herdr, "another", Overlay(stalled=frozenset({S}))) is herdr
+    assert read_status(herdr, SessionId("another"), Overlay(stalled=frozenset({S}))) is herdr
 
 
 @pytest.mark.parametrize(

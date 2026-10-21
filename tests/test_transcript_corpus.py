@@ -12,7 +12,7 @@ from pydantic import JsonValue, TypeAdapter, ValidationError
 from tests.engine_seam import copied_from, head_window
 
 # Opt-in, so the gate stays hermetic: point it at ~/.claude/projects to read the real box.
-CORPUS = os.environ.get("HERDR_PWA_CORPUS", "")
+CORPUS = os.environ.get("HP_CORPUS", "")
 ROOT = Path(CORPUS).expanduser()
 
 MEASURED_VERSIONS = (
@@ -79,7 +79,7 @@ WHAT_IT_SAW = f"corpus {ROOT}: {len(HEADS)} transcripts, versions {sorted(SEEN)}
 
 corpus = pytest.mark.skipif(
     not HEADS,
-    reason=f"no readable transcript corpus at {CORPUS or '(HERDR_PWA_CORPUS unset)'}; this check reads the real box",
+    reason=f"no readable transcript corpus at {CORPUS or '(HP_CORPUS unset)'}; this check reads the real box",
 )
 
 

@@ -378,7 +378,7 @@ if (nav) {
       .map((f) => f.textContent) : [],
   };
 }
-// G2: a control that stops a turn now keeps out of Send's column and REACH px from it, and a
+// A control that stops a turn now keeps out of Send's column and REACH px from it, and a
 // confirm's safe answer covers the control whose first tap armed it.
 const drawn = (el) => box(el).width > 0 && getComputedStyle(el).visibility !== "hidden";
 const send = document.querySelector("#composer button[type=submit]");
@@ -403,7 +403,7 @@ if (send && drawn(send)) {
     }
   }
 }
-// G4: a status-row line never opens on a separator. One left of its counts box is clipped away.
+// A status-row line never opens on a separator. One left of its counts box is clipped away.
 const leading = [];
 const shown = (el) => box(el).width > 0 && getComputedStyle(el).visibility !== "hidden";
 const sameLine = (a, b) => Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 0.5 * a.height;
@@ -427,7 +427,7 @@ for (const counts of document.querySelectorAll(".tray__counts")) {
     if (shown(text)) before.push(box(text));
   }
 }
-// G4: herdr's state word in the row is never dropped, at any width or text size.
+// herdr's state word in the row is never dropped, at any width or text size.
 for (const word of document.querySelectorAll(".tray__row .tray__words--state")) {
   if (!shown(word) || word.scrollWidth > word.clientWidth + 0.5) {
     leading.push({ what: describe(word), text: word.textContent.trim(), state: true });

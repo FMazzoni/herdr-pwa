@@ -19,6 +19,7 @@ from herdr_pwa.engine import (
     BlockedPrompt,
     EngineError,
     InvalidRequest,
+    SessionId,
     Snapshot,
     as_session_id,
 )
@@ -88,7 +89,7 @@ def asked_by(web: WebState, agent: Agent) -> str:
     return card_question(agent_row(agent, overlay_of(web, (agent,)), prompt))
 
 
-def mark_read(web: WebState, session: str) -> None:
+def mark_read(web: WebState, session: SessionId) -> None:
     """The phone showed this agent: its current state is observed first, then stamped read."""
     seen = web.seen
     if seen is None:

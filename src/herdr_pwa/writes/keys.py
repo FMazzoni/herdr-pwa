@@ -16,6 +16,11 @@ BUTTON_PAD_KEYS: Final = ("esc", "left", "right", "enter")
 MAX_TAPPABLE_OPTION: Final = 9
 
 
+def normalise_key(key: str) -> str:
+    """A posted key as the allowed sets spell it; every check and echo goes through this."""
+    return key.strip().lower()
+
+
 def pad_keys(prompt: BlockedPrompt | None) -> tuple[str, ...]:
     """The generic pad this screen earns: the arrows only where the screen uses them."""
     if prompt is not None and prompt.shape is MenuShape.BUTTONS:

@@ -13,6 +13,7 @@ def build(web: WebState, hub: Hub) -> APIRouter:
     """The event stream's one route, behind the same gate as every page."""
     router = APIRouter(dependencies=[Depends(viewer_guard(web))])
 
+    # Each reportUnusedFunction ignore marks a route: FastAPI registers it by decorator.
     @router.get("/events")
     async def events(  # pyright: ignore[reportUnusedFunction]
         topic: Annotated[list[str] | None, Query()] = None,

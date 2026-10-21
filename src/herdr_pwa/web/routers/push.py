@@ -20,6 +20,7 @@ from herdr_pwa.validation import or_default, summary
 from herdr_pwa.web.deps import WebState, viewer_guard
 from herdr_pwa.web.herd import mark_read
 from herdr_pwa.web.notifier import PushState
+from herdr_pwa.web.writing import identity_of
 
 # A PushSubscription is well under 1 KiB; anything far bigger is not one.
 MAX_BODY_BYTES: Final = 8192
@@ -118,6 +119,7 @@ def _status(push: PushState) -> dict[str, object]:
 
 
 def _page_routes(router: APIRouter, web: WebState, push: PushState | None) -> None:
+    # Each reportUnusedFunction ignore marks a route: FastAPI registers it by decorator.
     @router.get("")
     def alerts_page() -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
         if push is None:
@@ -218,7 +220,7 @@ def _preference_routes(router: APIRouter, web: WebState, push: PushState | None)
     def seen(session: str) -> Response:  # pyright: ignore[reportUnusedFunction]
         # The loaded page says it was read; the GET that served it does not.
         if push is not None:
-            mark_read(web, session)
+            mark_read(web, identity_of(session))
         return Response(status_code=204)
 
 

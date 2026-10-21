@@ -10,7 +10,7 @@ from typing import Protocol, Self
 
 from herdr_pwa.clock import Clock
 from herdr_pwa.decisions import NO_OVERLAY, Overlay, read_status
-from herdr_pwa.engine import AgentStatus
+from herdr_pwa.engine import AgentStatus, PaneId, SessionId
 from herdr_pwa.notify_state import Interrupts, SeenLedger, StatusLedger
 from herdr_pwa.push import (
     EVENT_BLOCKED,
@@ -41,10 +41,10 @@ class AgentView(Protocol):
     """The fields of one herdr agent the notifier reads; the engine's agent satisfies it."""
 
     @property
-    def session(self) -> str: ...
+    def session(self) -> SessionId: ...
 
     @property
-    def target(self) -> str: ...
+    def target(self) -> PaneId: ...
 
     @property
     def status(self) -> str: ...
@@ -76,8 +76,8 @@ class Change:
 class _Shown:
     """An agent as the phone shows it: the same fields, its status after the read rule."""
 
-    session: str
-    target: str
+    session: SessionId
+    target: PaneId
     status: str
     title: str
     workspace: str
@@ -87,7 +87,7 @@ class _Shown:
 
 def _shown(agent: AgentView, overlay: Overlay) -> AgentView:
     # The rule is the feed's own: a stall needs you, a finish the phone has already shown is idle.
-    status = read_status(AgentStatus.coerce(agent.status), str(agent.session), overlay)
+    status = read_status(AgentStatus.coerce(agent.status), agent.session, overlay)
     if status.value == str(agent.status):
         return agent
     return _Shown(
@@ -438,7 +438,7 @@ class Hooks:
     """Optional collaborators; each one that is absent or raises costs a refinement, never a buzz."""
 
     seen: SeenLedger | None = None
-    is_managed: Callable[[str], bool] | None = None
+    is_managed: Callable[[PaneId], bool] | None = None
     policy: Callable[[], tuple[Interrupts, float]] | None = None
     health: DeliveryLog | None = None
 
@@ -587,12 +587,12 @@ def _read_map(
     return {str(one.session): one.session in unread for one in agents if one.session}
 
 
-def _managed_finish(change: Change, is_managed: Callable[[str], bool]) -> bool:
+def _managed_finish(change: Change, is_managed: Callable[[PaneId], bool]) -> bool:
     # Only a finish is ever quieted: a managed agent may be blocked because its watcher died.
     if change.event != EVENT_DONE or change.agent is None:
         return False
     try:
-        return is_managed(str(change.agent.target))
+        return is_managed(change.agent.target)
     except Exception:
         log.exception("the managed reader raised; the phone is still told")
         return False

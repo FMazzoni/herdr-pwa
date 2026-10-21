@@ -11,7 +11,7 @@ import pytest
 from pydantic import JsonValue
 
 from herdr_pwa.decisions import Overlay, asks_now, read_status, screen_asks
-from herdr_pwa.engine import AgentStatus, BlockedPrompt, MenuShape
+from herdr_pwa.engine import AgentStatus, BlockedPrompt, MenuShape, SessionId
 from herdr_pwa.writes.answer import KeyAsk, KeySent, send_key
 from herdr_pwa.writes.keys import answer_digits, control_token
 from herdr_pwa.writes.outcome import Evidence, Outcome
@@ -80,13 +80,13 @@ def test_a_question_mark_in_an_idle_status_line_is_not_a_dialog_asking(
 @pytest.mark.parametrize("status", [AgentStatus.DONE, AgentStatus.IDLE])
 def test_a_stop_whose_screen_asks_needs_you(status: AgentStatus) -> None:
     asking = Overlay(unread={IDLE_SESSION: False}, asking=frozenset({IDLE_SESSION}))
-    assert read_status(status, IDLE_SESSION, asking) is AgentStatus.BLOCKED
-    assert read_status(status, "another", asking) is not AgentStatus.BLOCKED
+    assert read_status(status, SessionId(IDLE_SESSION), asking) is AgentStatus.BLOCKED
+    assert read_status(status, SessionId("another"), asking) is not AgentStatus.BLOCKED
 
 
 def test_a_working_agent_is_not_promoted_by_what_its_screen_last_showed() -> None:
     asking = Overlay(asking=frozenset({IDLE_SESSION}))
-    assert read_status(AgentStatus.WORKING, IDLE_SESSION, asking) is AgentStatus.WORKING
+    assert read_status(AgentStatus.WORKING, SessionId(IDLE_SESSION), asking) is AgentStatus.WORKING
 
 
 # The tap

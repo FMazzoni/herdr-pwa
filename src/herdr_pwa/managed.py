@@ -5,6 +5,8 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Protocol
 
+from herdr_pwa.ids import PaneId
+
 log = logging.getLogger(__name__)
 
 MANAGED_ENV = "HERDR_PWA_MANAGED"
@@ -34,7 +36,7 @@ def carries_mark(pid: int, *, proc: Path = PROC) -> bool:
 class PaneProcesses(Protocol):
     """The one thing this module needs from the runner."""
 
-    def pane_pids(self, pane_id: str) -> tuple[int, ...]: ...
+    def pane_pids(self, pane_id: PaneId) -> tuple[int, ...]: ...
 
 
 class ManagedHerd:
@@ -43,9 +45,9 @@ class ManagedHerd:
     def __init__(self, panes: PaneProcesses, *, proc: Path) -> None:
         self._panes: PaneProcesses = panes
         self._proc: Path = proc
-        self._cache: dict[str, tuple[tuple[int, ...], bool]] = {}
+        self._cache: dict[PaneId, tuple[tuple[int, ...], bool]] = {}
 
-    def is_managed(self, pane_id: str) -> bool:
+    def is_managed(self, pane_id: PaneId) -> bool:
         """True only when a pid in this pane provably carries the mark."""
         pids = self._pids(pane_id)
         if not pids:
@@ -59,12 +61,12 @@ class ManagedHerd:
         self._cache[pane_id] = (pids, managed)
         return managed
 
-    def forget(self, live: Sequence[str]) -> None:
+    def forget(self, live: Sequence[PaneId]) -> None:
         """Drop panes no longer in the herd so the cache cannot grow forever."""
         for pane_id in set(self._cache) - set(live):
             del self._cache[pane_id]
 
-    def _pids(self, pane_id: str) -> tuple[int, ...]:
+    def _pids(self, pane_id: PaneId) -> tuple[int, ...]:
         try:
             return self._panes.pane_pids(pane_id)
         except Exception:  # noqa: BLE001 - the engine's error type is a layer up; any failure reads as unmanaged, which still buzzes

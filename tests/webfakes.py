@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 from pydantic import JsonValue, TypeAdapter
 from starlette.routing import BaseRoute
 
-from herdr_pwa.engine import EngineSettings, HerdrClient, WireReply
+from herdr_pwa.engine import EngineError, EngineSettings, HerdrClient, WireReply
 from herdr_pwa.settings import Settings
 from herdr_pwa.web.app import create_app
 from herdr_pwa.web.assets import SCRIPTS, STATIC_DIR
@@ -39,6 +39,7 @@ READ = method_of(wire_request.AgentReadRequest)
 AGENT_GET = method_of(wire_request.AgentGetRequest)
 SEND_KEYS = method_of(wire_request.AgentSendKeysRequest)
 PROMPT = method_of(wire_request.AgentPromptRequest)
+_PROCESS_INFO = method_of(wire_request.PaneProcessInfoRequest)
 
 # The fixture's working agent, and the first idle one.
 WORKING_SESSION = "6ae1e031-ddb4-4684-ab07-68073f7fec47"
@@ -112,6 +113,10 @@ class FakeWire:
         target = params.get("target")
         reply = self.replies.get(f"{method} {target}") if isinstance(target, str) else None
         reply = reply if reply is not None else self.replies.get(method)
+        if reply is None and method == _PROCESS_INFO:
+            # A test that scripts no process info has a runner that will not say, which only
+            # loses the identity proof.
+            raise EngineError("no process info")
         if reply is None:
             raise AssertionError(f"the test gave no reply for {method}")
         if isinstance(reply, Exception):

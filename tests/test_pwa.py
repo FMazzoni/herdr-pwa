@@ -63,8 +63,9 @@ def test_every_script_a_page_runs_is_precached_and_linked_in_order(tmp_path: Pat
     assert linked[0] == "htmx.min.js"
 
 
-# htmx.org@2.0.10's dist/htmx.min.js as published: the vendored copy is upgraded by replacing the
-# file whole and both lines here, never by editing it.
+# htmx.org@2.0.10's dist/htmx.min.js as published, from
+# https://unpkg.com/htmx.org@2.0.10/dist/htmx.min.js (0BSD): the vendored copy is upgraded by
+# replacing the file whole and the URL and both lines here, never by editing it.
 HTMX_VERSION = "2.0.10"
 HTMX_SHA256 = "71ea67185bfa8c98c39d31717c6fce5d852370fcdfd129db4543774d3145c0de"
 

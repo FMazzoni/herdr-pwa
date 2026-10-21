@@ -246,6 +246,7 @@ def _agent_target(explorer: Explorer, root: Root, cwd: Path, path: str) -> Path:
 
 
 def _register_pages(router: APIRouter, explorer: Explorer) -> None:
+    # Each reportUnusedFunction ignore marks a route: FastAPI registers it by decorator.
     @router.get("/files")
     def roots_page() -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
         roots = explorer.roots()

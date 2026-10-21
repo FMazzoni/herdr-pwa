@@ -252,7 +252,7 @@ def test_snapshot_parses_the_fixture(snap: Snapshot) -> None:
     assert len(snap.agents) == 6
     assert len(snap.workspaces) == 5
     assert snap.focused_pane_id == "w1:p3"
-    assert snap.protocol_ok is True
+    assert snap.protocol == snap.expected_protocol
 
 
 def test_agents_come_out_ranked_most_urgent_first(snap: Snapshot) -> None:
@@ -320,7 +320,7 @@ def test_empty_session_is_a_valid_snapshot_not_an_error() -> None:
     assert s.blocked == ()
     assert s.protocol == EXPECTED_PROTOCOL
     assert s.version == "0.8.2"
-    assert s.protocol_ok is True
+    assert s.expected_protocol == EXPECTED_PROTOCOL
     assert s.counts == dict.fromkeys(AgentStatus, 0)
     # A missing key is not a crash either: no agents, no workspaces, no join.
     assert Snapshot.from_raw({}).agents == ()
@@ -329,7 +329,7 @@ def test_empty_session_is_a_valid_snapshot_not_an_error() -> None:
 def test_protocol_drift_is_visible_on_the_model() -> None:
     drifted = EXPECTED_PROTOCOL + 1
     s = Snapshot.from_raw({"protocol": drifted, "agents": [], "workspaces": []})
-    assert s.protocol_ok is False
+    assert s.protocol != s.expected_protocol
 
 
 # BlockedPrompt
@@ -1288,18 +1288,16 @@ def test_the_fallback_still_rescues_the_screens_it_was_written_for() -> None:
 
 # one expected protocol per view, not one per module
 def test_a_snapshot_judges_itself_against_the_protocol_it_was_handed() -> None:
-    """``protocol_ok`` used to compare against the module constant, always."""
+    """The expectation used to be the module constant, always."""
     handed = EXPECTED_PROTOCOL + 1
     raw: dict[str, JsonValue] = {"protocol": handed, "agents": [], "workspaces": []}
-    assert Snapshot.from_raw(raw).protocol_ok is False  # the build's number
-    assert Snapshot.from_raw(raw, expected_protocol=handed).protocol_ok is True
+    assert Snapshot.from_raw(raw).expected_protocol == EXPECTED_PROTOCOL  # the build's number
     assert Snapshot.from_raw(raw, expected_protocol=handed).expected_protocol == handed
 
 
 def test_an_omitted_expectation_still_means_the_build_it_was_compiled_for() -> None:
     raw: dict[str, JsonValue] = {"protocol": EXPECTED_PROTOCOL, "agents": [], "workspaces": []}
     assert Snapshot.from_raw(raw).expected_protocol == EXPECTED_PROTOCOL
-    assert Snapshot.from_raw(raw).protocol_ok is True
 
 
 def test_a_blocked_prompt_refuses_a_mixed_up_address_and_identity() -> None:

@@ -23,6 +23,7 @@ from herdr_pwa.engine.model import (
     SessionId,
     Snapshot,
     Workspace,
+    WorkspaceId,
     as_pane_id,
 )
 from herdr_pwa.engine.transport import (
@@ -119,8 +120,6 @@ def payload_field(arm: type[BaseModel]) -> str:
 
 _TEXT_FIELD: Final = "text"
 
-_EXPLAIN_FIELD: Final = "explain"
-
 
 @dataclass(frozen=True, slots=True)
 class ReadOptions:
@@ -158,7 +157,7 @@ class Mirror(NamedTuple):
 class NewTab:
     """A tab to make in a workspace: where its shell starts, its label, and its environment."""
 
-    workspace_id: str
+    workspace_id: WorkspaceId
     cwd: str
     label: str
     env: Mapping[str, str] = field(default_factory=dict[str, str])
@@ -170,7 +169,7 @@ class Launch:
 
     name: str
     kind: str
-    pane_id: str
+    pane_id: PaneId
     args: tuple[str, ...] = ()
 
 
@@ -196,8 +195,8 @@ class _SalvagedProcessInfo(wire.PaneProcessInfo):
 class StartedAgent(NamedTuple):
     """What starting an agent actually told us, in this app's own words."""
 
-    pane: str
-    session: str
+    pane: PaneId
+    session: SessionId
     status: str
     ready: bool = False
 
@@ -241,12 +240,6 @@ class HerdrClient:
     def close(self) -> None:
         """Release whatever the transport holds open; the client stays usable."""
         self.transport.close()
-
-    def forget_protocol(self) -> None:
-        """Drop the protocol memory, as if this client had just been built."""
-        self.last_protocol = None
-        self.last_protocol_at = 0.0
-        self.warned_protocol = None
 
     # ----------------------------------------------------------------------
     # The one choke point: guard, issue, validate
@@ -292,8 +285,9 @@ class HerdrClient:
                     f"runner's own published schema: {result}"
                 ) from result
             log.warning(
-                "%s answered a frame that does not match the runner's own "
-                "published schema; serving it anyway, writes will fail closed: %s",
+                "%s answered a frame that does not match the runner's own published schema; "
+                "serving it anyway, since a write to an agent first re-reads it with a strict "
+                "agent.get: %s",
                 method,
                 result,
             )
@@ -487,24 +481,6 @@ class HerdrClient:
             return None
         return detected if panetext.is_clean_prose(detected) else None
 
-    def explain(self, target: PaneId, *, timeout: float | None = None) -> Frame:
-        """Which detection rule decided this agent's state, on what evidence."""
-        method = method_of(wire_request.AgentExplainRequest)
-        payload = self._call(
-            wire_request.AgentExplainRequest,
-            wire_request.AgentTarget(target=as_pane_id(target)),
-            timeout=timeout,
-        ).payload
-        return self._sub_object(payload, _EXPLAIN_FIELD, method=method)
-
-    def agent_frame(self, target: PaneId, *, timeout: float | None = None) -> Frame:
-        """The whole `agent.get` reply as the runner sent it, normalized by nothing."""
-        return self._call(
-            wire_request.AgentGetRequest,
-            wire_request.AgentTarget(target=as_pane_id(target)),
-            timeout=timeout,
-        ).payload
-
     def blocked_prompt(
         self,
         target: PaneId,
@@ -647,7 +623,7 @@ class HerdrClient:
     # Lifecycle: the two writes that make a herd able to shrink as well as grow
     # ----------------------------------------------------------------------
 
-    def shell_pane(self, pane_id: str, *, timeout: float | None = None) -> bool:
+    def shell_pane(self, pane_id: PaneId, *, timeout: float | None = None) -> bool:
         """Is this pane a settled shell, ready for an agent to be started in it?"""
         info = self._arm(
             self._call(
@@ -660,7 +636,7 @@ class HerdrClient:
         running = info.foreground_processes or []
         return bool(info.shell_pid) and [p.pid for p in running] == [info.shell_pid]
 
-    def pane_pids(self, pane_id: str, *, timeout: float | None = None) -> tuple[int, ...]:
+    def pane_pids(self, pane_id: PaneId, *, timeout: float | None = None) -> tuple[int, ...]:
         """Every process in this pane, shell first. A runner that will not say answers `()`."""
         info = self._process_info(pane_id, timeout)
         if info is None:
@@ -669,12 +645,12 @@ class HerdrClient:
         pids.extend(process.pid for process in info.foreground_processes or [])
         return tuple(dict.fromkeys(pids))
 
-    def foreground_leader(self, pane_id: str, *, timeout: float | None = None) -> int | None:
+    def foreground_leader(self, pane_id: PaneId, *, timeout: float | None = None) -> int | None:
         """The process leading the pane's terminal, the one its keys reach, or ``None``."""
         info = self._process_info(pane_id, timeout)
         return None if info is None else info.foreground_process_group_id
 
-    def _process_info(self, pane_id: str, timeout: float | None) -> wire.PaneProcessInfo | None:
+    def _process_info(self, pane_id: PaneId, timeout: float | None) -> wire.PaneProcessInfo | None:
         arm, raw = self._result(
             self._call(
                 wire_request.PaneProcessInfoRequest,
@@ -686,7 +662,7 @@ class HerdrClient:
         )
         return arm.process_info if arm else _SalvagedProcessInfo.salvage(raw)
 
-    def create_tab(self, tab: NewTab, *, timeout: float | None = None) -> str:
+    def create_tab(self, tab: NewTab, *, timeout: float | None = None) -> PaneId:
         """Make a new tab with one shell pane in it, and return its root pane."""
         reply = self._call(
             wire_request.TabCreateRequest,
@@ -700,7 +676,7 @@ class HerdrClient:
             timeout=timeout,
         )
         arm = self._written(reply, wire.TabCreatedResponseResult)
-        return arm.root_pane.pane_id
+        return PaneId(arm.root_pane.pane_id)
 
     def start_agent(self, launch: Launch, *, timeout: float | None = None) -> StartedAgent:
         """Start an agent in a pane that already holds a settled shell."""
@@ -722,17 +698,17 @@ class HerdrClient:
         """One ``AgentInfo`` as the three facts the create flow acts on."""
         holder = info.agent_session.value if info.agent_session else ""
         return StartedAgent(
-            pane=info.pane_id,
-            session=str(holder or "").strip(),
+            pane=PaneId(info.pane_id),
+            session=SessionId(str(holder or "").strip()),
             status=str(info.agent_status),
             ready=not info.launch_pending and info.interactive_ready is not False,
         )
 
-    def started_agent(self, pane_id: str, *, timeout: float | None = None) -> StartedAgent:
+    def started_agent(self, pane_id: PaneId, *, timeout: float | None = None) -> StartedAgent:
         """Re-read a just-started agent, to see whether it has a session UUID yet."""
         root, _ = self._agent_result(as_pane_id(pane_id), timeout=timeout, degrade=False)
         if root is None:  # pragma: no cover - degrade=False cannot return None
-            return StartedAgent(pane=pane_id, session="", status="unknown")
+            return StartedAgent(pane=pane_id, session=SessionId(""), status="unknown")
         return self._started(root.agent)
 
     def close_pane(self, seat: Seat, *, timeout: float | None = None) -> Frame:
@@ -767,7 +743,7 @@ class HerdrClient:
         return Workspace.from_raw(arm.workspace.model_dump(mode="json"))
 
     def rename_workspace(
-        self, workspace_id: str, label: str, *, timeout: float | None = None
+        self, workspace_id: WorkspaceId, label: str, *, timeout: float | None = None
     ) -> Frame:
         """Relabel a workspace. Nothing in it is touched; only what it is called."""
         return self._call(
@@ -776,7 +752,7 @@ class HerdrClient:
             timeout=timeout,
         ).payload
 
-    def close_workspace(self, workspace_id: str, *, timeout: float | None = None) -> Frame:
+    def close_workspace(self, workspace_id: WorkspaceId, *, timeout: float | None = None) -> Frame:
         """End every agent in a workspace at once -- the largest write this app makes."""
         return self._call(
             wire_request.WorkspaceCloseRequest,
@@ -786,7 +762,7 @@ class HerdrClient:
 
     # -- the two halves of start_agent, kept out of it for readability ------
 
-    def _wait_for_shell(self, pane_id: str, timeout: float | None) -> None:
+    def _wait_for_shell(self, pane_id: PaneId, timeout: float | None) -> None:
         """Block until the new pane is a settled shell, or refuse the start."""
         for attempt in range(_SHELL_POLLS):
             if self.shell_pane(pane_id, timeout=timeout):

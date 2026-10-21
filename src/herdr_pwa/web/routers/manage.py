@@ -83,6 +83,7 @@ def build(web: WebState) -> APIRouter:
 def _new_routes(router: APIRouter, writes: WriteRoutes) -> None:
     web = writes.web
 
+    # Each reportUnusedFunction ignore marks a route: FastAPI registers it by decorator.
     @router.get("/new")
     def new_form() -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
         return web.pages.page("new.html", _new_context(web, web.client.snapshot(), {}))

@@ -41,6 +41,7 @@ def build(web: WebState, assets: Assets) -> APIRouter:
     """The shell's routes, gated like everything else."""
     router = APIRouter(dependencies=[Depends(viewer_guard(web))])
 
+    # Each reportUnusedFunction ignore marks a route: FastAPI registers it by decorator.
     @router.get("/sw.js", include_in_schema=False)
     def worker() -> Response:  # pyright: ignore[reportUnusedFunction]
         return _root_scoped(assets, WORKER, "text/javascript")

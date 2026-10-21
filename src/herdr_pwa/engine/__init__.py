@@ -9,7 +9,6 @@ signature of a name that does.
 from herdr_pwa.engine.cache import (
     CachedSnapshot,
     CachedValue,
-    CacheSettings,
     ReadAbandoned,
     SnapshotCache,
 )
@@ -39,6 +38,7 @@ from herdr_pwa.engine.model import (
     SessionId,
     Snapshot,
     Workspace,
+    WorkspaceId,
     as_pane_id,
     as_session_id,
     rank,
@@ -116,7 +116,6 @@ __all__ = [
     "AgentStatus",
     "Ask",
     "BlockedPrompt",
-    "CacheSettings",
     "CachedSnapshot",
     "CachedValue",
     "EngineError",
@@ -166,6 +165,7 @@ __all__ = [
     "Window",
     "WireReply",
     "Workspace",
+    "WorkspaceId",
     "as_pane_id",
     "as_session_id",
     "chat_window",

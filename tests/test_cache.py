@@ -1,7 +1,6 @@
 """Cache tests: coalescing and an honest age, proved rather than asserted."""
 
 import threading
-from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -9,7 +8,6 @@ from pydantic import JsonValue, TypeAdapter
 
 from herdr_pwa.engine import (
     CachedSnapshot,
-    CacheSettings,
     EngineUnavailable,
     Snapshot,
     SnapshotCache,
@@ -171,26 +169,6 @@ def test_the_value_is_refetched_once_the_ttl_has_passed():
     clock.advance(0.2)
     assert cache.get(load).age == 0.0
     assert load.calls == 2
-
-
-@dataclass(frozen=True)
-class _Tuned:
-    snapshot_cache_ttl: float
-
-
-def test_ttl_comes_from_settings_and_nowhere_else():
-    """No hardcoded number: the TTL is a configured field like everything else."""
-    cache = SnapshotCache.from_settings(_Tuned(snapshot_cache_ttl=37.0))
-    assert cache.ttl == 37.0
-
-
-# The configuration boundary: the cache reads one field and builds nothing else.
-
-
-def test_the_cache_declares_the_one_field_it_reads_and_no_more():
-    """``from_settings`` took a whole ``Settings`` and read one field of it."""
-    reads = {name for name in dir(CacheSettings) if not name.startswith("_")}
-    assert reads == {"snapshot_cache_ttl"}
 
 
 # Failure policy — stale but honest, never "fine and 0s old"

@@ -47,6 +47,7 @@ def build(web: WebState) -> APIRouter:
     router = APIRouter(dependencies=[Depends(viewer_guard(web))])
     store = ReportStore(web.settings.state_dir)
 
+    # Each reportUnusedFunction ignore marks a route: FastAPI registers it by decorator.
     @router.post("/device-report", include_in_schema=False)
     async def device_report(request: Request) -> Response:  # pyright: ignore[reportUnusedFunction]
         try:
