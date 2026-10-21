@@ -11,8 +11,7 @@ There's no design doc: the code, tests and commit log are the truth.
   To keep the exit code: `just check > out.txt 2>&1; echo "EXIT=$?" >> out.txt`.
 - The gate and browser harnesses are heavy: one at a time (`pgrep -f "just check"` first),
   under `nice -n 19`. Reproduce a flake by stressing the test, not the machine.
-- The layers (`pyproject.toml`) and the ruff limits (`ruff.toml`) carry their reasons.
-  Fix the code rather than widen a limit.
+- Fix the code; never widen a limit in `ruff.toml` or `pyproject.toml`.
 - For a change under `web/templates` or `web/static`, run the `phone-look` skill before and
   after, and make the sheet. The owner checks it on a real phone before merge.
 - `tests/fixtures/ledger.json` is the first implementation's decisions, frozen. Never edit
@@ -25,9 +24,9 @@ There's no design doc: the code, tests and commit log are the truth.
 
 - Comments are one line and say why, citing the outside source when there is one.
   Public API: one-line Google docstring.
-- Commit messages are for a person skimming the log: a subject of 72 characters or
-  fewer, then a body of two sentences, five at most (the commit-msg hook checks). When a
-  decision had alternatives, name the rejected one on a `Rejected:` line.
+- Commit messages: a subject of 72 characters or fewer, then a body of two sentences,
+  five at most (the commit-msg hook checks). When a decision had alternatives, name the
+  rejected one on a `Rejected:` line.
 - Write state-dir files through `statedir.py`, which makes them 0600.
 - No ticket ids, other projects, or anyone's machine, login or tailnet, anywhere in the
   repo or its commit messages. Fixtures follow `tests/fixtures/README.md`.
