@@ -7,7 +7,7 @@
 (function (hp) {
   "use strict";
 
-  // A click this soon after a drag is the drag's compat click, never a tap (G3).
+  // A click this soon after a drag is the drag's compat click; a tap is never read from a drag.
   var DRAGGED_CLICK_MS = 400;
   // The finger's speed is read over its last moves within this window.
   var SPEED_WINDOW_MS = 60;
