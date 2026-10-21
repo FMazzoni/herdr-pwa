@@ -234,10 +234,12 @@ class Source:
         kind = (agent_kind or "").strip().lower()
         adapter = adapter_for(kind)
         roots = (
-            () if adapter is None else tuple(_roots(root, kind=kind, default=adapter.default_roots))
+            ()
+            if adapter is None
+            else tuple(search_roots(root, kind=kind, default=adapter.default_roots))
         )
         # A session id off a URL segment must not walk the tree, so a path reads as no session.
-        return cls(_session_id(session), roots, expect=log, kind=kind)
+        return cls(session_name(session), roots, expect=log, kind=kind)
 
 
 class Gather:
@@ -504,7 +506,7 @@ def _for_kind(entry: str, kind: str) -> str:
     return rest.strip() if head.strip().lower() == kind else ""
 
 
-def _roots(
+def search_roots(
     root: TranscriptRoots = None,
     *,
     kind: str = "claude",
@@ -818,7 +820,7 @@ def _in_root(base: Path, session: str, *, follow: bool) -> Path | None:
     return None
 
 
-def _session_id(session: SessionId | str) -> str:
+def session_name(session: SessionId | str) -> str:
     """*session* as a NAME, or ``""`` for anything that is really a path."""
     # A session id off a URL segment must not walk the tree.
     text = str(session).strip()
@@ -833,10 +835,10 @@ def locate(
     root: TranscriptRoots = None,
 ) -> Path | None:
     """The file *session*'s conversation is actually in now, or ``None``."""
-    text = _session_id(session)
+    text = session_name(session)
     if not text:
         return None
-    for base in _roots(root, kind="claude"):
+    for base in search_roots(root, kind="claude"):
         # A root that cannot be read must not blank the roots after it.
         found = _in_root(base, text, follow=True)
         if found is not None:
@@ -1189,7 +1191,7 @@ def _user_text(record: ClaudeRecord, content: str, uuid: str) -> TranscriptTurn 
         return _injected_turn(found, uuid)
     if record.is_meta:
         # Measured: a scheduled prompt is queued, then delivered hidden; only the queue reads it.
-        return _queue_mark(_TAKEN, content, uuid) if _source(record) else None
+        return _queue_mark(TAKEN, content, uuid) if _source(record) else None
     # The cap follows the speaker: injected machinery gets the note cap, as the view shows three lines.
     text, cut = _prompt(content) if human else clip(without_reminders(content), MAX_NOTE_CHARS)
     if not text:
@@ -1329,15 +1331,15 @@ def _queued_turn(record: ClaudeRecord, uuid: str) -> TranscriptTurn | None:
 
 
 # Measured queue verbs: sent while busy, absorbed or taken back, pulled back to edit, a bare pop.
-_ENQUEUE: Final = "enqueue"
-_REMOVE: Final = "remove"
-_POP_ALL: Final = "popAll"
-_TAKEN: Final = "taken"
+ENQUEUE: Final = "enqueue"
+REMOVE: Final = "remove"
+POP_ALL: Final = "popAll"
+TAKEN: Final = "taken"
 
 
 def _queue_mark(verb: str, content: str, uuid: str) -> TranscriptTurn | None:
     text, _ = _prompt(content)
-    if verb != _POP_ALL and not text:
+    if verb != POP_ALL and not text:
         return None
     return TranscriptTurn(uuid=uuid, speaker=Speaker.queue, text=text, tool=verb)
 
@@ -1345,9 +1347,9 @@ def _queue_mark(verb: str, content: str, uuid: str) -> TranscriptTurn | None:
 def _queue_turn(record: ClaudeRecord) -> TranscriptTurn | None:
     """A queue operation as a mark the fold reads; the harness's own deliveries are left out."""
     verb, content = record.operation or "", record.content or ""
-    if verb not in (_ENQUEUE, _REMOVE, _POP_ALL):
+    if verb not in (ENQUEUE, REMOVE, POP_ALL):
         return None
-    if verb == _ENQUEUE and injected(None, content, human=False) is not None:
+    if verb == ENQUEUE and injected(None, content, human=False) is not None:
         return None
     return _queue_mark(verb, content, f"queue:{verb}:{record.timestamp}")
 
@@ -1399,7 +1401,7 @@ _SAME_PROMPT: Final = MAX_NOTE_CHARS
 def _delivers(turn: TranscriptTurn) -> bool:
     """Whether *turn* is a prompt reaching the agent, which is what ends its wait in the queue."""
     if turn.speaker is Speaker.queue:
-        return turn.tool in (_REMOVE, _TAKEN)
+        return turn.tool in (REMOVE, TAKEN)
     return turn.speaker in (Speaker.human, Speaker.system) or (
         is_slash_command(turn) and turn.tool == SLASH
     )
@@ -1409,9 +1411,9 @@ def waiting(turns: Iterable[TranscriptTurn]) -> list[str]:
     """The prompts queued in *turns* not since delivered, removed or pulled back, by words."""
     held: list[str] = []
     for turn in turns:
-        if turn.speaker is Speaker.queue and turn.tool == _ENQUEUE:
+        if turn.speaker is Speaker.queue and turn.tool == ENQUEUE:
             held.append(turn.text)
-        elif turn.speaker is Speaker.queue and turn.tool == _POP_ALL:
+        elif turn.speaker is Speaker.queue and turn.tool == POP_ALL:
             held.clear()
         elif _delivers(turn):
             _take_first(held, turn.text)
@@ -2010,7 +2012,7 @@ def _end(agent: SpawnedAgent, at: str, *, failed: bool) -> None:
 
 def _queued_notice(record: ClaudeRecord) -> Injected | None:
     # Measured: a subagent's shell ends only here; enqueue and remove repeat it, which is harmless.
-    if record.type != "queue-operation" or record.operation not in (_ENQUEUE, _REMOVE):
+    if record.type != "queue-operation" or record.operation not in (ENQUEUE, REMOVE):
         return None
     return injected(None, record.content or "", human=False)
 
