@@ -206,7 +206,7 @@ def _stall(tmp_path: Path, records: list[dict[str, JsonValue]]) -> None:
     write_transcript(tmp_path / "transcripts", WORKING_SESSION, records)
 
 
-def test_a_stall_pushes_once_through_its_retries_and_clears_on_compact(tmp_path: Path) -> None:
+def test_a_stall_pushes_once_through_its_retries_and_not_again_on_compact(tmp_path: Path) -> None:
     loop = build_loop(tmp_path)
     loop.subscribe()
     records = api_error_records()
@@ -225,7 +225,8 @@ def test_a_stall_pushes_once_through_its_retries_and_clears_on_compact(tmp_path:
     loop.set_status("working")
     _ = loop.notifier.tick()
     sent = [payload for _, payload in loop.sender.sent]
-    assert [p["event"] for p in sent] == ["blocked", "clear"]
+    # The compact retracts the alert on the box only: a clear push would show nothing.
+    assert [p["event"] for p in sent] == ["blocked"]
     assert str(sent[0]["title"]).startswith("needs you")
     assert CONTEXT_FULL in str(sent[0]["body"])
 
@@ -240,7 +241,7 @@ def test_a_refusal_after_the_person_answered_is_a_new_stop(tmp_path: Path) -> No
         _stall(tmp_path, records[:end])
         loop.set_status(status)
         _ = loop.notifier.tick()
-    assert [p["event"] for _, p in loop.sender.sent] == ["blocked", "clear", "blocked"]
+    assert [p["event"] for _, p in loop.sender.sent] == ["blocked", "blocked"]
 
 
 def test_an_agent_already_stalled_when_watching_began_is_not_news(tmp_path: Path) -> None:

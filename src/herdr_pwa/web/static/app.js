@@ -108,6 +108,7 @@
   var REGISTERED = "hp-push-endpoint";
   /* The owner turned alerts off here, so the banner does not nag about a choice. */
   var DECLINED = "hp-alerts-declined";
+  var HERD_TAG = "herd";
   var NO_PUSH = "this browser has no Web Push here (on iPhone, open the Home Screen app)";
   var DEVICE_TEXT = {
     on: "Alerts are on for this device.",
@@ -276,6 +277,23 @@
     });
   }
 
+  /* The box sends no clear, since a push that shows nothing costs the subscription, so the herd
+   * alert left on the phone is closed when the app is opened; a ping keeps its own tag. */
+  function closeHerdAlert() {
+    if (!worker) {
+      return;
+    }
+    worker.ready.then(function (registration) {
+      return typeof registration.getNotifications === "function" ? registration.getNotifications({ tag: HERD_TAG }) : [];
+    }).then(function (open) {
+      open.forEach(function (notification) {
+        notification.close();
+      });
+    }).catch(function () {
+      /* No notifications to list here, so none is left showing to close. */
+    });
+  }
+
   /* The banner asks the box about this endpoint only, and only where alerts could be on. */
   function checkDevice() {
     if (panel) {
@@ -358,10 +376,12 @@
     });
   }
 
+  closeHerdAlert();
   checkDevice();
   /* A Home Screen app resumes rather than reloads, and its owner may be back from Settings. */
   document.addEventListener("visibilitychange", function () {
     if (!document.hidden) {
+      closeHerdAlert();
       checkDevice();
     }
   });

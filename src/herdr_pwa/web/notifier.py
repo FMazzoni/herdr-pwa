@@ -24,13 +24,14 @@ from herdr_pwa.engine import (
     as_session_id,
 )
 from herdr_pwa.managed import ManagedHerd
-from herdr_pwa.notify import AgentView, Hooks, NotifyConfig, Planner, Slot, Step, notice_for
+from herdr_pwa.notify import AgentView, Hooks, NotifyConfig, Planner, Step, notice_for
 from herdr_pwa.notify_state import InterruptStore, SeenLedger, StatusLedger
 from herdr_pwa.push import (
     PUSH_LIMITS,
     Deliver,
     DeliveryLog,
     FanOut,
+    Notice,
     Outlet,
     PushError,
     PushLimits,
@@ -40,7 +41,6 @@ from herdr_pwa.push import (
     SubscriptionStore,
     VapidKeys,
     arm_sender,
-    build_clear,
     build_payload,
     encode_payload,
     fan_out,
@@ -215,18 +215,16 @@ class Notifier:
             )
             self._managed.forget([agent.target for agent in snapshot.agents])
             self.state.ticks += 1
-            if step.slot is None:
+            notice = None if step.slot is None else notice_for(step.slot, self._question)
+            if notice is None:
+                # Nothing to show sends nothing: a push that shows nothing costs the subscription.
                 return Tick(devices=len(devices), step=step)
-            return Tick(devices=len(devices), step=step, sent=self._send(step.slot, devices))
+            return Tick(devices=len(devices), step=step, sent=self._send(notice, devices))
 
-    def retract(self) -> FanOut:
-        """Take down whatever the phones show, so a snooze acts at once."""
+    def retract(self) -> None:
+        """Forget the herd alert, so a snooze acts at once; the app closes it when opened."""
         with self._lock:
             self.planner.retract()
-            devices = self._devices()
-            if not devices:
-                return FanOut()
-            return self._broadcast(build_clear(now=self._clock()), devices)
 
     def interval(self) -> float:
         """Seconds until the next tick: the cadence, or sooner when a held alert falls due."""
@@ -306,11 +304,8 @@ class Notifier:
             return ""
         return prompt.question
 
-    def _send(self, slot: Slot, devices: list[Subscription]) -> FanOut:
-        notice = notice_for(slot, self._question)
-        now = self._clock()
-        payload = build_clear(now=now) if notice is None else build_payload(notice, now=now)
-        return self._broadcast(payload, devices)
+    def _send(self, notice: Notice, devices: list[Subscription]) -> FanOut:
+        return self._broadcast(build_payload(notice, now=self._clock()), devices)
 
     def _broadcast(self, payload: dict[str, object], devices: list[Subscription]) -> FanOut:
         try:

@@ -182,9 +182,11 @@ def test_a_push_shows_the_servers_text_and_a_tap_opens_that_agent() -> None:
     assert seen["navigatedExisting"] == [f"https://box.tailnet.ts.net/agent/{SESSION}"]
     assert seen["openedAsWell"] == []
     assert seen["liveAfterThree"] == 1
-    assert (seen["liveBeforeClear"], seen["liveAfterClear"], seen["shownByClear"]) == (1, 0, 0)
+    # A clear from an older server replaces the herd alert with a quiet one, never with nothing.
+    assert (seen["liveBeforeClear"], seen["liveAfterClear"], seen["shownByClear"]) == (1, 1, 1)
+    assert seen["clearedHerd"] == {"silent": True, "renotify": False, "url": "/"}
     # A ping has its own tag: a herd clear leaves it up, and a tap on it opens the herd.
-    assert seen["liveTagsAfterHerdClear"] == ["ping"]
+    assert seen["liveTagsAfterHerdClear"] == ["ping", "herd"]
     # With the dashboard open on screen a ping still sounds; only a snooze's quiet mutes it.
     assert seen["pingOnScreen"] == {"silent": False, "renotify": True, "requireInteraction": False}
     assert seen["snoozedPingOnScreen"] == {"silent": True, "renotify": False}
@@ -201,6 +203,12 @@ def test_a_push_is_quiet_when_on_screen_or_told_so_and_never_dropped() -> None:
     assert isinstance(quiet, dict)
     assert (quiet["silent"], quiet["requireInteraction"]) == (True, True)
     assert seen["unreadableTitle"] == "herdr"
+
+
+@pytest.mark.node
+def test_every_push_whatever_its_payload_ends_in_a_shown_notification() -> None:
+    # WebKit revokes a subscription after a few pushes that show nothing (its silent push quota).
+    assert observed()["silentPushes"] == []
 
 
 @pytest.mark.node

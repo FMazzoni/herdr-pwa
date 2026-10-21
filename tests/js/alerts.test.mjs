@@ -102,6 +102,10 @@ function load({ panel = false, standalone = true, permission = "granted", endpoi
   };
   const manager = service(endpoint);
   const server = box(held);
+  const shown = [
+    { tag: "herd", closed: false, close() { this.closed = true; } },
+    { tag: "ping", closed: false, close() { this.closed = true; } },
+  ];
   const notification = {
     permission,
     requestPermission: () => Promise.resolve((notification.permission = "granted")),
@@ -113,7 +117,10 @@ function load({ panel = false, standalone = true, permission = "granted", endpoi
       serviceWorker: {
         register: () => Promise.resolve(),
         addEventListener: () => {},
-        ready: Promise.resolve({ pushManager: manager }),
+        ready: Promise.resolve({
+          pushManager: manager,
+          getNotifications: ({ tag }) => Promise.resolve(shown.filter((n) => n.tag === tag && !n.closed)),
+        }),
       },
     },
     localStorage: storage,
@@ -128,7 +135,7 @@ function load({ panel = false, standalone = true, permission = "granted", endpoi
     runInNewContext(readFileSync(new URL(name, STATIC), "utf8"), window);
   }
   const resume = () => (documentListeners.visibilitychange || []).forEach((fn) => fn({}));
-  return { ids, manager, server, notification, storage, resume };
+  return { ids, manager, server, notification, storage, resume, shown };
 }
 
 // Every promise the page chained, run out.
@@ -230,4 +237,14 @@ test("storage whose every call throws still subscribes, with nothing to replace"
   assert.equal(posts.length, 1);
   assert.equal("replaces" in posts[0][1], false);
   assert.equal(page.ids["push-state"].textContent, "Alerts are on for this device.");
+});
+
+test("opening or resuming the app closes the herd alert the box no longer clears, not a ping", async () => {
+  const page = load({ standalone: false });
+  await settle();
+  assert.deepEqual(page.shown.map((n) => [n.tag, n.closed]), [["herd", true], ["ping", false]]);
+  page.shown.push({ tag: "herd", closed: false, close() { this.closed = true; } });
+  page.resume();
+  await settle();
+  assert.equal(page.shown[2].closed, true);
 });

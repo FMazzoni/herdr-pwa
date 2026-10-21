@@ -152,15 +152,23 @@ def test_an_agent_that_blocks_buzzes_every_device_with_its_question(tmp_path: Pa
     assert health.sent == 1
 
 
-def test_resolving_the_block_takes_the_notification_down(tmp_path: Path) -> None:
+def test_resolving_the_block_sends_nothing_because_a_silent_push_costs_the_device(
+    tmp_path: Path,
+) -> None:
     loop = build_loop(tmp_path)
     loop.subscribe()
     _ = loop.notifier.tick()
     loop.set_status("blocked")
     _ = loop.notifier.tick()
     loop.set_status("working")
+    tick = loop.notifier.tick()
+    assert tick.sent is None
+    assert [payload["event"] for _, payload in loop.sender.sent] == ["blocked"]
+    # The slot is still emptied, so the next block buzzes as new.
+    loop.set_status("blocked")
+    loop.clock.now += PAST_THE_CACHE
     _ = loop.notifier.tick()
-    assert [payload["event"] for _, payload in loop.sender.sent] == ["blocked", "clear"]
+    assert [payload["event"] for _, payload in loop.sender.sent] == ["blocked", "blocked"]
 
 
 def test_an_unchanged_herd_sends_nothing_more(tmp_path: Path) -> None:
@@ -220,12 +228,15 @@ def test_a_device_the_push_service_retired_is_pruned(tmp_path: Path) -> None:
     assert loop.stores.devices.list_all() == []
 
 
-def test_retract_sends_the_clear_to_every_device(tmp_path: Path) -> None:
+def test_retract_forgets_the_alert_and_sends_nothing(tmp_path: Path) -> None:
     loop = build_loop(tmp_path)
     loop.subscribe()
-    sent = loop.notifier.retract()
-    assert sent.sent == 1
-    assert [payload["event"] for _, payload in loop.sender.sent] == ["clear"]
+    _ = loop.notifier.tick()
+    loop.set_status("blocked")
+    _ = loop.notifier.tick()
+    loop.notifier.retract()
+    assert [payload["event"] for _, payload in loop.sender.sent] == ["blocked"]
+    assert loop.notifier.planner.slot.next_due() is None
 
 
 def test_a_held_alert_shortens_the_sleep_to_when_it_falls_due(tmp_path: Path) -> None:

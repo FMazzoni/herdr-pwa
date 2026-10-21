@@ -529,7 +529,7 @@ class Planner:
         return Step(tuple(changes), self.slot.update(changes))
 
     def retract(self) -> None:
-        """Forget whatever is showing so a snooze acts at once; the caller sends the clear."""
+        """Forget whatever is showing so a snooze acts at once; nothing is sent to the phone."""
         self.slot.reset()
 
     def _prior_for(self, current: Mapping[str, str]) -> dict[str, str] | None:

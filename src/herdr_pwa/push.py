@@ -47,7 +47,7 @@ HEALTH_FILENAME: Final = "push-health.json"
 # Beside the store, so every process that rewrites it takes the same flock.
 SUBSCRIPTIONS_LOCK: Final = "subscriptions.lock"
 HEALTH_LOCK: Final = "push-health.lock"
-# What a push says happened: the two that notify, a message someone sent, and the retraction.
+# The two that notify, a message someone sent, and the retraction, which shows nothing so is never sent.
 type PushEvent = Literal["blocked", "done", "ping", "clear"]
 EVENT_BLOCKED: Final = "blocked"
 EVENT_DONE: Final = "done"
@@ -538,11 +538,6 @@ def build_payload(notice: Notice, *, now: WallTime) -> dict[str, object]:
         "quiet": notice.quiet,
         "ts": int(now),
     }
-
-
-def build_clear(*, now: WallTime, tag: str = HERD_TAG) -> dict[str, object]:
-    """The retraction: take the slot down and raise nothing."""
-    return {"v": 1, "event": EVENT_CLEAR, "agent": "", "tag": tag, "ts": int(now)}
 
 
 def encode_payload(payload: dict[str, object]) -> str:

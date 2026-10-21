@@ -46,7 +46,6 @@ from herdr_pwa.push import (
     VapidKeyError,
     WebPushSender,
     arm_sender,
-    build_clear,
     build_payload,
     check_subject,
     encode_payload,
@@ -491,11 +490,9 @@ def test_a_body_that_was_only_a_link_falls_back() -> None:
     assert build_payload(notice, now=WallTime(0))["body"] == "herdr"
 
 
-def test_only_blocked_and_done_are_notifications_and_clear_raises_nothing() -> None:
+def test_a_clear_is_never_a_payload_because_a_push_must_show_something() -> None:
     with pytest.raises(PushError):
         _ = build_payload(Notice(event=EVENT_CLEAR, title="", body=""), now=WallTime(0))
-    clear = build_clear(now=WallTime(5))
-    assert (clear["event"], clear["tag"], "title" in clear) == (EVENT_CLEAR, "herd", False)
 
 
 def test_the_encoded_payload_is_compact_and_always_fits() -> None:

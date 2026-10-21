@@ -361,6 +361,49 @@ await dispatch("push", pushEvent(notify("blocked")));
 await dispatch("push", pushEvent({ v: 1, event: "clear", agent: SESSION, tag: "herd", ts: 2 }));
 const liveTagsAfterHerdClear = notifications.live.map((n) => n.tag);
 const pingUrl = notifications.shown[0].data.url;
+const clearedHerd = notifications.live.find((n) => n.tag === "herd") || null;
+
+/* WebKit revokes a subscription after a few pushes that show nothing (its silent push quota),
+ * so every push, whatever it carries and whatever the platform does, must end in a shown
+ * notification. The labels of the ones that did not are the observation. */
+const anyPayloads = {
+  blocked: notify("blocked"),
+  done: notify("done"),
+  ping: ping(),
+  quiet: notify("blocked", { quiet: true }),
+  clear: { v: 1, event: "clear", agent: SESSION, tag: "herd", ts: 1 },
+  clearNoTag: { v: 1, event: "clear", agent: "", ts: 1 },
+  clearOtherTag: { v: 1, event: "clear", agent: "", tag: "ping", ts: 1 },
+  unknownEvent: notify("archived"),
+  bare: { v: 1 },
+  wrongVersion: notify("blocked", { v: 2 }),
+  notJson: "not json",
+  noData: null,
+  jsonNull: { json: () => null },
+  jsonNumber: { json: () => 7 },
+};
+const silentPushes = [];
+async function showsSomething(label, event) {
+  const before = notifications.shown.length;
+  try {
+    await dispatch("push", event);
+  } catch (err) {
+    silentPushes.push(`${label} (threw ${err.message})`);
+    return;
+  }
+  if (notifications.shown.length === before) silentPushes.push(label);
+}
+for (const [label, payload] of Object.entries(anyPayloads)) {
+  const event = payload && typeof payload.json === "function" && !("v" in payload)
+    ? { data: payload, waits: [], waitUntil(p) { this.waits.push(p); } }
+    : pushEvent(payload);
+  await showsSomething(label, event);
+}
+/* The window lookup failing must not cost the notification either. */
+const matchAll = self.clients.matchAll;
+self.clients.matchAll = async () => { throw new Error("clients unavailable"); };
+await showsSomething("clientsRejected", pushEvent(notify("blocked")));
+self.clients.matchAll = matchAll;
 
 /* three transitions in a row land on ONE slot, not three stacked
  * notifications. `tag` is what the platform replaces on, so the count of LIVE
@@ -494,7 +537,8 @@ console.log(JSON.stringify({
   wrongVersionTitle: wrongVersionShown && wrongVersionShown.title,
   noDataTitle: noDataShown && noDataShown.title,
   liveBeforeClear, liveAfterClear, shownByClear,
-  liveTagsAfterHerdClear, pingUrl,
+  liveTagsAfterHerdClear, pingUrl, silentPushes,
+  clearedHerd: clearedHerd && { silent: !!clearedHerd.silent, renotify: !!clearedHerd.renotify, url: clearedHerd.data && clearedHerd.data.url },
   quietUpdate: {
     silent: !!quietUpdate.silent, renotify: !!quietUpdate.renotify,
     requireInteraction: !!quietUpdate.requireInteraction, title: quietUpdate.title,

@@ -208,8 +208,8 @@ async def _snooze(push: PushState, request: Request) -> JSONResponse:
     except (BadBodyError, OSError) as exc:
         return _bad(str(exc))
     if policy.dnd_until and push.notifier is not None:
-        # The clear goes out over the network, so it runs off the event loop.
-        _ = await asyncio.to_thread(push.notifier.retract)
+        # It waits on the notifier's lock, which a tick holds while it sends, so off the loop.
+        await asyncio.to_thread(push.notifier.retract)
     return _json(await asyncio.to_thread(_policy, push.stores.interrupts))
 
 
