@@ -1,4 +1,7 @@
 import json
+import multiprocessing
+import os
+import pwd
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -20,11 +23,14 @@ from herdr_pwa.web.ping import (
     DEFAULT_SENDER,
     EXIT_NO_DEVICES,
     EXIT_PARTIAL,
+    EXIT_RATE_LIMITED,
     EXIT_SENT,
     EXIT_UNAVAILABLE,
     EXIT_UNDELIVERED,
     EXIT_USAGE,
+    PING_BURST,
     PING_TAG,
+    PING_WINDOW,
     Message,
     ping,
 )
@@ -76,6 +82,7 @@ class _Rig:
     sender: Sender = field(default_factory=Sender)
     runner: _Runner | None = None
     environ: dict[str, str] = field(default_factory=dict[str, str])
+    clock: Clock = field(default_factory=Clock)
 
 
 def _ping(
@@ -84,7 +91,7 @@ def _ping(
     rig = rig or _Rig()
     out: list[str] = []
     seams = Seams(
-        wall=Clock(),
+        wall=rig.clock,
         deliver=rig.sender,
         client_factory=rig.runner,
         write=out.append,
@@ -165,12 +172,25 @@ def test_an_audit_log_that_cannot_be_written_sends_nothing(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _ = _paired(tmp_path, ONE)
-    (tmp_path / audit.AUDIT_FILENAME).mkdir()
+    # Readable, so the rate limit can count, but not writable, so the attempt cannot go down.
+    (tmp_path / audit.AUDIT_FILENAME).touch(mode=0o400)
     sender = Sender()
     code, _ = _ping(tmp_path, Message("hi", "me"), _Rig(sender=sender))
     assert code == EXIT_UNAVAILABLE
     assert sender.sent == []
     assert "nothing was sent" in capsys.readouterr().err
+
+
+def test_an_audit_log_that_cannot_be_read_sends_nothing(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _ = _paired(tmp_path, ONE)
+    (tmp_path / audit.AUDIT_FILENAME).mkdir()
+    sender = Sender()
+    code, _ = _ping(tmp_path, Message("hi", "me"), _Rig(sender=sender))
+    assert code == EXIT_UNAVAILABLE
+    assert sender.sent == []
+    assert "cannot read the audit log" in capsys.readouterr().err
 
 
 def test_no_paired_phone_is_its_own_exit(
@@ -369,14 +389,75 @@ def test_two_stores_on_one_file_never_lose_a_device_to_each_other(
     assert [one.endpoint for one in service.list_all()] == [kept, added]
 
 
-def test_health_written_by_another_process_is_kept(tmp_path: Path) -> None:
-    clock = Clock()
-    service, cli_log = DeliveryLog(tmp_path, clock=clock), DeliveryLog(tmp_path, clock=clock)
-    service.sent()
-    clock.advance(1)
-    cli_log.failed("push service answered 500")
-    clock.advance(1)
-    service.sent()
+def _three_hundred_sends(state_dir: Path) -> None:
+    health = DeliveryLog(state_dir)
+    for _ in range(300):
+        health.sent()
+
+
+def test_two_processes_sending_at_once_lose_no_count(tmp_path: Path) -> None:
+    # Spawned, not forked: real processes on one file, as the service and a ping are.
+    spawn = multiprocessing.get_context("spawn")
+    workers = [spawn.Process(target=_three_hundred_sends, args=(tmp_path,)) for _ in range(2)]
+    for worker in workers:
+        worker.start()
+    for worker in workers:
+        worker.join(60)
+    assert [worker.exitcode for worker in workers] == [0, 0]
     record = DeliveryLog(tmp_path).load()
     assert record is not None
-    assert (record.sent, record.failed) == (2, 1)
+    assert record.sent == 600
+
+
+def test_a_store_lock_held_too_long_is_an_error_the_callers_already_handle(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(statedir, "LOCK_TIMEOUT", 0.05)
+    store = _paired(tmp_path, ONE)
+    # TimeoutError is an OSError, which every caller of add and remove already handles.
+    with (
+        statedir.locked(tmp_path / push.SUBSCRIPTIONS_LOCK),
+        pytest.raises(OSError, match="stayed locked"),
+    ):
+        _ = store.remove(ONE)
+    assert [one.endpoint for one in store.list_all()] == [ONE]
+
+
+def test_the_eleventh_ping_in_ten_minutes_is_refused_and_not_sent(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _ = _paired(tmp_path, ONE)
+    rig = _Rig()
+    codes = [_ping(tmp_path, Message(f"wave {n}", "me"), rig)[0] for n in range(PING_BURST)]
+    assert codes == [EXIT_SENT] * PING_BURST
+    code, _ = _ping(tmp_path, Message("one more", "me"), rig)
+    assert code == EXIT_RATE_LIMITED
+    assert len(rig.sender.sent) == PING_BURST
+    assert "10 pings in the last 10 minutes" in capsys.readouterr().err
+    # A refused ping is not audited, so it never pushes the window further out.
+    assert len(_records(tmp_path)) == 2 * PING_BURST
+    rig.clock.advance(PING_WINDOW + 1)
+    assert _ping(tmp_path, Message("next wave", "me"), rig)[0] == EXIT_SENT
+
+
+def test_nothing_to_say_is_refused_before_push_or_the_runner_is_looked_at(
+    tmp_path: Path,
+) -> None:
+    runner = _Runner(agent_frame(name="never-asked"))
+    rig = _Rig(runner=runner, environ={"HERDR_PANE_ID": PANE})
+    settings = _settings(tmp_path, push_enabled=False)
+    code, _ = _ping(tmp_path, Message("\x1b[2J"), rig, settings)
+    assert code == EXIT_USAGE
+    assert runner.sockets == []
+
+
+def test_a_uid_with_no_passwd_entry_is_audited_by_number(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def unknown(uid: int) -> pwd.struct_passwd:
+        raise KeyError(uid)
+
+    monkeypatch.setattr(pwd, "getpwuid", unknown)
+    _ = _paired(tmp_path, ONE)
+    assert _ping(tmp_path, Message("hi", "me"))[0] == EXIT_SENT
+    assert _records(tmp_path)[0]["actor"] == str(os.getuid())

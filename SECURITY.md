@@ -106,7 +106,9 @@ A misread screen could send the wrong keys, so refusing is the safer failure.
 
 Before it sends anything to an agent, the app writes a record to its audit log: who sent
 it, from which address, and what was sent. If the record can't be written, nothing is
-sent. So every keystroke the app typed has a record, made before the keystroke.
+sent. So every keystroke the app typed has a record, made before the keystroke. The app
+records each notification sent from this machine with `herdr-pwa ping` the same way, with
+its sender and text, before it goes out.
 
 For a prompt, the record holds only its length at first. The app adds the text only if
 the whole of it shows on the pane after the send. It never keeps a prompt of fewer than

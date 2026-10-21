@@ -28,6 +28,8 @@ reachable only over your [Tailscale](https://tailscale.com) network.
 - **Files.** A read-only file browser and diff view for the git repos your agents work in.
 - **Start and stop.** Open a new agent in a fresh tab, stop one, or close a workspace.
 - **Push.** A notification when an agent needs you, or finishes something you haven't read.
+  A script or agent on this machine can also send you its own message with
+  `herdr-pwa ping "waves complete"`, and the app records each one in its audit log.
 
 ## The interesting part: a tap is a keystroke with no undo
 

@@ -348,6 +348,15 @@ await dispatch("push", pushEvent({ v: 1, event: "clear", agent: SESSION, tag: "h
 const liveAfterClear = notifications.live.length;
 const shownByClear = notifications.shown.length - 1;
 
+/* A ping lives under its own tag, so a herd clear takes down the herd alert and leaves it. */
+notifications.shown.length = 0;
+notifications.live.length = 0;
+await dispatch("push", pushEvent({ v: 1, event: "ping", agent: "", tag: "ping", title: "waves-pi", body: "waves complete", quiet: false, ts: 1 }));
+await dispatch("push", pushEvent(notify("blocked")));
+await dispatch("push", pushEvent({ v: 1, event: "clear", agent: SESSION, tag: "herd", ts: 2 }));
+const liveTagsAfterHerdClear = notifications.live.map((n) => n.tag);
+const pingUrl = notifications.shown[0].data.url;
+
 /* three transitions in a row land on ONE slot, not three stacked
  * notifications. `tag` is what the platform replaces on, so the count of LIVE
  * notifications is the assertion -- `shown` counts renders, which is three. */
@@ -478,6 +487,7 @@ console.log(JSON.stringify({
   wrongVersionTitle: wrongVersionShown && wrongVersionShown.title,
   noDataTitle: noDataShown && noDataShown.title,
   liveBeforeClear, liveAfterClear, shownByClear,
+  liveTagsAfterHerdClear, pingUrl,
   quietUpdate: {
     silent: !!quietUpdate.silent, renotify: !!quietUpdate.renotify,
     requireInteraction: !!quietUpdate.requireInteraction, title: quietUpdate.title,

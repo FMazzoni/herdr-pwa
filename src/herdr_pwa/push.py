@@ -46,6 +46,7 @@ SUBSCRIPTIONS_FILENAME: Final = "subscriptions.json"
 HEALTH_FILENAME: Final = "push-health.json"
 # Beside the store, so every process that rewrites it takes the same flock.
 SUBSCRIPTIONS_LOCK: Final = "subscriptions.lock"
+HEALTH_LOCK: Final = "push-health.lock"
 # What a push says happened: the two that notify, a message someone sent, and the retraction.
 type PushEvent = Literal["blocked", "done", "ping", "clear"]
 EVENT_BLOCKED: Final = "blocked"
@@ -730,13 +731,13 @@ class DeliveryLog:
 
     def _bump(self, change: Callable[[DeliveryRecord, float], dict[str, object]]) -> None:
         now = self._clock()
-        # The newer of memory and disk: a ping from the CLI writes this file too.
-        known = [one for one in (self._current, self.load()) if one is not None]
-        base = max(known, key=lambda one: one.updated_at, default=DeliveryRecord(version=1))
-        self._current = base.model_copy(update={**change(base, now), "updated_at": now})
         try:
             _ = statedir.ensure_dir(self.path.parent)
-            statedir.write_secret(self.path, self._current.model_dump_json(indent=2) + "\n")
+            # Built on the disk record under the lock: the service and a ping both count here.
+            with statedir.locked(self.path.with_name(HEALTH_LOCK)):
+                base = self.load() or self._current or DeliveryRecord(version=1)
+                self._current = base.model_copy(update={**change(base, now), "updated_at": now})
+                statedir.write_secret(self.path, self._current.model_dump_json(indent=2) + "\n")
         except OSError as exc:
             # Health is for the reader; failing to write it must never stop a push.
             log.warning("cannot write %s: %s; doctor will see nothing", self.path, exc)

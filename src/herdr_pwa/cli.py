@@ -260,7 +260,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     report_cmd = sub.add_parser("device-report", help="print the latest phone device report")
     report_cmd.add_argument("--session", default="", help="a session id instead of the latest")
-    ping_cmd = sub.add_parser("ping", help="send one notification to every paired phone")
+    ping_cmd = sub.add_parser(
+        "ping", help="send one notification to every paired phone (at most 10 in 10 minutes)"
+    )
     ping_cmd.add_argument("text", help="plain text, capped as an agent's is")
     ping_cmd.add_argument("--title", help="who it is from (default: this pane's agent name)")
     args = parser.parse_args(argv, namespace=_Args())

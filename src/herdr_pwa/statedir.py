@@ -4,6 +4,7 @@ import fcntl
 import os
 import stat
 import tempfile
+import time
 from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
@@ -11,6 +12,10 @@ from typing import Final
 
 DIR_MODE: Final = 0o700
 FILE_MODE: Final = 0o600
+# A holder keeps it for one small write; this long means it is stuck, as a stalled send's 10 s.
+LOCK_TIMEOUT: Final = 10.0
+# Short, because a holder lets go within milliseconds and LOCK_NB grants no place in a queue.
+LOCK_POLL: Final = 0.001
 
 
 def ensure_dir(path: Path) -> Path:
@@ -79,18 +84,35 @@ def locked(path: Path) -> Generator[None]:
     """Hold an exclusive flock on a 0600 lock file, so other processes' writers wait.
 
     Raises:
-        OSError: the lock file cannot be opened, or is not 0600 (``PermissionError``).
+        OSError: the lock file cannot be opened or made 0600, or another holder kept it
+            past ``LOCK_TIMEOUT`` (as ``TimeoutError``).
     """
     fd = os.open(path, os.O_RDWR | os.O_CREAT, FILE_MODE)
     try:
+        # It holds no secret, so a drifted mode is put back rather than refusing every write.
+        if stat.S_IMODE(os.fstat(fd).st_mode) != FILE_MODE:
+            os.fchmod(fd, FILE_MODE)
         mode = stat.S_IMODE(os.fstat(fd).st_mode)
         if mode != FILE_MODE:
             raise PermissionError(f"{path} is mode {mode:04o}, expected 0600")
+        _acquire(fd, path)
         # Released when the descriptor closes, so a crashed holder never leaves it held.
-        fcntl.flock(fd, fcntl.LOCK_EX)
         yield
     finally:
         os.close(fd)
+
+
+def _acquire(fd: int, path: Path) -> None:
+    # A holder stopped mid-write (Ctrl-Z on a ping) must not hang the service's writers too.
+    deadline = time.monotonic() + LOCK_TIMEOUT
+    while time.monotonic() < deadline:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            time.sleep(LOCK_POLL)
+        else:
+            return
+    raise TimeoutError(f"{path} stayed locked for {LOCK_TIMEOUT:g}s")
 
 
 def _check_mode(path: Path) -> None:

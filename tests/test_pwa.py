@@ -187,6 +187,9 @@ def test_a_push_shows_the_servers_text_and_a_tap_opens_that_agent() -> None:
     assert seen["openedAsWell"] == []
     assert seen["liveAfterThree"] == 1
     assert (seen["liveBeforeClear"], seen["liveAfterClear"], seen["shownByClear"]) == (1, 0, 0)
+    # A ping has its own tag: a herd clear leaves it up, and a tap on it opens the herd.
+    assert seen["liveTagsAfterHerdClear"] == ["ping"]
+    assert seen["pingUrl"] == "/"
 
 
 @needs_node

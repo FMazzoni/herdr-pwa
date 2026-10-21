@@ -1,4 +1,4 @@
-"""Every write the runner is asked to make, and every ping, logged first; reads are not."""
+"""Every runner write and every ping, logged first; reads, subscriptions and refusals are not."""
 
 import json
 import logging
@@ -25,6 +25,7 @@ log = logging.getLogger(__name__)
 AUDIT_FILENAME: Final = "audit.log"
 # Two generations bound the disk use with no dated files and so no reaper.
 ROTATED_FILENAME: Final = "audit.log.1"
+LOCK_FILENAME: Final = "audit.lock"
 PROMPT: Final = "prompt"
 KEYS: Final = "keys"
 START: Final = "start"
@@ -303,13 +304,15 @@ class AuditLog:
 
     def _append(self, record: Attempt | Outcome) -> None:
         line = _LINE.dump_json(record) + b"\n"
-        self._rotate(len(line))
-        handle = self._open()
-        try:
-            _ = os.write(handle, line)
-            os.fsync(handle)
-        finally:
-            os.close(handle)
+        # A ping appends from the CLI too; two rotations at once would lose a whole generation.
+        with statedir.locked(self.path.with_name(LOCK_FILENAME)):
+            self._rotate(len(line))
+            handle = self._open()
+            try:
+                _ = os.write(handle, line)
+                os.fsync(handle)
+            finally:
+                os.close(handle)
 
     def _rotate(self, incoming: int) -> None:
         path = self.path
@@ -367,6 +370,25 @@ def records(state_dir: Path, *, limit: int = 50) -> list[Record]:
             if line.strip():
                 found.append(_parse_line(line, f"{name}:{number}"))
     return found[-limit:] if limit > 0 else found
+
+
+def _epoch(stamp: str) -> float:
+    try:
+        return datetime.fromisoformat(stamp).timestamp()
+    except ValueError:
+        # A stamp nobody can read counts as long ago, so it never holds anything back.
+        return 0.0
+
+
+def attempts_since(state_dir: Path, endpoint: str, since: float) -> int:
+    """How many attempts at *endpoint* both generations hold from *since* (epoch seconds) on."""
+    return sum(
+        1
+        for record in records(state_dir, limit=0)
+        if record["phase"] == ATTEMPT
+        and record["endpoint"] == endpoint
+        and _epoch(record["ts"]) >= since
+    )
 
 
 def describe(record: Record) -> str:

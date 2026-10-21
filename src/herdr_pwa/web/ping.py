@@ -7,7 +7,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
-from herdr_pwa.audit import PING, AuditLog, AuditUnavailableError, Entry, Origin, Write
+from herdr_pwa.audit import (
+    PING,
+    AuditLog,
+    AuditUnavailableError,
+    Entry,
+    Origin,
+    Write,
+    attempts_since,
+)
 from herdr_pwa.auth import VIA_CLI
 from herdr_pwa.clock import WallTime
 from herdr_pwa.engine import EngineError, EngineSettings, as_pane_id, engine_settings
@@ -15,6 +23,7 @@ from herdr_pwa.notify_state import InterruptStore
 from herdr_pwa.push import (
     EVENT_PING,
     LINK_PLACEHOLDER,
+    MAX_BODY_CHARS,
     MAX_TITLE_CHARS,
     Deliver,
     DeliveryLog,
@@ -42,6 +51,9 @@ PANE_ENV: Final = "HERDR_PANE_ID"
 SOCKET_ENV: Final = "HERDR_SOCKET_PATH"
 # Seconds to ask the runner the caller's name; past it the ping goes out under the default.
 NAME_TIMEOUT: Final = 2.0
+# A looping agent must not buzz the phone all night, or get the key throttled by push services.
+PING_BURST: Final = 10
+PING_WINDOW: Final = 600.0
 
 EXIT_SENT: Final = 0
 EXIT_UNDELIVERED: Final = 1
@@ -50,6 +62,7 @@ EXIT_USAGE: Final = 2
 EXIT_UNAVAILABLE: Final = 3
 EXIT_NO_DEVICES: Final = 4
 EXIT_PARTIAL: Final = 5
+EXIT_RATE_LIMITED: Final = 6
 
 
 class _Refused(Exception):  # noqa: N818 - named for the exit it becomes
@@ -89,16 +102,32 @@ def caller_name(settings: Settings, seams: Seams) -> str:
     return title or DEFAULT_SENDER
 
 
-def _payload(message: Message, sender: str, *, quiet: bool, now: WallTime) -> dict[str, object]:
-    title = sanitise(sender, limit=MAX_TITLE_CHARS) or DEFAULT_SENDER
-    notice = Notice(EVENT_PING, title=title, body=message.text, tag=PING_TAG, quiet=quiet)
-    payload = build_payload(notice, now=now)
-    body = str(payload["body"])
+def _body(message: Message) -> str:
+    body = sanitise(message.text, limit=MAX_BODY_CHARS)
     if not body.replace(LINK_PLACEHOLDER, "").strip():
         raise _Refused(
             "nothing left to send: the text is empty once controls and links go", EXIT_USAGE
         )
-    return payload
+    return body
+
+
+def _payload(body: str, sender: str, *, quiet: bool, now: WallTime) -> dict[str, object]:
+    title = sanitise(sender, limit=MAX_TITLE_CHARS) or DEFAULT_SENDER
+    notice = Notice(EVENT_PING, title=title, body=body, tag=PING_TAG, quiet=quiet)
+    return build_payload(notice, now=now)
+
+
+def _check_rate(seams: Seams, state_dir: Path) -> None:
+    try:
+        sent = attempts_since(state_dir, PING, seams.wall() - PING_WINDOW)
+    except OSError as exc:
+        raise _Refused(f"cannot read the audit log: {exc}", EXIT_UNAVAILABLE) from exc
+    if sent >= PING_BURST:
+        raise _Refused(
+            f"{sent} pings in the last {PING_WINDOW / 60:g} minutes, the most it sends; "
+            "try again later",
+            EXIT_RATE_LIMITED,
+        )
 
 
 def _deliver(settings: Settings, seams: Seams, state_dir: Path) -> Deliver:
@@ -119,7 +148,13 @@ def _deliver(settings: Settings, seams: Seams, state_dir: Path) -> Deliver:
 
 def _origin() -> Origin:
     # The uid is what admits a CLI caller: anyone running as it can already read the state dir.
-    return Origin(pwd.getpwuid(os.getuid()).pw_name, VIA_CLI)
+    uid = os.getuid()
+    try:
+        name = pwd.getpwuid(uid).pw_name
+    except KeyError:
+        # A uid with no passwd entry, as in some containers, is still who ran it.
+        name = str(uid)
+    return Origin(name, VIA_CLI)
 
 
 def _verdict(result: FanOut, devices: int) -> tuple[str, int]:
@@ -162,16 +197,19 @@ def _audit(settings: Settings, seams: Seams, state_dir: Path, payload: dict[str,
 
 
 def _send(settings: Settings, seams: Seams, message: Message) -> tuple[str, int]:
+    # Nothing to say is refused before any push config, device or runner is looked at.
+    body = _body(message)
     state_dir = settings.state_dir.expanduser()
     deliver = _deliver(settings, seams, state_dir)
     store, devices = _devices(seams, state_dir)
+    _check_rate(seams, state_dir)
     # Asked only once there is somewhere to send, so a refusal never waits on the runner.
     sender = message.title
     if sender is None:
         sender = caller_name(settings, seams)
     # A snooze holds finishes back; a ping still shows, but without a sound.
     policy, now = InterruptStore(state_dir, clock=seams.wall).current()
-    payload = _payload(message, sender, quiet=policy.snoozed(now), now=now)
+    payload = _payload(body, sender, quiet=policy.snoozed(now), now=now)
     data = encode_payload(payload)
     outlet = Outlet(
         deliver, store, DeliveryLog(state_dir, clock=seams.wall), seams.push_limits, seams.clock
@@ -187,7 +225,8 @@ def ping(settings: Settings, seams: Seams, message: Message) -> int:
 
     Returns:
         0 when every device took it, 1 when none did, 2 when the text sanitises to nothing,
-        3 when push cannot be used here, 4 with no paired phone, 5 when some devices failed.
+        3 when push cannot be used here, 4 with no paired phone, 5 when some devices failed,
+        6 when ``PING_BURST`` pings went out in the last ``PING_WINDOW`` seconds.
     """
     try:
         line, code = _send(settings, seams, message)
