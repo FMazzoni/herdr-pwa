@@ -17,7 +17,7 @@ from herdr_pwa.engine import (
     AgentStatus,
     BlockedPrompt,
     EngineSettings,
-    EngineUnavailable,
+    EngineUnavailableError,
     HerdrClient,
     PaneId,
     SessionId,
@@ -450,7 +450,7 @@ def test_doctor_fails_on_runner_drift(tmp_path: Path) -> None:
 
 
 def test_doctor_fails_on_an_unreachable_runner(tmp_path: Path) -> None:
-    code, out = _doctor(tmp_path, FakeWire({SNAPSHOT: EngineUnavailable("down")}))
+    code, out = _doctor(tmp_path, FakeWire({SNAPSHOT: EngineUnavailableError("down")}))
     assert code == 1
     assert "unreachable" in out
 

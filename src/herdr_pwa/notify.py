@@ -40,25 +40,39 @@ class AgentView(Protocol):
     """The fields of one herdr agent the notifier reads; the engine's agent satisfies it."""
 
     @property
-    def session(self) -> SessionId: ...
+    def session(self) -> SessionId:
+        """The herdr session the agent reports."""
+        ...
 
     @property
-    def target(self) -> PaneId: ...
+    def target(self) -> PaneId:
+        """The pane the agent runs in."""
+        ...
 
     @property
-    def status(self) -> str: ...
+    def status(self) -> str:
+        """The agent's herdr status, as the wire spells it."""
+        ...
 
     @property
-    def title(self) -> str: ...
+    def title(self) -> str:
+        """The agent's title, as herdr shows it."""
+        ...
 
     @property
-    def workspace(self) -> str: ...
+    def workspace(self) -> str:
+        """The workspace the agent belongs to."""
+        ...
 
     @property
-    def project(self) -> str: ...
+    def project(self) -> str:
+        """The project the agent works in."""
+        ...
 
     @property
-    def state_change_seq(self) -> int: ...
+    def state_change_seq(self) -> int:
+        """herdr's counter for the agent's status changes."""
+        ...
 
 
 @dataclass(frozen=True, slots=True)

@@ -18,14 +18,14 @@ from herdr_pwa.engine import (
     AgentStatus,
     BlockedPrompt,
     EngineError,
-    InvalidRequest,
+    InvalidRequestError,
     SessionId,
     Snapshot,
     as_session_id,
 )
 from herdr_pwa.web.background import pending_by_session
 from herdr_pwa.web.deps import WebState
-from herdr_pwa.web.failures import AgentGone
+from herdr_pwa.web.failures import AgentGoneError
 from herdr_pwa.web.naming import card_question
 
 log = logging.getLogger(__name__)
@@ -130,8 +130,8 @@ def find_agent(web: WebState, session: str) -> Agent:
     try:
         identity = as_session_id(session)
     except ValueError as exc:
-        raise InvalidRequest(str(exc)) from exc
+        raise InvalidRequestError(str(exc)) from exc
     agent = web.snapshot().value.by_session(identity)
     if agent is None:
-        raise AgentGone(session)
+        raise AgentGoneError(session)
     return agent

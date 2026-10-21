@@ -60,7 +60,9 @@ MIN_SLEEP: Final = 0.25
 class HerdReader(Protocol):
     """The runner reads the notifier may make; nothing here can write to an agent."""
 
-    def snapshot(self, *, timeout: float | None = None) -> Snapshot: ...
+    def snapshot(self, *, timeout: float | None = None) -> Snapshot:
+        """Read the whole herd once."""
+        ...
 
     def blocked_prompt(
         self,
@@ -68,9 +70,13 @@ class HerdReader(Protocol):
         *,
         session: SessionId = ...,
         options: ReadOptions = ...,
-    ) -> BlockedPrompt: ...
+    ) -> BlockedPrompt:
+        """Read the prompt a blocked agent is showing."""
+        ...
 
-    def pane_pids(self, pane_id: PaneId, *, timeout: float | None = None) -> tuple[int, ...]: ...
+    def pane_pids(self, pane_id: PaneId, *, timeout: float | None = None) -> tuple[int, ...]:
+        """The pids running in this pane."""
+        ...
 
 
 @dataclass(frozen=True, slots=True)

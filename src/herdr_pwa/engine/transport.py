@@ -83,31 +83,31 @@ class EngineError(Exception):
             self.code = code
 
 
-class EngineMisconfigured(EngineError):  # noqa: N818 - the names the rest of the app maps to HTTP statuses
+class EngineMisconfiguredError(EngineError):
     """This box's configuration will not load, so no client can be built (-> 500)."""
 
     code = "engine_misconfigured"
 
 
-class EngineUnavailable(EngineError):  # noqa: N818 - the names the rest of the app maps to HTTP statuses
+class EngineUnavailableError(EngineError):
     """The runner is not running, or its socket is stale or unreachable (-> 503)."""
 
     code = "engine_unavailable"
 
 
-class EngineTimeout(EngineError):  # noqa: N818 - the names the rest of the app maps to HTTP statuses
+class EngineTimeoutError(EngineError):
     """The runner did not answer inside the timeout (-> 503)."""
 
     code = "engine_timeout"
 
 
-class InvalidRequest(EngineError, ValueError):  # noqa: N818 - the names the rest of the app maps to HTTP statuses
+class InvalidRequestError(EngineError, ValueError):
     """The caller asked for something this client cannot send (-> 400)."""
 
     code = "invalid_request"
 
 
-class RequestTooLarge(InvalidRequest):
+class RequestTooLargeError(InvalidRequestError):
     """Past what the runner will read, so it is refused here and never sent (-> 400)."""
 
     code = "request_too_large"
@@ -118,19 +118,19 @@ class RequestTooLarge(InvalidRequest):
         self.limit = limit
 
 
-class InvalidResponse(EngineError):  # noqa: N818 - the names the rest of the app maps to HTTP statuses
+class InvalidResponseError(EngineError):
     """The runner answered something that is not the JSON contract (-> 502)."""
 
     code = "invalid_response"
 
 
-class TargetNotFound(EngineError):  # noqa: N818 - the names the rest of the app maps to HTTP statuses
+class TargetNotFoundError(EngineError):
     """The addressed agent vanished mid-flight (-> 404)."""
 
     code = "target_not_found"
 
 
-class ProtocolMismatch(EngineError):  # noqa: N818 - the names the rest of the app maps to HTTP statuses
+class ProtocolMismatchError(EngineError):
     """The runner speaks an unexpected snapshot protocol, so writes fail closed (-> 409)."""
 
     code = "protocol_mismatch"
@@ -153,9 +153,9 @@ def raise_for_error_frame(reply: WireReply) -> None:
     code = body.code or "engine_error"
     message = body.message or code
     if code in _NOT_FOUND_CODES:
-        raise TargetNotFound(message, code=code)
+        raise TargetNotFoundError(message, code=code)
     if code in _UNAVAILABLE_CODES:
-        raise EngineUnavailable(message, code=code)
+        raise EngineUnavailableError(message, code=code)
     raise EngineError(message, code=code)
 
 
@@ -167,7 +167,7 @@ def _open_socket(purpose: str) -> socket.socket:
         why = f"could not open a socket {purpose}: {exc}"
         if exc.errno in _EXHAUSTED:
             why += "; there are no file descriptors left to open one with"
-        raise EngineUnavailable(why) from exc
+        raise EngineUnavailableError(why) from exc
 
 
 def _why_unreachable(path: Path, exc: OSError) -> str:
@@ -197,9 +197,11 @@ def decode_frame(line: bytes) -> WireReply:
     try:
         payload = _FRAME.validate_json(line.decode("utf-8", errors="replace"))
     except ValidationError as exc:
-        raise InvalidResponse(f"the runner sent a frame that is not JSON: {line[:200]!r}") from exc
+        raise InvalidResponseError(
+            f"the runner sent a frame that is not JSON: {line[:200]!r}"
+        ) from exc
     if not isinstance(payload, dict):
-        raise InvalidResponse(f"expected a JSON object, got {type(payload).__name__}")
+        raise InvalidResponseError(f"expected a JSON object, got {type(payload).__name__}")
     result: ResponseResult | ValidationError
     try:
         result = SuccessResponse.model_validate(payload).result
@@ -227,7 +229,7 @@ def _next_frame(
             del buffer[: end + 1]
             return line
         if len(buffer) > limit:
-            raise InvalidResponse(too_long)
+            raise InvalidResponseError(too_long)
         buffer += recv()
 
 
@@ -348,7 +350,7 @@ class SocketTransport:
         ).encode()
         # Before the connect, so an over-large call costs no socket and no wait.
         if len(frame) > MAX_REQUEST_BYTES:
-            raise RequestTooLarge(
+            raise RequestTooLargeError(
                 f"{call.method} would be {len(frame)} bytes on the wire and the "
                 f"runner reads at most {MAX_REQUEST_BYTES}; nothing was sent",
                 size=len(frame),
@@ -360,11 +362,11 @@ class SocketTransport:
             try:
                 sock.sendall(frame + b"\n")
             except TimeoutError as exc:
-                raise EngineTimeout(
+                raise EngineTimeoutError(
                     f"{call.method} could not be sent within {call.budget}s"
                 ) from exc
             except OSError as exc:
-                raise EngineUnavailable(f"{call.method} could not be sent: {exc}") from exc
+                raise EngineUnavailableError(f"{call.method} could not be sent: {exc}") from exc
             # The whole frame is out, newline and all; from here a failure cannot say nothing ran.
             try:
                 return self._receive(sock, request_id, call)
@@ -395,7 +397,7 @@ class SocketTransport:
                 reply.payload.get("id"),
                 request_id,
             )
-        raise InvalidResponse(
+        raise InvalidResponseError(
             f"no reply to {call.method} after {strays} frames for other "
             "ids; "
             "the connection is out of step and is being dropped"
@@ -407,11 +409,13 @@ class SocketTransport:
         try:
             chunk = sock.recv(_CHUNK)
         except TimeoutError as exc:
-            raise EngineTimeout(f"{call.method} did not answer within {call.budget}s") from exc
+            raise EngineTimeoutError(f"{call.method} did not answer within {call.budget}s") from exc
         except OSError as exc:
-            raise EngineUnavailable(f"reading the reply to {call.method} failed: {exc}") from exc
+            raise EngineUnavailableError(
+                f"reading the reply to {call.method} failed: {exc}"
+            ) from exc
         if not chunk:
-            raise EngineUnavailable(
+            raise EngineUnavailableError(
                 f"the runner closed the connection while answering {call.method}"
             )
         return chunk
@@ -425,7 +429,7 @@ class SocketTransport:
         with self._lock:
             now, retry_at = self._clock(), self._retry_at
         if now < retry_at:
-            raise EngineUnavailable(
+            raise EngineUnavailableError(
                 f"no connection to the runner at {self.path}; not retrying for "
                 f"another {retry_at - now:.1f}s",
                 code="engine_unavailable",
@@ -439,12 +443,12 @@ class SocketTransport:
             sock.close()
             if isinstance(exc, TimeoutError):
                 self._penalise()
-                raise EngineTimeout(
+                raise EngineTimeoutError(
                     f"connecting to the runner at {self.path} timed out after {call.budget}s"
                 ) from exc
             if isinstance(exc, OSError):
                 self._penalise()
-                raise EngineUnavailable(self._why_unreachable(exc)) from exc
+                raise EngineUnavailableError(self._why_unreachable(exc)) from exc
             raise
         with self._lock:
             self._backoff = 0.0
@@ -455,7 +459,7 @@ class SocketTransport:
         """Create the descriptor; failing to is a failed attempt, and backs off like one."""
         try:
             return _open_socket(f"to reach the runner at {self.path}")
-        except EngineUnavailable:
+        except EngineUnavailableError:
             self._penalise()
             raise
 
@@ -474,10 +478,10 @@ class SocketTransport:
         sock.settimeout(self._check_budget(call, self._clock()))
 
     def _check_budget(self, call: _Call, now: MonoTime) -> float:
-        """What is left of the call's budget, or :class:`EngineTimeout`."""
+        """What is left of the call's budget, or :class:`EngineTimeoutError`."""
         remaining = call.remaining(now)
         if remaining <= 0:
-            raise EngineTimeout(
+            raise EngineTimeoutError(
                 f"{call.method} ran out of its {call.budget}s budget talking to "
                 f"the runner at {self.path}"
             )
@@ -561,7 +565,7 @@ class EventStream:
     def _subscribe(self) -> socket.socket:
         """Open a connection and put its one and only request on it."""
         if not self.subscriptions:
-            raise InvalidRequest(
+            raise InvalidRequestError(
                 "an event stream with no subscriptions would hold a connection "
                 "open forever and never deliver anything"
             )
@@ -574,7 +578,7 @@ class EventStream:
             separators=(",", ":"),
         ).encode()
         if len(frame) > MAX_REQUEST_BYTES:
-            raise RequestTooLarge(
+            raise RequestTooLargeError(
                 f"subscribing to {len(self.subscriptions)} subscriptions would be "
                 f"{len(frame)} bytes and the runner reads at most "
                 f"{MAX_REQUEST_BYTES}; nothing was sent",
@@ -588,7 +592,7 @@ class EventStream:
             try:
                 sock.sendall(frame + b"\n")
             except OSError as exc:
-                raise EngineUnavailable(f"the subscribe could not be sent: {exc}") from exc
+                raise EngineUnavailableError(f"the subscribe could not be sent: {exc}") from exc
             self._await_started(sock)
         except BaseException:
             self._drop()
@@ -606,7 +610,9 @@ class EventStream:
             if _confirms_subscription(reply):
                 return
             log.warning("discarding %r while waiting for the subscription", reply.payload)
-        raise InvalidResponse(f"the runner never confirmed the subscription after {strays} frames")
+        raise InvalidResponseError(
+            f"the runner never confirmed the subscription after {strays} frames"
+        )
 
     def _connect(self) -> socket.socket:
         """A connection of this stream's own, registered so `close` can reach it."""
@@ -614,19 +620,19 @@ class EventStream:
         with self._lock:
             if self._closed:
                 sock.close()
-                raise EngineUnavailable("this event stream was closed before it opened")
+                raise EngineUnavailableError("this event stream was closed before it opened")
             self._sock = sock
         try:
             sock.settimeout(self.timeout)
             sock.connect(str(self.path))
         except TimeoutError as exc:
             self._drop()
-            raise EngineTimeout(
+            raise EngineTimeoutError(
                 f"connecting the event stream to {self.path} timed out after {self.timeout}s"
             ) from exc
         except OSError as exc:
             self._drop()
-            raise EngineUnavailable(_why_unreachable(self.path, exc)) from exc
+            raise EngineUnavailableError(_why_unreachable(self.path, exc)) from exc
         return sock
 
     # -- reading -----------------------------------------------------------
@@ -646,13 +652,13 @@ class EventStream:
         try:
             chunk = sock.recv(_CHUNK)
         except TimeoutError as exc:
-            raise EngineTimeout(
+            raise EngineTimeoutError(
                 f"the runner did not confirm the subscription within {self.timeout}s"
             ) from exc
         except OSError as exc:
-            raise EngineUnavailable(f"the event stream failed: {exc}") from exc
+            raise EngineUnavailableError(f"the event stream failed: {exc}") from exc
         if not chunk:
-            raise EngineUnavailable(
+            raise EngineUnavailableError(
                 "the runner closed the event connection"
                 if not self._closed
                 else "the event stream was closed"

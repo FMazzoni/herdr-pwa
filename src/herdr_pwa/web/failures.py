@@ -13,16 +13,16 @@ from herdr_pwa.auth import AuthError
 from herdr_pwa.decisions import IDLE_CADENCE
 from herdr_pwa.engine import (
     EngineError,
-    EngineMisconfigured,
-    EngineTimeout,
-    EngineUnavailable,
-    InvalidRequest,
-    InvalidResponse,
-    ProtocolMismatch,
-    TargetNotFound,
+    EngineMisconfiguredError,
+    EngineTimeoutError,
+    EngineUnavailableError,
+    InvalidRequestError,
+    InvalidResponseError,
+    ProtocolMismatchError,
+    TargetNotFoundError,
 )
-from herdr_pwa.files.reader import NotReadable, OutsideRoot
-from herdr_pwa.files.roots import UnknownRoot
+from herdr_pwa.files.reader import NotReadableError, OutsideRootError
+from herdr_pwa.files.roots import UnknownRootError
 from herdr_pwa.patterns import Rx
 from herdr_pwa.web.render import Pages
 from herdr_pwa.writes.refusal import Refused
@@ -33,11 +33,11 @@ log = logging.getLogger(__name__)
 STOP_POLLING: Final = 286
 
 
-class AgentGone(Exception):  # noqa: N818 - named for what the screen says
+class AgentGoneError(Exception):
     """The session asked for is in no snapshot any more."""
 
 
-class PageHidden(Exception):  # noqa: N818 - a signal, not an error
+class PageHiddenError(Exception):
     """A poll from a hidden page, answered by stopping its clock."""
 
 
@@ -54,35 +54,35 @@ class Failure:
 
 # First match wins, so a subclass sits above its base.
 FAILURES: Final[tuple[tuple[type[Exception], Failure], ...]] = (
-    (PageHidden, Failure(STOP_POLLING, "", "")),
+    (PageHiddenError, Failure(STOP_POLLING, "", "")),
     (
         AuthError,
         Failure(403, "not allowed", "This request did not prove who is asking."),
     ),
     (
-        AgentGone,
+        AgentGoneError,
         Failure(404, "agent gone", "This agent is not in the herd any more."),
     ),
     (
-        UnknownRoot,
+        UnknownRootError,
         Failure(404, "no such repository", "No agent is working in that repository now."),
     ),
     (
-        OutsideRoot,
+        OutsideRootError,
         Failure(403, "outside the repository", "That path leads outside the repository."),
     ),
     (
-        NotReadable,
+        NotReadableError,
         Failure(404, "not found", "Nothing readable is at that path."),
     ),
     (
-        TargetNotFound,
+        TargetNotFoundError,
         Failure(
             404, "agent gone", "The agent's pane vanished while it was being read.", retry=True
         ),
     ),
     (
-        ProtocolMismatch,
+        ProtocolMismatchError,
         Failure(
             409,
             "runner version drift",
@@ -91,25 +91,25 @@ FAILURES: Final[tuple[tuple[type[Exception], Failure], ...]] = (
         ),
     ),
     (
-        InvalidRequest,
+        InvalidRequestError,
         Failure(400, "bad address", "That is not an address this app can look up."),
     ),
     (
-        EngineTimeout,
+        EngineTimeoutError,
         Failure(503, "runner too slow", "The runner did not answer in time.", retry=True),
     ),
     (
-        EngineUnavailable,
+        EngineUnavailableError,
         Failure(
             503, "runner unreachable", "This app is up and the runner is not answering.", retry=True
         ),
     ),
     (
-        InvalidResponse,
+        InvalidResponseError,
         Failure(502, "runner answered nonsense", "The runner's reply did not parse.", retry=True),
     ),
     (
-        EngineMisconfigured,
+        EngineMisconfiguredError,
         Failure(500, "misconfigured", "This box's runner configuration will not load."),
     ),
     (

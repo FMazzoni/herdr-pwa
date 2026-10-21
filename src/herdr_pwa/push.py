@@ -524,7 +524,9 @@ def encode_payload(payload: dict[str, object]) -> str:
 class Deliver(Protocol):
     """Send one encrypted payload to one device, raising DeliveryError on refusal."""
 
-    def __call__(self, subscription: Subscription, data: str) -> None: ...
+    def __call__(self, subscription: Subscription, data: str) -> None:
+        """Deliver *data* to *subscription*."""
+        ...
 
 
 class _SendOptions(TypedDict):

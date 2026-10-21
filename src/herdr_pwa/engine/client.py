@@ -30,11 +30,11 @@ from herdr_pwa.engine.transport import (
     EngineError,
     EventStream,
     Frame,
-    InvalidRequest,
-    InvalidResponse,
-    ProtocolMismatch,
+    InvalidRequestError,
+    InvalidResponseError,
+    ProtocolMismatchError,
     SocketTransport,
-    TargetNotFound,
+    TargetNotFoundError,
     Transport,
     WireReply,
 )
@@ -100,7 +100,7 @@ def method_of(request_type: type[BaseModel]) -> str:
     args: tuple[object, ...] = get_args(annotation)
     names = [arg for arg in args if isinstance(arg, str)]
     if len(names) != 1:
-        raise InvalidResponse(
+        raise InvalidResponseError(
             f"{request_type.__name__} does not pin exactly one method name; "
             "the generated models are not the shape this build expects"
         )
@@ -112,7 +112,7 @@ def payload_field(arm: type[BaseModel]) -> str:
     """The one field of a result arm that is not its ``type`` discriminator."""
     fields = [name for name in arm.model_fields if name != "type"]
     if len(fields) != 1:
-        raise InvalidResponse(
+        raise InvalidResponseError(
             f"{arm.__name__} does not carry exactly one payload field; "
             "the generated models are not the shape this build expects"
         )
@@ -276,7 +276,7 @@ class HerdrClient:
         key = payload_field(arm)
         if isinstance(result, ValidationError):
             if not degrade:
-                raise InvalidResponse(
+                raise InvalidResponseError(
                     f"{method} answered a frame that does not match the "
                     f"runner's own published schema: {result}"
                 ) from result
@@ -290,7 +290,7 @@ class HerdrClient:
             return None, self._sub_object(payload, key, method=method)
         root = result.root
         if not isinstance(root, arm):
-            raise InvalidResponse(
+            raise InvalidResponseError(
                 f"{method} answered {type(root).__name__} where {arm.__name__} was expected"
             )
         # Payload_field names the arm's field that holds its BaseModel payload.
@@ -302,13 +302,13 @@ class HerdrClient:
         del self
         method, _, result = reply
         if isinstance(result, ValidationError):
-            raise InvalidResponse(
+            raise InvalidResponseError(
                 f"{method} answered a frame that does not match the runner's "
                 f"own published schema: {result}"
             ) from result
         root = result.root
         if not isinstance(root, arm):
-            raise InvalidResponse(
+            raise InvalidResponseError(
                 f"{method} answered {type(root).__name__} where {arm.__name__} was expected"
             )
         return root
@@ -317,7 +317,7 @@ class HerdrClient:
         """A write's reply as its typed arm; a reply that will not parse came after the write ran."""
         try:
             return self._arm(reply, arm)
-        except InvalidResponse as exc:
+        except InvalidResponseError as exc:
             exc.after_send = True
             raise
 
@@ -327,7 +327,7 @@ class HerdrClient:
         result = payload.get("result")
         raw = result.get(key) if isinstance(result, dict) else None
         if not isinstance(raw, dict):
-            raise InvalidResponse(f"{method} answered no {key!r} object")
+            raise InvalidResponseError(f"{method} answered no {key!r} object")
         return raw
 
     # --- Reads ---
@@ -392,7 +392,7 @@ class HerdrClient:
         _, raw = self._result(reply, wire.PaneReadResponseResult, degrade=True)
         text = raw.get(_TEXT_FIELD)
         if not isinstance(text, str):
-            raise InvalidResponse("the runner answered a read with no terminal text")
+            raise InvalidResponseError("the runner answered a read with no terminal text")
         return text
 
     def _read_params(self, target: PaneId, options: ReadOptions) -> "wire_request.AgentReadParams":
@@ -431,7 +431,9 @@ class HerdrClient:
             return wire_request.ReadSource(source)
         except ValueError as exc:
             allowed = ", ".join(s.value for s in wire_request.ReadSource)
-            raise InvalidRequest(f"unknown read source {source!r}; expected {allowed}") from exc
+            raise InvalidRequestError(
+                f"unknown read source {source!r}; expected {allowed}"
+            ) from exc
 
     def mirror_read(
         self, target: PaneId, *, status: object = "", options: ReadOptions = PLAIN_READ
@@ -525,7 +527,7 @@ class HerdrClient:
         if not fresh:
             self._refresh_protocol(timeout)
         if self.last_protocol != self.settings.expected_protocol:
-            raise ProtocolMismatch(
+            raise ProtocolMismatchError(
                 f"runner speaks snapshot protocol {self.last_protocol}, expected "
                 f"{self.settings.expected_protocol}; refusing to drive an agent"
             )
@@ -575,7 +577,7 @@ class HerdrClient:
             return
         holder = info.agent_session.value if info.agent_session else ""
         if holder.strip() != str(session).strip():
-            raise TargetNotFound(
+            raise TargetNotFoundError(
                 f"pane {target} is held by session {holder or '(none)'}, not "
                 f"{session}; pane ids are recycled, so this keystroke would go "
                 "to a different agent -- re-resolve the session first",
@@ -598,7 +600,7 @@ class HerdrClient:
     def send_keys(self, seat: Seat, *keys: str, timeout: float | None = None) -> Frame:
         """Send key presses to the agent in ``seat`` (``"1"``, ``"enter"``, ``"ctrl-c"``...)."""
         if not keys:
-            raise InvalidRequest("send_keys requires at least one key")
+            raise InvalidRequestError("send_keys requires at least one key")
         target = as_pane_id(seat.target)
         seat = Seat(target, seat.session)
         self._require_writable(timeout)

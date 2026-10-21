@@ -36,7 +36,9 @@ def carries_mark(pid: int, *, proc: Path = PROC) -> bool:
 class PaneProcesses(Protocol):
     """The one thing this module needs from the runner."""
 
-    def pane_pids(self, pane_id: PaneId) -> tuple[int, ...]: ...
+    def pane_pids(self, pane_id: PaneId) -> tuple[int, ...]:
+        """The pids running in this pane."""
+        ...
 
 
 class ManagedHerd:

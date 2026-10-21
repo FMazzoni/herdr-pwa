@@ -10,12 +10,12 @@ from pydantic import JsonValue
 from herdr_pwa.engine import (
     AgentStatus,
     EngineError,
-    EngineMisconfigured,
-    EngineTimeout,
-    EngineUnavailable,
+    EngineMisconfiguredError,
+    EngineTimeoutError,
+    EngineUnavailableError,
     HistoryState,
-    InvalidResponse,
-    ProtocolMismatch,
+    InvalidResponseError,
+    ProtocolMismatchError,
     Speaker,
     TranscriptPage,
     TranscriptTurn,
@@ -158,7 +158,7 @@ def test_a_hidden_page_poll_stops_its_clock(tmp_path: Path) -> None:
 
 
 def test_an_unreachable_runner_renders_honestly_and_keeps_polling(tmp_path: Path) -> None:
-    rig = build_rig(tmp_path, {SNAPSHOT: EngineUnavailable("socket gone")})
+    rig = build_rig(tmp_path, {SNAPSHOT: EngineUnavailableError("socket gone")})
     response = rig.http.get("/feed", headers=FRAGMENT)
     assert response.status_code == 503
     assert "runner unreachable" in response.text
@@ -172,7 +172,7 @@ def test_an_unreachable_runner_renders_honestly_and_keeps_polling(tmp_path: Path
 def test_a_failed_refresh_over_a_good_snapshot_is_degraded_not_empty(tmp_path: Path) -> None:
     rig = build_rig(tmp_path)
     assert rig.http.get("/feed").status_code == 200
-    rig.wire.replies[SNAPSHOT] = EngineTimeout("slow")
+    rig.wire.replies[SNAPSHOT] = EngineTimeoutError("slow")
     rig.clock.now += 5
     response = rig.http.get("/feed")
     assert response.status_code == 200
@@ -197,11 +197,11 @@ def _failure_name(row: _Row) -> str:
 @pytest.mark.parametrize(
     "row",
     [
-        _Row(EngineUnavailable("x"), 503, "runner unreachable", polls=True),
-        _Row(EngineTimeout("x"), 503, "runner too slow", polls=True),
-        _Row(InvalidResponse("x"), 502, "runner answered nonsense", polls=True),
-        _Row(ProtocolMismatch("x"), 409, "runner version drift", polls=True),
-        _Row(EngineMisconfigured("x"), 500, "misconfigured", polls=False),
+        _Row(EngineUnavailableError("x"), 503, "runner unreachable", polls=True),
+        _Row(EngineTimeoutError("x"), 503, "runner too slow", polls=True),
+        _Row(InvalidResponseError("x"), 502, "runner answered nonsense", polls=True),
+        _Row(ProtocolMismatchError("x"), 409, "runner version drift", polls=True),
+        _Row(EngineMisconfiguredError("x"), 500, "misconfigured", polls=False),
         _Row(EngineError("x"), 502, "runner error", polls=True),
     ],
     ids=_failure_name,
@@ -217,7 +217,7 @@ def test_the_failure_table_maps_each_engine_failure(tmp_path: Path, row: _Row) -
 def test_a_failure_fragment_stands_in_for_its_region_under_the_region_id(tmp_path: Path) -> None:
     # The page holds a region's redraw back under a finger by its id; a failure with none is
     # swapped out from under the reader the moment it heals.
-    rig = build_rig(tmp_path, {SNAPSHOT: EngineUnavailable("x")})
+    rig = build_rig(tmp_path, {SNAPSHOT: EngineUnavailableError("x")})
     url = f"/agent/{WORKING_SESSION}/answer"
     response = rig.http.get(url, headers={**FRAGMENT, "HX-Target": "answer"})
     assert response.status_code == 503
@@ -229,7 +229,7 @@ def test_a_failure_fragment_stands_in_for_its_region_under_the_region_id(tmp_pat
 def test_a_failure_takes_only_a_plain_region_id_from_the_request(
     tmp_path: Path, target: str
 ) -> None:
-    rig = build_rig(tmp_path, {SNAPSHOT: EngineUnavailable("x")})
+    rig = build_rig(tmp_path, {SNAPSHOT: EngineUnavailableError("x")})
     response = rig.http.get("/feed", headers={**FRAGMENT, "HX-Target": target})
     assert response.status_code == 503
     assert " id=" not in response.text.split(">", 1)[0]
@@ -259,14 +259,14 @@ def test_every_region_id_the_templates_draw_is_echoed_by_a_failure(tmp_path: Pat
     # The echo takes only plain ids; a region outside that shape would lose its id on failure.
     ids = region_ids()
     assert {"answer", "agent-view", "composer", "find-results"} <= ids
-    rig = build_rig(tmp_path, {SNAPSHOT: EngineUnavailable("x")})
+    rig = build_rig(tmp_path, {SNAPSHOT: EngineUnavailableError("x")})
     for region in sorted(ids):
         response = rig.http.get("/feed", headers={**FRAGMENT, "HX-Target": region})
         assert f'id="{region}"' in response.text.split(">", 1)[0], region
 
 
 def test_a_failed_page_load_is_a_whole_document(tmp_path: Path) -> None:
-    rig = build_rig(tmp_path, {SNAPSHOT: EngineUnavailable("x")})
+    rig = build_rig(tmp_path, {SNAPSHOT: EngineUnavailableError("x")})
     response = rig.http.get(f"/agent/{WORKING_SESSION}")
     assert response.status_code == 503
     assert response.text.startswith("<!doctype html>")

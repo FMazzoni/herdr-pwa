@@ -10,13 +10,13 @@ from pydantic import JsonValue
 from herdr_pwa.audit import PROMPT, AuditUnavailableError, Entry, Write
 from herdr_pwa.engine import (
     EngineError,
-    EngineMisconfigured,
-    EngineTimeout,
-    EngineUnavailable,
-    InvalidResponse,
-    ProtocolMismatch,
-    RequestTooLarge,
-    TargetNotFound,
+    EngineMisconfiguredError,
+    EngineTimeoutError,
+    EngineUnavailableError,
+    InvalidResponseError,
+    ProtocolMismatchError,
+    RequestTooLargeError,
+    TargetNotFoundError,
     WorkspaceId,
     as_pane_id,
     harness_kinds,
@@ -309,13 +309,13 @@ def test_every_refusal_has_one_row_in_the_failure_table() -> None:
 @pytest.mark.parametrize(
     ("exc", "refusal"),
     [
-        (EngineUnavailable("x"), Refusal.UNREACHABLE),
-        (EngineTimeout("x"), Refusal.TIMED_OUT),
-        (EngineMisconfigured("x"), Refusal.MISCONFIGURED),
-        (ProtocolMismatch("x"), Refusal.PROTOCOL_DRIFT),
-        (RequestTooLarge("x", size=2, limit=1), Refusal.TOO_LONG),
-        (TargetNotFound("x"), Refusal.GONE),
-        (TargetNotFound("x", code="session_moved"), Refusal.SESSION_MOVED),
+        (EngineUnavailableError("x"), Refusal.UNREACHABLE),
+        (EngineTimeoutError("x"), Refusal.TIMED_OUT),
+        (EngineMisconfiguredError("x"), Refusal.MISCONFIGURED),
+        (ProtocolMismatchError("x"), Refusal.PROTOCOL_DRIFT),
+        (RequestTooLargeError("x", size=2, limit=1), Refusal.TOO_LONG),
+        (TargetNotFoundError("x"), Refusal.GONE),
+        (TargetNotFoundError("x", code="session_moved"), Refusal.SESSION_MOVED),
         (EngineError("x", code="agent_not_ready"), Refusal.NOT_READY),
         (EngineError("x"), Refusal.RUNNER_REFUSED),
     ],
@@ -332,10 +332,10 @@ def _sent(exc: EngineError) -> EngineError:
 @pytest.mark.parametrize(
     ("exc", "refusal"),
     [
-        (_sent(EngineUnavailable("reset")), Refusal.ANSWER_LOST),
-        (_sent(InvalidResponse("garbled")), Refusal.ANSWER_LOST),
+        (_sent(EngineUnavailableError("reset")), Refusal.ANSWER_LOST),
+        (_sent(InvalidResponseError("garbled")), Refusal.ANSWER_LOST),
         (_sent(EngineError("x", code="agent_not_ready")), Refusal.ANSWER_LOST),
-        (_sent(EngineTimeout("slow")), Refusal.TIMED_OUT),
+        (_sent(EngineTimeoutError("slow")), Refusal.TIMED_OUT),
     ],
 )
 def test_a_failure_after_the_send_never_says_nothing_was_sent(
@@ -350,11 +350,11 @@ def test_a_failure_after_the_send_never_says_nothing_was_sent(
 
 
 def test_a_failure_before_the_send_says_nothing_was_sent() -> None:
-    exc = EngineUnavailable("no socket")
+    exc = EngineUnavailableError("no socket")
     said = Refused(refusal_for(exc), "sent")
     assert not said.unsure
     assert said.says.startswith("Nothing was sent")
-    assert failed_result(exc) == "refused:EngineUnavailable"
+    assert failed_result(exc) == "refused:EngineUnavailableError"
 
 
 def test_names_are_folded_to_what_the_runner_takes() -> None:

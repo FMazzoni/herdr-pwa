@@ -22,13 +22,13 @@ from pydantic import JsonValue, TypeAdapter
 from herdr_pwa.clock import MonoClock, MonoTime, mono_now
 from herdr_pwa.engine import (
     EngineError,
-    EngineTimeout,
-    EngineUnavailable,
+    EngineTimeoutError,
+    EngineUnavailableError,
     EventStream,
-    InvalidRequest,
-    InvalidResponse,
-    RequestTooLarge,
-    TargetNotFound,
+    InvalidRequestError,
+    InvalidResponseError,
+    RequestTooLargeError,
+    TargetNotFoundError,
     Transport,
     WireLimits,
 )
@@ -327,7 +327,7 @@ def test_an_error_frame_maps_onto_the_taxonomy(
 
     serve(sock_path, handler, request)
     wire = transport(sock_path)
-    with pytest.raises(TargetNotFound) as exc:
+    with pytest.raises(TargetNotFoundError) as exc:
         wire.call("agent.get", {"target": "nosuch"})
     assert exc.value.code == "agent_not_found"
     assert "nosuch" in exc.value.message
@@ -345,7 +345,7 @@ def test_a_server_side_unavailable_code_is_not_a_transport_failure(
 
     serve(sock_path, handler, request)
     wire = transport(sock_path)
-    with pytest.raises(EngineUnavailable):
+    with pytest.raises(EngineUnavailableError):
         wire.call("session.snapshot", {})
     wire.close()
 
@@ -415,7 +415,7 @@ def test_an_error_frame_is_a_conversation_not_a_failure(
 
     fake = serve(sock_path, handler, request)
     wire = transport(sock_path)
-    with pytest.raises(TargetNotFound):
+    with pytest.raises(TargetNotFoundError):
         wire.call("agent.get", {"target": "gone"})
     # Each call gets its own connection, which is the protocol rather than a symptom.
     wire.call("agent.get", {"target": "here"})
@@ -432,7 +432,7 @@ def test_a_missing_socket_is_unavailable_not_a_filenotfounderror(
     tmp_path: Path,
 ) -> None:
     wire = transport(tmp_path / "nothing-here.sock")
-    with pytest.raises(EngineUnavailable) as exc:
+    with pytest.raises(EngineUnavailableError) as exc:
         wire.call("session.snapshot", {})
     assert "not running" in exc.value.message
 
@@ -445,7 +445,7 @@ def test_a_stale_socket_file_is_unavailable_not_a_connectionrefusederror(
     orphan.bind(str(sock_path))  # bound but never listen()ed
     try:
         wire = transport(sock_path)
-        with pytest.raises(EngineUnavailable) as exc:
+        with pytest.raises(EngineUnavailableError) as exc:
             wire.call("session.snapshot", {})
         assert "stale" in exc.value.message
     finally:
@@ -458,7 +458,7 @@ def test_a_path_that_is_not_a_socket_is_unavailable_not_an_oserror(
     plain = tmp_path / "not-a-socket"
     plain.write_text("i am a regular file")
     wire = transport(plain)
-    with pytest.raises(EngineUnavailable):
+    with pytest.raises(EngineUnavailableError):
         wire.call("session.snapshot", {})
 
 
@@ -470,7 +470,7 @@ def test_the_runner_hanging_up_mid_answer_is_unavailable(
 
     serve(sock_path, handler, request)
     wire = transport(sock_path)
-    with pytest.raises(EngineUnavailable) as exc:
+    with pytest.raises(EngineUnavailableError) as exc:
         wire.call("session.snapshot", {})
     assert "closed the connection" in exc.value.message
     wire.close()
@@ -487,7 +487,7 @@ def test_a_runner_that_never_answers_times_out(
     serve(sock_path, lambda _r, _c: None, request)
     wire = transport(sock_path, timeout=0.2)
     started = time.monotonic()
-    with pytest.raises(EngineTimeout):
+    with pytest.raises(EngineTimeoutError):
         wire.call("session.snapshot", {})
     assert time.monotonic() - started < 2.0
     wire.close()
@@ -510,7 +510,7 @@ def test_a_dribbling_peer_cannot_outlast_the_deadline(
     serve(sock_path, handler, request)
     wire = transport(sock_path, timeout=0.3)
     started = time.monotonic()
-    with pytest.raises(EngineTimeout):
+    with pytest.raises(EngineTimeoutError):
         wire.call("session.snapshot", {})
     assert time.monotonic() - started < 2.0
     wire.close()
@@ -529,7 +529,7 @@ def test_a_timeout_destroys_the_connection(sock_path: Path, request: pytest.Fixt
     serve(sock_path, handler, request)
     wire = Tracked(sock_path, timeout=0.15)
     try:
-        with pytest.raises(EngineTimeout):
+        with pytest.raises(EngineTimeoutError):
             wire.call("agent.get", {"target": "w1:p3"})
     finally:
         release.set()
@@ -549,9 +549,9 @@ def test_an_exhausted_budget_times_out_before_dialling(sock_path: Path) -> None:
             return opened[-1]
 
     wire = Counted(sock_path, timeout=0.0)
-    retained: list[EngineTimeout] = []  # what logging.exception would hold
+    retained: list[EngineTimeoutError] = []  # what logging.exception would hold
     for _ in range(51):
-        with pytest.raises(EngineTimeout) as caught:
+        with pytest.raises(EngineTimeoutError) as caught:
             wire.call("session.snapshot", {})
         retained.append(caught.value)
     assert [s for s in opened if s.fileno() != -1] == [], "a timed-out call kept its socket open"
@@ -591,7 +591,7 @@ def test_every_wait_in_a_call_is_armed_from_its_one_deadline(
     wire = Watched(sock_path, timeout=budget, clock=lambda: MonoTime(next(reads) * budget / 20))
     wire.call("agent.list", {})  # answered, and hung up on, like every call
     armed.clear()
-    with pytest.raises(EngineTimeout) as caught:  # the second one is never answered at all
+    with pytest.raises(EngineTimeoutError) as caught:  # the second one is never answered at all
         wire.call("agent.get", {"target": "w1:p3"})
     assert len(armed) >= 3, armed
     assert armed[0] < budget, f"one budget, not a fresh one per wait: {armed}"
@@ -648,7 +648,7 @@ def test_a_non_json_frame_is_an_invalid_response(
 ) -> None:
     serve(sock_path, lambda _r, _c: b"this is not json\n", request)
     wire = transport(sock_path)
-    with pytest.raises(InvalidResponse):
+    with pytest.raises(InvalidResponseError):
         wire.call("session.snapshot", {})
     wire.close()
 
@@ -658,7 +658,7 @@ def test_a_json_array_is_an_invalid_response(
 ) -> None:
     serve(sock_path, lambda _r, _c: b'["not", "an", "object"]\n', request)
     wire = transport(sock_path)
-    with pytest.raises(InvalidResponse) as exc:
+    with pytest.raises(InvalidResponseError) as exc:
         wire.call("session.snapshot", {})
     assert "list" in exc.value.message
     wire.close()
@@ -687,7 +687,7 @@ def test_undecodable_bytes_that_break_the_frame_are_an_invalid_response(
     """The same replacement, landing outside a string, makes the JSON invalid."""
     serve(sock_path, lambda _r, _c: b'{"id": \xff\xfe}\n', request)
     wire = transport(sock_path)
-    with pytest.raises(InvalidResponse):
+    with pytest.raises(InvalidResponseError):
         wire.call("agent.read", {"target": "w1:p3"})
     wire.close()
 
@@ -707,7 +707,7 @@ def test_a_frame_with_no_terminator_is_cut_off_rather_than_buffered_forever(
     serve(sock_path, handler, request)
     # A small bound, so the endless line overruns it in two frames rather than thousands.
     wire = Tracked(sock_path, timeout=2.0, limits=replace(WIRE_LIMITS, max_frame_bytes=8192))
-    with pytest.raises(InvalidResponse) as exc:
+    with pytest.raises(InvalidResponseError) as exc:
         wire.call("session.snapshot", {})
     assert "terminator" in exc.value.message
     assert wire.still_open == []
@@ -746,7 +746,7 @@ def test_a_request_past_the_limit_is_refused_before_anything_is_sent(
 ) -> None:
     """Nothing is written, no socket is opened, and the numbers are in the error."""
     wire = SocketTransport(sock_path, timeout=FAST)
-    with pytest.raises(RequestTooLarge) as caught:
+    with pytest.raises(RequestTooLargeError) as caught:
         wire.call("session.snapshot", {"_pad": "x" * (MAX_REQUEST_BYTES + 1)})
     assert caught.value.limit == MAX_REQUEST_BYTES
     assert caught.value.size > MAX_REQUEST_BYTES
@@ -759,7 +759,7 @@ def test_a_request_past_the_limit_is_refused_before_anything_is_sent(
 def test_the_refusal_is_still_an_invalid_request(sock_path: Path) -> None:
     """A route catching the taxonomy it already catches keeps working."""
     wire = SocketTransport(sock_path, timeout=FAST)
-    with pytest.raises(InvalidRequest):
+    with pytest.raises(InvalidRequestError):
         wire.call("session.snapshot", {"_pad": "x" * (MAX_REQUEST_BYTES + 1)})
     with pytest.raises(ValueError):  # noqa: PT011 - the type is the subject, not the message
         wire.call("session.snapshot", {"_pad": "x" * (MAX_REQUEST_BYTES + 1)})
@@ -799,7 +799,7 @@ def test_a_stream_that_only_answers_other_ids_is_declared_out_of_step(
 
     serve(sock_path, handler, request)
     wire = Tracked(sock_path)
-    with pytest.raises(InvalidResponse) as exc:
+    with pytest.raises(InvalidResponseError) as exc:
         wire.call("session.snapshot", {})
     assert "out of step" in exc.value.message
     assert wire.still_open == []
@@ -859,7 +859,7 @@ def test_a_write_is_never_resent(sock_path: Path, request: pytest.FixtureRequest
 
     fake = serve(sock_path, handler, request)
     wire = transport(sock_path)
-    with pytest.raises(EngineUnavailable):
+    with pytest.raises(EngineUnavailableError):
         wire.call("agent.prompt", {"target": "w1:p3"}, idempotent=False)
     assert len(fake.requests) <= 1, "a write was sent more than once"
     wire.close()
@@ -875,7 +875,7 @@ def test_a_fresh_connection_that_fails_is_not_retried(
 
     fake = serve(sock_path, handler, request)
     wire = transport(sock_path)
-    with pytest.raises(EngineUnavailable):
+    with pytest.raises(EngineUnavailableError):
         wire.call("agent.list", {})
     assert len(fake.requests) == 1
     wire.close()
@@ -897,16 +897,16 @@ def test_connect_failures_back_off_instead_of_dialling_every_poll(
     """A dead runner behind a 3s poll loop must not mean a syscall per tick."""
     clock = Clock()
     wire = transport(tmp_path / "gone.sock", clock=clock)
-    with pytest.raises(EngineUnavailable) as first:
+    with pytest.raises(EngineUnavailableError) as first:
         wire.call("session.snapshot", {})
     assert "not running" in first.value.message
 
-    with pytest.raises(EngineUnavailable) as gated:
+    with pytest.raises(EngineUnavailableError) as gated:
         wire.call("session.snapshot", {})
     assert "not retrying" in gated.value.message
 
     clock.now += 10
-    with pytest.raises(EngineUnavailable) as after:
+    with pytest.raises(EngineUnavailableError) as after:
         wire.call("session.snapshot", {})
     assert "not running" in after.value.message
 
@@ -919,7 +919,7 @@ def test_the_backoff_is_bounded_and_a_success_clears_it(
     wire = transport(sock_path, clock=clock, limits=replace(WIRE_LIMITS, backoff_cap=0.8))
     for _ in range(10):  # ten failed dials, doubling each time, well past the cap
         clock.now += 100
-        with pytest.raises(EngineUnavailable):
+        with pytest.raises(EngineUnavailableError):
             wire.call("session.snapshot", {})
     assert wire._backoff == 0.8  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
 
@@ -1207,7 +1207,7 @@ def test_running_out_of_descriptors_is_unavailable_and_backs_off(
     )
     assert done.returncode == 0, done.stderr[-2000:]
     parts = done.stdout.split("|")
-    assert parts[0] == "EngineUnavailable", f"the taxonomy was escaped: {done.stdout}"
+    assert parts[0] == "EngineUnavailableError", f"the taxonomy was escaped: {done.stdout}"
     assert parts[1] == "engine_unavailable"
     assert parts[2] == "True", "the backoff was skipped, so it will re-dial every tick"
     assert "file descriptors" in parts[3], parts[3]
@@ -1317,7 +1317,7 @@ def test_the_runner_hanging_up_is_unavailable_rather_than_a_quiet_end(
     """A stream that just stops must be a failure the caller can back off from."""
     serve(sock_path, streaming(status("w1:p1", "done"), then_hang_up=True), request)
     live = stream(sock_path)
-    with pytest.raises(EngineUnavailable, match="closed the event connection"):
+    with pytest.raises(EngineUnavailableError, match="closed the event connection"):
         list(live)
     assert not live.closed, "nobody closed this: it was closed on us"
 
@@ -1334,7 +1334,7 @@ def test_an_error_frame_on_the_stream_maps_onto_the_taxonomy(
         }
 
     serve(sock_path, handler, request)
-    with pytest.raises(TargetNotFound, match="no such pane"):
+    with pytest.raises(TargetNotFoundError, match="no such pane"):
         list(stream(sock_path))
 
 
@@ -1362,7 +1362,7 @@ def test_a_reply_the_schema_rejects_never_confirms_the_subscription(
             conn.sendall(_line({"id": req["id"], "result": {"type": "no_such_arm"}}))
 
     serve(sock_path, handler, request)
-    with pytest.raises(InvalidResponse, match="never confirmed the subscription"):
+    with pytest.raises(InvalidResponseError, match="never confirmed the subscription"):
         list(stream(sock_path))
 
 
@@ -1382,7 +1382,7 @@ def test_a_stream_reads_only_as_many_stray_frames_as_its_limits_allow(
         timeout=FAST,
         limits=replace(WIRE_LIMITS, max_stray_frames=1),
     )
-    with pytest.raises(InvalidResponse, match="after 1 frames"):
+    with pytest.raises(InvalidResponseError, match="after 1 frames"):
         list(one)
 
 
@@ -1394,7 +1394,7 @@ def test_close_from_another_thread_ends_the_iteration(
     live = stream(sock_path)
     threading.Timer(0.2, live.close).start()
     started = time.monotonic()
-    with pytest.raises(EngineUnavailable, match="was closed"):
+    with pytest.raises(EngineUnavailableError, match="was closed"):
         list(live)
     assert live.closed, "a caller-requested stop has to be distinguishable"
     assert time.monotonic() - started < FAST * 10
@@ -1405,7 +1405,7 @@ def test_a_subscription_with_nothing_in_it_is_refused_before_any_connection(
 ) -> None:
     """It would hold a connection open forever and deliver nothing at all."""
     fake = serve(sock_path, streaming(), request)
-    with pytest.raises(InvalidRequest, match="never deliver"):
+    with pytest.raises(InvalidRequestError, match="never deliver"):
         list(stream(sock_path, subscriptions=[]))
     assert fake.connections == 0
 
@@ -1419,7 +1419,7 @@ def test_an_over_large_subscribe_costs_no_connection(
         {"type": "pane.agent_status_changed", "pane_id": "p" * 1000}
         for _ in range(MAX_REQUEST_BYTES // 900)
     ]
-    with pytest.raises(RequestTooLarge):
+    with pytest.raises(RequestTooLargeError):
         list(stream(sock_path, subscriptions=huge))
     assert fake.connections == 0
 
@@ -1429,13 +1429,13 @@ def test_a_subscription_that_is_never_confirmed_times_out(
 ) -> None:
     """Waiting forever for the handshake would hide a runner that took the request and stopped."""
     serve(sock_path, lambda _req, _conn: None, request)
-    with pytest.raises(EngineTimeout, match="confirm the subscription"):
+    with pytest.raises(EngineTimeoutError, match="confirm the subscription"):
         list(stream(sock_path))
 
 
 def test_a_missing_socket_is_unavailable_for_the_stream_too(tmp_path: Path) -> None:
     """The stream connects on its own, so it needs the same diagnosis, not an OSError."""
-    with pytest.raises(EngineUnavailable, match="not running"):
+    with pytest.raises(EngineUnavailableError, match="not running"):
         list(stream(tmp_path / "nothing.sock"))
 
 
@@ -1450,7 +1450,7 @@ def test_a_refused_subscription_gives_the_descriptor_back(
     serve(sock_path, handler, request)
     before = open_fds()
     for _ in range(20):
-        with pytest.raises(TargetNotFound):
+        with pytest.raises(TargetNotFoundError):
             list(stream(sock_path))
     # The fake's own end closes on its thread, after the client is done; wait for it, not a leak.
     settled = eventually(lambda: open_fds() <= before, 5.0)
@@ -1477,9 +1477,9 @@ def _silent(_req: dict[str, JsonValue], _conn: socket.socket) -> None:
 @pytest.mark.parametrize(
     ("handler", "kind"),
     [
-        (_hang_up, EngineUnavailable),
-        (_garbled, InvalidResponse),
-        (_silent, EngineTimeout),
+        (_hang_up, EngineUnavailableError),
+        (_garbled, InvalidResponseError),
+        (_silent, EngineTimeoutError),
     ],
 )
 def test_a_write_whose_answer_is_lost_is_marked_as_sent(
@@ -1513,14 +1513,14 @@ def test_a_read_whose_answer_is_lost_is_not_marked(
 
 def test_a_write_that_never_left_is_not_marked(tmp_path: Path) -> None:
     wire = transport(tmp_path / "nobody-here.sock")
-    with pytest.raises(EngineUnavailable) as exc:
+    with pytest.raises(EngineUnavailableError) as exc:
         wire.call("agent.send_keys", {"target": "w1:p3", "keys": ["1"]}, idempotent=False)
     assert not exc.value.after_send
 
 
 def test_a_write_too_large_to_send_is_not_marked(server: FakeHerdr, sock_path: Path) -> None:
     wire = transport(sock_path)
-    with pytest.raises(RequestTooLarge) as exc:
+    with pytest.raises(RequestTooLargeError) as exc:
         wire.call("agent.prompt", {"text": "x" * MAX_REQUEST_BYTES}, idempotent=False)
     assert not exc.value.after_send
     assert server.requests == []
@@ -1536,7 +1536,7 @@ def test_a_write_the_runner_answered_with_an_error_is_not_marked(
 
     serve(sock_path, handler, request)
     wire = transport(sock_path)
-    with pytest.raises(TargetNotFound) as exc:
+    with pytest.raises(TargetNotFoundError) as exc:
         wire.call("agent.send_keys", {"target": "w1:p3", "keys": ["1"]}, idempotent=False)
     assert not exc.value.after_send
     wire.close()

@@ -12,11 +12,11 @@ _FILE_FLAGS: Final = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC
 _DIR_FLAGS: Final = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
 
 
-class OutsideRoot(Exception):  # noqa: N818 - named for what the screen says
+class OutsideRootError(Exception):
     """A path that resolves outside every root the herd is working in."""
 
 
-class NotReadable(Exception):  # noqa: N818 - named for what the screen says
+class NotReadableError(Exception):
     """A path that is missing, or is not a regular file or directory."""
 
 
@@ -83,18 +83,18 @@ class LocalReader:
         try:
             opened = Path(f"/proc/self/fd/{fd}").readlink()
         except OSError as exc:
-            raise OutsideRoot(str(exc)) from exc
+            raise OutsideRootError(str(exc)) from exc
         if not inside(opened, self.root):
-            raise OutsideRoot(str(opened))
+            raise OutsideRootError(str(opened))
 
     def _open(self, path: Path, flags: int) -> int:
         try:
             fd = os.open(path, flags)
         except OSError as exc:
-            raise NotReadable(str(exc)) from exc
+            raise NotReadableError(str(exc)) from exc
         try:
             self._confined(fd)
-        except OutsideRoot:
+        except OutsideRootError:
             os.close(fd)
             raise
         return fd
@@ -114,10 +114,10 @@ class LocalReader:
         try:
             found = path.stat()
         except OSError as exc:
-            raise NotReadable(str(exc)) from exc
+            raise NotReadableError(str(exc)) from exc
         is_dir = stat.S_ISDIR(found.st_mode)
         if not is_dir and not stat.S_ISREG(found.st_mode):
-            raise NotReadable(f"{path.name} is not a regular file")
+            raise NotReadableError(f"{path.name} is not a regular file")
         return Stat(found.st_size, found.st_mtime_ns, is_dir)
 
     def read_range(self, path: Path, offset: int, length: int) -> bytes:
@@ -125,7 +125,7 @@ class LocalReader:
         fd = self._open(path, _FILE_FLAGS)
         try:
             if not stat.S_ISREG(os.fstat(fd).st_mode):
-                raise NotReadable(f"{path.name} is not a regular file")
+                raise NotReadableError(f"{path.name} is not a regular file")
             return os.pread(fd, length, offset)
         finally:
             os.close(fd)

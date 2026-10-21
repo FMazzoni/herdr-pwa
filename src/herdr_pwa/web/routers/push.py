@@ -27,7 +27,7 @@ MAX_BODY_BYTES: Final = 8192
 PUSH_OFF: Final = "push is switched off on this server (HP_PUSH_ENABLED=0)"
 
 
-class BadBody(Exception):  # noqa: N818 - named for the answer it becomes
+class BadBodyError(Exception):
     """The request body is too big to be what the route needs."""
 
 
@@ -61,7 +61,7 @@ def _bad(detail: str) -> JSONResponse:
 async def _body[M: BaseModel](request: Request, model: type[M]) -> M:
     raw = await request.body()
     if len(raw) > MAX_BODY_BYTES:
-        raise BadBody(f"body is over {MAX_BODY_BYTES} bytes")
+        raise BadBodyError(f"body is over {MAX_BODY_BYTES} bytes")
     return model.model_validate_json(raw.decode("utf-8", errors="replace"))
 
 
@@ -147,7 +147,7 @@ async def _subscribe(push: PushState, request: Request) -> JSONResponse:
         stored = await asyncio.to_thread(push.stores.devices.add, subscription)
     except ValidationError as exc:
         return _bad(summary(exc))
-    except (BadBody, SubscriptionError, OSError) as exc:
+    except (BadBodyError, SubscriptionError, OSError) as exc:
         return _bad(str(exc))
     devices = await asyncio.to_thread(_devices, push.stores.devices)
     # The echoed endpoint is the server's confirmation; only then does the page say "on".
@@ -161,7 +161,7 @@ async def _unsubscribe(push: PushState, request: Request) -> JSONResponse:
         removed = await asyncio.to_thread(push.stores.devices.remove, endpoint)
     except ValidationError as exc:
         return _bad(summary(exc))
-    except (BadBody, SubscriptionError, OSError) as exc:
+    except (BadBodyError, SubscriptionError, OSError) as exc:
         return _bad(str(exc))
     devices = await asyncio.to_thread(_devices, push.stores.devices)
     return _json({"removed": removed, "devices": devices})
@@ -174,7 +174,7 @@ async def _set_prefs(push: PushState, request: Request) -> JSONResponse:
         _ = await asyncio.to_thread(interrupts.set_kinds, blocked=kinds.blocked, done=kinds.done)
     except ValidationError as exc:
         return _bad(summary(exc))
-    except (BadBody, OSError) as exc:
+    except (BadBodyError, OSError) as exc:
         return _bad(str(exc))
     return _json(await asyncio.to_thread(_policy, push.stores.interrupts))
 
@@ -185,7 +185,7 @@ async def _snooze(push: PushState, request: Request) -> JSONResponse:
         policy = await asyncio.to_thread(push.stores.interrupts.snooze, seconds)
     except ValidationError as exc:
         return _bad(summary(exc))
-    except (BadBody, OSError) as exc:
+    except (BadBodyError, OSError) as exc:
         return _bad(str(exc))
     if policy.dnd_until and push.notifier is not None:
         # The clear goes out over the network, so it runs off the event loop.

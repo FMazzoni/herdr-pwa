@@ -11,7 +11,7 @@ from typing import cast
 
 from fastapi import FastAPI
 
-from herdr_pwa.engine import EngineUnavailable
+from herdr_pwa.engine import EngineUnavailableError
 from herdr_pwa.web.deps import WebState
 from herdr_pwa.web.warm import warm
 from tests.catalogue import tool_heavy_chat
@@ -72,7 +72,7 @@ def test_the_pane_page_arrives_with_its_screen(tmp_path: Path) -> None:
 
 
 def test_a_screen_that_cannot_be_read_leaves_the_pane_to_fetch_itself(tmp_path: Path) -> None:
-    replies = {SNAPSHOT: snapshot_frame(), READ: EngineUnavailable("the runner went away")}
+    replies = {SNAPSHOT: snapshot_frame(), READ: EngineUnavailableError("the runner went away")}
     rig = build_rig(tmp_path, replies)
     page = rig.http.get(f"{AGENT}?tab=pane")
     assert page.status_code == 200

@@ -8,7 +8,7 @@ from pydantic import JsonValue
 
 from herdr_pwa.decisions import answer_digits as decided_digits
 from herdr_pwa.decisions import decide_screen
-from herdr_pwa.engine import BlockedPrompt, EngineUnavailable, KeyHint
+from herdr_pwa.engine import BlockedPrompt, EngineUnavailableError, KeyHint
 from herdr_pwa.panetext import as_text_read
 from herdr_pwa.writes.answer import KeyAsk, KeySent, StartingKeyAsk, send_key, send_starting_key
 from herdr_pwa.writes.keys import (
@@ -182,7 +182,7 @@ def test_a_second_tab_s_interrupt_is_refused_mid_interrupt_and_taken_after_it(
 
 def test_interrupt_works_when_the_question_cannot_be_read(tmp_path: Path) -> None:
     r = blocked_rig(tmp_path)
-    r.herd.fail["agent.read"] = EngineUnavailable("down")
+    r.herd.fail["agent.read"] = EngineUnavailableError("down")
     blind = refused(send_key(r.writer, KeyAsk(S1, "enter")))
     assert blind.refusal is Refusal.UNREADABLE
     _ = sent(send_key(r.writer, KeyAsk(S1, "ctrl-c", confirmed=True)))
@@ -371,7 +371,7 @@ def test_an_interrupt_drawn_under_a_question_that_has_gone_still_goes(tmp_path: 
 
 def _lost_after_send(_herd: FakeHerd, _params: dict[str, JsonValue]) -> None:
     """herdr typed the key, then the connection dropped before its answer came back."""
-    lost = EngineUnavailable("the runner closed the connection while answering")
+    lost = EngineUnavailableError("the runner closed the connection while answering")
     lost.after_send = True
     raise lost
 
@@ -384,7 +384,7 @@ def test_a_key_whose_answer_was_lost_is_said_to_maybe_have_gone(tmp_path: Path) 
     assert "may or may not have been sent" in result.says
     assert len(r.herd.writes(SEND_KEYS)) == 1, "never re-sent"
     results = [rec.get("result") for rec in r.audit_records if rec["phase"] == "outcome"]
-    assert results == ["unknown:EngineUnavailable"]
+    assert results == ["unknown:EngineUnavailableError"]
 
 
 def test_a_second_tab_answering_while_the_first_is_mid_write_is_refused(tmp_path: Path) -> None:

@@ -11,13 +11,13 @@ from herdr_pwa.engine import (
     SESSION_MOVED_CODE,
     BlockedPrompt,
     EngineError,
-    EngineMisconfigured,
-    EngineTimeout,
-    EngineUnavailable,
-    InvalidRequest,
-    ProtocolMismatch,
-    RequestTooLarge,
-    TargetNotFound,
+    EngineMisconfiguredError,
+    EngineTimeoutError,
+    EngineUnavailableError,
+    InvalidRequestError,
+    ProtocolMismatchError,
+    RequestTooLargeError,
+    TargetNotFoundError,
 )
 
 
@@ -177,12 +177,12 @@ FAILURES: Final[MappingProxyType[Refusal, Failure]] = MappingProxyType(
 
 # Checked in order, so a subclass is named before the class it extends.
 _BY_CLASS: Final[tuple[tuple[type[EngineError], Refusal], ...]] = (
-    (EngineMisconfigured, Refusal.MISCONFIGURED),
-    (EngineTimeout, Refusal.TIMED_OUT),
-    (EngineUnavailable, Refusal.UNREACHABLE),
-    (RequestTooLarge, Refusal.TOO_LONG),
-    (ProtocolMismatch, Refusal.PROTOCOL_DRIFT),
-    (InvalidRequest, Refusal.RUNNER_REFUSED),
+    (EngineMisconfiguredError, Refusal.MISCONFIGURED),
+    (EngineTimeoutError, Refusal.TIMED_OUT),
+    (EngineUnavailableError, Refusal.UNREACHABLE),
+    (RequestTooLargeError, Refusal.TOO_LONG),
+    (ProtocolMismatchError, Refusal.PROTOCOL_DRIFT),
+    (InvalidRequestError, Refusal.RUNNER_REFUSED),
 )
 
 _BY_CODE: Final[MappingProxyType[str, Refusal]] = MappingProxyType(
@@ -198,14 +198,14 @@ _BY_CODE: Final[MappingProxyType[str, Refusal]] = MappingProxyType(
 def refusal_for(exc: EngineError) -> Refusal:
     """The refusal an engine failure during a write amounts to."""
     if exc.after_send:
-        return Refusal.TIMED_OUT if isinstance(exc, EngineTimeout) else Refusal.ANSWER_LOST
+        return Refusal.TIMED_OUT if isinstance(exc, EngineTimeoutError) else Refusal.ANSWER_LOST
     by_code = _BY_CODE.get(exc.code)
     if by_code is not None:
         return by_code
     for kind, refusal in _BY_CLASS:
         if isinstance(exc, kind):
             return refusal
-    return Refusal.GONE if isinstance(exc, TargetNotFound) else Refusal.RUNNER_REFUSED
+    return Refusal.GONE if isinstance(exc, TargetNotFoundError) else Refusal.RUNNER_REFUSED
 
 
 def failed_result(exc: EngineError) -> str:

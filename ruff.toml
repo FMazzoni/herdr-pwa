@@ -12,13 +12,16 @@ select = [
     "ANN", "S", "B", "A", "C4", "DTZ", "T20",
     "ISC", "ICN", "PIE", "PT", "RET", "SIM", "TID",
     "ARG", "PTH", "ERA", "PL", "TRY", "PERF", "RUF",
-    "ASYNC", "G", "LOG",
+    "ASYNC", "G", "LOG", "D1",
 ]
 ignore = [
     "E501",    # the formatter owns line length
     # TRY003 wants a custom exception class for every message: a style opinion.
     # TRY002 (no bare Exception) stays on, so specific exception types still apply.
     "TRY003",
+    # D1 asks public API for a docstring; magic methods and __init__ say what their name does.
+    "D105",
+    "D107",
 ]
 # RUF100 (unused noqa) stays on, so a suppression can't outlive its reason.
 # BLE001 is not in a selected family, so it is named: a blind except hides the bug it catches.
@@ -41,7 +44,10 @@ extend-select = ["BLE001", "FBT003", "TC006", "RUF039", "RUF055", "FURB167"]
 "src/herdr_pwa/engine/claude/records.py" = ["TID251"]
 "src/herdr_pwa/web/started.py" = ["TID251"]
 "src/herdr_pwa/web/routers/*.py" = ["TID251"]
-"{tests,scripts,.claude}/**" = ["TID251"]  # tests and tools read JSON freely
+"{tests,scripts,.claude}/**" = [
+    "TID251",  # tests and tools read JSON freely
+    "D1",      # tests and tools are not public API
+]
 
 # Dev scripts talk to the operator on stdout and shell out to herdr by name.
 "scripts/**" = ["T201", "S603", "S607"]

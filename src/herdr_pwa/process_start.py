@@ -26,7 +26,9 @@ class PanePids(NamedTuple):
 class PaneProcesses(Protocol):
     """The one thing this module needs from the runner."""
 
-    def pane_processes(self, pane_id: PaneId) -> PanePids: ...
+    def pane_processes(self, pane_id: PaneId) -> PanePids:
+        """This pane's processes, with its shell named apart."""
+        ...
 
 
 def _boot(proc: Path) -> float | None:

@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Final
 
 from herdr_pwa.files.git import Git
-from herdr_pwa.files.reader import NotReadable, OutsideRoot, inside
+from herdr_pwa.files.reader import NotReadableError, OutsideRootError, inside
 from herdr_pwa.patterns import Rx
 
 ROOT_ID: Final = re.compile(r"[0-9a-f]{12}")
@@ -116,12 +116,12 @@ def discover(cwds: Iterable[tuple[str, str]], git: Git, fence: Fence) -> tuple[R
 def resolve(root: Root, rel: str, fence: Fence) -> Path:
     """``rel`` resolved, links and all; raises unless it is inside ``root``, fenced, not in .git."""
     if "\0" in rel:
-        raise OutsideRoot("a NUL in a path")
+        raise OutsideRootError("a NUL in a path")
     real = (root.path / rel).resolve()
     if not inside(real, root.path) or not fence.allows(real):
-        raise OutsideRoot(rel)
+        raise OutsideRootError(rel)
     if any(is_git_dir(part) for part in real.relative_to(root.path).parts):
-        raise OutsideRoot(rel)
+        raise OutsideRootError(rel)
     _probe(real)
     return real
 
@@ -133,7 +133,7 @@ def _probe(real: Path) -> None:
     except (FileNotFoundError, NotADirectoryError):
         return
     except OSError as exc:
-        raise NotReadable(exc.strerror or "unreadable") from exc
+        raise NotReadableError(exc.strerror or "unreadable") from exc
 
 
 def relative(root: Root, real: Path) -> str:
@@ -141,7 +141,7 @@ def relative(root: Root, real: Path) -> str:
     return "" if real == root.path else real.relative_to(root.path).as_posix()
 
 
-class UnknownRoot(Exception):  # noqa: N818 - named for what the screen says
+class UnknownRootError(Exception):
     """A root id no agent is standing in now, or an agent standing in no repository."""
 
 
