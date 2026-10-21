@@ -7,20 +7,13 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Final, Protocol, cast
+from typing import Final, cast
 
 from herdr_pwa.clock import Clock
 from herdr_pwa.engine.model import Snapshot
 from herdr_pwa.engine.transport import EngineUnavailable
 
 log = logging.getLogger(__name__)
-
-
-class CacheSettings(Protocol):
-    """The settings surface this module reads, and the whole of it."""
-
-    @property
-    def snapshot_cache_ttl(self) -> float: ...
 
 
 _CLOCK: Final = time.monotonic
@@ -82,11 +75,6 @@ class SnapshotCache:
         self._clock = clock
         self._lock = threading.Lock()
         self._shelves: dict[str, _Shelf] = {}
-
-    @classmethod
-    def from_settings(cls, settings: CacheSettings) -> SnapshotCache:
-        """Build one from *these* settings. The only place the TTL is read."""
-        return cls(ttl=settings.snapshot_cache_ttl)
 
     @property
     def ttl(self) -> float:

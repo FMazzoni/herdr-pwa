@@ -352,11 +352,6 @@ class Snapshot(BaseModel):
         )
 
     @property
-    def protocol_ok(self) -> bool:
-        """False when the runner speaks a protocol this *view* was not built for."""
-        return self.protocol == self.expected_protocol
-
-    @property
     def blocked(self) -> tuple[Agent, ...]:
         """Agents that need a human. These are the ones a notification is for."""
         return tuple(a for a in self.agents if a.status is AgentStatus.BLOCKED)

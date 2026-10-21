@@ -7,8 +7,8 @@ import pytest
 
 from herdr_pwa import auth, pairing, tailscale
 from herdr_pwa.settings import Settings
-from herdr_pwa.tailscale import STATUS_PATH, LocalApi, LocalApiError, magicdns, self_login
-from tests.fakes import GOOD_STATUS, LOGIN, NODE, Canned, status_route, tailscaled
+from herdr_pwa.tailscale import STATUS_PATH, LocalApi, LocalApiError, magicdns
+from tests.fakes import GOOD_STATUS, NODE, Canned, status_route, tailscaled
 
 
 def test_magicdns_strips_the_trailing_dot_and_reads_only_status(tmp_path: Path) -> None:
@@ -17,11 +17,6 @@ def test_magicdns_strips_the_trailing_dot_and_reads_only_status(tmp_path: Path) 
         assert [(r.method, r.path) for r in fake.requests] == [("GET", STATUS_PATH)]
         # LocalAPI's CSRF guard: anything else is refused by tailscaled.
         assert fake.requests[0].headers["host"] == "local-tailscaled.sock"
-
-
-def test_self_login_reads_the_user_table_by_the_stringified_id(tmp_path: Path) -> None:
-    with tailscaled(tmp_path, canned=status_route()) as fake:
-        assert self_login(fake.api) == LOGIN
 
 
 @pytest.mark.parametrize(
@@ -45,15 +40,6 @@ def test_a_status_without_a_usable_name_is_an_actionable_error(
         pytest.raises(LocalApiError, match=message),
     ):
         _ = magicdns(fake.api)
-
-
-def test_self_login_says_so_when_there_is_no_login(tmp_path: Path) -> None:
-    document: dict[str, object] = {**GOOD_STATUS, "User": {}}
-    with (
-        tailscaled(tmp_path, canned=status_route(document)) as fake,
-        pytest.raises(LocalApiError, match="LoginName"),
-    ):
-        _ = self_login(fake.api)
 
 
 @pytest.mark.parametrize(

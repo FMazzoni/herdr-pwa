@@ -27,9 +27,8 @@ from herdr_pwa.decisions import (
     decide_herd,
     decide_screen,
     rows_answer,
-    rows_toggle,
 )
-from herdr_pwa.engine import BlockedPrompt, Snapshot, rank
+from herdr_pwa.engine import BlockedPrompt, MenuShape, Snapshot, rank
 
 REPO = Path(__file__).resolve().parents[1]
 FIXTURES = REPO / "tests" / "fixtures"
@@ -199,6 +198,11 @@ def _array(items: Iterable[JsonValue]) -> list[JsonValue]:
     return list(items)
 
 
+def _rows_toggle(prompt: BlockedPrompt) -> bool:
+    # The old app's read, kept here because only its pinned verdict still uses it.
+    return bool(answer_digits(prompt)) and prompt.shape is MenuShape.MULTI_SELECT
+
+
 def _screen_json(decision: ScreenDecision, prompt: BlockedPrompt) -> dict[str, JsonValue]:
     """The ledger's row: the decision, and the per-screen reads the old app also recorded."""
     steps = decision.steps
@@ -210,12 +214,12 @@ def _screen_json(decision: ScreenDecision, prompt: BlockedPrompt) -> dict[str, J
             "rows_answer": rows_answer(prompt),
             "hints": [h.key for h in decision.hints],
             "ticked": _array(decision.ticked),
-            "checkable": decision.checkable,
+            "checkable": sum(1 for o in decision.options if o.checked is not None),
             "steps": None if steps is None else [steps.answered, steps.total],
         },
         "render": {
             "answer_hints": [h.key for h in decision.answer_hints],
-            "rows_toggle": rows_toggle(prompt),
+            "rows_toggle": _rows_toggle(prompt),
             "corroborated": decision.corroborated,
             "drew_rows": decision.drew_rows,
             "asked": decision.asked,

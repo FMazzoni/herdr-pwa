@@ -9,7 +9,7 @@ from typing import Annotated, Final
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter, ValidationError
 
-from herdr_pwa.validation import OR_NONE, Text, is_not_json, or_default
+from herdr_pwa.validation import OR_NONE, Text, is_not_json
 
 # LocalAPI refuses any request whose Host is not this exact name (its CSRF guard).
 LOCALAPI_HOST = "local-tailscaled.sock"
@@ -137,14 +137,6 @@ class _Node(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     dns_name: Text = Field(default=None, validation_alias="DNSName")
-    # A number in Self, while the User table's keys are the same number as a string.
-    user_id: Annotated[int | str | None, OR_NONE] = Field(default=None, validation_alias="UserID")
-
-
-class _User(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
-    login: Text = Field(default=None, validation_alias="LoginName")
 
 
 class TailnetStatus(BaseModel):
@@ -154,9 +146,6 @@ class TailnetStatus(BaseModel):
 
     backend_state: Text = Field(default=None, validation_alias="BackendState")
     node: Annotated[_Node | None, OR_NONE] = Field(default=None, validation_alias="Self")
-    users: Annotated[dict[str, Annotated[_User | None, OR_NONE]], or_default({})] = Field(
-        default={}, validation_alias="User"
-    )
 
 
 def status(api: LocalApi) -> TailnetStatus:
@@ -188,18 +177,6 @@ def magicdns(api: LocalApi) -> str:
             "console, then run 'tailscale up' again."
         )
     return name.strip().rstrip(".")
-
-
-def self_login(api: LocalApi) -> str:
-    """The login the ingress would assert for this node's own user, e.g. to pin it."""
-    found = status(api)
-    user_id = found.node.user_id if found.node is not None else None
-    # Go marshals the map[UserID] keys as strings while Self.UserID stays a number.
-    user = found.users.get(str(user_id))
-    login = (user.login if user is not None else None) or ""
-    if not login.strip():
-        raise LocalApiError("tailscaled's status carries no LoginName for this node's user.")
-    return login.strip()
 
 
 # The serve config is kept whole: pairing writes it back, so a section it does not know survives.

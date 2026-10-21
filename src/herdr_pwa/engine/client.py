@@ -120,8 +120,6 @@ def payload_field(arm: type[BaseModel]) -> str:
 
 _TEXT_FIELD: Final = "text"
 
-_EXPLAIN_FIELD: Final = "explain"
-
 
 @dataclass(frozen=True, slots=True)
 class ReadOptions:
@@ -242,12 +240,6 @@ class HerdrClient:
     def close(self) -> None:
         """Release whatever the transport holds open; the client stays usable."""
         self.transport.close()
-
-    def forget_protocol(self) -> None:
-        """Drop the protocol memory, as if this client had just been built."""
-        self.last_protocol = None
-        self.last_protocol_at = 0.0
-        self.warned_protocol = None
 
     # ----------------------------------------------------------------------
     # The one choke point: guard, issue, validate
@@ -487,24 +479,6 @@ class HerdrClient:
             log.debug("detection read failed for %s: %s", target, exc)
             return None
         return detected if panetext.is_clean_prose(detected) else None
-
-    def explain(self, target: PaneId, *, timeout: float | None = None) -> Frame:
-        """Which detection rule decided this agent's state, on what evidence."""
-        method = method_of(wire_request.AgentExplainRequest)
-        payload = self._call(
-            wire_request.AgentExplainRequest,
-            wire_request.AgentTarget(target=as_pane_id(target)),
-            timeout=timeout,
-        ).payload
-        return self._sub_object(payload, _EXPLAIN_FIELD, method=method)
-
-    def agent_frame(self, target: PaneId, *, timeout: float | None = None) -> Frame:
-        """The whole `agent.get` reply as the runner sent it, normalized by nothing."""
-        return self._call(
-            wire_request.AgentGetRequest,
-            wire_request.AgentTarget(target=as_pane_id(target)),
-            timeout=timeout,
-        ).payload
 
     def blocked_prompt(
         self,

@@ -693,8 +693,6 @@ READ_VERBS = frozenset(
         "blocked_prompt",
         "shell_pane",
         "started_agent",
-        "explain",
-        "agent_frame",
         "pane_pids",
     }
 )
@@ -846,13 +844,6 @@ def test_the_warn_once_flag_resets_with_a_fresh_instance(
         second.snapshot()
     assert caplog.text.lower().count(f"protocol {DRIFTED}") == 1  # said again, by a new view
 
-    caplog.clear()
-    first.forget_protocol()
-    assert (first.last_protocol, first.warned_protocol) == (None, None)
-    with caplog.at_level("WARNING"):
-        first.snapshot()
-    assert caplog.text.lower().count(f"protocol {DRIFTED}") == 1
-
 
 def test_a_client_built_with_nothing_opens_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
     """Construction must not dial: a service that starts before the runner must not die at import."""
@@ -974,14 +965,15 @@ def test_the_rendered_protocol_check_and_the_write_guard_agree() -> None:
     """One runner, one number. They used to be two."""
     eng, _ = build(settings=replace(SETTINGS, expected_protocol=DRIFTED), protocol_number=DRIFTED)
     snap = eng.snapshot()
-    assert snap.protocol_ok is True  # what the header renders...
+    assert snap.protocol == snap.expected_protocol  # what the snapshot reports...
     eng.focus(P3)  # ...and what the guard allows
 
 
 def test_an_unconfigured_snapshot_still_judges_itself_by_the_build() -> None:
     """Nobody who never configured anything sees a behaviour change."""
     eng, _ = build(protocol_number=DRIFTED)
-    assert eng.snapshot().protocol_ok is False
+    snap = eng.snapshot()
+    assert snap.protocol != snap.expected_protocol
 
 
 # --------------------------------------------------------------------------

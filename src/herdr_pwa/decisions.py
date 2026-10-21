@@ -90,11 +90,6 @@ class ScreenDecision:
         """Indices of the options whose box is ticked."""
         return tuple(i for i, option in enumerate(self.options) if option.checked)
 
-    @property
-    def checkable(self) -> int:
-        """How many options carry a box at all."""
-        return sum(1 for option in self.options if option.checked is not None)
-
 
 class Condition(StrEnum):
     """Which honest state the feed's data is in."""
@@ -203,11 +198,6 @@ def rows_answer(prompt: BlockedPrompt) -> bool:
     if prompt.stepper is not None:
         return False
     return bool(answer_digits(prompt)) and prompt.shape is MenuShape.SINGLE_CHOICE
-
-
-def rows_toggle(prompt: BlockedPrompt) -> bool:
-    """Whether tapping a row ticks a box the screen keeps, ending nothing."""
-    return bool(answer_digits(prompt)) and prompt.shape is MenuShape.MULTI_SELECT
 
 
 def answer_hints(prompt: BlockedPrompt, *, digits: tuple[str, ...]) -> tuple[KeyHint, ...]:

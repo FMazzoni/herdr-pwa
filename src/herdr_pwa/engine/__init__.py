@@ -9,7 +9,6 @@ signature of a name that does.
 from herdr_pwa.engine.cache import (
     CachedSnapshot,
     CachedValue,
-    CacheSettings,
     ReadAbandoned,
     SnapshotCache,
 )
@@ -117,7 +116,6 @@ __all__ = [
     "AgentStatus",
     "Ask",
     "BlockedPrompt",
-    "CacheSettings",
     "CachedSnapshot",
     "CachedValue",
     "EngineError",
