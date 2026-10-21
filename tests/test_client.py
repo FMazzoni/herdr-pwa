@@ -246,7 +246,10 @@ def test_agent_get_unwraps_result_agent() -> None:
 
 def test_read_builds_the_documented_params() -> None:
     eng, wire = build({READ: read_frame("viewport text")})
-    assert eng.read(P3, ReadOptions(lines=40, source="detection")) == "viewport text"
+    assert (
+        eng.read(P3, ReadOptions(lines=40, source=wire_request.ReadSource.detection))
+        == "viewport text"
+    )
     assert wire.last.method == READ
     assert wire.last.params == {
         "target": "w1:p3",
@@ -265,48 +268,6 @@ def test_read_defaults_to_the_visible_source() -> None:
     eng, wire = build({READ: read_frame("viewport text")})
     eng.read(P3)
     assert wire.last.params["source"] == "visible"
-
-
-def test_an_unnamed_source_comes_from_settings_rather_than_a_literal() -> None:
-    """The read_source field must be read: a call naming no source takes it."""
-    eng, wire = build(
-        {READ: read_frame("viewport text")},
-        settings=replace(SETTINGS, read_source="detection"),
-    )
-    eng.read(P3)
-    assert wire.last.params["source"] == "detection"
-
-
-def test_a_named_source_still_beats_the_configured_default() -> None:
-    """Wiring the default may not quietly override a caller who was explicit."""
-    eng, wire = build(
-        {READ: read_frame("viewport text")},
-        settings=replace(SETTINGS, read_source="detection"),
-    )
-    eng.read(P3, ReadOptions(source="visible"))
-    assert wire.last.params["source"] == "visible"
-    eng.blocked_prompt(P3)
-    assert wire.last.params["source"] == "detection"
-
-
-def test_a_configured_recent_default_is_capped_like_an_explicit_one() -> None:
-    """The cap is on the resolved source, not on the caller's argument."""
-    eng, wire = build(
-        {READ: read_frame("viewport text")},
-        settings=replace(SETTINGS, read_source="recent", read_lines=200),
-    )
-    eng.read(P3)
-    assert wire.last.params["source"] == "recent"
-    assert wire.last.params["lines"] == eng.settings.recent_max_lines
-
-
-def test_a_recent_read_is_capped_so_it_cannot_outrun_the_timeout() -> None:
-    eng, wire = build({READ: read_frame("viewport text")})
-    eng.read(P3, ReadOptions(lines=200, source="recent"))
-    lines = wire.last.params["lines"]
-    assert isinstance(lines, int)
-    assert lines == eng.settings.recent_max_lines
-    assert lines * 0.035 < eng.settings.command_timeout
 
 
 def test_a_visible_read_takes_its_line_count_as_given() -> None:
@@ -400,16 +361,6 @@ def test_send_keys_requires_a_key() -> None:
     with pytest.raises(InvalidRequestError) as caught:
         eng.send_keys(Seat(P3))
     assert isinstance(caught.value, EngineError | ValueError)
-    assert caught.value.code == "invalid_request"
-    assert wire.calls == []
-
-
-def test_an_unknown_read_source_is_an_engine_error_not_a_bare_valueerror() -> None:
-    """``?source=`` off a phone is a typo, not a crash. It never leaves the process either way -- but it has to arrive as something a route can map."""
-    eng, wire = build()
-    with pytest.raises(InvalidRequestError) as caught:
-        eng.read(P3, ReadOptions(source="visable"))
-    assert isinstance(caught.value, EngineError)
     assert caught.value.code == "invalid_request"
     assert wire.calls == []
 
@@ -597,18 +548,6 @@ def test_a_write_verb_runs_the_protocol_guard_once_not_twice() -> None:
     assert wire.methods == [SNAPSHOT, GET, PROMPT]
 
 
-def test_the_write_guard_cannot_recurse_through_its_own_snapshot(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """``WRITE_METHODS`` is three hand-written strings, and sets grow."""
-    monkeypatch.setattr(client_module, "WRITE_METHODS", frozenset({SNAPSHOT, PROMPT}))
-    eng, _ = build()
-    with pytest.raises(EngineError) as caught:
-        eng.snapshot()
-    assert not isinstance(caught.value, RecursionError)
-    assert "re-entered" in str(caught.value)
-
-
 def test_the_protocol_guard_does_not_re_snapshot_once_known() -> None:
     eng, wire = build({GET: agent_frame()})
     eng.snapshot()
@@ -634,16 +573,6 @@ def test_a_stale_but_still_correct_protocol_is_simply_refreshed() -> None:
     eng.last_protocol_at -= eng.settings.protocol_max_age + 1
     eng.prompt(Seat(P3), "hi")
     assert wire.methods == [SNAPSHOT, SNAPSHOT, GET, PROMPT]
-
-
-def test_drift_can_be_configured_not_to_fail_writes() -> None:
-    """Off by default and stays off by default; this proves the switch is wired rather than decorative -- and that opting out skips the extra snapshot."""
-    eng, wire = build(
-        settings=replace(SETTINGS, protocol_drift_fails_writes=False, expected_protocol=44),
-        protocol_number=DRIFTED,
-    )
-    eng.focus(P3)
-    assert wire.methods == [FOCUS]
 
 
 # --------------------------------------------------------------------------
@@ -775,7 +704,7 @@ def test_a_request_type_that_pins_no_single_method_is_refused() -> None:
 def test_the_request_that_goes_on_the_wire_is_what_the_schema_dumps() -> None:
     """Params are serialized by the generated model, not assembled by hand."""
     eng, wire_ = build({READ: read_frame("x")})
-    eng.read(P3, ReadOptions(lines=5, source="detection"))
+    eng.read(P3, ReadOptions(lines=5, source=wire_request.ReadSource.detection))
     assert wire_.last.params == {
         "target": "w1:p3",
         "lines": 5,
@@ -1258,7 +1187,7 @@ def test_the_engine_reads_the_apps_settings_into_its_own(tmp_path: Path) -> None
     assert unnamed.command_timeout == Settings().command_timeout
 
 
-def test_the_engine_declares_the_nine_fields_it_reads_and_no_more() -> None:
+def test_the_engine_declares_the_five_fields_it_reads_and_no_more() -> None:
     """``EngineSettings`` is the engine's whole configuration seam, and the honest dependency."""
     engine_reads = {name for name in dir(EngineSettings) if not name.startswith("_")}
     assert engine_reads == {
@@ -1266,10 +1195,6 @@ def test_the_engine_declares_the_nine_fields_it_reads_and_no_more() -> None:
         "command_timeout",
         "expected_protocol",
         "protocol_max_age",
-        "protocol_drift_fails_writes",
-        "read_source",
-        "read_lines",
-        "recent_max_lines",
         "wire",
     }
     assert "bind_host" not in engine_reads

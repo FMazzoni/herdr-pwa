@@ -10,8 +10,6 @@ from herdr_pwa.devreport import Batch, ReportStore
 from herdr_pwa.validation import summary
 from herdr_pwa.web.deps import WebState, viewer_guard
 
-# A keepalive fetch may carry at most 64 KiB, so a bigger body is not from the script.
-MAX_BODY_BYTES: Final = 64 * 1024
 JSON_TYPE: Final = "application/json"
 
 
@@ -21,24 +19,12 @@ class _RefusalError(Exception):
         self.status: int = status
 
 
-async def _bounded_body(request: Request) -> bytes:
-    declared = request.headers.get("content-length", "")
-    if declared.isdigit() and int(declared) > MAX_BODY_BYTES:
-        raise _RefusalError(413, f"body is over {MAX_BODY_BYTES} bytes")
-    raw = bytearray()
-    async for chunk in request.stream():
-        raw.extend(chunk)
-        # Checked while reading, so a lying Content-Length cannot make the server buffer it all.
-        if len(raw) > MAX_BODY_BYTES:
-            raise _RefusalError(413, f"body is over {MAX_BODY_BYTES} bytes")
-    return bytes(raw)
-
-
 async def _batch(request: Request) -> Batch:
     kind = request.headers.get("content-type", "").split(";")[0].strip().lower()
     if kind != JSON_TYPE:
         raise _RefusalError(415, f"expected {JSON_TYPE}")
-    raw = await _bounded_body(request)
+    # The identity gate already refused a body past its 64 KiB cap, a keepalive fetch's limit.
+    raw = await request.body()
     return Batch.model_validate_json(raw.decode("utf-8", errors="replace"))
 
 

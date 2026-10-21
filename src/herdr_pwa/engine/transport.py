@@ -288,21 +288,7 @@ class SocketTransport:
         self._clock = clock
         self._limits = limits
         self._lock = threading.Lock()
-        self._pid = os.getpid()
-        self._prefix = self._mint_prefix()
-        self._ids = itertools.count(1)
-        self._backoff = 0.0
-        self._retry_at = 0.0
-
-    @staticmethod
-    def _mint_prefix() -> str:
-        return f"herdr-pwa:{os.getpid()}:{token_hex(4)}"
-
-    def adopt_fork(self) -> None:
-        """Become this process's own transport: a lock no parent thread holds, and new ids."""
-        self._lock = threading.Lock()
-        self._pid = os.getpid()
-        self._prefix = self._mint_prefix()
+        self._prefix = f"herdr-pwa:{os.getpid()}:{token_hex(4)}"
         self._ids = itertools.count(1)
         self._backoff = 0.0
         self._retry_at = 0.0
@@ -324,9 +310,6 @@ class SocketTransport:
         budget = self.timeout if timeout is None else timeout
         # The budget starts when the caller asks, not when some shared resource frees up.
         call = _Call(method, self._clock() + budget, budget, idempotent)
-        # A forked child may inherit the lock mid-hold; nothing here forks, so a pid check is enough.
-        if self._pid != os.getpid():
-            self.adopt_fork()
         with self._lock:
             request_id = f"{self._prefix}:{next(self._ids)}"
         reply = self._exchange(params, call, request_id)

@@ -562,43 +562,6 @@ def test_every_wait_in_a_call_is_armed_from_its_one_deadline(
     assert str(budget) in str(caught.value), "the message must name the real budget"
 
 
-@pytest.mark.filterwarnings("ignore:This process .* is multi-threaded")
-def test_a_forked_child_gets_its_own_ids_and_its_own_connection(  # noqa: PLR0915 - a fork scenario whose steps only make sense in order
-    server: FakeHerdr, sock_path: Path
-) -> None:
-    """A preforking server must not hand two workers one stream and one id space."""
-    wire = transport(sock_path)
-    wire.call("agent.list", {})  # parent: prefix minted, socket open, counter used
-
-    read_fd, write_fd = os.pipe()
-    child = os.fork()
-    if child == 0:  # pragma: no cover - runs in the forked child
-        status = 0
-        try:
-            wire.call("agent.list", {})
-            os.write(write_fd, f"{wire._prefix}".encode())  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
-        except BaseException:  # noqa: BLE001 - any failure in the child becomes its exit status
-            status = 1
-        os._exit(status)
-
-    os.close(write_fd)
-    child_prefix = os.read(read_fd, 4096).decode()
-    os.close(read_fd)
-    _, wait_status = os.waitpid(child, 0)
-
-    assert os.waitstatus_to_exitcode(wait_status) == 0, "the child could not call"
-    assert child_prefix
-    assert child_prefix != wire._prefix, "the child re-used the parent's id prefix"  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
-    assert str(os.getpid()) not in child_prefix, "the child kept the parent's pid"
-    assert server.connections >= 2, "the child re-used the parent's socket"
-
-    wire.call("agent.list", {})  # closing in the child left the parent's fd alone
-    # Parent call, child call, parent call; the subject is the id prefix asserted above.
-    assert server.connections == 3
-    ids = [r["id"] for r in server.requests]
-    assert len(set(ids)) == len(ids) == 3
-
-
 # --------------------------------------------------------------------------
 # Malformed frames
 # --------------------------------------------------------------------------

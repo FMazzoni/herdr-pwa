@@ -1,12 +1,11 @@
 """The typed verbs: what this app is allowed to ask the runner for."""
 
 import logging
-import threading
 import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from functools import cache
-from typing import Final, NamedTuple, TypeVar, cast, get_args
+from typing import Final, Literal, NamedTuple, TypeVar, cast, get_args
 
 from pydantic import BaseModel, ValidationError
 
@@ -62,9 +61,6 @@ def status_subscriptions(panes: Sequence[str | PaneId]) -> list[Frame]:
         for pane in dict.fromkeys(str(pane) for pane in panes)
     ]
 
-
-# Measured cost of one line of a recent read on herdr 0.8.0.
-SECONDS_PER_RECENT_LINE: Final = 0.035
 
 _BLOCKED: Final = "blocked"
 
@@ -122,22 +118,26 @@ def payload_field(arm: type[BaseModel]) -> str:
 _TEXT_FIELD: Final = "text"
 
 
+# A recent read past the viewport scrolls the operator's own pane, so no caller can ask for one.
+ReadBuffer = Literal[wire_request.ReadSource.visible, wire_request.ReadSource.detection]
+
+
 @dataclass(frozen=True, slots=True)
 class ReadOptions:
-    """How one pane read is taken: lines, buffer, colour and timeout; ``None`` is the default."""
+    """How one pane read is taken: lines, buffer, colour and timeout; no timeout is the default."""
 
-    lines: int | None = None
-    source: str | None = None
+    lines: int = 200
+    source: ReadBuffer = wire_request.ReadSource.visible
     colour: bool = False
     timeout: float | None = None
 
 
-# The configured read: the default lines and source, as text, at the command timeout.
+# The default read: the visible screen as text, at the command timeout.
 PLAIN_READ: Final = ReadOptions()
 # What is on the pane's screen right now, as text.
-VISIBLE_READ: Final = ReadOptions(source="visible")
+VISIBLE_READ: Final = ReadOptions(source=wire_request.ReadSource.visible)
 # The same screen in colour: the mirror draws it, and its text is what a prompt is checked against.
-SCREEN_READ: Final = ReadOptions(source="visible", colour=True)
+SCREEN_READ: Final = ReadOptions(source=wire_request.ReadSource.visible, colour=True)
 
 
 class Mirror(NamedTuple):
@@ -226,7 +226,6 @@ class HerdrClient:
         self.last_protocol: int | None = None
         self.last_protocol_at: float = 0.0
         self.warned_protocol: int | None = None
-        self._refreshing = threading.local()
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
         return (
@@ -366,16 +365,24 @@ class HerdrClient:
 
     def agent(self, target: PaneId, *, timeout: float | None = None) -> Agent:
         """One agent by pane address -- cheaper than a whole snapshot for a detail poll."""
-        _, raw = self._agent_result(as_pane_id(target), timeout=timeout, degrade=True)
+        _, raw = self._result(
+            self._agent_get(as_pane_id(target), timeout=timeout),
+            wire.AgentInfoResponseResult,
+            degrade=True,
+        )
         return Agent.from_raw(raw)
 
-    def _agent_result(
-        self, target: PaneId, *, timeout: float | None, degrade: bool
-    ) -> tuple[wire.AgentInfoResponseResult | None, Frame]:
-        reply = self._call(
+    def _agent_get(self, target: PaneId, *, timeout: float | None) -> _Reply:
+        """One ``agent.get``, left for the caller to validate strictly or leniently."""
+        return self._call(
             wire_request.AgentGetRequest, wire_request.AgentTarget(target=target), timeout=timeout
         )
-        return self._result(reply, wire.AgentInfoResponseResult, degrade=degrade)
+
+    def _agent_info(self, target: PaneId, *, timeout: float | None) -> "wire.AgentInfo":
+        """The agent at ``target``, validated strictly, since a write acts on what it says."""
+        return self._arm(
+            self._agent_get(target, timeout=timeout), wire.AgentInfoResponseResult
+        ).agent
 
     def read(self, target: PaneId, options: ReadOptions = PLAIN_READ) -> str:
         """Read an agent's terminal output."""
@@ -391,45 +398,18 @@ class HerdrClient:
             raise InvalidResponseError("the runner answered a read with no terminal text")
         return text
 
-    def _read_params(self, target: PaneId, options: ReadOptions) -> "wire_request.AgentReadParams":
-        """The read's parameters, with the lines a recent read would scroll capped off."""
-        lines = self.settings.read_lines if options.lines is None else options.lines
-        source = self.settings.read_source if options.source is None else options.source
-        where = self._read_source(source)
+    @staticmethod
+    def _read_params(target: PaneId, options: ReadOptions) -> "wire_request.AgentReadParams":
+        """The read's parameters, as herdr's schema declares them."""
         colour = options.colour
-        if where is wire_request.ReadSource.recent and lines > (self.settings.recent_max_lines):
-            # Not only cost: past the viewport this scrolls the operator's own pane.
-            log.warning(
-                "read(%s, source=%s, lines=%d) would scroll the agent's pane for "
-                "~%.1fs; capping to %d lines -- use the visible source",
-                target,
-                where,
-                lines,
-                lines * SECONDS_PER_RECENT_LINE,
-                self.settings.recent_max_lines,
-            )
-            lines = self.settings.recent_max_lines
         return wire_request.AgentReadParams(
             target=target,
-            lines=lines,
-            source=where,
+            lines=options.lines,
+            source=options.source,
             format=(wire_request.ReadFormat.ansi if colour else wire_request.ReadFormat.text),
             # Explicit because the schema default is True, which would sanitise the colour away.
             strip_ansi=not colour,
         )
-
-    @staticmethod
-    def _read_source(source: str) -> "wire_request.ReadSource":
-        """Turn a caller's string into the enum herdr's schema declares."""
-        if isinstance(source, wire_request.ReadSource):
-            return source
-        try:
-            return wire_request.ReadSource(source)
-        except ValueError as exc:
-            allowed = ", ".join(s.value for s in wire_request.ReadSource)
-            raise InvalidRequestError(
-                f"unknown read source {source!r}; expected {allowed}"
-            ) from exc
 
     def mirror_read(
         self, target: PaneId, *, status: object = "", options: ReadOptions = PLAIN_READ
@@ -445,7 +425,9 @@ class HerdrClient:
         detected = self._detected(target, status, options)
         if detected is not None:
             return detected
-        return self.read(target, replace(options, source=None, colour=True))
+        return self.read(
+            target, replace(options, source=wire_request.ReadSource.visible, colour=True)
+        )
 
     def mirror(self, target: PaneId, *, status: object = "") -> Mirror:
         """The mirror's read with the visible screen as text beside it, one read when they are one."""
@@ -514,43 +496,24 @@ class HerdrClient:
 
     def _require_writable(self, timeout: float | None = None) -> None:
         """Refuse to drive an agent when the snapshot shape can no longer be trusted."""
-        if not self.settings.protocol_drift_fails_writes:
-            return
         fresh = (
             self.last_protocol is not None
             and (self._clock() - self.last_protocol_at) <= self.settings.protocol_max_age
         )
         if not fresh:
-            self._refresh_protocol(timeout)
+            self.snapshot(timeout=timeout)
         if self.last_protocol != self.settings.expected_protocol:
             raise ProtocolMismatchError(
                 f"runner speaks snapshot protocol {self.last_protocol}, expected "
                 f"{self.settings.expected_protocol}; refusing to drive an agent"
             )
 
-    def _refresh_protocol(self, timeout: float | None) -> None:
-        """Take a snapshot for the write guard, refusing to do it recursively."""
-        if getattr(self._refreshing, "active", False):
-            raise EngineError(
-                "the write guard re-entered its own protocol refresh; the "
-                "snapshot request must not be registered as a write",
-                code="engine_misconfigured",
-            )
-        self._refreshing.active = True
-        try:
-            self.snapshot(timeout=timeout)
-        finally:
-            self._refreshing.active = False
-
     def _require_ready(
         self, seat: Seat, timeout: float | None = None, *, interrupting: bool = False
     ) -> None:
         """Refuse to type at an agent whose terminal is not reading yet."""
         target = seat.target
-        root, _ = self._agent_result(target, timeout=timeout, degrade=False)
-        info = root.agent if root is not None else None
-        if info is None:  # pragma: no cover - degrade=False cannot return None
-            return
+        info = self._agent_info(target, timeout=timeout)
         self._require_session(seat, info)
         # Launching AND blocked is an agent that stopped during startup to ask; keys are the point.
         if info.launch_pending and info.agent_status is not wire.AgentStatus.blocked:
@@ -706,19 +669,15 @@ class HerdrClient:
 
     def started_agent(self, pane_id: PaneId, *, timeout: float | None = None) -> StartedAgent:
         """Re-read a just-started agent, to see whether it has a session UUID yet."""
-        root, _ = self._agent_result(as_pane_id(pane_id), timeout=timeout, degrade=False)
-        if root is None:  # pragma: no cover - degrade=False cannot return None
-            return StartedAgent(pane=pane_id, session=SessionId(""), status="unknown")
-        return self._started(root.agent)
+        return self._started(self._agent_info(as_pane_id(pane_id), timeout=timeout))
 
     def close_pane(self, seat: Seat, *, timeout: float | None = None) -> Frame:
         """End an agent by closing the pane it runs in -- the app's one no-undo write."""
         target = as_pane_id(seat.target)
         self._require_writable(timeout)
         if seat.session is not None:
-            root, _ = self._agent_result(target, timeout=timeout, degrade=False)
-            if root is not None:
-                self._require_session(Seat(target, seat.session), root.agent)
+            info = self._agent_info(target, timeout=timeout)
+            self._require_session(Seat(target, seat.session), info)
         return self._call(
             wire_request.PaneCloseRequest,
             wire_request.PaneTarget(pane_id=str(target)),
