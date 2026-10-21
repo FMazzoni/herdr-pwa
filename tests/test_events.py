@@ -28,7 +28,7 @@ from tests.webfakes import (
     write_transcript,
 )
 
-IDLE = "5b609dba-d756-493a-a3fc-b4e09bf0a183"
+IDLE = "5e55001c-0000-0000-0000-000000000000"
 WAIT = 5.0
 
 

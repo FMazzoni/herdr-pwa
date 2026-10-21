@@ -29,8 +29,8 @@ SNAPSHOT: dict[str, JsonValue] = obj(
 _TEMPLATE_AGENT: dict[str, JsonValue] = obj(SNAPSHOT, "result", "snapshot", "agents", 4)
 _TEMPLATE_WORKSPACE: dict[str, JsonValue] = obj(SNAPSHOT, "result", "snapshot", "workspaces", 3)
 
-S1 = as_session_id("6ae1e031-ddb4-4684-ab07-68073f7fec47")
-S2 = as_session_id("a36eed14-ff20-48e5-9b50-b8b846cbf977")
+S1 = as_session_id("5e550020-0000-0000-0000-000000000000")
+S2 = as_session_id("5e550021-0000-0000-0000-000000000000")
 P3 = as_pane_id("w1:p3")
 P5 = as_pane_id("w1:p5")
 

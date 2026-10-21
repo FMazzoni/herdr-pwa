@@ -379,7 +379,8 @@ def test_no_audit_file_holds_text_whose_send_was_not_echoed(
     r = idle_rig(tmp_path_factory.mktemp("audit"), before, later)
     result = send_prompt(r.writer, PromptAsk(S1, secret))
     if not (isinstance(result, PromptSent) and result.verified):
-        assert secret not in _log_text(r)
+        # A placeholder session id is mostly zeros, which a generated secret can spell.
+        assert secret not in _log_text(r).replace(S1, "")
 
 
 def _kept(r: Rig) -> list[object]:

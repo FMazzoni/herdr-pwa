@@ -2,7 +2,7 @@
   "herd": {
     "snapshot.example": {
       "agents": {
-        "3ec8bcb4-8fd5-46a5-9f6d-ada27a5c3048": {
+        "5e55001e-0000-0000-0000-000000000000": {
           "effective_status": "idle",
           "feed_key": [
             3,
@@ -14,7 +14,7 @@
           "status": "idle",
           "target": "w654c7902e43791:pA"
         },
-        "5b609dba-d756-493a-a3fc-b4e09bf0a183": {
+        "5e55001c-0000-0000-0000-000000000000": {
           "effective_status": "idle",
           "feed_key": [
             3,
@@ -26,7 +26,7 @@
           "status": "idle",
           "target": "w652ae557d5b9c1:p2"
         },
-        "6ae1e031-ddb4-4684-ab07-68073f7fec47": {
+        "5e550020-0000-0000-0000-000000000000": {
           "effective_status": "working",
           "feed_key": [
             2,
@@ -38,7 +38,7 @@
           "status": "working",
           "target": "w1:p3"
         },
-        "6f5c4c0d-38a8-41dc-b3b9-3daaf50ffcf4": {
+        "5e55001f-0000-0000-0000-000000000000": {
           "effective_status": "idle",
           "feed_key": [
             3,
@@ -50,7 +50,7 @@
           "status": "idle",
           "target": "w1:p1"
         },
-        "a36eed14-ff20-48e5-9b50-b8b846cbf977": {
+        "5e550021-0000-0000-0000-000000000000": {
           "effective_status": "idle",
           "feed_key": [
             3,
@@ -62,7 +62,7 @@
           "status": "idle",
           "target": "w2:p1"
         },
-        "c7242542-f9ce-4b05-ae32-f20806015262": {
+        "5e55001d-0000-0000-0000-000000000000": {
           "effective_status": "idle",
           "feed_key": [
             3,
@@ -456,12 +456,12 @@
         "unread": null
       },
       "order": [
-        "6ae1e031-ddb4-4684-ab07-68073f7fec47",
-        "c7242542-f9ce-4b05-ae32-f20806015262",
-        "5b609dba-d756-493a-a3fc-b4e09bf0a183",
-        "3ec8bcb4-8fd5-46a5-9f6d-ada27a5c3048",
-        "6f5c4c0d-38a8-41dc-b3b9-3daaf50ffcf4",
-        "a36eed14-ff20-48e5-9b50-b8b846cbf977"
+        "5e550020-0000-0000-0000-000000000000",
+        "5e55001d-0000-0000-0000-000000000000",
+        "5e55001c-0000-0000-0000-000000000000",
+        "5e55001e-0000-0000-0000-000000000000",
+        "5e55001f-0000-0000-0000-000000000000",
+        "5e550021-0000-0000-0000-000000000000"
       ],
       "sections": [
         {
@@ -475,7 +475,7 @@
           "key": "working",
           "label": "Working",
           "sessions": [
-            "6ae1e031-ddb4-4684-ab07-68073f7fec47"
+            "5e550020-0000-0000-0000-000000000000"
           ]
         },
         {
@@ -483,18 +483,18 @@
           "key": "idle",
           "label": "Idle",
           "sessions": [
-            "c7242542-f9ce-4b05-ae32-f20806015262",
-            "5b609dba-d756-493a-a3fc-b4e09bf0a183",
-            "3ec8bcb4-8fd5-46a5-9f6d-ada27a5c3048",
-            "6f5c4c0d-38a8-41dc-b3b9-3daaf50ffcf4",
-            "a36eed14-ff20-48e5-9b50-b8b846cbf977"
+            "5e55001d-0000-0000-0000-000000000000",
+            "5e55001c-0000-0000-0000-000000000000",
+            "5e55001e-0000-0000-0000-000000000000",
+            "5e55001f-0000-0000-0000-000000000000",
+            "5e550021-0000-0000-0000-000000000000"
           ]
         }
       ]
     },
     "snapshot.example+blocked": {
       "agents": {
-        "3ec8bcb4-8fd5-46a5-9f6d-ada27a5c3048": {
+        "5e55001e-0000-0000-0000-000000000000": {
           "answer_digits": [
             "1",
             "2",
@@ -517,7 +517,7 @@
           "status": "blocked",
           "target": "w654c7902e43791:pA"
         },
-        "5b609dba-d756-493a-a3fc-b4e09bf0a183": {
+        "5e55001c-0000-0000-0000-000000000000": {
           "answer_digits": [
             "1",
             "2",
@@ -544,7 +544,7 @@
           "status": "blocked",
           "target": "w652ae557d5b9c1:p2"
         },
-        "6ae1e031-ddb4-4684-ab07-68073f7fec47": {
+        "5e550020-0000-0000-0000-000000000000": {
           "effective_status": "working",
           "feed_key": [
             2,
@@ -556,7 +556,7 @@
           "status": "working",
           "target": "w1:p3"
         },
-        "6f5c4c0d-38a8-41dc-b3b9-3daaf50ffcf4": {
+        "5e55001f-0000-0000-0000-000000000000": {
           "effective_status": "done",
           "feed_key": [
             1,
@@ -568,7 +568,7 @@
           "status": "done",
           "target": "w1:p1"
         },
-        "a36eed14-ff20-48e5-9b50-b8b846cbf977": {
+        "5e550021-0000-0000-0000-000000000000": {
           "effective_status": "idle",
           "feed_key": [
             3,
@@ -580,7 +580,7 @@
           "status": "idle",
           "target": "w2:p1"
         },
-        "c7242542-f9ce-4b05-ae32-f20806015262": {
+        "5e55001d-0000-0000-0000-000000000000": {
           "answer_digits": [
             "1",
             "2",
@@ -978,9 +978,9 @@
       ],
       "input": {
         "prompts": {
-          "3ec8bcb4-8fd5-46a5-9f6d-ada27a5c3048": "tests/fixtures/capture-blocked-askuserquestion-menu/detection.txt",
-          "5b609dba-d756-493a-a3fc-b4e09bf0a183": "tests/fixtures/capture-blocked-multiselect-checklist/detection.txt",
-          "c7242542-f9ce-4b05-ae32-f20806015262": "tests/fixtures/hermes/blocked-approval.txt"
+          "5e55001e-0000-0000-0000-000000000000": "tests/fixtures/capture-blocked-askuserquestion-menu/detection.txt",
+          "5e55001c-0000-0000-0000-000000000000": "tests/fixtures/capture-blocked-multiselect-checklist/detection.txt",
+          "5e55001d-0000-0000-0000-000000000000": "tests/fixtures/hermes/blocked-approval.txt"
         },
         "snapshot": "tests/fixtures/snapshot.example.json",
         "status_overrides": {
@@ -992,12 +992,12 @@
         "unread": null
       },
       "order": [
-        "c7242542-f9ce-4b05-ae32-f20806015262",
-        "5b609dba-d756-493a-a3fc-b4e09bf0a183",
-        "3ec8bcb4-8fd5-46a5-9f6d-ada27a5c3048",
-        "6f5c4c0d-38a8-41dc-b3b9-3daaf50ffcf4",
-        "6ae1e031-ddb4-4684-ab07-68073f7fec47",
-        "a36eed14-ff20-48e5-9b50-b8b846cbf977"
+        "5e55001d-0000-0000-0000-000000000000",
+        "5e55001c-0000-0000-0000-000000000000",
+        "5e55001e-0000-0000-0000-000000000000",
+        "5e55001f-0000-0000-0000-000000000000",
+        "5e550020-0000-0000-0000-000000000000",
+        "5e550021-0000-0000-0000-000000000000"
       ],
       "sections": [
         {
@@ -1005,9 +1005,9 @@
           "key": "blocked",
           "label": "Needs you",
           "sessions": [
-            "c7242542-f9ce-4b05-ae32-f20806015262",
-            "5b609dba-d756-493a-a3fc-b4e09bf0a183",
-            "3ec8bcb4-8fd5-46a5-9f6d-ada27a5c3048"
+            "5e55001d-0000-0000-0000-000000000000",
+            "5e55001c-0000-0000-0000-000000000000",
+            "5e55001e-0000-0000-0000-000000000000"
           ]
         },
         {
@@ -1015,7 +1015,7 @@
           "key": "done",
           "label": "Finished",
           "sessions": [
-            "6f5c4c0d-38a8-41dc-b3b9-3daaf50ffcf4"
+            "5e55001f-0000-0000-0000-000000000000"
           ]
         },
         {
@@ -1023,7 +1023,7 @@
           "key": "working",
           "label": "Working",
           "sessions": [
-            "6ae1e031-ddb4-4684-ab07-68073f7fec47"
+            "5e550020-0000-0000-0000-000000000000"
           ]
         },
         {
@@ -1031,14 +1031,14 @@
           "key": "idle",
           "label": "Idle",
           "sessions": [
-            "a36eed14-ff20-48e5-9b50-b8b846cbf977"
+            "5e550021-0000-0000-0000-000000000000"
           ]
         }
       ]
     },
     "snapshot.example+blocked+read": {
       "agents": {
-        "3ec8bcb4-8fd5-46a5-9f6d-ada27a5c3048": {
+        "5e55001e-0000-0000-0000-000000000000": {
           "answer_digits": [
             "1",
             "2",
@@ -1061,7 +1061,7 @@
           "status": "blocked",
           "target": "w654c7902e43791:pA"
         },
-        "5b609dba-d756-493a-a3fc-b4e09bf0a183": {
+        "5e55001c-0000-0000-0000-000000000000": {
           "answer_digits": [
             "1",
             "2",
@@ -1088,7 +1088,7 @@
           "status": "blocked",
           "target": "w652ae557d5b9c1:p2"
         },
-        "6ae1e031-ddb4-4684-ab07-68073f7fec47": {
+        "5e550020-0000-0000-0000-000000000000": {
           "effective_status": "working",
           "feed_key": [
             2,
@@ -1100,7 +1100,7 @@
           "status": "working",
           "target": "w1:p3"
         },
-        "6f5c4c0d-38a8-41dc-b3b9-3daaf50ffcf4": {
+        "5e55001f-0000-0000-0000-000000000000": {
           "effective_status": "idle",
           "feed_key": [
             3,
@@ -1112,7 +1112,7 @@
           "status": "done",
           "target": "w1:p1"
         },
-        "a36eed14-ff20-48e5-9b50-b8b846cbf977": {
+        "5e550021-0000-0000-0000-000000000000": {
           "effective_status": "idle",
           "feed_key": [
             3,
@@ -1124,7 +1124,7 @@
           "status": "idle",
           "target": "w2:p1"
         },
-        "c7242542-f9ce-4b05-ae32-f20806015262": {
+        "5e55001d-0000-0000-0000-000000000000": {
           "answer_digits": [
             "1",
             "2",
@@ -1522,9 +1522,9 @@
       ],
       "input": {
         "prompts": {
-          "3ec8bcb4-8fd5-46a5-9f6d-ada27a5c3048": "tests/fixtures/capture-blocked-askuserquestion-menu/detection.txt",
-          "5b609dba-d756-493a-a3fc-b4e09bf0a183": "tests/fixtures/capture-blocked-multiselect-checklist/detection.txt",
-          "c7242542-f9ce-4b05-ae32-f20806015262": "tests/fixtures/hermes/blocked-approval.txt"
+          "5e55001e-0000-0000-0000-000000000000": "tests/fixtures/capture-blocked-askuserquestion-menu/detection.txt",
+          "5e55001c-0000-0000-0000-000000000000": "tests/fixtures/capture-blocked-multiselect-checklist/detection.txt",
+          "5e55001d-0000-0000-0000-000000000000": "tests/fixtures/hermes/blocked-approval.txt"
         },
         "snapshot": "tests/fixtures/snapshot.example.json",
         "status_overrides": {
@@ -1534,16 +1534,16 @@
           "w654c7902e43791:pA": "blocked"
         },
         "unread": {
-          "6f5c4c0d-38a8-41dc-b3b9-3daaf50ffcf4": false
+          "5e55001f-0000-0000-0000-000000000000": false
         }
       },
       "order": [
-        "c7242542-f9ce-4b05-ae32-f20806015262",
-        "5b609dba-d756-493a-a3fc-b4e09bf0a183",
-        "3ec8bcb4-8fd5-46a5-9f6d-ada27a5c3048",
-        "6ae1e031-ddb4-4684-ab07-68073f7fec47",
-        "6f5c4c0d-38a8-41dc-b3b9-3daaf50ffcf4",
-        "a36eed14-ff20-48e5-9b50-b8b846cbf977"
+        "5e55001d-0000-0000-0000-000000000000",
+        "5e55001c-0000-0000-0000-000000000000",
+        "5e55001e-0000-0000-0000-000000000000",
+        "5e550020-0000-0000-0000-000000000000",
+        "5e55001f-0000-0000-0000-000000000000",
+        "5e550021-0000-0000-0000-000000000000"
       ],
       "sections": [
         {
@@ -1551,9 +1551,9 @@
           "key": "blocked",
           "label": "Needs you",
           "sessions": [
-            "c7242542-f9ce-4b05-ae32-f20806015262",
-            "5b609dba-d756-493a-a3fc-b4e09bf0a183",
-            "3ec8bcb4-8fd5-46a5-9f6d-ada27a5c3048"
+            "5e55001d-0000-0000-0000-000000000000",
+            "5e55001c-0000-0000-0000-000000000000",
+            "5e55001e-0000-0000-0000-000000000000"
           ]
         },
         {
@@ -1561,7 +1561,7 @@
           "key": "working",
           "label": "Working",
           "sessions": [
-            "6ae1e031-ddb4-4684-ab07-68073f7fec47"
+            "5e550020-0000-0000-0000-000000000000"
           ]
         },
         {
@@ -1569,15 +1569,15 @@
           "key": "idle",
           "label": "Idle",
           "sessions": [
-            "6f5c4c0d-38a8-41dc-b3b9-3daaf50ffcf4",
-            "a36eed14-ff20-48e5-9b50-b8b846cbf977"
+            "5e55001f-0000-0000-0000-000000000000",
+            "5e550021-0000-0000-0000-000000000000"
           ]
         }
       ]
     },
     "snapshot.example+blocked+unread": {
       "agents": {
-        "3ec8bcb4-8fd5-46a5-9f6d-ada27a5c3048": {
+        "5e55001e-0000-0000-0000-000000000000": {
           "answer_digits": [
             "1",
             "2",
@@ -1600,7 +1600,7 @@
           "status": "blocked",
           "target": "w654c7902e43791:pA"
         },
-        "5b609dba-d756-493a-a3fc-b4e09bf0a183": {
+        "5e55001c-0000-0000-0000-000000000000": {
           "answer_digits": [
             "1",
             "2",
@@ -1627,7 +1627,7 @@
           "status": "blocked",
           "target": "w652ae557d5b9c1:p2"
         },
-        "6ae1e031-ddb4-4684-ab07-68073f7fec47": {
+        "5e550020-0000-0000-0000-000000000000": {
           "effective_status": "working",
           "feed_key": [
             2,
@@ -1639,7 +1639,7 @@
           "status": "working",
           "target": "w1:p3"
         },
-        "6f5c4c0d-38a8-41dc-b3b9-3daaf50ffcf4": {
+        "5e55001f-0000-0000-0000-000000000000": {
           "effective_status": "done",
           "feed_key": [
             1,
@@ -1651,7 +1651,7 @@
           "status": "done",
           "target": "w1:p1"
         },
-        "a36eed14-ff20-48e5-9b50-b8b846cbf977": {
+        "5e550021-0000-0000-0000-000000000000": {
           "effective_status": "idle",
           "feed_key": [
             3,
@@ -1663,7 +1663,7 @@
           "status": "idle",
           "target": "w2:p1"
         },
-        "c7242542-f9ce-4b05-ae32-f20806015262": {
+        "5e55001d-0000-0000-0000-000000000000": {
           "answer_digits": [
             "1",
             "2",
@@ -2061,9 +2061,9 @@
       ],
       "input": {
         "prompts": {
-          "3ec8bcb4-8fd5-46a5-9f6d-ada27a5c3048": "tests/fixtures/capture-blocked-askuserquestion-menu/detection.txt",
-          "5b609dba-d756-493a-a3fc-b4e09bf0a183": "tests/fixtures/capture-blocked-multiselect-checklist/detection.txt",
-          "c7242542-f9ce-4b05-ae32-f20806015262": "tests/fixtures/hermes/blocked-approval.txt"
+          "5e55001e-0000-0000-0000-000000000000": "tests/fixtures/capture-blocked-askuserquestion-menu/detection.txt",
+          "5e55001c-0000-0000-0000-000000000000": "tests/fixtures/capture-blocked-multiselect-checklist/detection.txt",
+          "5e55001d-0000-0000-0000-000000000000": "tests/fixtures/hermes/blocked-approval.txt"
         },
         "snapshot": "tests/fixtures/snapshot.example.json",
         "status_overrides": {
@@ -2073,16 +2073,16 @@
           "w654c7902e43791:pA": "blocked"
         },
         "unread": {
-          "6f5c4c0d-38a8-41dc-b3b9-3daaf50ffcf4": true
+          "5e55001f-0000-0000-0000-000000000000": true
         }
       },
       "order": [
-        "c7242542-f9ce-4b05-ae32-f20806015262",
-        "5b609dba-d756-493a-a3fc-b4e09bf0a183",
-        "3ec8bcb4-8fd5-46a5-9f6d-ada27a5c3048",
-        "6f5c4c0d-38a8-41dc-b3b9-3daaf50ffcf4",
-        "6ae1e031-ddb4-4684-ab07-68073f7fec47",
-        "a36eed14-ff20-48e5-9b50-b8b846cbf977"
+        "5e55001d-0000-0000-0000-000000000000",
+        "5e55001c-0000-0000-0000-000000000000",
+        "5e55001e-0000-0000-0000-000000000000",
+        "5e55001f-0000-0000-0000-000000000000",
+        "5e550020-0000-0000-0000-000000000000",
+        "5e550021-0000-0000-0000-000000000000"
       ],
       "sections": [
         {
@@ -2090,9 +2090,9 @@
           "key": "blocked",
           "label": "Needs you",
           "sessions": [
-            "c7242542-f9ce-4b05-ae32-f20806015262",
-            "5b609dba-d756-493a-a3fc-b4e09bf0a183",
-            "3ec8bcb4-8fd5-46a5-9f6d-ada27a5c3048"
+            "5e55001d-0000-0000-0000-000000000000",
+            "5e55001c-0000-0000-0000-000000000000",
+            "5e55001e-0000-0000-0000-000000000000"
           ]
         },
         {
@@ -2100,7 +2100,7 @@
           "key": "done",
           "label": "Finished",
           "sessions": [
-            "6f5c4c0d-38a8-41dc-b3b9-3daaf50ffcf4"
+            "5e55001f-0000-0000-0000-000000000000"
           ]
         },
         {
@@ -2108,7 +2108,7 @@
           "key": "working",
           "label": "Working",
           "sessions": [
-            "6ae1e031-ddb4-4684-ab07-68073f7fec47"
+            "5e550020-0000-0000-0000-000000000000"
           ]
         },
         {
@@ -2116,7 +2116,7 @@
           "key": "idle",
           "label": "Idle",
           "sessions": [
-            "a36eed14-ff20-48e5-9b50-b8b846cbf977"
+            "5e550021-0000-0000-0000-000000000000"
           ]
         }
       ]
@@ -2176,7 +2176,7 @@
     },
     "now": 1790000000.0,
     "pruned": "Rows whose input is not in this repo (an AGPL corpus never shipped, collie screens never vendored, and seven collie screens removed because they carried their author's email or home path) were removed; every remaining verdict is as recorded.",
-    "rehashed": "Input hashes were re-pinned after a privacy scrub replaced or rewrote captures; no verdict changed.",
+    "rehashed": "Input hashes were re-pinned after a privacy scrub replaced or rewrote captures, and the ledger's own hash after the herd fixtures' session ids became placeholders; no verdict changed.",
     "verdict_fields": [
       "shape",
       "options",

@@ -65,7 +65,7 @@ SNAPSHOT_JSON = FIXTURE.read_text()
 # Converted once and deliberately: a bare string or a session id at a verb is a type error.
 P3 = as_pane_id("w1:p3")
 P5 = as_pane_id("w1:p5")
-SESS = as_session_id("5b609dba-d756-493a-a3fc-b4e09bf0a183")
+SESS = as_session_id("5e55001c-0000-0000-0000-000000000000")
 
 # Read off the generated request types, never spelled, so an upstream rename moves both.
 SNAPSHOT = method_of(wire_request.SessionSnapshotRequest)
@@ -246,7 +246,7 @@ def test_agent_get_unwraps_result_agent() -> None:
     a = eng.agent(as_pane_id("w652ae557d5b9c1:p2"))
     assert wire.last.method == GET
     assert wire.last.params == {"target": "w652ae557d5b9c1:p2"}
-    assert a.session == "5b609dba-d756-493a-a3fc-b4e09bf0a183"
+    assert a.session == "5e55001c-0000-0000-0000-000000000000"
     assert a.workspace == ""  # a single agent carries no workspace list to join
 
 
@@ -937,7 +937,7 @@ def test_a_session_id_handed_to_a_write_verb_raises_at_runtime() -> None:
     """The static error is the fence; this is the runtime shape guard behind it."""
     eng, wire = build({GET: agent_frame()})
     # PaneId() checks nothing: it is how an untyped value reaches a verb unvalidated.
-    uuid = PaneId("5b609dba-d756-493a-a3fc-b4e09bf0a183")
+    uuid = PaneId("5e55001c-0000-0000-0000-000000000000")
     calls: tuple[Callable[[], object], ...] = (
         lambda: eng.send_keys(Seat(uuid), "1"),
         lambda: eng.prompt(Seat(uuid), "hi"),
@@ -955,7 +955,7 @@ def test_a_session_id_handed_to_a_write_verb_raises_at_runtime() -> None:
 def test_a_pane_id_cannot_be_smuggled_into_a_blocked_prompt() -> None:
     """``BlockedPrompt`` is what a tap-to-answer UI builds its keystroke from."""
     with pytest.raises(ValueError, match="session id"):
-        BlockedPrompt.parse("q", target=PaneId("5b609dba-d756-493a-a3fc-b4e09bf0a183"))
+        BlockedPrompt.parse("q", target=PaneId("5e55001c-0000-0000-0000-000000000000"))
     with pytest.raises(ValueError, match="pane id"):
         BlockedPrompt.parse("q", session=SessionId("w1:p3"))
     p = BlockedPrompt.parse("q", target=as_pane_id("  w1:p3 "), session=SESS)
