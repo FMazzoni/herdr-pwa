@@ -81,6 +81,27 @@ class Message:
     title: str | None = None
 
 
+def ping(settings: Settings, seams: Seams, message: Message) -> int:
+    """Send one notification to every paired phone, audited first; tapping it opens the herd.
+
+    Returns:
+        0 when every device took it, 1 when none did, 2 when the text sanitises to nothing,
+        3 when push cannot be used here, 4 with no paired phone, 5 when some devices failed,
+        6 when ``PING_BURST`` pings went out in the last ``PING_WINDOW`` seconds.
+    """
+    try:
+        line, code = _send(settings, seams, message)
+    except _Refused as exc:
+        sys.stderr.write(f"ping: {exc}\n")
+        return exc.code
+    # The one translation of what push refused (key, contact, store) into words for the caller.
+    except PushError as exc:
+        sys.stderr.write(f"ping: {exc}\n")
+        return EXIT_UNAVAILABLE
+    (seams.write if code == EXIT_SENT else sys.stderr.write)(line + "\n")
+    return code
+
+
 def caller_name(settings: Settings, seams: Seams) -> str:
     """The calling pane's agent name, or the default outside a pane or when the runner is silent."""
     environ = seams.environ
@@ -100,100 +121,6 @@ def caller_name(settings: Settings, seams: Seams) -> str:
     finally:
         client.close()
     return title or DEFAULT_SENDER
-
-
-def _body(message: Message) -> str:
-    body = sanitise(message.text, limit=MAX_BODY_CHARS)
-    if not body.replace(LINK_PLACEHOLDER, "").strip():
-        raise _Refused(
-            "nothing left to send: the text is empty once controls and links go", EXIT_USAGE
-        )
-    return body
-
-
-def _payload(body: str, sender: str, *, quiet: bool, now: WallTime) -> dict[str, object]:
-    title = sanitise(sender, limit=MAX_TITLE_CHARS) or DEFAULT_SENDER
-    notice = Notice(EVENT_PING, title=title, body=body, tag=PING_TAG, quiet=quiet)
-    return build_payload(notice, now=now)
-
-
-def _check_rate(seams: Seams, state_dir: Path) -> None:
-    try:
-        sent = attempts_since(state_dir, PING, seams.wall() - PING_WINDOW)
-    except OSError as exc:
-        raise _Refused(f"cannot read the audit log: {exc}", EXIT_UNAVAILABLE) from exc
-    if sent >= PING_BURST:
-        raise _Refused(
-            f"{sent} pings in the last {PING_WINDOW / 60:g} minutes, the most it sends; "
-            "try again later",
-            EXIT_RATE_LIMITED,
-        )
-
-
-def _deliver(settings: Settings, seams: Seams, state_dir: Path) -> Deliver:
-    if not settings.push_enabled:
-        raise _Refused("push is switched off on this box (HP_PUSH_ENABLED=0)", EXIT_UNAVAILABLE)
-    keys = read_vapid_keys(state_dir)
-    if keys is None:
-        raise _Refused(
-            f"no VAPID key in {state_dir}: start the service and turn alerts on from the phone",
-            EXIT_UNAVAILABLE,
-        )
-    if seams.deliver is not None:
-        return seams.deliver
-    return arm_sender(
-        keys, subject=settings.push_subject, ttl=settings.push_ttl, limits=seams.push_limits
-    )
-
-
-def _origin() -> Origin:
-    # The uid is what admits a CLI caller: anyone running as it can already read the state dir.
-    uid = os.getuid()
-    try:
-        name = pwd.getpwuid(uid).pw_name
-    except KeyError:
-        # A uid with no passwd entry, as in some containers, is still who ran it.
-        name = str(uid)
-    return Origin(name, VIA_CLI)
-
-
-def _verdict(result: FanOut, devices: int) -> tuple[str, int]:
-    line = f"ping: sent to {result.sent} of {devices} device(s)"
-    if result.pruned:
-        line += f"; forgot {result.pruned} the push service retired"
-    if result.failed:
-        line += f"; {result.failed} failed (herdr-pwa doctor shows the last error)"
-    if result.sent and result.failed:
-        return line, EXIT_PARTIAL
-    return line, EXIT_SENT if result.sent else EXIT_UNDELIVERED
-
-
-def _devices(seams: Seams, state_dir: Path) -> tuple[SubscriptionStore, list[Subscription]]:
-    store = SubscriptionStore(state_dir, clock=seams.wall, limits=seams.push_limits)
-    try:
-        devices = store.list_all()
-    except OSError as exc:
-        raise _Refused(f"cannot read the paired devices: {exc}", EXIT_UNAVAILABLE) from exc
-    if not devices:
-        raise _Refused(
-            "no paired phone: open the app on the phone and turn alerts on", EXIT_NO_DEVICES
-        )
-    return store, devices
-
-
-def _audit(settings: Settings, seams: Seams, state_dir: Path, payload: dict[str, object]) -> Entry:
-    audit = AuditLog(
-        state_dir,
-        max_bytes=settings.audit_max_bytes,
-        payload_chars=settings.audit_payload_chars,
-        clock=seams.wall,
-    )
-    # The text recorded is what the lock screen shows, so the log answers who said what there.
-    write = Write(PING, target=str(payload["title"]), payload=str(payload["body"]))
-    try:
-        return audit.record(_origin(), write)
-    except AuditUnavailableError as exc:
-        raise _Refused(f"{exc}; nothing was sent", EXIT_UNAVAILABLE) from exc
 
 
 def _send(settings: Settings, seams: Seams, message: Message) -> tuple[str, int]:
@@ -220,22 +147,95 @@ def _send(settings: Settings, seams: Seams, message: Message) -> tuple[str, int]
     return _verdict(result, len(devices))
 
 
-def ping(settings: Settings, seams: Seams, message: Message) -> int:
-    """Send one notification to every paired phone, audited first; tapping it opens the herd.
+def _body(message: Message) -> str:
+    body = sanitise(message.text, limit=MAX_BODY_CHARS)
+    if not body.replace(LINK_PLACEHOLDER, "").strip():
+        raise _Refused(
+            "nothing left to send: the text is empty once controls and links go", EXIT_USAGE
+        )
+    return body
 
-    Returns:
-        0 when every device took it, 1 when none did, 2 when the text sanitises to nothing,
-        3 when push cannot be used here, 4 with no paired phone, 5 when some devices failed,
-        6 when ``PING_BURST`` pings went out in the last ``PING_WINDOW`` seconds.
-    """
+
+def _deliver(settings: Settings, seams: Seams, state_dir: Path) -> Deliver:
+    if not settings.push_enabled:
+        raise _Refused("push is switched off on this box (HP_PUSH_ENABLED=0)", EXIT_UNAVAILABLE)
+    keys = read_vapid_keys(state_dir)
+    if keys is None:
+        raise _Refused(
+            f"no VAPID key in {state_dir}: start the service and turn alerts on from the phone",
+            EXIT_UNAVAILABLE,
+        )
+    if seams.deliver is not None:
+        return seams.deliver
+    return arm_sender(
+        keys, subject=settings.push_subject, ttl=settings.push_ttl, limits=seams.push_limits
+    )
+
+
+def _devices(seams: Seams, state_dir: Path) -> tuple[SubscriptionStore, list[Subscription]]:
+    store = SubscriptionStore(state_dir, clock=seams.wall, limits=seams.push_limits)
     try:
-        line, code = _send(settings, seams, message)
-    except _Refused as exc:
-        sys.stderr.write(f"ping: {exc}\n")
-        return exc.code
-    # The one translation of what push refused (key, contact, store) into words for the caller.
-    except PushError as exc:
-        sys.stderr.write(f"ping: {exc}\n")
-        return EXIT_UNAVAILABLE
-    (seams.write if code == EXIT_SENT else sys.stderr.write)(line + "\n")
-    return code
+        devices = store.list_all()
+    except OSError as exc:
+        raise _Refused(f"cannot read the paired devices: {exc}", EXIT_UNAVAILABLE) from exc
+    if not devices:
+        raise _Refused(
+            "no paired phone: open the app on the phone and turn alerts on", EXIT_NO_DEVICES
+        )
+    return store, devices
+
+
+def _check_rate(seams: Seams, state_dir: Path) -> None:
+    try:
+        sent = attempts_since(state_dir, PING, seams.wall() - PING_WINDOW)
+    except OSError as exc:
+        raise _Refused(f"cannot read the audit log: {exc}", EXIT_UNAVAILABLE) from exc
+    if sent >= PING_BURST:
+        raise _Refused(
+            f"{sent} pings in the last {PING_WINDOW / 60:g} minutes, the most it sends; "
+            "try again later",
+            EXIT_RATE_LIMITED,
+        )
+
+
+def _payload(body: str, sender: str, *, quiet: bool, now: WallTime) -> dict[str, object]:
+    title = sanitise(sender, limit=MAX_TITLE_CHARS) or DEFAULT_SENDER
+    notice = Notice(EVENT_PING, title=title, body=body, tag=PING_TAG, quiet=quiet)
+    return build_payload(notice, now=now)
+
+
+def _audit(settings: Settings, seams: Seams, state_dir: Path, payload: dict[str, object]) -> Entry:
+    audit = AuditLog(
+        state_dir,
+        max_bytes=settings.audit_max_bytes,
+        payload_chars=settings.audit_payload_chars,
+        clock=seams.wall,
+    )
+    # The text recorded is what the lock screen shows, so the log answers who said what there.
+    write = Write(PING, target=str(payload["title"]), payload=str(payload["body"]))
+    try:
+        return audit.record(_origin(), write)
+    except AuditUnavailableError as exc:
+        raise _Refused(f"{exc}; nothing was sent", EXIT_UNAVAILABLE) from exc
+
+
+def _origin() -> Origin:
+    # The uid is what admits a CLI caller: anyone running as it can already read the state dir.
+    uid = os.getuid()
+    try:
+        name = pwd.getpwuid(uid).pw_name
+    except KeyError:
+        # A uid with no passwd entry, as in some containers, is still who ran it.
+        name = str(uid)
+    return Origin(name, VIA_CLI)
+
+
+def _verdict(result: FanOut, devices: int) -> tuple[str, int]:
+    line = f"ping: sent to {result.sent} of {devices} device(s)"
+    if result.pruned:
+        line += f"; forgot {result.pruned} the push service retired"
+    if result.failed:
+        line += f"; {result.failed} failed (herdr-pwa doctor shows the last error)"
+    if result.sent and result.failed:
+        return line, EXIT_PARTIAL
+    return line, EXIT_SENT if result.sent else EXIT_UNDELIVERED
