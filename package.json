@@ -1,0 +1,10 @@
+{
+  "name": "herdr-pwa-lint",
+  "private": true,
+  "description": "Only the JS lint for web/static; install once with `npm ci`, then the gate runs offline.",
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "eslint": "10.12.0",
+    "globals": "17.13.0"
+  }
+}
