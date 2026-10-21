@@ -14,7 +14,7 @@ from herdr_pwa.audit import (
     Entry,
     Origin,
     Write,
-    attempts_since,
+    attempts_between,
 )
 from herdr_pwa.auth import VIA_CLI
 from herdr_pwa.clock import WallTime
@@ -51,7 +51,7 @@ PANE_ENV: Final = "HERDR_PANE_ID"
 SOCKET_ENV: Final = "HERDR_SOCKET_PATH"
 # Seconds to ask the runner the caller's name; past it the ping goes out under the default.
 NAME_TIMEOUT: Final = 2.0
-# A looping agent must not buzz the phone all night, or get the key throttled by push services.
+# About this many: a looping agent must not buzz the phone all night; parallel bursts may pass.
 PING_BURST: Final = 10
 PING_WINDOW: Final = 600.0
 
@@ -87,7 +87,7 @@ def ping(settings: Settings, seams: Seams, message: Message) -> int:
     Returns:
         0 when every device took it, 1 when none did, 2 when the text sanitises to nothing,
         3 when push cannot be used here, 4 with no paired phone, 5 when some devices failed,
-        6 when ``PING_BURST`` pings went out in the last ``PING_WINDOW`` seconds.
+        6 when about ``PING_BURST`` pings went out in the last ``PING_WINDOW`` seconds.
     """
     try:
         line, code = _send(settings, seams, message)
@@ -187,7 +187,8 @@ def _devices(seams: Seams, state_dir: Path) -> tuple[SubscriptionStore, list[Sub
 
 def _check_rate(seams: Seams, state_dir: Path) -> None:
     try:
-        sent = attempts_since(state_dir, PING, seams.wall() - PING_WINDOW)
+        now = seams.wall()
+        sent = attempts_between(state_dir, PING, now - PING_WINDOW, now)
     except OSError as exc:
         raise _Refused(f"cannot read the audit log: {exc}", EXIT_UNAVAILABLE) from exc
     if sent >= PING_BURST:

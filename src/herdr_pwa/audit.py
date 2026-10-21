@@ -6,7 +6,8 @@ import os
 import secrets
 import stat
 import threading
-from collections.abc import Iterator, Mapping
+from collections.abc import Generator, Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -224,7 +225,7 @@ class AuditLog:
             AuditUnavailableError: the log cannot be opened at 0600.
         """
         try:
-            with self._lock:
+            with self._held():
                 os.close(self._open())
         except OSError as exc:
             raise AuditUnavailableError(f"cannot open the audit log: {exc}") from exc
@@ -260,7 +261,7 @@ class AuditLog:
             "payload_omitted": omitted,
         }
         try:
-            with self._lock:
+            with self._held():
                 self._append(attempt)
         except OSError as exc:
             raise AuditUnavailableError(f"cannot record {write.endpoint}: {exc}") from exc
@@ -282,7 +283,7 @@ class AuditLog:
             outcome["payload"] = text or ""
             outcome["payload_truncated"] = truncated
         try:
-            with self._lock:
+            with self._held():
                 self._append(outcome)
         except OSError:
             log.exception(
@@ -291,6 +292,16 @@ class AuditLog:
                 attempt["id"],
                 result,
             )
+
+    @contextmanager
+    def _held(self) -> Generator[None]:
+        # Bounded like the flock behind it, so writers queued on a stuck one are refused in turn.
+        if not self._lock.acquire(timeout=statedir.LOCK_TIMEOUT):
+            raise TimeoutError(f"another write held the audit log for {statedir.LOCK_TIMEOUT:g}s")
+        try:
+            yield
+        finally:
+            self._lock.release()
 
     def _open(self) -> int:
         path = self.path
@@ -380,14 +391,15 @@ def _epoch(stamp: str) -> float:
         return 0.0
 
 
-def attempts_since(state_dir: Path, endpoint: str, since: float) -> int:
-    """How many attempts at *endpoint* both generations hold from *since* (epoch seconds) on."""
+def attempts_between(state_dir: Path, endpoint: str, since: float, until: float) -> int:
+    """How many attempts at *endpoint* both generations hold stamped from *since* to *until*."""
+    # The upper bound keeps a wall clock stepped back from counting the "future" ones for good.
     return sum(
         1
         for record in records(state_dir, limit=0)
         if record["phase"] == ATTEMPT
         and record["endpoint"] == endpoint
-        and _epoch(record["ts"]) >= since
+        and since <= _epoch(record["ts"]) <= until
     )
 
 

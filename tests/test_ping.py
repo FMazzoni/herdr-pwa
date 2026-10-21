@@ -390,6 +390,8 @@ def test_two_stores_on_one_file_never_lose_a_device_to_each_other(
 
 
 def _three_hundred_sends(state_dir: Path) -> None:
+    # Back-to-back writes starve a waiter for seconds on a busy disk; this tests lost updates.
+    statedir.LOCK_TIMEOUT = 600.0
     health = DeliveryLog(state_dir)
     for _ in range(300):
         health.sent()
@@ -438,6 +440,17 @@ def test_the_eleventh_ping_in_ten_minutes_is_refused_and_not_sent(
     assert len(_records(tmp_path)) == 2 * PING_BURST
     rig.clock.advance(PING_WINDOW + 1)
     assert _ping(tmp_path, Message("next wave", "me"), rig)[0] == EXIT_SENT
+
+
+def test_pings_stamped_after_a_clock_stepped_back_do_not_hold_the_next_one(
+    tmp_path: Path,
+) -> None:
+    _ = _paired(tmp_path, ONE)
+    rig = _Rig()
+    for n in range(PING_BURST):
+        _ = _ping(tmp_path, Message(f"wave {n}", "me"), rig)
+    rig.clock.advance(-3600)
+    assert _ping(tmp_path, Message("after the step", "me"), rig)[0] == EXIT_SENT
 
 
 def test_nothing_to_say_is_refused_before_push_or_the_runner_is_looked_at(
