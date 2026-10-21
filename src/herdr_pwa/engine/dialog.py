@@ -1057,6 +1057,9 @@ _SGR_CHARS: Final = frozenset("0123456789;")
 
 def _sgr_at(line: str, at: int) -> tuple[int, str] | None:
     """Where the SGR at ``line[at]`` ends and its codes, or ``None`` for any other sequence."""
+    # Only a CSI can be one; a string sequence's frame would be read again from each ESC inside it.
+    if not line.startswith("\x1b[", at):
+        return None
     escape = escape_at(line, at)
     if escape.sgr is None or not set(escape.sgr) <= _SGR_CHARS:
         return None

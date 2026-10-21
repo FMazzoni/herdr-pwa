@@ -13,8 +13,10 @@ from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
 import herdr_pwa
+from herdr_pwa.panetext import plain, without_escapes
 from herdr_pwa.patterns import Rx
 from herdr_pwa.validation import MODEL_ID
+from tests.engine_seam import dialog_chunks
 
 # The wire models are generated from herdr's schema and compile nothing of this app's.
 _GENERATED = "herdr_pwa.engine.generated"
@@ -135,3 +137,16 @@ def test_what_a_validator_accepts_is_one_line(rx: Rx) -> None:
 def test_a_model_id_holds_no_whitespace(model: str) -> None:
     # The doctor file is written on the promise that an id holds no whitespace.
     assert not any(c.isspace() for c in model)
+
+
+# Escape floods: a string sequence's opener over and over, which a colour read could carry.
+_FLOODS = ("\x1b]" * 20_000, "\x1bPx" * 15_000, "\x1b_" * 20_000)
+
+
+@pytest.mark.parametrize("flood", _FLOODS, ids=["osc", "dcs", "apc"])
+def test_an_escape_flood_is_read_in_linear_time(flood: str) -> None:
+    started = time.process_time()
+    _ = dialog_chunks(flood)
+    _ = without_escapes(flood)
+    _ = plain(flood)
+    assert time.process_time() - started < _CPU_SECONDS
