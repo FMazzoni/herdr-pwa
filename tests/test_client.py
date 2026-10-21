@@ -3,6 +3,7 @@
 import ast
 import inspect
 import json
+import os
 import socket
 import subprocess
 import sys
@@ -15,6 +16,7 @@ import pytest
 from pydantic import BaseModel, JsonValue, TypeAdapter
 
 from herdr_pwa import protocol
+from herdr_pwa.clock import MonoTime
 from herdr_pwa.engine import (
     INTERRUPT_KEY,
     NOT_READY_CODE,
@@ -42,6 +44,7 @@ from herdr_pwa.engine import (
     as_session_id,
     engine_settings,
 )
+from herdr_pwa.process_start import ProcessStarts
 from herdr_pwa.settings import Settings
 from tests._jsonpath import at, obj
 from tests._wire_support import FakeTransport, Reply, TickingClock, no_sleep
@@ -695,6 +698,7 @@ READ_VERBS = frozenset(
         "shell_pane",
         "started_agent",
         "pane_pids",
+        "pane_processes",
     }
 )
 
@@ -1050,6 +1054,22 @@ def test_a_process_info_the_schema_rejects_names_no_pids() -> None:
     obj(frame, "result", "process_info")["shell_pid"] = "not a pid"
     eng, _ = build({PROCESS_INFO: frame})
     assert eng.pane_pids(PaneId("w1:p9")) == ()
+
+
+def test_an_agent_started_where_herdr_names_no_shell_still_has_a_start(tmp_path: Path) -> None:
+    """With no ``shell_pid`` the first pid is the agent's own, so it must not be dropped as the shell."""
+    frame = process_info_frame()
+    info = obj(frame, "result", "process_info")
+    info["shell_pid"] = None
+    info["foreground_processes"] = [{"pid": 7, "name": "claude", "argv": ["claude"]}]
+    eng, _ = build({PROCESS_INFO: frame})
+    proc = tmp_path / "proc"
+    (proc / "7").mkdir(parents=True)
+    (proc / "stat").write_text("btime 1000\n")
+    fields = ["S", *["0"] * 18, str(5 * os.sysconf("SC_CLK_TCK"))]
+    (proc / "7" / "stat").write_text(f"7 (claude) {' '.join(fields)}\n")
+    starts = ProcessStarts(eng, proc=proc, clock=lambda: MonoTime(0.0))
+    assert starts.started(PaneId("w1:p9")) == 1005.0
 
 
 def test_a_process_info_reply_with_no_process_info_is_invalid() -> None:
