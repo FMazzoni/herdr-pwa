@@ -38,6 +38,36 @@ def test_the_checks_run_in_process_and_only_green_leaves_a_receipt(
     assert (tmp_path / "abc.json").is_file() is receipted
 
 
+def test_an_edit_under_render_changes_the_fingerprint(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A renderer decides what a page draws, so its edit must not reuse the receipts before it."""
+    monkeypatch.setattr(geometry_gate, "version", lambda: "Mozilla Firefox 1.0")
+    # The tree is the repo's own; a copy holding one renderer stands in for it.
+    monkeypatch.setattr(geometry_gate, "ROOT", tmp_path)
+    source = tmp_path / "src/herdr_pwa/render/markdown.py"
+    source.parent.mkdir(parents=True)
+    _ = source.write_text('HEADING = "h2"\n')
+    before = geometry_gate.fingerprint()
+    _ = source.write_text('HEADING = "h1"\n')
+    assert geometry_gate.fingerprint() != before
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "src/herdr_pwa/render/markdown.py",
+        "src/herdr_pwa/files/view.py",
+        "tests/conftest.py",
+        "tests/fixtures/ledger.json",
+        "pyproject.toml",
+        "uv.lock",
+    ],
+)
+def test_the_fingerprint_guards_what_a_page_is_built_from(name: str) -> None:
+    assert geometry_gate.ROOT / name in geometry_gate.guarded_files()
+
+
 # The plugin as the browser tests' conftest loads it, with the gate's --browser-force flag and
 # its receipts under RECEIPTS, which the fixture fills in.
 _CONFTEST = """

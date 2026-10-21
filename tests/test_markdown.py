@@ -68,6 +68,11 @@ def test_every_tag_class_and_attribute_comes_from_its_closed_set() -> None:
     assert {"table", "math", "mfrac", "mtable", "span", "a"} <= {n.tag for n in nodes}
 
 
+def test_every_heading_sits_a_level_below_the_pages_own_h1() -> None:
+    text = "\n\n".join(f"{'#' * n} level {n}" for n in range(1, 7))
+    assert [node.tag for node in render_tree(text)] == ["h2", "h3", "h4", "h5", "h6", "h6"]
+
+
 def test_a_table_scrolls_in_its_own_box_and_keeps_its_alignment() -> None:
     (wrap,) = render_tree("| a | b | c |\n|:-:|--:|---|\n| 1 | 2 | 3 |\n")
     assert (wrap.tag, wrap.cls) == ("div", "table-scroll")

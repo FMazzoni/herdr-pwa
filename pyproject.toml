@@ -79,6 +79,8 @@ exclude = ["src/herdr_pwa/engine/generated/**"]
 testpaths = ["tests"]
 # A marker no entry below registers is an error, so a misspelt resource never runs unguarded.
 addopts = ["--strict-markers"]
+# An expected failure that starts passing fails the run, so a fix is never hidden by its old mark.
+xfail_strict = true
 markers = [
     "browser: drives headless Firefox over the real app; reused, not run, while a receipt for this tree exists",
     # The resources a test may need, the only reasons a test is skipped: tests/conftest.py checks each.

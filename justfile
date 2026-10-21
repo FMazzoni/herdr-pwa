@@ -16,13 +16,16 @@ check: && skips
     uv run python scripts/geometry_gate.py
 
 # Fail on a skip whose reason is not "needs <resource>:" for a resource registered as a pytest marker
-# in pyproject.toml; prints how many tests each resource kept from running. REPORT is pytest's JUnit
-# XML, which records an expected failure as a skip of its own type.
-skips REPORT=".pytest_cache/junit.xml":
+# in pyproject.toml, and on a pytest.xfail() call under TESTS, which decides from inside a test as a
+# skip would; prints how many tests each resource kept from running. REPORT is pytest's JUnit XML,
+# which records an expected failure, marked or called, as a skip of its own type.
+skips REPORT=".pytest_cache/junit.xml" TESTS="tests":
     #!/usr/bin/env -S uv run --quiet python
+    import ast
     import sys
     import tomllib
     import xml.etree.ElementTree as ET
+    from pathlib import Path
     with open("pyproject.toml", "rb") as file:
         markers = tomllib.load(file)["tool"]["pytest"]["ini_options"]["markers"]
     registered = {marker.partition(":")[0] for marker in markers}
@@ -38,6 +41,12 @@ skips REPORT=".pytest_cache/junit.xml":
                 kinds[kind] = kinds.get(kind, 0) + 1
             else:
                 stray.append(f"{case.get('classname')}::{case.get('name')}: {reason}")
+    for path in sorted(Path("{{TESTS}}").rglob("*.py")):
+        for node in ast.walk(ast.parse(path.read_bytes())):
+            call = node.func if isinstance(node, ast.Call) else None
+            if isinstance(call, ast.Attribute) and isinstance(call.value, ast.Name):
+                if (call.value.id, call.attr) == ("pytest", "xfail"):
+                    stray.append(f"{path}:{node.lineno}: pytest.xfail(); mark the test instead")
     print("skipped:", ", ".join(f"{n} needs {k}" for k, n in sorted(kinds.items())) or "none")
     for line in stray:
         print(f"unregistered skip: {line}", file=sys.stderr)
