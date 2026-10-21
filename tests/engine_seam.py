@@ -8,8 +8,8 @@ place outside the engine that imports its submodules.
 """
 
 from herdr_pwa.engine import cache as cache_module
+from herdr_pwa.engine import claude, dialog, generated
 from herdr_pwa.engine import client as client_module
-from herdr_pwa.engine import dialog, generated, transcript
 from herdr_pwa.engine.client import discovery_subscriptions, method_of, payload_field
 from herdr_pwa.engine.dialog import OPTION_RE, is_key_hint
 from herdr_pwa.engine.generated import request as wire_request
@@ -54,11 +54,11 @@ from herdr_pwa.engine.transport import (
 )
 
 # Private to their modules; a test pins each directly because no public call shows it.
-HEAD_BYTES = transcript._HEAD_BYTES  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
-HEAD_FINISH = transcript._HEAD_FINISH  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
-copied_from = transcript._copied_from  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
-head_records = transcript._head_records  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
-head_window = transcript._head_window  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
+HEAD_BYTES = claude._HEAD_BYTES  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
+HEAD_FINISH = claude._HEAD_FINISH  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
+copied_from = claude._copied_from  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
+head_records = claude._head_records  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
+head_window = claude._head_window  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
 dialog_chunks = dialog._chunks  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
 
 __all__ = [
