@@ -1,6 +1,7 @@
 # Runs the project's own locked tools, so the hook matches `just check`.
-# Install once per clone: `pre-commit install --hook-type pre-commit --hook-type pre-push --hook-type commit-msg`.
-# ruff stays a pre-commit hook; the two guards below run only at their own stage.
+# Install once per clone: `pre-commit install --hook-type pre-commit --hook-type commit-msg`,
+# then `ln -s ../../scripts/hooks/pre_push.py .git/hooks/pre-push` (git, not pre-commit, runs it).
+# ruff stays a pre-commit hook; the message check below runs only at commit-msg.
 default_stages: [pre-commit]
 repos:
   - repo: local
@@ -15,14 +16,6 @@ repos:
         entry: uv run ruff check --force-exclude
         language: system
         types_or: [python, pyi]
-      # Same root as main, branches and v-tags only, no line of ~/.config/git/push-deny-patterns.
-      - id: pre-push-guard
-        name: push guard
-        entry: python3 scripts/hooks/pre_push.py
-        language: system
-        stages: [pre-push]
-        pass_filenames: false
-        always_run: true
       - id: commit-msg-shape
         name: commit message shape
         entry: python3 scripts/hooks/commit_msg.py

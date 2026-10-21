@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Refuse a push that carries a foreign root, an unlisted ref or a denied identifier."""
 
-# Install via .pre-commit-config.yaml, or `ln -s ../../scripts/hooks/pre_push.py .git/hooks/pre-push`
-# to check every ref: pre-commit passes on only the first ref with new commits, and none without.
+# Install with `ln -s ../../scripts/hooks/pre_push.py .git/hooks/pre-push`, not through pre-commit,
+# which passes on only the first ref with new commits; git gives it every ref on stdin.
 
 import os
 import re
@@ -45,14 +45,6 @@ def _from_stdin(lines: list[str]) -> list[Update]:
             local_ref, local_sha, remote_ref, remote_sha = line.rsplit(maxsplit=3)
             updates.append(Update(local_ref, local_sha, remote_ref, remote_sha))
     return updates
-
-
-def _from_pre_commit(env: dict[str, str]) -> list[Update]:
-    # pre-commit reads git's stdin itself and passes on only the first ref that sends commits.
-    local_ref = env.get("PRE_COMMIT_LOCAL_BRANCH", "HEAD")
-    local_sha = env.get("PRE_COMMIT_TO_REF") or _git("rev-parse", local_ref).strip()
-    remote_sha = env.get("PRE_COMMIT_FROM_REF") or ZERO
-    return [Update(local_ref, local_sha, env["PRE_COMMIT_REMOTE_BRANCH"], remote_sha)]
 
 
 def _ref_problem(update: Update) -> str | None:
@@ -148,14 +140,10 @@ def check(remote: str, updates: list[Update], env: dict[str, str]) -> list[str]:
 
 
 def main(argv: list[str]) -> int:
-    """Read the push the way git or pre-commit hands it over, and refuse it on any problem."""
-    env = dict(os.environ)
-    if "PRE_COMMIT_REMOTE_BRANCH" in env:
-        remote, updates = env.get("PRE_COMMIT_REMOTE_NAME", ""), _from_pre_commit(env)
-    else:
-        remote, updates = (argv[0] if argv else ""), _from_stdin(sys.stdin.read().splitlines())
+    """Read the push the way git hands it over, and refuse it on any problem."""
+    remote, updates = (argv[0] if argv else ""), _from_stdin(sys.stdin.read().splitlines())
     try:
-        problems = check(remote, updates, env)
+        problems = check(remote, updates, dict(os.environ))
     except RuntimeError as error:
         problems = [str(error)]
     for problem in problems:

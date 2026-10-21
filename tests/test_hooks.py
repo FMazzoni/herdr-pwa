@@ -50,11 +50,7 @@ def rig(tmp_path: Path) -> Rig:
     home.mkdir()
     patterns = tmp_path / "deny"
     patterns.write_text(f"# one marker per line\n\n{MARKER}\n", encoding="utf-8")
-    env = {
-        key: value
-        for key, value in os.environ.items()
-        if not key.startswith(("GIT_", "PRE_COMMIT"))
-    }
+    env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
     env |= {
         "HOME": str(home),
         "GIT_CONFIG_NOSYSTEM": "1",
@@ -108,7 +104,8 @@ def test_the_stash_is_refused(rig: Rig) -> None:
         assert "pre-push refused: refs/stash" in done.stderr
 
 
-def test_a_tag_outside_v_is_refused(rig: Rig) -> None:
+def test_a_tag_outside_v_is_refused_on_a_commit_already_pushed(rig: Rig) -> None:
+    # pre-commit skips a push with no new commits; git still hands this ref to the hook.
     rig.git("tag", "browser-wave1")
     done = rig.push("refs/tags/browser-wave1")
     assert done.returncode != 0
@@ -146,39 +143,6 @@ def test_a_missing_patterns_file_refuses_unless_switched_off(rig: Rig) -> None:
     assert "push-deny-patterns" in done.stderr
     rig.env["HP_PUSH_DENY_PATTERNS"] = "none"
     assert rig.push("feature").returncode == 0
-
-
-def _pre_commit_stage(
-    rig: Rig, branch: str, from_ref: str = ""
-) -> subprocess.CompletedProcess[str]:
-    # pre-commit's pre-push stage hands the first sending ref over in env, with no args or stdin.
-    env = rig.env | {
-        "PRE_COMMIT": "1",
-        "PRE_COMMIT_LOCAL_BRANCH": f"refs/heads/{branch}",
-        "PRE_COMMIT_REMOTE_BRANCH": f"refs/heads/{branch}",
-        "PRE_COMMIT_REMOTE_NAME": "origin",
-        "PRE_COMMIT_REMOTE_URL": "unused",
-    }
-    if from_ref:
-        env |= {"PRE_COMMIT_FROM_REF": from_ref, "PRE_COMMIT_TO_REF": branch}
-    command = [sys.executable, str(PRE_PUSH)]
-    return subprocess.run(  # noqa: S603
-        command, cwd=rig.work, env=env, capture_output=True, text=True, check=False
-    )
-
-
-def test_the_pre_commit_stage_is_checked_the_same(rig: Rig) -> None:
-    rig.git("checkout", "-q", "-b", "feature")
-    rig.commit("notes.txt", "plain\n")
-    main = rig.git("rev-parse", "main").stdout.strip()
-    assert _pre_commit_stage(rig, "feature", from_ref=main).returncode == 0
-    rig.commit("more.txt", f"{MARKER}\n")
-    assert _pre_commit_stage(rig, "feature", from_ref=main).returncode != 0
-    rig.git("checkout", "-q", "--orphan", "rewritten")
-    rig.commit("other.txt", "unrelated\n", "Start over")
-    done = _pre_commit_stage(rig, "rewritten")
-    assert done.returncode != 0
-    assert "root commit" in done.stderr
 
 
 def _commit_msg(tmp_path: Path, message: str) -> subprocess.CompletedProcess[str]:
