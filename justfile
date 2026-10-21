@@ -10,7 +10,7 @@ check:
     uv run complexipy --quiet src
     uv run lint-imports --no-cache --no-logo
     npx --no-install eslint src/herdr_pwa/web/static
-    HP_FIXTURE_USE=1 uv run pytest -q -n auto
+    HP_FIXTURE_USE=1 uv run pytest -q -n auto --cov=herdr_pwa --cov-branch --cov-report= --cov-fail-under=94.7
     node --test tests/js/*.test.mjs
     uv run python scripts/css_tokens.py
     uv run python scripts/geometry_gate.py

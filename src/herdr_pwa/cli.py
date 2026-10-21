@@ -6,6 +6,7 @@ import logging
 import os
 import sys
 from dataclasses import dataclass
+from importlib.metadata import version
 from typing import Final
 
 import uvicorn
@@ -244,10 +245,11 @@ class _Args(argparse.Namespace):
 def main(argv: list[str] | None = None) -> int:
     """Parse arguments and run the chosen command."""
     parser = argparse.ArgumentParser(prog="herdr-pwa")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {version('herdr-pwa')}")
     sub = parser.add_subparsers(dest="command", required=True)
-    serve_cmd = sub.add_parser("serve")
-    serve_cmd.add_argument("--port", type=int)
-    sub.add_parser("doctor")
+    serve_cmd = sub.add_parser("serve", help="serve the dashboard on the loopback port")
+    serve_cmd.add_argument("--port", type=int, help="a port instead of HP_PORT")
+    sub.add_parser("doctor", help="check the runner and the running service")
     pair_cmd = sub.add_parser("pair", help="publish over tailscale serve and print a QR")
     pair_cmd.add_argument(
         "--check", action="store_true", help="report what serve has, change nothing"
