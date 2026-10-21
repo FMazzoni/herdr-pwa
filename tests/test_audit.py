@@ -10,7 +10,6 @@ from pydantic import JsonValue, TypeAdapter
 from herdr_pwa import audit
 from herdr_pwa.audit import (
     CLOSE,
-    ECHOED,
     KEYS,
     OMITTED_UNTIL_ECHO,
     PROMPT,
@@ -25,7 +24,6 @@ from herdr_pwa.audit import (
 )
 from herdr_pwa.auth import Identity
 from herdr_pwa.clock import WallTime
-from herdr_pwa.writes.outcome import Evidence, Outcome, audit_result
 
 ME = Origin(
     actor="you@example.com", via="tailscale", client_ip="127.0.0.1", forwarded_for="198.51.100.7"
@@ -136,7 +134,8 @@ def test_a_long_payload_is_truncated_visibly_in_band(tmp_path: Path) -> None:
 
 def test_an_echoed_prompt_is_truncated_on_its_outcome(tmp_path: Path) -> None:
     with make_log(tmp_path, payload_chars=10).record(ME, Write(PROMPT, payload="a" * 25)) as entry:
-        entry.outcome(ECHOED)
+        entry.shown()
+        entry.outcome("confirmed:echo")
     attempt, outcome = lines(tmp_path)
     assert (attempt["payload"], attempt["payload_chars"]) == (None, 25)
     assert outcome["payload"] == "a" * 10 + "…[truncated: 25 chars sent]"
@@ -145,14 +144,11 @@ def test_an_echoed_prompt_is_truncated_on_its_outcome(tmp_path: Path) -> None:
 
 def test_a_payload_within_the_cap_is_stored_verbatim_on_one_line(tmp_path: Path) -> None:
     with make_log(tmp_path).record(ME, Write(PROMPT, payload="two\nlines")) as entry:
-        entry.outcome(ECHOED)
+        entry.shown()
+        entry.outcome("confirmed:echo")
     assert len((tmp_path / audit.AUDIT_FILENAME).read_text().splitlines()) == 2
     _, outcome = lines(tmp_path)
     assert (outcome["payload"], outcome["payload_truncated"]) == ("two\nlines", False)
-
-
-def test_the_echoed_token_is_the_one_a_read_back_records() -> None:
-    assert audit_result(Outcome.CONFIRMED, Evidence.ECHO) == ECHOED
 
 
 def test_a_prompt_attempt_holds_its_length_and_never_its_text(tmp_path: Path) -> None:
@@ -167,7 +163,15 @@ def test_a_prompt_attempt_holds_its_length_and_never_its_text(tmp_path: Path) ->
 
 
 @pytest.mark.parametrize(
-    "result", ["accepted:noecho", "accepted:argv", "failed:unavailable", "refused:EngineError"]
+    # A confirmed echo alone keeps nothing: the caller must say the whole text showed.
+    "result",
+    [
+        "confirmed:echo",
+        "accepted:noecho",
+        "accepted:argv",
+        "failed:unavailable",
+        "refused:EngineError",
+    ],
 )
 def test_a_prompt_not_echoed_never_stores_its_text(tmp_path: Path, result: str) -> None:
     with make_log(tmp_path).record(ME, Write(PROMPT, payload="hunter2")) as entry:

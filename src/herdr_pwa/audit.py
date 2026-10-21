@@ -36,8 +36,6 @@ OUTCOME: Final = "outcome"
 UNREADABLE: Final = "unreadable"
 # A prompt's text waits for its echo: a screen detector can miss a hidden-input prompt.
 OMITTED_UNTIL_ECHO: Final = "pending_echo"
-# The one outcome whose text the screen already showed, so storing it reveals nothing new.
-ECHOED: Final = "confirmed:echo"
 UNRECORDED: Final = "unrecorded"
 _MARK: Final = "…[truncated: {total} chars sent]"
 
@@ -75,7 +73,7 @@ class Outcome(TypedDict):
     endpoint: str
     target: str
     result: str
-    # A prompt's text, present only on an echoed outcome; older logs keep it on the attempt.
+    # A prompt's text, present only once it showed whole on screen; older logs keep it on the attempt.
     payload: NotRequired[str]
     payload_truncated: NotRequired[bool]
 
@@ -156,6 +154,7 @@ class Entry:
         self._audit: AuditLog = audit
         self._record: Attempt = record
         self._held: str = held
+        self._shown: bool = False
         self._outcome: str = ""
 
     @property
@@ -166,6 +165,10 @@ class Entry:
     def outcome(self, result: str) -> None:
         """Name what the write did; the outcome record carries it verbatim."""
         self._outcome = result.strip() or UNRECORDED
+
+    def shown(self) -> None:
+        """The whole text showed on screen after the send, so the outcome may carry it."""
+        self._shown = True
 
     def __enter__(self) -> Self:
         """The attempt is already recorded; this only hands back the handle."""
@@ -184,8 +187,8 @@ class Entry:
         if not result:
             result = UNRECORDED
             log.error("audit %s: the write named no outcome; this is a caller bug", self.id)
-        echoed = result == ECHOED and self._record["payload_omitted"] == OMITTED_UNTIL_ECHO
-        self._audit.close(self._record, result, self._held if echoed else None)
+        keep = self._shown and self._record["payload_omitted"] == OMITTED_UNTIL_ECHO
+        self._audit.close(self._record, result, self._held if keep else None)
         return False
 
 

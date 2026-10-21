@@ -4,7 +4,7 @@ import threading
 from pathlib import Path
 
 import pytest
-from hypothesis import HealthCheck, given, settings
+from hypothesis import HealthCheck, assume, given, settings
 from hypothesis import strategies as st
 from pydantic import JsonValue
 
@@ -366,6 +366,97 @@ def test_no_audit_file_holds_text_whose_send_was_not_echoed(
     result = send_prompt(r.writer, PromptAsk(S1, secret))
     if not (isinstance(result, PromptSent) and result.verified):
         assert secret not in _log_text(r)
+
+
+def _kept(r: Rig) -> list[object]:
+    return [rec.get("payload") for rec in r.audit_records if rec.get("payload") is not None]
+
+
+_PINENTRY = (
+    "\u250c\u2500\u2500 pinentry \u2500\u2500\u2510\n"
+    "\u2502 Please enter the passphrase to unlock the key \u2502\n"
+    "\u2502 Passphrase: ________ \u2502\n"
+    "\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2518"
+)
+
+
+@pytest.mark.parametrize(
+    ("before", "after", "secret"),
+    [
+        pytest.param(
+            "[sudo] password for owner:",
+            "[sudo] password for owner:\nSorry, try again.\n[sudo] password for owner:",
+            "password1!",
+            id="sudo-retry",
+        ),
+        pytest.param(
+            "owner@host's password:",
+            "owner@host's password:\nPermission denied, please try again.\nowner@host's password:",
+            "owner@ho-secret",
+            id="ssh-retry",
+        ),
+        pytest.param(
+            "Enter PIN:", "Enter PIN:\nbuilt 2026-10-21 in 2026 ms", "2026", id="short-pin"
+        ),
+        pytest.param(
+            SETTLED, echoed("\u276f hunter2- was here"), "hunter2-REALSECRET", id="prefix"
+        ),
+        pytest.param(
+            _PINENTRY,
+            "$ echo s3cret-passphrase-xyz\ns3cret-passphrase-xyz\nowner@host:~$",
+            "s3cret-passphrase-xyz",
+            id="pinentry-return",
+        ),
+    ],
+)
+def test_text_that_did_not_show_whole_and_new_is_never_kept(
+    tmp_path: Path, before: str, after: str, secret: str
+) -> None:
+    r = idle_rig(tmp_path, before, after)
+    _ = send_prompt(r.writer, PromptAsk(S1, secret))
+    assert _kept(r) == []
+    # A short secret can match a timestamp, so only a long one is sought in the raw file.
+    assert len(secret) < 8 or secret not in _log_text(r)
+
+
+def _flat(text: str) -> str:
+    return "".join(text.split())
+
+
+def _reprompt(asks: str, tail: str) -> tuple[str, str, str]:
+    # The secret shares the prompt's first eight characters, which the re-prompt draws again.
+    return asks, f"{asks}\nSorry, try again.\n{asks}", _flat(asks)[:8] + tail
+
+
+def _short(pin: str) -> tuple[str, str, str]:
+    return "Enter PIN:", f"Enter PIN:\nbuilt {pin} files in {pin} ms", pin
+
+
+def _prefix(head: str, tail: str) -> tuple[str, str, str]:
+    return "Password:", f"Password:\n{head} shown alone", head + tail
+
+
+_ASKS = st.sampled_from(["[sudo] password for owner:", "owner@host's password:", "Enter PIN:"])
+_LEAKY = st.one_of(
+    st.builds(_reprompt, _ASKS, _SECRET),
+    st.builds(_short, st.from_regex(r"[0-9A-Za-z]{1,7}", fullmatch=True)),
+    st.builds(_prefix, st.from_regex(r"[A-Za-z0-9]{8}", fullmatch=True), _SECRET),
+)
+
+
+@settings(
+    max_examples=80, deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture]
+)
+@given(case=_LEAKY)
+def test_no_audit_file_keeps_text_that_did_not_show_whole_and_new(
+    tmp_path_factory: pytest.TempPathFactory, case: tuple[str, str, str]
+) -> None:
+    before, after, secret = case
+    needle = _flat(secret)
+    assume(len(needle) < 8 or _flat(after).count(needle) <= _flat(before).count(needle))
+    r = idle_rig(tmp_path_factory.mktemp("audit"), before, after)
+    _ = send_prompt(r.writer, PromptAsk(S1, secret))
+    assert _kept(r) == []
 
 
 def test_a_prompt_from_a_second_tab_mid_send_is_refused_not_typed_twice(tmp_path: Path) -> None:

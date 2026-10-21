@@ -106,10 +106,12 @@ A misread screen could send the wrong keys, so refusing is the safer failure.
 
 Before it sends anything to an agent, the app writes a record to its audit log: who sent
 it, from which address, and what was sent. If the record can't be written, nothing is
-sent. So every keystroke the app typed has a record, made before the keystroke. A prompt's
-record holds only its length until the app sees the text appear on the pane. Text you type
-into a prompt that hides your typing, such as a password prompt, never appears, so it is
-never stored.
+sent. So every keystroke the app typed has a record, made before the keystroke.
+
+For a prompt, the record holds only its length at first. The app adds the text only if
+the whole of it shows on the pane after the send. It never keeps a prompt of fewer than
+eight characters, not counting spaces. So a password typed into a prompt that hides your
+typing is not stored.
 
 ### Agent text running as code (disclosure)
 
@@ -163,5 +165,5 @@ These follow from the design, and I've chosen not to fix them:
   line, where other users on the machine can read it.
 - Push services can see when a notification is sent, but not what it says, because the
   content is encrypted.
-- The audit log keeps up to 512 characters of each prompt the pane showed back, in a file
-  only your user can read.
+- The audit log keeps up to 512 characters of each prompt that showed whole on the pane,
+  in a file only your user can read.

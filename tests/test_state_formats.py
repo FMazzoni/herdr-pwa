@@ -384,7 +384,8 @@ def test_the_audit_log_reads_old_records_and_new_ones_side_by_side(tmp_path: Pat
         "".join(json.dumps(one) + "\n" for one in (old_attempt, old_outcome))
     )
     with old.record(origin, audit.Write(audit.PROMPT, "w1:p3", payload="carry on")) as entry:
-        entry.outcome(audit.ECHOED)
+        entry.shown()
+        entry.outcome("confirmed:echo")
     with old.record(origin, audit.Write(audit.PROMPT, "w1:p3", payload="hunter2")) as entry:
         entry.outcome("accepted:noecho")
     found = audit.records(tmp_path)
