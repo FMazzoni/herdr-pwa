@@ -357,6 +357,12 @@ def test_a_long_notice_is_cut_before_it_is_scanned() -> None:
     assert cleaned == "a" * (MAX_BODY_CHARS - 1) + "…"
 
 
+@pytest.mark.parametrize("padding", range(4075, 4095))
+def test_a_link_cut_by_the_scan_cap_is_dropped_and_the_cut_marked(padding: int) -> None:
+    cleaned = sanitise("https://x/" + "a" * padding + " evil.ru/pay", limit=MAX_BODY_CHARS)
+    assert cleaned == f"{LINK_PLACEHOLDER} …"
+
+
 def test_the_title_and_body_are_capped() -> None:
     payload = build_payload(Notice(event=EVENT_BLOCKED, title="t" * 200, body="b" * 500), now=0)
     assert len(str(payload["title"])) == 60

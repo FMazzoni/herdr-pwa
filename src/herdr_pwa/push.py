@@ -445,7 +445,10 @@ def sanitise(text: str, *, limit: int) -> str:
     """Agent output reduced to what is safe on a lock screen: no escapes, controls or links."""
     cleaned = _ANSI_RE.sub("", text)
     cleaned = "".join(" " if unicodedata.category(ch) in _INVISIBLE else ch for ch in cleaned)
-    cleaned = " ".join(cleaned.split())[:_MAX_SCANNED]
+    cleaned = " ".join(cleaned.split())
+    if len(cleaned) > _MAX_SCANNED:
+        # A word cut at the cap may be half a link that no longer looks like one, so it goes.
+        cleaned = cleaned[:_MAX_SCANNED].rsplit(" ", 1)[0] + " …"
     # An autolinked lock screen is a phishing primitive.
     cleaned = " ".join(_URL_RE.sub(_unlinked, cleaned).split())
     if len(cleaned) > limit:
