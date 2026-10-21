@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
 <meta name="hp-build" content="{{ build }}">
 <title>offline &mdash; herdr</title>
 <link rel="stylesheet" href="{{ asset('app.css') }}">
@@ -10,6 +11,7 @@
 <body>
 <header class="topbar"><a class="brand" href="/">herdr</a></header>
 <main class="feed-host">
+  <h1 class="sr-only">offline</h1>
   {% import "_ui.html" as ui %}{{ ui.banner("offline", what="offline", why="this phone cannot reach the box; nothing here is a claim about the herd") }}
   <p class="boot"><a href="/">Try again</a></p>
 </main>

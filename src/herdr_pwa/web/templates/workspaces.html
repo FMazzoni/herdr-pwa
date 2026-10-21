@@ -7,7 +7,7 @@
 {% block topbar %}<a class="leave topbar__back" href="/" aria-label="Back to herd" {{ replace() }}>&lsaquo; Herd</a><span class="topbar__title">workspaces</span>{% endblock %}
 {% block body %}
 <main class="feed-host">
-  {{ ui.section_head("Workspaces", workspaces|length) }}
+  {{ ui.section_head("Workspaces", workspaces|length, level=1) }}
   <p class="actions"><a href="/workspaces/new" {{ replace() }}>New workspace</a> <a href="/new" {{ replace() }}>New agent</a></p>
   <ul class="cards">
     {% for ws in workspaces %}

@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from herdr_pwa.engine import EngineUnavailable
-from tests.catalogue import BLOCKED, herd
+from tests.catalogue import BLOCKED, STATES, State, build, herd
 from tests.webfakes import (
     READ,
     SNAPSHOT,
@@ -135,6 +135,26 @@ def test_the_agent_page_has_landmarks_a_heading_and_a_named_way_back(tmp_path: P
 def test_the_feed_has_a_page_heading(tmp_path: Path) -> None:
     rig = build_rig(tmp_path)
     assert '<h1 class="sr-only">Herd</h1>' in rig.http.get("/").text
+
+
+def test_with_scripts_off_the_feed_links_the_servers_own_list(tmp_path: Path) -> None:
+    rig = build_rig(tmp_path)
+    page = rig.http.get("/?ws=w2").text
+    noscript = page.partition("<noscript>")[2].partition("</noscript>")[0]
+    assert '<a href="/feed?ws=w2">' in noscript
+    assert "reload" not in noscript
+    assert rig.http.get("/feed?ws=w2").status_code == 200
+
+
+H1 = re.compile(r"<h1[\s>]")
+
+
+@pytest.mark.parametrize("state", STATES, ids=[s.name for s in STATES])
+def test_every_page_has_exactly_one_page_heading(state: State, tmp_path: Path) -> None:
+    page = build(state, tmp_path).http.get(state.path, follow_redirects=False)
+    if not page.text.lower().startswith("<!doctype html"):
+        pytest.skip("not a page: a refusal or a redirect")
+    assert len(H1.findall(page.text)) == 1
 
 
 def test_who_spoke_is_said_in_words(tmp_path: Path) -> None:

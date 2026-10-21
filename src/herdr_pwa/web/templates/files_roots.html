@@ -6,7 +6,7 @@
 {% block topbar %}<a class="leave topbar__back" href="/" aria-label="Back to herd" {{ replace() }}>&lsaquo; Herd</a><span class="topbar__title">files</span>{% endblock %}
 {% block body %}
 <main class="feed-host">
-  {{ ui.section_head("Repositories", roots|length) }}
+  {{ ui.section_head("Repositories", roots|length, level=1) }}
   {% if roots %}
   <ul class="cards">
     {% for r in roots %}

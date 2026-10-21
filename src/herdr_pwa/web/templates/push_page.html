@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% import "_ui.html" as ui %}
 {% block title %}alerts &mdash; herdr{% endblock %}
-{% block topbar %}<span class="topbar__title">alerts</span>{% endblock %}
+{% block topbar %}<h1 class="topbar__title">alerts</h1>{% endblock %}
 {% block body %}
 <main class="sheet" id="push-panel"{% if push %} data-hp-push="on"{% endif %}>
   {% if not push %}

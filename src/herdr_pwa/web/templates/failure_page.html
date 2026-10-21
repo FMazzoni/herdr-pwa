@@ -2,5 +2,5 @@
 {% block title %}{{ failure.headline }} &mdash; herdr{% endblock %}
 {% block head %}{% if poll_url %}<meta http-equiv="refresh" content="{{ cadence }}">{% endif %}{% endblock %}
 {% block body %}
-<main class="feed-host">{% include "failure.html" %}</main>
+<main class="feed-host"><h1 class="sr-only">{{ failure.headline }}</h1>{% include "failure.html" %}</main>
 {% endblock %}
