@@ -504,8 +504,15 @@ def _titled_message(paragraphs: list[str]) -> str:
     return ""
 
 
-# A counter or clock in a row label ticks while the question stays put.
+# A run of digits: what a countdown, a clock or a token counter changes while a question stays put.
 _DIGITS_RE: Final = re.compile(r"\d+")
+
+
+def digits_masked(text: str) -> str:
+    """*text* with every run of digits drawn as ``#``, so a ticking count reads as the same."""
+    return _DIGITS_RE.sub("#", text)
+
+
 _COUNTER_RE: Final = re.compile(r"^Question \d+/\d+\b[^\n]*\n")
 """codex's ``Question N/M`` counter, heading the question it counts, whatever that ends with."""
 
@@ -734,7 +741,7 @@ class BlockedPrompt(BaseModel):
             options=_choices(buttons) if shape is MenuShape.BUTTONS else _options(run, shape),
             stepper=_stepper(lines, stop) or _tabs_strip(lines, stop, hints),
             body=_body(lines, box),
-            drawn_labels=tuple(_DIGITS_RE.sub("#", label) for _, _, label in found or ()),
+            drawn_labels=tuple(digits_masked(label) for _, _, label in found or ()),
             asked=bool(_asks(lines, stop)),
             raw=screen.text,
             shape=shape,

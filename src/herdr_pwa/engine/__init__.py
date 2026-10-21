@@ -27,7 +27,13 @@ from herdr_pwa.engine.client import (
     StartedAgent,
 )
 from herdr_pwa.engine.config import EngineSettings, engine_settings
-from herdr_pwa.engine.dialog import BlockedPrompt, KeyHint, MenuShape, ends_a_question
+from herdr_pwa.engine.dialog import (
+    BlockedPrompt,
+    KeyHint,
+    MenuShape,
+    digits_masked,
+    ends_a_question,
+)
 from herdr_pwa.engine.holder import holds_session
 from herdr_pwa.engine.model import (
     Agent,
@@ -169,6 +175,7 @@ __all__ = [
     "as_pane_id",
     "as_session_id",
     "chat_window",
+    "digits_masked",
     "ends_a_question",
     "ends_refused",
     "engine_settings",
