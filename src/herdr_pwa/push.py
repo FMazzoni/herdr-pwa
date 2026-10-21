@@ -252,7 +252,15 @@ def load_or_create_vapid_keys(state_dir: Path, *, clock: Clock = time.time) -> V
     return document.keys(path)
 
 
-_ENDPOINT_RE: Final = re.compile(r"https://[^\s/@]+(?:/\S*)?")
+_HTTPS: Final = "https://"
+
+
+def _is_https_url(endpoint: str) -> bool:
+    # A host with no userinfo, then any path: whitespace nowhere, a trailing newline included.
+    host = endpoint.removeprefix(_HTTPS).partition("/")[0]
+    if not endpoint.startswith(_HTTPS) or not host or "@" in host:
+        return False
+    return not any(c.isspace() for c in endpoint)
 
 
 def _is_push_service(host: str) -> bool:
@@ -262,7 +270,7 @@ def _is_push_service(host: str) -> bool:
 def _checked_endpoint(endpoint: str) -> str:
     if len(endpoint) > MAX_ENDPOINT_CHARS:
         raise ValueError(f"endpoint is over the {MAX_ENDPOINT_CHARS} character cap")
-    if not _ENDPOINT_RE.fullmatch(endpoint):
+    if not _is_https_url(endpoint):
         raise ValueError("endpoint must be an https:// URL")
     parts = urlsplit(endpoint)
     try:

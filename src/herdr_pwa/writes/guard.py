@@ -12,11 +12,9 @@ MAX_PROMPT_CHARS: Final = 4000
 # Eight characters: enough that the needle is this send's, short enough to survive a wrap.
 MIN_MATCH_CHARS: Final = 8
 
-_SPACE: Final = re.compile(r"\s+")
-
 
 def _flat(text: str) -> str:
-    return _SPACE.sub(" ", text).strip()
+    return " ".join(text.split())
 
 
 def _above_the_box(screen: str) -> str:

@@ -5,6 +5,7 @@ from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
+from string import ascii_lowercase
 from typing import Final, Self
 
 from pydantic import BaseModel, ConfigDict, field_validator
@@ -137,7 +138,6 @@ opencode puts two spaces between hint pairs on the same line (measured on its
 permission dialog, where the buttons share that line).
 """
 
-_LIST_OR: Final = re.compile(r"(?i)^\s*or\s+")
 
 _TRAILING_PAREN_RE: Final = re.compile(r"(?<=\S)\s*\([^()]*\)\s*$")
 
@@ -175,7 +175,9 @@ opencode advertises a horizontal select as ``⇆`` and a vertical one as ``↑�
 one token each (measured on its dialogs).
 """
 
-_CTRL_RE: Final = re.compile(r"^ctrl[+-]([a-z])$")
+_CTRL: Final = ("ctrl+", "ctrl-")
+
+_CTRL_KEY_CHARS: Final = len("ctrl+e")
 
 _MAX_HINTS: Final = 4
 
@@ -251,10 +253,17 @@ class KeyHint(BaseModel):
         return _HANDOFF_RE.search(self.verb) is not None
 
 
+def _ctrl_letter(key: str) -> str | None:
+    """The letter a ``ctrl+e`` or ``ctrl-e`` key names, or ``None``."""
+    if len(key) == _CTRL_KEY_CHARS and key.startswith(_CTRL) and key[-1] in ascii_lowercase:
+        return key[-1]
+    return None
+
+
 def _key_label(key: str) -> str:
     """A key name as a human reads it on a button: ``ctrl-e`` -> ``Ctrl+E``."""
-    if (m := _CTRL_RE.match(key)) is not None:
-        return f"Ctrl+{m.group(1).upper()}"
+    if (letter := _ctrl_letter(key)) is not None:
+        return f"Ctrl+{letter.upper()}"
     return key.capitalize()
 
 
@@ -271,8 +280,8 @@ def _keys_in(token: str, verb: str = "") -> tuple[str, ...]:
         piece = raw.strip().strip(".")
         if not piece:
             continue
-        if (ctrl := _CTRL_RE.match(piece)) is not None:
-            found.append(f"ctrl-{ctrl.group(1)}")
+        if (letter := _ctrl_letter(piece)) is not None:
+            found.append(f"ctrl-{letter}")
             continue
         if piece == "\u21c6":
             # The glyph names whatever moves between the things the screen shows: on a
@@ -317,6 +326,14 @@ def _footer_lines(lines: list[str]) -> list[str]:
     return list(reversed(found))
 
 
+def _without_list_or(part: str) -> str:
+    """*part* without the ``or`` that closes a list, as in ``type 1/2/3, or ↑/↓``."""
+    rest = part.lstrip()
+    if rest[:2].lower() == "or" and rest[2:3].isspace():
+        return rest[2:].lstrip()
+    return part
+
+
 def _segments(line: str) -> list[str]:
     """One footer line as hint-sized pieces, commas used only where they must be."""
     pieces: list[str] = []
@@ -326,7 +343,7 @@ def _segments(line: str) -> list[str]:
             pieces.append(segment)
             continue
         # "type 1/2/3, or ↑/↓ to select" (hermes): the "or" closes the list, it names no key.
-        parts = (_LIST_OR.sub("", part) for part in whole.split(","))
+        parts = (_without_list_or(part) for part in whole.split(","))
         pieces.extend(part for part in parts if part.strip())
     return pieces
 
@@ -936,9 +953,13 @@ _STRIP_WINDOW: Final = 4
 """How far above the options a tabs strip may sit and still be its own."""
 
 
+# A tabs strip's headers stand three or more spaces apart, wider than the words inside one.
+_STRIP_GAP: Final = re.compile(r"\s{3,}")
+
+
 def _strip_tokens(line: str) -> tuple[str, ...]:
     """A candidate tabs-strip line as its header tokens, or ``()``."""
-    tokens = [t.strip() for t in re.split(r"\s{3,}", line.strip()) if t.strip()]
+    tokens = [t.strip() for t in _STRIP_GAP.split(line.strip()) if t.strip()]
     if not _MIN_STRIP_TOKENS <= len(tokens) <= _MAX_STRIP_TOKENS:
         return ()
     if not all(_HEADER_TOKEN.match(t) for t in tokens):
@@ -1115,9 +1136,11 @@ def _is_interleave(line: str) -> bool:
     return _is_inert(line) or line[:1].isspace() or bool(_PARKED_RE.match(line))
 
 
-_PANEL_TOP_RE: Final = re.compile(rf"^\s*{glyphs.one_of(glyphs.TOP_LEFT)}")
+def _opens_with(line: str, corners: str) -> bool:
+    """Does *line*, past its indent, open with one of *corners*?"""
+    rest = line.lstrip()
+    return bool(rest) and rest[0] in corners
 
-_PANEL_BOTTOM_RE: Final = re.compile(rf"^\s*{glyphs.one_of(glyphs.BOTTOM_LEFT)}")
 
 _PANEL_TAIL: Final = 6
 
@@ -1152,13 +1175,13 @@ def _panel_footer(lines: list[str]) -> list[str]:
 def _panel_screen(lines: list[str]) -> list[str] | None:
     """A drawn dialog panel and its footer, as a screen of its own."""
     top = next(
-        (i for i in range(len(lines) - 1, -1, -1) if _PANEL_TOP_RE.match(lines[i])),
+        (i for i in range(len(lines) - 1, -1, -1) if _opens_with(lines[i], glyphs.TOP_LEFT)),
         None,
     )
     if top is None:
         return None
     bottom = next(
-        (i for i in range(top + 1, len(lines)) if _PANEL_BOTTOM_RE.match(lines[i])),
+        (i for i in range(top + 1, len(lines)) if _opens_with(lines[i], glyphs.BOTTOM_LEFT)),
         None,
     )
     if bottom is None:
@@ -1188,7 +1211,7 @@ def _closing_box(lines: list[str]) -> range | None:
         end -= 1
     if not end or not _BOX_BOTTOM_RE.match(lines[end - 1]):
         return None
-    top = next((i for i in range(end - 2, -1, -1) if _PANEL_TOP_RE.match(lines[i])), None)
+    top = next((i for i in range(end - 2, -1, -1) if _opens_with(lines[i], glyphs.TOP_LEFT)), None)
     if top is None:
         return None
     inside = range(top + 1, end - 1)
@@ -1273,7 +1296,15 @@ def _is_chrome(line: str) -> bool:
     return bool(_DIVIDER_RE.match(line)) or bool(_FOOTER_RE.search(line)) or is_key_hint(line)
 
 
-_MARKER_LEAD: Final = re.compile(r"^[\s\u25cf\u25cb\u2022\u00b7]+")
+_MARKS: Final = "\u25cf\u25cb\u2022\u00b7"
+
+
+def _unmarked(line: str) -> str:
+    """*line* without the indent and the bullets a dialog leads its text with."""
+    at = 0
+    while at < len(line) and (line[at].isspace() or line[at] in _MARKS):
+        at += 1
+    return line[at:]
 
 
 def _box_start(lines: list[str], stop: int, barred: list[bool] | None = None) -> int:
@@ -1292,7 +1323,7 @@ def _box_start(lines: list[str], stop: int, barred: list[bool] | None = None) ->
 
 def _body(lines: list[str], box: range) -> str:
     """What is being asked ABOUT: the dialog's text above the options."""
-    kept = (_MARKER_LEAD.sub("", line).rstrip() for line in lines[box.start : box.stop])
+    kept = (_unmarked(line).rstrip() for line in lines[box.start : box.stop])
     return "\n".join(line for line in kept if line)
 
 

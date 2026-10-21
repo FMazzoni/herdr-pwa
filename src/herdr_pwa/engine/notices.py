@@ -43,7 +43,7 @@ _KINDS: Final = MappingProxyType(
 )
 _EXIT: Final = re.compile(r"exit code (-?\d+)")
 # What the harness puts in an agent's result in place of the report it delivers as a message.
-_RELAYED: Final = re.compile(r"\AThis agent(?:'s report was delivered| has not reported yet)")
+_RELAYED: Final = ("This agent's report was delivered", "This agent has not reported yet")
 
 
 class RecordOrigin(BaseModel):
@@ -131,7 +131,7 @@ class TaskNotice:
     @property
     def said(self) -> str:
         """The result worth showing: an agent's is only a pointer at its report when relayed."""
-        return "" if _RELAYED.match(self.result) else self.result
+        return "" if self.result.startswith(_RELAYED) else self.result
 
 
 @dataclass(frozen=True, slots=True)
@@ -290,8 +290,9 @@ def without_reminders(text: str) -> str:
 
 def _tag(body: str, name: str) -> str:
     """A tag's text, its XML entities decoded here and nowhere else (the page escapes it once)."""
-    found = re.search(rf"<{name}>(.*?)</{name}>", body, re.DOTALL)
-    return html.unescape(found.group(1).strip()) if found else ""
+    opened = body.find(f"<{name}>")
+    closed = body.find(f"</{name}>", opened + len(name) + 2) if opened >= 0 else -1
+    return html.unescape(body[opened + len(name) + 2 : closed].strip()) if closed >= 0 else ""
 
 
 def _millis(text: str) -> int:
