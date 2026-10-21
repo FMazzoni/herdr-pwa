@@ -51,7 +51,7 @@
    * server still holds an unconfirmed key, for a page with no script or a stale one. */
   var DISARM_MS = 5000;
   var STOPPING_MS = 3000;
-  // A control that just changed role takes no tap for this long (docs/design.md, G3).
+  // A control that just changed role takes no tap this long, so a tap meant for its old role misses.
   var SETTLE_MS = 300;
   var arming = "";
   var armedAt = 0;

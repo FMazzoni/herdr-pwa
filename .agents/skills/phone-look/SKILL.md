@@ -118,7 +118,15 @@ Never hand-write a comparison page or draw a wireframe in CSS: shoot the real th
 
 ## Rubric
 
-Judge every phone screen against each item of the rubric in `docs/design.md`.
+Judge every phone screen against each of these:
+
+- The thing that needs you is on the first screen.
+- The composer is in thumb reach.
+- Destructive actions are set apart from safe ones.
+- Long tokens truncate with an ellipsis; they don't wrap across lines.
+- Tap targets are at least 44px.
+- There is no empty block above the fold.
+- Back from anywhere lands on the feed.
 
 Back behaviour and the iOS edge swipe cannot be seen in a still picture, and no Linux
 engine reproduces the gesture. Judge back from the links on the page, and leave the

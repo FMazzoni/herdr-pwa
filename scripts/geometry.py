@@ -64,7 +64,7 @@ TEXT_SIZES = (1.3, 2.0)
 TEXT_WIDTHS = (430, 320)
 # Apple's HIG minimum and WCAG 2.5.5: 44 CSS px in both directions.
 TAP_FLOOR = 44
-# How far from Send anything that stops a turn now must stay (docs/design.md).
+# Anything that stops a turn stays this far from Send, so a thumb aimed at Send stops nothing.
 STOP_REACH = 120
 # iOS Safari zooms the page into a focused field whose text is under 16px, and does not zoom back.
 FIELD_FONT_FLOOR = 16
