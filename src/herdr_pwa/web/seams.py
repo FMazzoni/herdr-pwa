@@ -34,7 +34,7 @@ class Seams:
     client_factory: ClientFactory | None = None
     # None is the real sender, armed with this box's key.
     deliver: Deliver | None = None
-    # How long a send, and a whole fan-out, may hold the notifier.
+    # The bounds on Web Push: how many devices, and how long a send and a fan-out may take.
     push_limits: PushLimits = PUSH_LIMITS
     write: Callable[[str], object] = sys.stdout.write
     local_api: Callable[[Path], LocalApi] = LocalApi

@@ -1,7 +1,7 @@
 """The notifier loop over a fake runner: what it reads, what it sends, and when it stays out."""
 
 import asyncio
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import pytest
@@ -17,7 +17,7 @@ from herdr_pwa.engine import (
 )
 from herdr_pwa.notify import NotifyConfig
 from herdr_pwa.protocol import WRITE_METHODS
-from herdr_pwa.push import PUSH_LIMITS, DeliveryError, Subscription
+from herdr_pwa.push import PUSH_LIMITS, DeliveryError, Subscription, SubscriptionError
 from herdr_pwa.settings import Settings
 from herdr_pwa.web.app import create_app
 from herdr_pwa.web.notifier import HerdSource, LoopConfig, Notifier, PushStores, open_push
@@ -280,6 +280,17 @@ def test_push_is_not_armed_without_a_contact_and_says_so(tmp_path: Path) -> None
     assert state is not None
     assert state.notifier is None
     assert "HP_PUSH_SUBJECT" in state.reason
+
+
+def test_the_device_cap_comes_from_the_seams_push_limits(tmp_path: Path) -> None:
+    settings = Settings(state_dir=tmp_path / "state", socket_path=tmp_path / "no.sock")
+    reader = HerdrClient(engine_settings(settings), transport=FakeWire())
+    herd = HerdSource(reader, SnapshotCache(ttl=1.0), Stalls(tmp_path))
+    state = open_push(settings, herd, Seams(push_limits=replace(PUSH_LIMITS, max_devices=1)))
+    assert state is not None
+    _ = state.stores.devices.add(subscribed())
+    with pytest.raises(SubscriptionError, match="remove one first"):
+        _ = state.stores.devices.add(subscribed(f"{ENDPOINT}-second"))
 
 
 def test_the_app_starts_and_stops_the_loop_with_its_lifespan(tmp_path: Path) -> None:

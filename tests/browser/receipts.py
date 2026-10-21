@@ -14,9 +14,15 @@ from scripts.firefox import available
 BROWSER = "browser"
 FORCE = "--browser-force"
 _FINGERPRINT = pytest.StashKey[str]()
+# Where the receipts go; a run that sets none uses the gate's own.
+GATE = pytest.StashKey[geometry_gate.GateConfig]()
 # Whether every phase so far passed, and how long the call took.
 _CLEAN = pytest.StashKey[bool]()
 _SECONDS = pytest.StashKey[float]()
+
+
+def _gate(config: pytest.Config) -> geometry_gate.GateConfig:
+    return config.stash.get(GATE, geometry_gate.CONFIG)
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
@@ -30,7 +36,7 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     if config.getoption(FORCE, default=False):
         return
     for item in walks:
-        if geometry_gate.walk_receipt(current, item.nodeid).is_file():
+        if geometry_gate.walk_receipt(current, item.nodeid, _gate(config)).is_file():
             item.add_marker(pytest.mark.skip(reason=f"browser green for {current}"))
 
 
@@ -49,5 +55,6 @@ def pytest_runtest_makereport(
         item.stash[_SECONDS] = report.duration
     # The fixture's teardown judges page errors, so a pass is only known after it.
     if report.when == "teardown" and clean:
-        geometry_gate.record_walk(current, item.nodeid, item.stash.get(_SECONDS, 0.0))
+        seconds = item.stash.get(_SECONDS, 0.0)
+        geometry_gate.record_walk(current, item.nodeid, seconds, _gate(item.config))
     return report

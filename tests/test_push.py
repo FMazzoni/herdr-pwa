@@ -653,7 +653,7 @@ def test_an_endpoint_ending_in_a_newline_is_refused() -> None:
 def test_an_eleventh_device_is_refused_but_a_known_one_still_updates(
     store: SubscriptionStore,
 ) -> None:
-    endpoints = [f"https://fcm.googleapis.com/fcm/send/{n}" for n in range(push.MAX_DEVICES)]
+    endpoints = [f"https://fcm.googleapis.com/fcm/send/{n}" for n in range(PUSH_LIMITS.max_devices)]
     for endpoint in endpoints:
         _ = store.add(subscribed(endpoint))
     with pytest.raises(SubscriptionError, match="remove one first"):

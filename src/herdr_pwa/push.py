@@ -56,8 +56,6 @@ MAX_AGENT_CHARS: Final = 64
 # Push services reject roughly 4 KiB after encryption.
 MAX_PAYLOAD_BYTES: Final = 3072
 MAX_ENDPOINT_CHARS: Final = 2048
-# Each tick sends to every device in turn, so the count bounds how long a fan-out can take.
-MAX_DEVICES: Final = 10
 # The browsers' push services; anything else is a host the box would be told to post to.
 PUSH_SERVICES: Final = (
     "push.apple.com",
@@ -76,6 +74,21 @@ _AUTH_BYTES: Final = 16
 _UNCOMPRESSED: Final = 0x04
 # The order n of P-256 (SEC 2, 2.4.2); a private scalar must lie in [1, n-1].
 _P256_ORDER: Final = 0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551
+
+
+@dataclass(frozen=True, slots=True)
+class PushLimits:
+    """The bounds on Web Push: how many devices, and how long a send and a fan-out may take."""
+
+    # Each tick sends to every device in turn, so the count bounds how long a fan-out can take.
+    max_devices: int = 10
+    # Seconds one send may wait to connect, and again to read; a stalled service must not hold it.
+    send_timeout: float = 10.0
+    # A fan-out that has spent this long skips its remaining devices, bounding the notifier's lock.
+    fan_out_budget: float = 30.0
+
+
+PUSH_LIMITS: Final = PushLimits()
 
 
 class PushError(Exception):
@@ -343,9 +356,12 @@ class _StoreDocument(BaseModel):
 class SubscriptionStore:
     """Every subscribed device in one 0600 JSON file, keyed by endpoint."""
 
-    def __init__(self, state_dir: Path, *, clock: WallClock = wall_now) -> None:
+    def __init__(
+        self, state_dir: Path, *, clock: WallClock = wall_now, limits: PushLimits = PUSH_LIMITS
+    ) -> None:
         self._state_dir: Path = state_dir
         self._clock: WallClock = clock
+        self._max_devices: int = limits.max_devices
         # The routes and the notifier's pruning thread both rewrite the file from what they read.
         self._lock: threading.Lock = threading.Lock()
 
@@ -379,12 +395,12 @@ class SubscriptionStore:
         """Store a device; the same endpoint again updates its keys and keeps its stamp.
 
         Raises:
-            SubscriptionError: the store already holds ``MAX_DEVICES`` other devices.
+            SubscriptionError: the store already holds ``limits.max_devices`` other devices.
         """
         with self._lock:
             current = self.list_all()
             previous = next((one for one in current if one.endpoint == subscription.endpoint), None)
-            if previous is None and len(current) >= MAX_DEVICES:
+            if previous is None and len(current) >= self._max_devices:
                 raise SubscriptionError(
                     f"already {len(current)} devices, the most this server sends to; "
                     "remove one first"
@@ -561,19 +577,6 @@ def _phrase(status: int) -> str:
         return f"{status} {HTTPStatus(status).phrase}"
     except ValueError:
         return str(status)
-
-
-@dataclass(frozen=True, slots=True)
-class PushLimits:
-    """How long one send, and one whole fan-out, may hold the notifier."""
-
-    # Seconds one send may wait to connect, and again to read; a stalled service must not hold it.
-    send_timeout: float = 10.0
-    # A fan-out that has spent this long skips its remaining devices, bounding the notifier's lock.
-    fan_out_budget: float = 30.0
-
-
-PUSH_LIMITS: Final = PushLimits()
 
 
 @dataclass(frozen=True, slots=True)

@@ -27,6 +27,7 @@ from herdr_pwa.managed import ManagedHerd
 from herdr_pwa.notify import AgentView, Hooks, NotifyConfig, Planner, Slot, Step, notice_for
 from herdr_pwa.notify_state import InterruptStore, SeenLedger, StatusLedger
 from herdr_pwa.push import (
+    PUSH_LIMITS,
     Deliver,
     DeliveryLog,
     FanOut,
@@ -94,11 +95,13 @@ class PushStores:
     state_dir: Path
 
     @classmethod
-    def open(cls, state_dir: Path, *, clock: WallClock = wall_now) -> Self:
+    def open(
+        cls, state_dir: Path, *, clock: WallClock = wall_now, limits: PushLimits = PUSH_LIMITS
+    ) -> Self:
         """Load or create the VAPID key; a corrupt one raises rather than orphaning devices."""
         return cls(
             keys=load_or_create_vapid_keys(state_dir, clock=clock),
-            devices=SubscriptionStore(state_dir, clock=clock),
+            devices=SubscriptionStore(state_dir, clock=clock, limits=limits),
             interrupts=InterruptStore(state_dir, clock=clock),
             seen=SeenLedger(state_dir, clock=clock),
             health=DeliveryLog(state_dir, clock=clock),
@@ -329,7 +332,7 @@ def open_push(settings: Settings, herd: HerdSource, seams: Seams) -> PushState |
     if not settings.push_enabled:
         log.info("push is off (HP_PUSH_ENABLED=0): no key, no routes answer, no loop")
         return None
-    stores = PushStores.open(settings.state_dir, clock=seams.wall)
+    stores = PushStores.open(settings.state_dir, clock=seams.wall, limits=seams.push_limits)
     if not settings.push_notifier:
         return PushState(stores, None, "the notifier is switched off (HP_PUSH_NOTIFIER=0)")
     try:

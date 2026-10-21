@@ -13,6 +13,7 @@ import textwrap
 import threading
 import time
 from collections.abc import Callable, Iterator, Mapping, Sequence
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -29,13 +30,13 @@ from herdr_pwa.engine import (
     RequestTooLarge,
     TargetNotFound,
     Transport,
+    WireLimits,
 )
 from tests._jsonpath import at
 from tests.engine_seam import (
-    BACKOFF_CAP,
     EVENT_SUBSCRIBE,
     MAX_REQUEST_BYTES,
-    MAX_STRAY_FRAMES,
+    WIRE_LIMITS,
     SocketTransport,
 )
 from tests.waiting import eventually, until
@@ -163,8 +164,10 @@ def serve(path: Path, handler: Handler, request: pytest.FixtureRequest) -> FakeH
 class Tracked(SocketTransport):
     """A transport that keeps every socket it made, so a test can see each one was closed."""
 
-    def __init__(self, path: Path, *, timeout: float = FAST) -> None:
-        super().__init__(path, timeout=timeout)
+    def __init__(
+        self, path: Path, *, timeout: float = FAST, limits: WireLimits = WIRE_LIMITS
+    ) -> None:
+        super().__init__(path, timeout=timeout, limits=limits)
         self.opened: list[socket.socket] = []
 
     def _new_socket(self) -> socket.socket:
@@ -181,8 +184,9 @@ def transport(
     *,
     timeout: float = FAST,
     clock: MonoClock = mono_now,
+    limits: WireLimits = WIRE_LIMITS,
 ) -> SocketTransport:
-    return SocketTransport(path, timeout=timeout, clock=clock)
+    return SocketTransport(path, timeout=timeout, clock=clock, limits=limits)
 
 
 # --------------------------------------------------------------------------
@@ -701,9 +705,8 @@ def test_a_frame_with_no_terminator_is_cut_off_rather_than_buffered_forever(
                 return
 
     serve(sock_path, handler, request)
-    wire = Tracked(sock_path, timeout=2.0)
     # A small bound, so the endless line overruns it in two frames rather than thousands.
-    wire.max_frame_bytes = 8192
+    wire = Tracked(sock_path, timeout=2.0, limits=replace(WIRE_LIMITS, max_frame_bytes=8192))
     with pytest.raises(InvalidResponse) as exc:
         wire.call("session.snapshot", {})
     assert "terminator" in exc.value.message
@@ -792,7 +795,7 @@ def test_a_stream_that_only_answers_other_ids_is_declared_out_of_step(
     sock_path: Path, request: pytest.FixtureRequest
 ) -> None:
     def handler(_req: dict[str, JsonValue], _conn: socket.socket) -> bytes:
-        return _line({"id": "wrong", "result": {"type": "ok"}}) * (MAX_STRAY_FRAMES + 2)
+        return _line({"id": "wrong", "result": {"type": "ok"}}) * (WIRE_LIMITS.max_stray_frames + 2)
 
     serve(sock_path, handler, request)
     wire = Tracked(sock_path)
@@ -912,12 +915,13 @@ def test_the_backoff_is_bounded_and_a_success_clears_it(
     sock_path: Path, request: pytest.FixtureRequest
 ) -> None:
     clock = Clock()
-    wire = transport(sock_path, clock=clock)
+    # A cap of its own, so the bound shown is the one the transport was handed.
+    wire = transport(sock_path, clock=clock, limits=replace(WIRE_LIMITS, backoff_cap=0.8))
     for _ in range(10):  # ten failed dials, doubling each time, well past the cap
         clock.now += 100
         with pytest.raises(EngineUnavailable):
             wire.call("session.snapshot", {})
-    assert wire._backoff == BACKOFF_CAP  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
+    assert wire._backoff == 0.8  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
 
     serve(sock_path, ok, request)
     clock.now += 100
@@ -1354,12 +1358,32 @@ def test_a_reply_the_schema_rejects_never_confirms_the_subscription(
     """Only a frame herdr's schema reads as ``subscription_started`` opens the stream."""
 
     def handler(req: dict[str, JsonValue], conn: socket.socket) -> None:
-        for _ in range(MAX_STRAY_FRAMES):
+        for _ in range(WIRE_LIMITS.max_stray_frames):
             conn.sendall(_line({"id": req["id"], "result": {"type": "no_such_arm"}}))
 
     serve(sock_path, handler, request)
     with pytest.raises(InvalidResponse, match="never confirmed the subscription"):
         list(stream(sock_path))
+
+
+def test_a_stream_reads_only_as_many_stray_frames_as_its_limits_allow(
+    sock_path: Path, request: pytest.FixtureRequest
+) -> None:
+    def handler(req: dict[str, JsonValue], conn: socket.socket) -> None:
+        conn.sendall(_line({"id": req["id"], "result": {"type": "no_such_arm"}}))
+        conn.sendall(_line({"id": req["id"], "result": {"type": "subscription_started"}}))
+        # A stream that read past its limit ends on this hang-up rather than waiting for events.
+        conn.close()
+
+    serve(sock_path, handler, request)
+    one = EventStream(
+        sock_path,
+        subscriptions=[{"type": "pane.agent_status_changed", "pane_id": "w1:p1"}],
+        timeout=FAST,
+        limits=replace(WIRE_LIMITS, max_stray_frames=1),
+    )
+    with pytest.raises(InvalidResponse, match="after 1 frames"):
+        list(one)
 
 
 def test_close_from_another_thread_ends_the_iteration(

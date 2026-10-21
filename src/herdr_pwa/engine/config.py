@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 
+from herdr_pwa.engine.transport import WIRE_LIMITS, WireLimits
 from herdr_pwa.protocol import DEFAULT_SOCKET_PATH, EXPECTED_PROTOCOL
 from herdr_pwa.settings import Settings
 
@@ -21,6 +22,8 @@ class EngineSettings:
     read_lines: int = 200
     # Measured on herdr 0.8.0: 25 lines 2ms, 50 lines 1213ms, 200 lines 6905ms.
     recent_max_lines: int = 25
+    # How the socket backs off a dead runner and how far it reads past stray frames.
+    wire: WireLimits = WIRE_LIMITS
 
 
 def engine_settings(settings: Settings) -> EngineSettings:

@@ -5,6 +5,7 @@ import hashlib
 import json
 import sys
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
@@ -17,9 +18,21 @@ from tests.catalogue import CAPTURES  # noqa: E402 - after the sys.path line tha
 # Per user rather than per worktree: a fresh worktree whose guarded files match a tree already
 # measured reuses that receipt. A cache of a result, never a record anyone reviews.
 CACHE: Final = Path.home() / ".cache" / "herdr-pwa"
-RECEIPTS: Final = CACHE / "geometry"
-# One receipt per browser test that passed, under the tree's fingerprint, so pytest skips it.
-WALK_RECEIPTS: Final = RECEIPTS / "walks"
+
+
+@dataclass(frozen=True, slots=True)
+class GateConfig:
+    """Where the gate keeps its receipts: one per green run, and one per browser test that passed."""
+
+    receipts: Path = CACHE / "geometry"
+
+    @property
+    def walks(self) -> Path:
+        """One receipt per browser test that passed, under the tree's fingerprint, so pytest skips it."""
+        return self.receipts / "walks"
+
+
+CONFIG: Final = GateConfig()
 
 # Everything that decides what the browser lays out, plus the harness itself.
 GUARDED: Final = (
@@ -68,26 +81,26 @@ def fingerprint() -> str:
     return digest.hexdigest()[:16]
 
 
-def receipt(current: str) -> Path:
+def receipt(current: str, config: GateConfig = CONFIG) -> Path:
     """Where a green run for ``current`` leaves its receipt."""
-    return RECEIPTS / f"{current}.json"
+    return config.receipts / f"{current}.json"
 
 
-def walk_receipt(current: str, test: str) -> Path:
+def walk_receipt(current: str, test: str, config: GateConfig = CONFIG) -> Path:
     """Where browser test ``test`` (a pytest node id) leaves its receipt for tree ``current``."""
     name = hashlib.sha256(test.encode()).hexdigest()[:16]
-    return WALK_RECEIPTS / current / f"{name}.json"
+    return config.walks / current / f"{name}.json"
 
 
-def record_walk(current: str, test: str, seconds: float) -> None:
+def record_walk(current: str, test: str, seconds: float, config: GateConfig = CONFIG) -> None:
     """Leave the receipt that lets ``test`` be skipped until ``current`` changes."""
-    path = walk_receipt(current, test)
+    path = walk_receipt(current, test, config)
     path.parent.mkdir(parents=True, exist_ok=True)
     body = {"fingerprint": current, "test": test, "seconds": round(seconds, 1)}
     path.write_text(json.dumps(body, indent=2) + "\n", encoding="utf-8")
 
 
-def run(current: str) -> int:
+def run(current: str, config: GateConfig = CONFIG) -> int:
     """Run the checks in this interpreter and write the receipt only if every one passed."""
     # Imported late so a receipt hit skips loading it; its browsers live in its own workers.
     import geometry  # noqa: PLC0415 - late, so a receipt hit never loads it
@@ -98,9 +111,9 @@ def run(current: str) -> int:
         print(f"geometry: RED for {current}; no receipt written", file=sys.stderr)
         return code
     seconds = round(time.monotonic() - started, 1)
-    RECEIPTS.mkdir(parents=True, exist_ok=True)
+    config.receipts.mkdir(parents=True, exist_ok=True)
     body = {"fingerprint": current, "seconds": seconds, "files": len(guarded_files())}
-    receipt(current).write_text(json.dumps(body, indent=2) + "\n", encoding="utf-8")
+    receipt(current, config).write_text(json.dumps(body, indent=2) + "\n", encoding="utf-8")
     print(f"geometry green for {current} in {seconds}s; receipt written")
     return 0
 

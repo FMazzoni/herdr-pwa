@@ -3,7 +3,7 @@
 import zlib
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Final
+from typing import Final, Literal
 
 from herdr_pwa.clock import duration, duration_said, elapsed
 from herdr_pwa.decisions import QUIET_AFTER, gone_quiet, needs_you, still_talking
@@ -281,11 +281,19 @@ class Turning:
 NOT_TURNING: Final = Turning()
 
 
+# What the bubble shows: a turn at work, one gone quiet, or one waiting on the person.
+type BubbleState = Literal["working", "quiet", "blocked"]
+# The status row's state: the bubble's, else background work, a finished turn, or nothing.
+type RowState = BubbleState | Literal["background", "done", "still"]
+# Where one background agent or shell is.
+type LineState = Literal["running", "failed", "finished"]
+
+
 @dataclass(frozen=True, slots=True)
 class Bubble:
     """The status bubble: its state, its words, what VoiceOver hears, and its clocks."""
 
-    state: str
+    state: BubbleState
     text: str
     # Said when the state changes; the bubble's own words are for reading, not for announcing.
     said: str
@@ -306,7 +314,7 @@ class AgentLine:
     """One background agent under the bubble: what it was asked, where it is, and for how long."""
 
     description: str
-    state: str
+    state: LineState
     time: str = ""
 
 
@@ -315,7 +323,7 @@ _SHELL_CHARS: Final = 120
 
 
 def _agent_line(agent: SpawnedTime) -> AgentLine:
-    state = "running" if agent.running else "failed" if agent.failed else "finished"
+    state: LineState = "running" if agent.running else "failed" if agent.failed else "finished"
     time = elapsed(agent.seconds) if agent.seconds is not None else ""
     if agent.kind == SPAWNED_SHELL:
         return AgentLine(agent.description[:_SHELL_CHARS] or "Shell", state, time)
@@ -519,7 +527,7 @@ def chat_view(
 class Row:
     """The status row above the composer: its state, what still runs, and what waits."""
 
-    state: str
+    state: RowState
     running: int
     queued: int
     lead: str
@@ -536,6 +544,7 @@ def status_row(view: ChatView, status: str) -> Row:
     running = sum(1 for agent in view.agents if agent.state == "running")
     shells = sum(1 for shell in view.shells if shell.state == "running")
     queued = len(view.queued)
+    state: RowState
     if view.bubble is not None:
         state, lead = view.bubble.state, view.bubble.describe
     elif running or shells:
