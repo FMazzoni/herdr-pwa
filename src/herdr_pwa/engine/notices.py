@@ -361,15 +361,16 @@ def _first_closed(text: str, tag: str) -> _Tagged | None:
     at = text.find(opener)
     while at >= 0:
         after = at + len(opener)
+        # A longer name is passed before its bracket is sought, so a run of them is read once.
+        if _word_at(text, after):
+            at = text.find(opener, after)
+            continue
         bracket = text.find(">", after)
         # A later opener's bracket comes no sooner, so no later opener can close either.
         if bracket < 0 or last_close <= bracket:
             return None
-        if not _word_at(text, after):
-            inner = text[bracket + 1 : text.find(closer, bracket + 1)]
-            inner = inner.removeprefix("\n")
-            return _Tagged(at, text[after:bracket], inner.removesuffix("\n"))
-        at = text.find(opener, after)
+        inner = text[bracket + 1 : text.find(closer, bracket + 1)].removeprefix("\n")
+        return _Tagged(at, text[after:bracket], inner.removesuffix("\n"))
     return None
 
 

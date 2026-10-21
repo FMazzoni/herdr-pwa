@@ -34,13 +34,10 @@ _MAX_RATIO = 8.0
 _REPEATS = 5
 _AGREEING = 2
 _AGREEMENT = 1.1
-# A ratio over the bound is measured again, unless it is already as steep as quadratic's 16x.
-_RETRIES = 2
-_PLAINLY_QUADRATIC = 12.0
 # Below this the clock's grain and call overhead swamp the ratio, so the input grows first.
-_FLOOR_SECONDS = 0.002
-# Past this a pattern that is still under the floor costs nothing per character, so no ratio is read.
-_MAX_LONG = 320_000
+_FLOOR_SECONDS = 0.0005
+# Past this a shape still under the floor costs nothing per character, so no ratio is read.
+_MAX_LONG = 80_000
 # A flood of 100k escapes took tens of seconds when quadratic; 5 s still catches that under a busy gate.
 _FLOOD_CPU_SECONDS = 5.0
 
@@ -117,13 +114,19 @@ def test_a_validator_refuses_a_trailing_newline(rx: Rx) -> None:
     assert [text for text in rx.matches if rx.found(text + "\n") is not None] == []
 
 
-def _long_inputs(examples: tuple[str, ...], length: int = _LONG) -> Iterator[str]:
-    """The examples and their characters, repeated to a length no screen line reaches."""
+def _runs(examples: tuple[str, ...], length: int) -> Iterator[str]:
     for example in examples:
         if example:
             yield (example * (length // len(example) + 1))[:length]
     for char in sorted(set("".join(examples))):
         yield char * length
+
+
+def _long_inputs(
+    examples: tuple[str, ...], length: int = _LONG, ends: tuple[str, ...] = ("",)
+) -> Iterator[str]:
+    """The examples and their characters, repeated to a length no screen line reaches, then each end."""
+    return (run + end for run in _runs(examples, length) for end in ends)
 
 
 def _read(rx: Rx, text: str) -> int:
@@ -144,6 +147,8 @@ def test_no_pattern_backtracks_on_long_input(rx: Rx) -> None:
 class _Reader:
     read: Callable[[str], object]
     examples: tuple[str, ...]
+    # What closes a long run, for a reader that only does work once the run can close.
+    ends: tuple[str, ...] = ("",)
 
 
 def _pattern_reader(rx: Rx) -> object:
@@ -159,9 +164,12 @@ _TAG_EXAMPLES = (
     '<cross-session-message from="b">x</cross-session-message>',
     '<agent-message from="a">x</cross-session-message>',
     "<agent-messages>x</agent-messages>",
+    "<agent-messages</agent-message>",
+    "<agent-messages",
 )
 _TAG_READER = pytest.param(
-    _Reader(partial(injected, None, human=False), _TAG_EXAMPLES), id="notices.injected"
+    _Reader(partial(injected, None, human=False), _TAG_EXAMPLES, ("", "></agent-message>")),
+    id="notices.injected",
 )
 _PASSPHRASE_EXAMPLES = (
     "Enter passphrase for key '/k':",
@@ -173,9 +181,22 @@ _PASSPHRASE_READER = pytest.param(
 )
 
 
-def _cpu(reader: _Reader, texts: list[str]) -> float:
+def _shapes(reader: _Reader) -> Iterator[tuple[str, str]]:
+    units = (
+        *(example for example in reader.examples if example),
+        *sorted(set("".join(reader.examples))),
+    )
+    return ((unit, end) for unit in units for end in reader.ends)
+
+
+def _built(shape: tuple[str, str], length: int) -> str:
+    unit, end = shape
+    return (unit * (length // len(unit) + 1))[:length] + end
+
+
+def _cpu(reader: _Reader, text: str) -> float:
     started = time.process_time()
-    _ = [reader.read(text) for text in texts]
+    _ = reader.read(text)
     return time.process_time() - started
 
 
@@ -183,29 +204,37 @@ def _agree(runs: list[float]) -> bool:
     return len(runs) >= _AGREEING and max(runs[-_AGREEING:]) <= min(runs) * _AGREEMENT
 
 
-def _best_times(reader: _Reader, length: int) -> tuple[float, float]:
-    """The least CPU time over the repeats to read its inputs at *length* and at the scaled length."""
-    sizes = [list(_long_inputs(reader.examples, size)) for size in (length, length * _SCALE)]
+def _best_times(reader: _Reader, shape: tuple[str, str], length: int) -> tuple[float, float]:
+    """The least CPU time over the repeats to read *shape* at *length* and at the scaled length."""
+    sizes = [_built(shape, size) for size in (length, length * _SCALE)]
     runs: tuple[list[float], list[float]] = ([], [])
     # Interleaved, so a slow spell on the machine lands on both sizes rather than one.
     while len(runs[0]) < _REPEATS and not all(_agree(each) for each in runs):
-        for texts, each in zip(sizes, runs, strict=True):
-            each.append(_cpu(reader, texts))
+        for text, each in zip(sizes, runs, strict=True):
+            each.append(_cpu(reader, text))
     return min(runs[0]), min(runs[1])
 
 
-def _ratio(reader: _Reader) -> tuple[float, int] | None:
-    """How much more reading four times its input costs, and the length that was scaled."""
+def _shape_ratio(reader: _Reader, shape: tuple[str, str]) -> tuple[float, int] | None:
     length = _LONG
     # One run picks the length; only the length measured is repeated.
-    while (
-        length < _MAX_LONG
-        and _cpu(reader, list(_long_inputs(reader.examples, length))) < _FLOOR_SECONDS
-    ):
+    while length < _MAX_LONG and _cpu(reader, _built(shape, length)) < _FLOOR_SECONDS:
         length *= _SCALE
-    short, long = _best_times(reader, length)
+    short, long = _best_times(reader, shape, length)
     # Still under the floor: it bails out before reading the input, so no per-character cost scales.
-    return (long / short, length) if short >= _FLOOR_SECONDS else None
+    if short < _FLOOR_SECONDS:
+        return None
+    if long / short < _MAX_RATIO:
+        return long / short, length
+    # Quadratic is steep at every size; a cache filling up, or a slow spell, is one step.
+    again, longer = _best_times(reader, shape, length * _SCALE)
+    return min(long / short, longer / again), length
+
+
+def _ratio(reader: _Reader) -> tuple[float, int] | None:
+    """The steepest growth over its shapes, each timed alone so a cheap quadratic one is not diluted."""
+    found = (ratio for shape in _shapes(reader) if (ratio := _shape_ratio(reader, shape)))
+    return max(found, default=None)
 
 
 @pytest.mark.parametrize(
@@ -213,11 +242,6 @@ def _ratio(reader: _Reader) -> tuple[float, int] | None:
 )
 def test_no_pattern_costs_more_than_linear_time(reader: _Reader) -> None:
     measured = _ratio(reader)
-    # A loaded machine can slow one size for a whole measurement; it does not do so every time.
-    for _ in range(_RETRIES):
-        if measured is None or not _MAX_RATIO <= measured[0] < _PLAINLY_QUADRATIC:
-            break
-        measured = min(measured, _ratio(reader) or measured)
     if measured is not None:
         ratio, length = measured
         assert ratio < _MAX_RATIO, f"{ratio:.1f}x at {length * _SCALE:,} characters"
