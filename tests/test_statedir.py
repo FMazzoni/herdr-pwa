@@ -48,3 +48,27 @@ def test_a_failed_write_leaves_no_scratch_file(
     with pytest.raises(OSError, match="disk full"):
         statedir.write_secret(tmp_path / "secret.json", "token")
     assert list(tmp_path.iterdir()) == []
+
+
+def test_a_lock_file_whose_mode_drifted_is_put_back_and_still_locks(tmp_path: Path) -> None:
+    path = tmp_path / "store.lock"
+    path.touch(mode=0o644)
+    path.chmod(0o644)
+    with statedir.locked(path):
+        assert stat.S_IMODE(path.stat().st_mode) == statedir.FILE_MODE
+
+
+def test_a_lock_held_past_the_limit_raises_rather_than_waiting_forever(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(statedir, "LOCK_TIMEOUT", 0.05)
+    path = tmp_path / "store.lock"
+    # flock conflicts between descriptors, so one process stands in for two.
+    with (
+        statedir.locked(path),
+        pytest.raises(TimeoutError, match="stayed locked"),
+        statedir.locked(path),
+    ):
+        pass
+    with statedir.locked(path):
+        pass

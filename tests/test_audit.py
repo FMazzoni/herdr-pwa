@@ -1,6 +1,7 @@
 import json
 import logging
 import stat
+import threading
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -66,8 +67,8 @@ def test_a_mode_that_drifted_is_put_back_before_anything_is_written(tmp_path: Pa
     assert stat.S_IMODE((tmp_path / audit.AUDIT_FILENAME).stat().st_mode) == 0o600
 
 
-def test_the_vocabulary_is_the_four_writes_the_runner_is_asked_to_make() -> None:
-    assert {PROMPT, KEYS, START, CLOSE} == audit.ENDPOINTS
+def test_the_vocabulary_is_the_four_runner_writes_and_the_ping() -> None:
+    assert {PROMPT, KEYS, START, CLOSE, audit.PING} == audit.ENDPOINTS
 
 
 def test_anything_outside_the_vocabulary_is_refused_and_nothing_written(tmp_path: Path) -> None:
@@ -219,7 +220,9 @@ def test_two_generations_bound_the_disk(tmp_path: Path) -> None:
         _ = log.record(ME, Write(PROMPT, payload=f"{n}" * 100))
     assert (tmp_path / audit.ROTATED_FILENAME).exists()
     assert (tmp_path / audit.AUDIT_FILENAME).stat().st_size <= 4096
+    # The lock file is empty and never rotates, so it does not grow the disk use.
     assert sorted(p.name for p in tmp_path.iterdir()) == [
+        audit.LOCK_FILENAME,
         audit.AUDIT_FILENAME,
         audit.ROTATED_FILENAME,
     ]
@@ -261,3 +264,37 @@ def test_describe_shows_who_what_and_a_withheld_payload(tmp_path: Path) -> None:
     assert "<2 chars, text kept only once echoed>" in attempt
     assert "<payload withheld: no_echo_prompt, 2 chars>" in old
     assert outcome.endswith("-> sent")
+
+
+def test_two_logs_rotating_at_once_never_rename_over_the_previous_generation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Two instances stand for the service and a ping's CLI: their thread locks are not shared.
+    service, cli = make_log(tmp_path, max_bytes=4096), make_log(tmp_path, max_bytes=4096)
+    while not (tmp_path / audit.ROTATED_FILENAME).exists():
+        _ = service.record(ME, Write(PROMPT, payload="old" * 30))
+    while (tmp_path / audit.AUDIT_FILENAME).stat().st_size < 4096 - 300:
+        _ = service.record(ME, Write(PROMPT, payload="full" * 30))
+    full = (tmp_path / audit.AUDIT_FILENAME).read_text()
+    replace = Path.replace
+    rotating, release = threading.Event(), threading.Event()
+
+    def held(self: Path, target: Path) -> Path:
+        # The first rotation stops before its rename, after deciding the live file is full.
+        if threading.current_thread().name == "first":
+            rotating.set()
+            _ = release.wait(5)
+        return replace(self, target)
+
+    monkeypatch.setattr(Path, "replace", held)
+    big = Write(PROMPT, payload="new" * 100)
+    first = threading.Thread(target=service.record, args=(ME, big), name="first")
+    second = threading.Thread(target=cli.record, args=(ME, big), name="second")
+    first.start()
+    assert rotating.wait(5)
+    second.start()
+    second.join(0.3)
+    release.set()
+    first.join(5)
+    second.join(5)
+    assert (tmp_path / audit.ROTATED_FILENAME).read_text() == full

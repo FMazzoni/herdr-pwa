@@ -8,6 +8,7 @@ from hypothesis import HealthCheck, assume, given, settings
 from hypothesis import strategies as st
 from pydantic import JsonValue
 
+from herdr_pwa import audit, statedir
 from herdr_pwa.audit import AUDIT_FILENAME, AuditUnavailableError, Entry, Write
 from herdr_pwa.engine import EngineUnavailableError, as_session_id, screen_digest
 from herdr_pwa.panetext import as_text_read
@@ -212,6 +213,19 @@ def test_a_write_that_cannot_be_recorded_is_not_made(tmp_path: Path) -> None:
     r = idle_rig(tmp_path)
     writer = Writer(r.writer.client, _Unrecordable(), r.writer.pacing, memory=r.writer.memory)
     result = refused(send_prompt(writer, PromptAsk(S1, "hello")))
+    assert (result.refusal, result.status) == (Refusal.UNRECORDABLE, 503)
+    assert r.herd.writes(PROMPT) == []
+
+
+def test_a_write_while_another_process_holds_the_audit_lock_is_refused_not_sent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(statedir, "LOCK_TIMEOUT", 0.05)
+    r = idle_rig(tmp_path)
+    # A ping stopped mid-append in another process holds the lock the service needs.
+    lock = statedir.ensure_dir(tmp_path / "state") / audit.LOCK_FILENAME
+    with statedir.locked(lock):
+        result = refused(send_prompt(r.writer, PromptAsk(S1, "hello")))
     assert (result.refusal, result.status) == (Refusal.UNRECORDABLE, 503)
     assert r.herd.writes(PROMPT) == []
 

@@ -44,11 +44,16 @@ log = logging.getLogger(__name__)
 VAPID_FILENAME: Final = "vapid.json"
 SUBSCRIPTIONS_FILENAME: Final = "subscriptions.json"
 HEALTH_FILENAME: Final = "push-health.json"
-# What a push says happened: the two that notify, and the retraction of either.
-type PushEvent = Literal["blocked", "done", "clear"]
+# Beside the store, so every process that rewrites it takes the same flock.
+SUBSCRIPTIONS_LOCK: Final = "subscriptions.lock"
+HEALTH_LOCK: Final = "push-health.lock"
+# What a push says happened: the two that notify, a message someone sent, and the retraction.
+type PushEvent = Literal["blocked", "done", "ping", "clear"]
 EVENT_BLOCKED: Final = "blocked"
 EVENT_DONE: Final = "done"
+EVENT_PING: Final = "ping"
 EVENT_CLEAR: Final = "clear"
+SHOWN_EVENTS: Final = frozenset({EVENT_BLOCKED, EVENT_DONE, EVENT_PING})
 HERD_TAG: Final = "herd"
 MAX_TITLE_CHARS: Final = 60
 MAX_BODY_CHARS: Final = 180
@@ -266,6 +271,23 @@ def load_or_create_vapid_keys(state_dir: Path, *, clock: WallClock = wall_now) -
     return document.keys(path)
 
 
+def read_vapid_keys(state_dir: Path) -> VapidKeys | None:
+    """The keypair the service minted, or None when there is none; never creates one.
+
+    Raises:
+        VapidKeyError: the file cannot be read, or is not one valid keypair.
+    """
+    path = state_dir.expanduser() / VAPID_FILENAME
+    try:
+        existing = statedir.read_text(path)
+        if existing is None:
+            return None
+        document = _VapidFile.model_validate_json(existing)
+    except (OSError, ValidationError) as exc:
+        raise VapidKeyError(_vapid_problem(path, exc)) from exc
+    return document.keys(path)
+
+
 _HTTPS: Final = "https://"
 
 
@@ -366,6 +388,11 @@ class SubscriptionStore:
         self._lock: threading.Lock = threading.Lock()
 
     @property
+    def _lock_path(self) -> Path:
+        # A ping from the CLI prunes too, so the thread lock alone does not cover every writer.
+        return statedir.ensure_dir(self._state_dir) / SUBSCRIPTIONS_LOCK
+
+    @property
     def path(self) -> Path:
         """The store file; its directory is created 0700 on first use."""
         return statedir.ensure_dir(self._state_dir) / SUBSCRIPTIONS_FILENAME
@@ -397,7 +424,7 @@ class SubscriptionStore:
         Raises:
             SubscriptionError: the store already holds ``limits.max_devices`` other devices.
         """
-        with self._lock:
+        with self._lock, statedir.locked(self._lock_path):
             current = self.list_all()
             previous = next((one for one in current if one.endpoint == subscription.endpoint), None)
             if previous is None and len(current) >= self._max_devices:
@@ -412,7 +439,7 @@ class SubscriptionStore:
 
     def remove(self, endpoint: str) -> bool:
         """Forget one device; True when it was there."""
-        with self._lock:
+        with self._lock, statedir.locked(self._lock_path):
             current = self.list_all()
             kept = [one for one in current if one.endpoint != endpoint]
             if len(kept) == len(current):
@@ -490,8 +517,8 @@ class Notice:
 
 def build_payload(notice: Notice, *, now: WallTime) -> dict[str, object]:
     """The notification the service worker renders, every text field sanitised and capped."""
-    if notice.event not in {EVENT_BLOCKED, EVENT_DONE}:
-        raise PushError(f"unknown event {notice.event!r}: only blocked and done notify")
+    if notice.event not in SHOWN_EVENTS:
+        raise PushError(f"unknown event {notice.event!r}: only {sorted(SHOWN_EVENTS)} notify")
     body = sanitise(notice.body, limit=MAX_BODY_CHARS)
     if not body.replace(LINK_PLACEHOLDER, "").strip():
         body = sanitise(notice.fallback, limit=MAX_BODY_CHARS)
@@ -704,11 +731,13 @@ class DeliveryLog:
 
     def _bump(self, change: Callable[[DeliveryRecord, float], dict[str, object]]) -> None:
         now = self._clock()
-        base = self._current or self.load() or DeliveryRecord(version=1)
-        self._current = base.model_copy(update={**change(base, now), "updated_at": now})
         try:
             _ = statedir.ensure_dir(self.path.parent)
-            statedir.write_secret(self.path, self._current.model_dump_json(indent=2) + "\n")
+            # Built on the disk record under the lock: the service and a ping both count here.
+            with statedir.locked(self.path.with_name(HEALTH_LOCK)):
+                base = self.load() or self._current or DeliveryRecord(version=1)
+                self._current = base.model_copy(update={**change(base, now), "updated_at": now})
+                statedir.write_secret(self.path, self._current.model_dump_json(indent=2) + "\n")
         except OSError as exc:
             # Health is for the reader; failing to write it must never stop a push.
             log.warning("cannot write %s: %s; doctor will see nothing", self.path, exc)

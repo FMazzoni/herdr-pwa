@@ -1,4 +1,4 @@
-"""Every write the runner is asked to make, logged first; reads, subscriptions, refusals are not."""
+"""Every runner write and every ping, logged first; reads, subscriptions and refusals are not."""
 
 import json
 import logging
@@ -6,7 +6,8 @@ import os
 import secrets
 import stat
 import threading
-from collections.abc import Iterator, Mapping
+from collections.abc import Generator, Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -25,12 +26,15 @@ log = logging.getLogger(__name__)
 AUDIT_FILENAME: Final = "audit.log"
 # Two generations bound the disk use with no dated files and so no reaper.
 ROTATED_FILENAME: Final = "audit.log.1"
+LOCK_FILENAME: Final = "audit.lock"
 PROMPT: Final = "prompt"
 KEYS: Final = "keys"
 START: Final = "start"
 # Close is recorded because it is the one write with no undo.
 CLOSE: Final = "close"
-ENDPOINTS: Final = frozenset({PROMPT, KEYS, START, CLOSE})
+# A ping writes to the owner's lock screen rather than an agent, from the CLI.
+PING: Final = "ping"
+ENDPOINTS: Final = frozenset({PROMPT, KEYS, START, CLOSE, PING})
 ATTEMPT: Final = "attempt"
 OUTCOME: Final = "outcome"
 UNREADABLE: Final = "unreadable"
@@ -221,7 +225,7 @@ class AuditLog:
             AuditUnavailableError: the log cannot be opened at 0600.
         """
         try:
-            with self._lock:
+            with self._held():
                 os.close(self._open())
         except OSError as exc:
             raise AuditUnavailableError(f"cannot open the audit log: {exc}") from exc
@@ -257,7 +261,7 @@ class AuditLog:
             "payload_omitted": omitted,
         }
         try:
-            with self._lock:
+            with self._held():
                 self._append(attempt)
         except OSError as exc:
             raise AuditUnavailableError(f"cannot record {write.endpoint}: {exc}") from exc
@@ -279,7 +283,7 @@ class AuditLog:
             outcome["payload"] = text or ""
             outcome["payload_truncated"] = truncated
         try:
-            with self._lock:
+            with self._held():
                 self._append(outcome)
         except OSError:
             log.exception(
@@ -288,6 +292,16 @@ class AuditLog:
                 attempt["id"],
                 result,
             )
+
+    @contextmanager
+    def _held(self) -> Generator[None]:
+        # Bounded like the flock behind it, so writers queued on a stuck one are refused in turn.
+        if not self._lock.acquire(timeout=statedir.LOCK_TIMEOUT):
+            raise TimeoutError(f"another write held the audit log for {statedir.LOCK_TIMEOUT:g}s")
+        try:
+            yield
+        finally:
+            self._lock.release()
 
     def _open(self) -> int:
         path = self.path
@@ -301,13 +315,15 @@ class AuditLog:
 
     def _append(self, record: Attempt | Outcome) -> None:
         line = _LINE.dump_json(record) + b"\n"
-        self._rotate(len(line))
-        handle = self._open()
-        try:
-            _ = os.write(handle, line)
-            os.fsync(handle)
-        finally:
-            os.close(handle)
+        # A ping appends from the CLI too; two rotations at once would lose a whole generation.
+        with statedir.locked(self.path.with_name(LOCK_FILENAME)):
+            self._rotate(len(line))
+            handle = self._open()
+            try:
+                _ = os.write(handle, line)
+                os.fsync(handle)
+            finally:
+                os.close(handle)
 
     def _rotate(self, incoming: int) -> None:
         path = self.path
@@ -365,6 +381,26 @@ def records(state_dir: Path, *, limit: int = 50) -> list[Record]:
             if line.strip():
                 found.append(_parse_line(line, f"{name}:{number}"))
     return found[-limit:] if limit > 0 else found
+
+
+def _epoch(stamp: str) -> float:
+    try:
+        return datetime.fromisoformat(stamp).timestamp()
+    except ValueError:
+        # A stamp nobody can read counts as long ago, so it never holds anything back.
+        return 0.0
+
+
+def attempts_between(state_dir: Path, endpoint: str, since: float, until: float) -> int:
+    """How many attempts at *endpoint* both generations hold stamped from *since* to *until*."""
+    # The upper bound keeps a wall clock stepped back from counting the "future" ones for good.
+    return sum(
+        1
+        for record in records(state_dir, limit=0)
+        if record["phase"] == ATTEMPT
+        and record["endpoint"] == endpoint
+        and since <= _epoch(record["ts"]) <= until
+    )
 
 
 def describe(record: Record) -> str:

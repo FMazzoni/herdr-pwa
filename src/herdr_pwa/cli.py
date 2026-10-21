@@ -1,4 +1,4 @@
-"""Command-line entry point: ``serve`` the web app, ``pair`` a phone, or ask ``doctor``."""
+"""Command-line entry point: ``serve`` the app, ``pair`` a phone and ``ping`` it, or ``doctor``."""
 
 import argparse
 import ipaddress
@@ -17,6 +17,7 @@ from herdr_pwa.engine import HERDR_KINDS, EngineError, engine_settings, harness_
 from herdr_pwa.protocol import EXPECTED_PROTOCOL
 from herdr_pwa.push import DeliveryLog, VapidKeyError, health_line
 from herdr_pwa.settings import Settings
+from herdr_pwa.web import ping
 from herdr_pwa.web.app import create_app
 from herdr_pwa.web.seams import Seams
 from herdr_pwa.web.started import check_tree, record_started
@@ -241,6 +242,8 @@ class _Args(argparse.Namespace):
     port: int | None = None
     session: str = ""
     check: bool = False
+    text: str = ""
+    title: str | None = None
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -257,6 +260,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     report_cmd = sub.add_parser("device-report", help="print the latest phone device report")
     report_cmd.add_argument("--session", default="", help="a session id instead of the latest")
+    ping_cmd = sub.add_parser(
+        "ping", help="send one notification to every paired phone (about 10 in 10 minutes at most)"
+    )
+    ping_cmd.add_argument("text", help="plain text, capped as an agent's is")
+    ping_cmd.add_argument("--title", help="who it is from (default: this pane's agent name)")
     args = parser.parse_args(argv, namespace=_Args())
     settings = Settings()
     seams = Seams()
@@ -266,6 +274,8 @@ def main(argv: list[str] | None = None) -> int:
         return device_report(settings, seams, args.session)
     if args.command == "pair":
         return pair(settings, seams, publish=not args.check)
+    if args.command == "ping":
+        return ping.ping(settings, seams, ping.Message(args.text, args.title))
     try:
         serve(settings, args.port, seams)
     # A key or audit log that cannot be used stops the box serving; say why, not a traceback.

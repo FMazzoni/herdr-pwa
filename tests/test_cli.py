@@ -27,7 +27,7 @@ def test_every_subcommand_says_what_it_does(capsys: pytest.CaptureFixture[str]) 
     with pytest.raises(SystemExit):
         cli.main(["--help"])
     listed = capsys.readouterr().out
-    for command in ("serve", "doctor", "pair", "device-report"):
+    for command in ("serve", "doctor", "pair", "device-report", "ping"):
         # argparse lists each subcommand on its own line, its help after it.
         words = next(row.split() for row in listed.splitlines() if row.split()[:1] == [command])
         assert len(words) > 1, f"{command} has no help"
