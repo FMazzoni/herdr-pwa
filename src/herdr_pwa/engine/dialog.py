@@ -183,7 +183,8 @@ def _whole_hint(text: str) -> bool:
     return bool(pieces) and all(_KEY_TOKEN_RE.fullmatch(piece) for piece in pieces)
 
 
-_KEY_PIECE: Final = re.compile(r"\s*/\s*|\s+or\s+|\s*,\s*")
+# A space run is entered only where it starts and read whole, so a long run is read once.
+_KEY_PIECE: Final = re.compile(r"(?:(?<!\s)\s++)?/\s*|(?<!\s)\s++or\s+|(?:(?<!\s)\s++)?,\s*")
 
 _KEY_NAMES: Final = tuple(
     name for name in (*facts.KEY_ALIASES, *facts.UNSENT_KEYS) if " " not in name

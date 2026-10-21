@@ -16,16 +16,11 @@ from herdr_pwa.patterns import Rx
 from herdr_pwa.validation import Flag, Text
 
 # The harness's own wrapper, never shown: it is context for the model, not conversation.
-_REMINDER: Final = re.compile(r"<system-reminder>.*?</system-reminder>", re.DOTALL)
+_REMINDER_OPEN: Final = "<system-reminder>"
+_REMINDER_CLOSE: Final = "</system-reminder>"
 _TASK: Final = re.compile(r"\A<task-notification>(?P<body>.*?)</task-notification>", re.DOTALL)
-_PEER: Final = re.compile(
-    r"""
-    <(?P<tag>agent-message|cross-session-message)\b (?P<attrs>[^>]*)>  # either tag, with attributes
-    \n? (?P<body>.*?) \n?
-    </(?P=tag)>  # closed by the tag it opened with
-    """,
-    re.DOTALL | re.VERBOSE,
-)
+# Either tag, with attributes, closed by the tag it opened with.
+_PEER_TAGS: Final = ("agent-message", "cross-session-message")
 # Entered only where a name starts, so a long word is read once rather than from every letter.
 _ATTR: Final = re.compile(r'(?<![\w-])(?P<name>[\w-]+)="(?P<value>[^"]*)"')
 # Measured: the frame before a subagent's report, then the report with every line indented.
@@ -299,7 +294,16 @@ def without_paste_tags(text: str) -> str:
 
 def without_reminders(text: str) -> str:
     """*text* with every ``<system-reminder>`` block taken out."""
-    return _REMINDER.sub("", text).strip()
+    kept: list[str] = []
+    at = 0
+    # A str search, not a lazy regex, which would rescan to the end from every unclosed opener.
+    while (start := text.find(_REMINDER_OPEN, at)) >= 0 and (
+        end := text.find(_REMINDER_CLOSE, start + len(_REMINDER_OPEN))
+    ) >= 0:
+        kept.append(text[at:start])
+        at = end + len(_REMINDER_CLOSE)
+    kept.append(text[at:])
+    return "".join(kept).strip()
 
 
 def _tag(body: str, name: str) -> str:
@@ -339,13 +343,50 @@ def _report(body: str) -> str:
     return "\n".join(lines).strip()
 
 
+@dataclass(frozen=True, slots=True)
+class _Tagged:
+    start: int
+    attrs: str
+    body: str
+
+
+def _word_at(text: str, at: int) -> bool:
+    return at < len(text) and (text[at].isalnum() or text[at] == "_")
+
+
+def _first_closed(text: str, tag: str) -> _Tagged | None:
+    """The first *tag* in *text* that is closed, found with str searches that each read on."""
+    opener, closer = f"<{tag}", f"</{tag}>"
+    last_close = text.rfind(closer)
+    at = text.find(opener)
+    while at >= 0:
+        after = at + len(opener)
+        # A longer name is passed before its bracket is sought, so a run of them is read once.
+        if _word_at(text, after):
+            at = text.find(opener, after)
+            continue
+        bracket = text.find(">", after)
+        # A later opener's bracket comes no sooner, so no later opener can close either.
+        if bracket < 0 or last_close <= bracket:
+            return None
+        inner = text[bracket + 1 : text.find(closer, bracket + 1)].removeprefix("\n")
+        return _Tagged(at, text[after:bracket], inner.removesuffix("\n"))
+    return None
+
+
+def _peer_tag(text: str) -> _Tagged | None:
+    # Each tag's first closed one, and the earlier of the two: what one regex search would find.
+    found = [tagged for tag in _PEER_TAGS if (tagged := _first_closed(text, tag)) is not None]
+    return min(found, key=lambda tagged: tagged.start, default=None)
+
+
 def _peer_from_tag(text: str) -> PeerMessage | None:
-    found = _PEER.search(text)
+    found = _peer_tag(text)
     # The harness leads with one line ("Another Claude session sent a message:"), no more.
-    if found is None or "\n" in text[: found.start()].strip():
+    if found is None or "\n" in text[: found.start].strip():
         return None
-    attrs = {attr["name"]: attr["value"] for attr in _ATTR.finditer(found["attrs"])}
-    body = found["body"]
+    attrs = {attr["name"]: attr["value"] for attr in _ATTR.finditer(found.attrs)}
+    body = found.body
     return PeerMessage(
         sender=attrs.get("from-name") or attrs.get("from", ""),
         body=_report(body),
@@ -424,23 +465,10 @@ def injected(origin: RecordOrigin | None, content: str, *, human: bool) -> Injec
 
 PATTERNS: Final = (
     Rx(
-        _REMINDER,
-        ("<system-reminder>x</system-reminder>", "a<system-reminder>\nmany\n</system-reminder>b"),
-        ("<system-reminder>open", "system-reminder"),
-    ),
-    Rx(
         _TASK,
         ("<task-notification><summary>x</summary></task-notification>",),
         (" <task-notification>x</task-notification>", "<task-notification>open"),
         "match",
-    ),
-    Rx(
-        _PEER,
-        (
-            '<agent-message from="a">\nhi\n</agent-message>',
-            '<cross-session-message from="b">x</cross-session-message>',
-        ),
-        ('<agent-message from="a">x</cross-session-message>', "<agent-messages>x</agent-messages>"),
     ),
     Rx(_ATTR, ('from="a"', 'from-name="Bob B"'), ("from=a", "from='a'")),
     Rx(

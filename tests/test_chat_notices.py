@@ -208,6 +208,20 @@ def test_a_system_reminder_alone_is_hidden_and_one_around_a_prompt_is_taken_off(
     assert (turn.speaker, turn.text) == (Speaker.human, "ship it")
 
 
+def test_only_a_closed_tag_is_read_as_one() -> None:
+    assert injected(None, "a<system-reminder>\nmany\n</system-reminder>", human=False) is None
+    assert injected(None, "<system-reminder>open", human=False) is None
+    found = injected(
+        None, '<cross-session-message from="b">\nx\n</cross-session-message>', human=False
+    )
+    assert found == PeerMessage(sender="b", body="x", report=False, task="b")
+    for text in (
+        '<agent-message from="a">x</cross-session-message>',
+        "<agent-messages>x</agent-messages>",
+    ):
+        assert injected(None, text, human=False) is None
+
+
 def test_a_notification_inside_reminders_is_still_a_notice() -> None:
     body = (
         "<task-notification>\n<status>killed</status>\n<summary>s</summary>\n</task-notification>"

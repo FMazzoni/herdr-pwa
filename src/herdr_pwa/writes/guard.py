@@ -47,10 +47,17 @@ _NO_ECHO: Final[tuple[re.Pattern[str], ...]] = (
     re.compile(r"\[sudo\] password for \S+:\s*$", re.IGNORECASE),
     # ssh's ``user@host's password:``, entered at a word's start and its first @ after a letter.
     re.compile(r"(?<!\S)\S[^\s@]*+@\S+'s password:\s*$", re.IGNORECASE),
-    re.compile(r"enter (?:the )?passphrase(?: for \S.*)?:\s*$", re.IGNORECASE),
     re.compile(r"(?:verify|confirm|retype|repeat) password:\s*$", re.IGNORECASE),
     re.compile(r"password \(again\):\s*$", re.IGNORECASE),
 )
+# Read on the last line with its closing colon cut off, so a run of openers ends at once at \Z.
+_PASSPHRASE: Final = re.compile(r"enter (?:the )?passphrase(?: for \S.*)?\Z", re.IGNORECASE)
+
+
+def _asks_passphrase(text: str) -> bool:
+    # What ``enter (?:the )?passphrase(?: for \S.*)?:\s*$`` matches, without its rescan per opener.
+    body = text.rstrip()
+    return body.endswith(":") and _PASSPHRASE.search(body[body.rfind("\n") + 1 : -1]) is not None
 
 
 def no_echo_notice(screen: str) -> str:
@@ -58,7 +65,8 @@ def no_echo_notice(screen: str) -> str:
     tail = next((line.rstrip() for line in reversed(screen.splitlines()) if line.strip()), "")
     if not tail or _COMPOSER_LEAD.match(tail):
         return ""
-    return NO_ECHO_MECHANISM if any(p.search(tail) for p in _NO_ECHO) else ""
+    asks = any(p.search(tail) for p in _NO_ECHO) or _asks_passphrase(tail)
+    return NO_ECHO_MECHANISM if asks else ""
 
 
 def unsendable(text: str) -> bool | None:
@@ -226,14 +234,14 @@ PATTERNS: Final = (
         ("user@host's password: x", "'s password:"),
     ),
     Rx(
-        _NO_ECHO[2],
+        _PASSPHRASE,
         (
-            "Enter passphrase:",
-            "Enter passphrase for key '/home/user/.ssh/id_ed25519':",
-            "enter the passphrase:",
+            "Enter passphrase",
+            "Enter passphrase for key '/home/user/.ssh/id_ed25519'",
+            "enter the passphrase",
         ),
-        ("Enter passphrase", "enter passphrase for:"),
+        ("Enter passphrase now", "enter passphrase for"),
     ),
-    Rx(_NO_ECHO[3], ("Verify password:", "Retype password: "), ("password:", "new password:")),
-    Rx(_NO_ECHO[4], ("Password (again):",), ("Password again:",)),
+    Rx(_NO_ECHO[2], ("Verify password:", "Retype password: "), ("password:", "new password:")),
+    Rx(_NO_ECHO[3], ("Password (again):",), ("Password again:",)),
 )
