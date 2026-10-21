@@ -434,7 +434,7 @@ ADVERSARIAL = (
 def test_scanning_for_links_is_linear_in_the_text(text: str) -> None:
     # CPU time, so a loaded gate cannot inflate it; the old pattern took minutes, far past 1 s.
     started = time.process_time()
-    _ = push._URL_RE.sub(LINK_PLACEHOLDER, text)  # pyright: ignore[reportPrivateUsage]
+    _ = push._URL_RE.sub(LINK_PLACEHOLDER, text)  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
     assert time.process_time() - started < 1.0
 
 

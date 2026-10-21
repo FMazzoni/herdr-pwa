@@ -1750,8 +1750,8 @@ def _registry() -> dict[str, TranscriptAdapter]:
     """The adapters, built on first use."""
     if not _adapters:
         # The adapters import this module, so importing them at the top would be a cycle.
-        from herdr_pwa.engine.hermes import HermesAdapter  # noqa: PLC0415
-        from herdr_pwa.engine.opencode import OpencodeAdapter  # noqa: PLC0415
+        from herdr_pwa.engine.hermes import HermesAdapter  # noqa: PLC0415 - the adapters import this module, so a top import is a cycle
+        from herdr_pwa.engine.opencode import OpencodeAdapter  # noqa: PLC0415 - the adapters import this module, so a top import is a cycle
 
         adapters: tuple[TranscriptAdapter, ...] = (
             ClaudeAdapter(),

@@ -50,7 +50,7 @@ class Pages:
     def piece(self, name: str, context: Mapping[str, object]) -> Markup:
         """A fragment drawn into a page, exactly as its own route would send it."""
         # Safe as markup: it is this environment's own output, escaped as it was rendered.
-        return Markup(self.render(name, context))  # noqa: S704
+        return Markup(self.render(name, context))  # noqa: S704 - this environment's own output, escaped as it was rendered
 
     def page(self, name: str, context: Mapping[str, object], *, status: int = 200) -> HTMLResponse:
         """A whole document."""

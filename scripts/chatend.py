@@ -1271,7 +1271,7 @@ return {
 
 
 def _hub(rig: Rig) -> Hub:
-    hub = getattr(rig.http.app, "state").events  # noqa: B009
+    hub = getattr(rig.http.app, "state").events  # noqa: B009 - TestClient types app as a bare ASGI app, which has no state
     if not isinstance(hub, Hub):
         raise TypeError("the app carries no event hub")
     return hub

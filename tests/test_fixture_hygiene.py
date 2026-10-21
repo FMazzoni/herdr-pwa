@@ -89,7 +89,7 @@ def _commits(candidates: set[str]) -> set[str]:
     lines = "".join(f"{candidate}\n" for candidate in sorted(candidates))
     # git answers one line per name, in order, and a name it cannot find reads "<name> missing".
     command = [git, "-C", str(REPO), "cat-file", "--batch-check=%(objecttype)"]
-    done = subprocess.run(command, input=lines, capture_output=True, text=True, check=True)  # noqa: S603
+    done = subprocess.run(command, input=lines, capture_output=True, text=True, check=True)  # noqa: S603 - a fixed git or python command line, never shell input
     answers = done.stdout.splitlines()
     return {
         name

@@ -214,7 +214,7 @@ def _page_context(web: WebState, agent: Agent, tab: str, first: str) -> dict[str
 def _page_route(router: APIRouter, web: WebState) -> None:
     # Each reportUnusedFunction ignore marks a route: FastAPI registers it by decorator.
     @router.get("")
-    def agent_page(  # pyright: ignore[reportUnusedFunction]
+    def agent_page(  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         session: str, tab: str = "chat", first: str = ""
     ) -> Response:
         agent = find_agent(web, session)
@@ -225,7 +225,7 @@ def _page_route(router: APIRouter, web: WebState) -> None:
 
 def _view_routes(router: APIRouter, web: WebState) -> None:
     @router.get("/chat", dependencies=[Depends(hidden_tick)])
-    def chat(  # pyright: ignore[reportUnusedFunction]
+    def chat(  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         session: str, query: Annotated[ChatQuery, Query()]
     ) -> HTMLResponse:
         agent = find_agent(web, session)
@@ -236,17 +236,17 @@ def _view_routes(router: APIRouter, web: WebState) -> None:
         return web.pages.fragment("chat.html", context)
 
     @router.get("/pane", dependencies=[Depends(hidden_tick)])
-    def pane(session: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
+    def pane(session: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         agent = find_agent(web, session)
         return web.pages.fragment("pane.html", {"agent": agent, "view": read_pane(web, agent)})
 
     @router.get("/tray", dependencies=[Depends(hidden_tick)])
-    def tray(session: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
+    def tray(session: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         agent = find_agent(web, session)
         return web.pages.fragment("tray.html", tray_region(web, agent, read_chat(web, agent)))
 
     @router.get("/stats", dependencies=[Depends(hidden_tick)])
-    def stats(session: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
+    def stats(session: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         agent = find_agent(web, session)
         context = {"agent": agent, "stats": read_stats(web, agent)}
         return web.pages.fragment("stats.html", context)

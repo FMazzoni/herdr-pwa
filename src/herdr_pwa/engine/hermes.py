@@ -101,7 +101,7 @@ def _rows(db: SessionStore, ids: Sequence[int]) -> dict[int, Row]:
     holes = ",".join("?" * len(ids))
     # SQLite cannot bind a variable-length IN list; `holes` is only `?` placeholders.
     columns = "id, role, content, tool_call_id, tool_calls, tool_name"
-    sql = f"select {columns} from messages where session_id = ? and id in ({holes})"  # noqa: S608
+    sql = f"select {columns} from messages where session_id = ? and id in ({holes})"  # noqa: S608 - the interpolated names are fixed in code; every value is bound
     return {_as_int(row[0]): row for row in db.rows(sql, db.session, *ids)}
 
 

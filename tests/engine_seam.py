@@ -54,12 +54,12 @@ from herdr_pwa.engine.transport import (
 )
 
 # Private to their modules; a test pins each directly because no public call shows it.
-HEAD_BYTES = transcript._HEAD_BYTES  # pyright: ignore[reportPrivateUsage]
-HEAD_FINISH = transcript._HEAD_FINISH  # pyright: ignore[reportPrivateUsage]
-copied_from = transcript._copied_from  # pyright: ignore[reportPrivateUsage]
-head_records = transcript._head_records  # pyright: ignore[reportPrivateUsage]
-head_window = transcript._head_window  # pyright: ignore[reportPrivateUsage]
-dialog_chunks = dialog._chunks  # pyright: ignore[reportPrivateUsage]
+HEAD_BYTES = transcript._HEAD_BYTES  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
+HEAD_FINISH = transcript._HEAD_FINISH  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
+copied_from = transcript._copied_from  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
+head_records = transcript._head_records  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
+head_window = transcript._head_window  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
+dialog_chunks = dialog._chunks  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
 
 __all__ = [
     "BACKOFF_CAP",

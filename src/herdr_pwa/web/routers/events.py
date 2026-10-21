@@ -15,7 +15,7 @@ def build(web: WebState, hub: Hub) -> APIRouter:
 
     # Each reportUnusedFunction ignore marks a route: FastAPI registers it by decorator.
     @router.get("/events")
-    async def events(  # pyright: ignore[reportUnusedFunction]
+    async def events(  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         topic: Annotated[list[str] | None, Query()] = None,
     ) -> Response:
         topics = topics_of(topic or ())

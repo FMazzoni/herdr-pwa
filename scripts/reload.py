@@ -17,12 +17,12 @@ ROOT: Final = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from geometry import HTMX_SETTLED, Switch, install, serve  # noqa: E402
-from playwright.sync_api import Page  # noqa: E402
-from pydantic import BaseModel, TypeAdapter  # noqa: E402
-from shots import IPHONE, NARROW, SETTLE_MS, Device, context, drive, missing_browser, webkit  # noqa: E402
+from geometry import HTMX_SETTLED, Switch, install, serve  # noqa: E402 - after the sys.path line that makes it importable
+from playwright.sync_api import Page  # noqa: E402 - after the sys.path line that makes it importable
+from pydantic import BaseModel, TypeAdapter  # noqa: E402 - after the sys.path line that makes it importable
+from shots import IPHONE, NARROW, SETTLE_MS, Device, context, drive, missing_browser, webkit  # noqa: E402 - after the sys.path line that makes it importable
 
-from tests.catalogue import AGENT, State, pick  # noqa: E402
+from tests.catalogue import AGENT, State, pick  # noqa: E402 - after the sys.path line that makes it importable
 
 # Where the reader has scrolled to before the page is reloaded or walked away from.
 READ_Y: Final = 100

@@ -49,7 +49,7 @@ class SessionStore:
             return None
         store = cls(connection, session)
         # The table name is the adapter's own constant, never input.
-        if store.first(f"select 1 from {table} where id = ? limit 1", session) is None:  # noqa: S608
+        if store.first(f"select 1 from {table} where id = ? limit 1", session) is None:  # noqa: S608 - the interpolated names are fixed in code; every value is bound
             store.close()
             return None
         return store

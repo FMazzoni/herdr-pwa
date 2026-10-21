@@ -72,7 +72,7 @@ def _parse(tex: str, *, block: bool) -> MdNode | None:
         # No DTD, entity, comment or CDATA can come from TeX; refusing "<!" keeps expat to elements.
         if "<!" in xml:
             return None
-        root = ET.fromstring(xml)  # noqa: S314
+        root = ET.fromstring(xml)  # noqa: S314 - the xml comes from latex2mathml, with every <! refused above
     except Exception:  # noqa: BLE001 - latex2mathml raises a dozen kinds on bad TeX; the source is the fallback
         return None
     if _unknown_command(root):

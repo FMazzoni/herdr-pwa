@@ -25,7 +25,7 @@ class Rig:
     def git(self, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
         """Run git in the work repo, failing the test on a non-zero exit when check is set."""
         command = ["git", "-C", str(self.work), *args]
-        return subprocess.run(command, env=self.env, capture_output=True, text=True, check=check)  # noqa: S603
+        return subprocess.run(command, env=self.env, capture_output=True, text=True, check=check)  # noqa: S603 - a fixed git or python command line, never shell input
 
     def commit(self, name: str, text: str, message: str = "Add a file") -> None:
         """Write a file and commit it."""
@@ -61,8 +61,8 @@ def rig(tmp_path: Path) -> Rig:
         "GIT_COMMITTER_EMAIL": "committer@example.com",
         "HP_PUSH_DENY_PATTERNS": str(patterns),
     }
-    subprocess.run(["git", "init", "-q", "--bare", str(remote)], env=env, check=True)  # noqa: S603, S607
-    subprocess.run(["git", "init", "-q", "-b", "main", str(work)], env=env, check=True)  # noqa: S603, S607
+    subprocess.run(["git", "init", "-q", "--bare", str(remote)], env=env, check=True)  # noqa: S603, S607 - git found on PATH, as a developer runs it
+    subprocess.run(["git", "init", "-q", "-b", "main", str(work)], env=env, check=True)  # noqa: S603, S607 - git found on PATH, as a developer runs it
     made = Rig(work, env)
     made.git("remote", "add", "origin", str(remote))
     made.commit("README", "hello\n", "Start the project")
@@ -149,7 +149,7 @@ def _commit_msg(tmp_path: Path, message: str) -> subprocess.CompletedProcess[str
     path = tmp_path / "COMMIT_EDITMSG"
     path.write_text(message, encoding="utf-8")
     command = [sys.executable, str(COMMIT_MSG), str(path)]
-    return subprocess.run(command, capture_output=True, text=True, check=False)  # noqa: S603
+    return subprocess.run(command, capture_output=True, text=True, check=False)  # noqa: S603 - a fixed git or python command line, never shell input
 
 
 SIX = "One. Two. Three. Four. Five. Six."

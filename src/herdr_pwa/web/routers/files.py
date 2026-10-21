@@ -249,18 +249,18 @@ def _agent_target(explorer: Explorer, root: Root, cwd: Path, path: str) -> Path:
 def _register_pages(router: APIRouter, explorer: Explorer) -> None:
     # Each reportUnusedFunction ignore marks a route: FastAPI registers it by decorator.
     @router.get("/files")
-    def roots_page() -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
+    def roots_page() -> HTMLResponse:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         roots = explorer.roots()
         context = {"roots": roots, "statuses": {r.id: explorer.git.status(r.path) for r in roots}}
         return explorer.web.pages.page("files_roots.html", context)
 
     @router.get("/files/{root_id}")
-    def changes(root_id: str, from_: From = "") -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
+    def changes(root_id: str, from_: From = "") -> HTMLResponse:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         root, nav = explorer.at(root_id, from_)
         return explorer.page("files_changes.html", root, nav, "changes")
 
     @router.get("/files/{root_id}/tree")
-    def tree(root_id: str, query: Annotated[TreeQuery, Query()]) -> Response:  # pyright: ignore[reportUnusedFunction]
+    def tree(root_id: str, query: Annotated[TreeQuery, Query()]) -> Response:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         root, nav = explorer.at(root_id, query.from_)
         spot = explorer.spot(root, query.path)
         if spot.real.is_file():
@@ -271,7 +271,7 @@ def _register_pages(router: APIRouter, explorer: Explorer) -> None:
         return explorer.page("files_tree.html", root, nav, "tree", **context)
 
     @router.get("/files/{root_id}/find")
-    def find(root_id: str, q: str = "", from_: From = "") -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
+    def find(root_id: str, q: str = "", from_: From = "") -> HTMLResponse:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         root, nav = explorer.at(root_id, from_)
         found = fuzzy.find(q, explorer.git.files(root.path))
         return explorer.page("files_find.html", root, nav, "find", q=q, found=found)
@@ -279,11 +279,11 @@ def _register_pages(router: APIRouter, explorer: Explorer) -> None:
 
 def _register_file(router: APIRouter, explorer: Explorer) -> None:
     @router.get("/files/{root_id}/file")
-    def file(root_id: str, query: Annotated[FileQuery, Query()]) -> Response:  # pyright: ignore[reportUnusedFunction]
+    def file(root_id: str, query: Annotated[FileQuery, Query()]) -> Response:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         return _file_page(explorer, root_id, query)
 
     @router.get("/files/{root_id}/diff")
-    def diff(root_id: str, query: Annotated[DiffQuery, Query()]) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
+    def diff(root_id: str, query: Annotated[DiffQuery, Query()]) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         return _diff_page(explorer, root_id, query)
 
 
@@ -333,7 +333,7 @@ def _version(root: Root, real: Path) -> str:
 
 def _register_bytes(router: APIRouter, explorer: Explorer) -> None:
     @router.get("/files/{root_id}/raw")
-    def raw(root_id: str, query: Annotated[RawQuery, Query()]) -> Response:  # pyright: ignore[reportUnusedFunction]
+    def raw(root_id: str, query: Annotated[RawQuery, Query()]) -> Response:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         root = explorer.root(root_id)
         real = resolve(root, query.path, explorer.fence)
         if is_secret(real.name) and not query.reveal:
@@ -341,7 +341,7 @@ def _register_bytes(router: APIRouter, explorer: Explorer) -> None:
         return _image(root, real, query.path)
 
     @router.get("/files/{root_id}/watch", dependencies=[Depends(hidden_tick)])
-    def watch(root_id: str, query: Annotated[WatchQuery, Query()]) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
+    def watch(root_id: str, query: Annotated[WatchQuery, Query()]) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         root, nav = explorer.at(root_id, query.from_)
         spot = explorer.spot(root, query.path)
         context = {
@@ -356,7 +356,7 @@ def _register_bytes(router: APIRouter, explorer: Explorer) -> None:
 
 def _register_agent(router: APIRouter, explorer: Explorer) -> None:
     @router.get("/agent/{session}/files")
-    def from_agent(session: str, query: Annotated[AgentFilesQuery, Query()]) -> Response:  # pyright: ignore[reportUnusedFunction]
+    def from_agent(session: str, query: Annotated[AgentFilesQuery, Query()]) -> Response:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         agent = find_agent(explorer.web, session)
         try:
             return _redirect(_agent_url(explorer, agent, query))

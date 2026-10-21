@@ -24,13 +24,13 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 ROOT: Final = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-import affordance  # noqa: E402
-import backnav  # noqa: E402
-import chatend  # noqa: E402
-import feedhold  # noqa: E402
-import sendhold  # noqa: E402
-import voiceover  # noqa: E402
-from firefox import (  # noqa: E402
+import affordance  # noqa: E402 - after the sys.path line that makes it importable
+import backnav  # noqa: E402 - after the sys.path line that makes it importable
+import chatend  # noqa: E402 - after the sys.path line that makes it importable
+import feedhold  # noqa: E402 - after the sys.path line that makes it importable
+import sendhold  # noqa: E402 - after the sys.path line that makes it importable
+import voiceover  # noqa: E402 - after the sys.path line that makes it importable
+from firefox import (  # noqa: E402 - after the sys.path line that makes it importable
     Bench,
     BrowserError,
     Marionette,
@@ -41,10 +41,10 @@ from firefox import (  # noqa: E402
     phone_window,
 )
 
-from herdr_pwa.web.assets import SCRIPTS, STATIC_PREFIX  # noqa: E402
-from tests.catalogue import STATES, State, build, pick  # noqa: E402
-from tests.waiting import eventually  # noqa: E402
-from tests.webfakes import Hold  # noqa: E402
+from herdr_pwa.web.assets import SCRIPTS, STATIC_PREFIX  # noqa: E402 - after the sys.path line that makes it importable
+from tests.catalogue import STATES, State, build, pick  # noqa: E402 - after the sys.path line that makes it importable
+from tests.waiting import eventually  # noqa: E402 - after the sys.path line that makes it importable
+from tests.webfakes import Hold  # noqa: E402 - after the sys.path line that makes it importable
 
 # The --only name for the back-navigation walks.
 HISTORY: Final = "history"

@@ -977,7 +977,7 @@ def _drawn_in_colour(name: str) -> Callable[[dict[str, JsonValue]], dict[str, Js
 
 def _opencode_blocked_on(name: str) -> Replies:
     """The working pane as an opencode agent stopped on one of its captured dialogs."""
-    frame = lambda: _set(herd(**BLOCKED), WORKING_PANE, agent="opencode")  # noqa: E731
+    frame = lambda: _set(herd(**BLOCKED), WORKING_PANE, agent="opencode")  # noqa: E731 - a named lambda keeps the reply builders one line each
     return lambda: {SNAPSHOT: frame(), READ: _drawn_in_colour(name)}
 
 
@@ -985,7 +985,7 @@ def _opencode_listing() -> Replies:
     """An opencode agent whose transcript ends on a numbered list with a coloured row in it."""
     ansi = (FIXTURES / "rig" / "opencode-scrollback-list.ansi").read_text()
     text = as_text_read(ansi)
-    frame = lambda: _set(herd(**BLOCKED), WORKING_PANE, agent="opencode")  # noqa: E731
+    frame = lambda: _set(herd(**BLOCKED), WORKING_PANE, agent="opencode")  # noqa: E731 - a named lambda keeps the reply builders one line each
     return lambda: {
         SNAPSHOT: frame(),
         READ: lambda params: read_frame(ansi if params.get("format") == "ansi" else text),

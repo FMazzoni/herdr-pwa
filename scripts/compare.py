@@ -18,9 +18,9 @@ ROOT: Final = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from shots import DEVICES, Look, missing_browser, shoot, wire_css  # noqa: E402
+from shots import DEVICES, Look, missing_browser, shoot, wire_css  # noqa: E402 - after the sys.path line that makes it importable
 
-from tests.catalogue import STATES, pick  # noqa: E402
+from tests.catalogue import STATES, pick  # noqa: E402 - after the sys.path line that makes it importable
 
 TITLES: Final = MappingProxyType({s.name: s.title for s in STATES})
 SCALE: Final = "S: a few hours. M: about a day. L: several runs."

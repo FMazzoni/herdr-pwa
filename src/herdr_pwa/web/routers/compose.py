@@ -352,14 +352,14 @@ def _composer_routes(router: APIRouter, writes: WriteRoutes) -> None:
 
     # Each reportUnusedFunction ignore marks a route: FastAPI registers it by decorator.
     @router.get("/agent/{session}/compose")
-    def composer(session: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
+    def composer(session: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         agent = find_agent(web, identity_of(session))
         screen = _screen_now(web, agent)
         held = _held_over(agent, screen)
         return web.pages.fragment("compose.html", composer_region(agent, screen, held=held))
 
     @router.post("/agent/{session}/prompt")
-    def prompt(session: str, post: Annotated[Posted, Depends(writes.post)]) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
+    def prompt(session: str, post: Annotated[Posted, Depends(writes.post)]) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         return _prompt(identity_of(session), post)
 
 
@@ -367,12 +367,12 @@ def _answer_routes(router: APIRouter, writes: WriteRoutes) -> None:
     web = writes.web
 
     @router.get("/agent/{session}/answer")
-    def answer(session: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
+    def answer(session: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         agent = find_agent(web, identity_of(session))
         return web.pages.fragment("answer.html", answer_region(web, agent))
 
     @router.post("/agent/{session}/keys")
-    def keys(session: str, post: Annotated[Posted, Depends(writes.post)]) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
+    def keys(session: str, post: Annotated[Posted, Depends(writes.post)]) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         return _key(identity_of(session), post)
 
 
@@ -380,18 +380,18 @@ def _close_routes(router: APIRouter, writes: WriteRoutes) -> None:
     web = writes.web
 
     @router.get("/agent/{session}/close")
-    def close_form(session: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
+    def close_form(session: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         agent = find_agent(web, identity_of(session))
         return web.pages.page("close.html", {"agent": agent})
 
     @router.post("/agent/{session}/close", response_model=None)
-    def close(session: str, post: Annotated[Posted, Depends(writes.post)]) -> Response:  # pyright: ignore[reportUnusedFunction]
+    def close(session: str, post: Annotated[Posted, Depends(writes.post)]) -> Response:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         return _close(identity_of(session), post)
 
 
 def _door_page(router: APIRouter, web: WebState) -> None:
     @router.get("/starting/{pane}", response_model=None)
-    def starting(pane: str, first: str = "") -> Response:  # pyright: ignore[reportUnusedFunction]
+    def starting(pane: str, first: str = "") -> Response:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         target = address_of(pane)
         agent = web.client.snapshot().by_target(target)
         if agent is not None and agent.session:
@@ -407,7 +407,7 @@ def _door_writes(router: APIRouter, writes: WriteRoutes) -> None:
     web = writes.web
 
     @router.post("/starting/{pane}/prompt")
-    def first_prompt(pane: str, post: Annotated[Posted, Depends(writes.post)]) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
+    def first_prompt(pane: str, post: Annotated[Posted, Depends(writes.post)]) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         values = post.values
         target = address_of(pane)
         text = values.get("text", "")
@@ -415,7 +415,7 @@ def _door_writes(router: APIRouter, writes: WriteRoutes) -> None:
         return _door(web, target, _Knock(result, text=text))
 
     @router.post("/starting/{pane}/keys")
-    def first_key(pane: str, post: Annotated[Posted, Depends(writes.post)]) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
+    def first_key(pane: str, post: Annotated[Posted, Depends(writes.post)]) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         target = address_of(pane)
         key = post.values.get("key", "")
         ask = StartingKeyAsk(target, key, confirmed=ticked(post.values, "confirm"))

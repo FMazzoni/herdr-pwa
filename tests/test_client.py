@@ -327,7 +327,7 @@ def decoded_frame(text: bytes) -> dict[str, JsonValue]:
     """A reply frame carrying ``text``, round-tripped through the real wire."""
     line = json.dumps(read_frame("\x00PLACEHOLDER\x00")).encode()
     framed = line.replace(b"\\u0000PLACEHOLDER\\u0000", text)
-    reply = SocketTransport._decode(framed)  # pyright: ignore[reportPrivateUsage]
+    reply = SocketTransport._decode(framed)  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
     raise_for_error_frame(reply)  # pane content is data, never an envelope
     return reply.payload
 
@@ -401,7 +401,7 @@ def test_send_keys_requires_a_key() -> None:
     eng, wire = build()
     with pytest.raises(InvalidRequest) as caught:
         eng.send_keys(Seat(P3))
-    assert isinstance(caught.value, EngineError | ValueError)  # pyright: ignore[reportUnnecessaryIsInstance]
+    assert isinstance(caught.value, EngineError | ValueError)  # pyright: ignore[reportUnnecessaryIsInstance] - the check is the point: the error must stay in the taxonomy
     assert caught.value.code == "invalid_request"
     assert wire.calls == []
 
@@ -411,7 +411,7 @@ def test_an_unknown_read_source_is_an_engine_error_not_a_bare_valueerror() -> No
     eng, wire = build()
     with pytest.raises(InvalidRequest) as caught:
         eng.read(P3, ReadOptions(source="visable"))
-    assert isinstance(caught.value, EngineError)  # pyright: ignore[reportUnnecessaryIsInstance]
+    assert isinstance(caught.value, EngineError)  # pyright: ignore[reportUnnecessaryIsInstance] - the check is the point: the error must stay in the taxonomy
     assert caught.value.code == "invalid_request"
     assert wire.calls == []
 
@@ -673,7 +673,7 @@ def test_a_write_through_the_private_caller_still_fails_closed(
     """The guard is a property of issuing a request, not of remembering to ask."""
     eng, wire = build(protocol_number=DRIFTED)
     with pytest.raises(ProtocolMismatch):
-        _ = eng._call(request_type, params)  # pyright: ignore[reportPrivateUsage]
+        _ = eng._call(request_type, params)  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
     assert wire.methods == [SNAPSHOT]  # nothing was driven
 
 
