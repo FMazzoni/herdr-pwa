@@ -221,13 +221,22 @@ def test_a_close_into_a_recycled_pane_is_refused_on_the_wire(tmp_path: Path) -> 
 
 def test_workspace_create_and_rename_read_back(tmp_path: Path) -> None:
     r = rig(tmp_path)
-    made = create_workspace(r.writer.client, "scratch")
+    made = create_workspace(r.writer.client, "scratch", memory=r.writer.memory)
     assert made == WorkspaceDone(WorkspaceId("w7"), verified=True)
-    renamed = rename_workspace(r.writer.client, "w7", "renamed")
+    renamed = rename_workspace(r.writer.client, "w7", "renamed", memory=r.writer.memory)
     assert renamed == WorkspaceDone(WorkspaceId("w7"), verified=True)
-    assert refused(rename_workspace(r.writer.client, "w7", "")).refusal is Refusal.BAD_LABEL
-    assert refused(rename_workspace(r.writer.client, "w404", "x")).refusal is Refusal.NO_WORKSPACE
-    assert refused(create_workspace(r.writer.client, "a\nb")).refusal is Refusal.BAD_LABEL
+    assert (
+        refused(rename_workspace(r.writer.client, "w7", "", memory=r.writer.memory)).refusal
+        is Refusal.BAD_LABEL
+    )
+    assert (
+        refused(rename_workspace(r.writer.client, "w404", "x", memory=r.writer.memory)).refusal
+        is Refusal.NO_WORKSPACE
+    )
+    assert (
+        refused(create_workspace(r.writer.client, "a\nb", memory=r.writer.memory)).refusal
+        is Refusal.BAD_LABEL
+    )
 
 
 def test_an_empty_workspace_closes_on_one_confirm(tmp_path: Path) -> None:
@@ -496,8 +505,12 @@ def test_the_opening_prompt_holds_the_new_pane(tmp_path: Path) -> None:
 
 def test_a_second_workspace_create_mid_create_is_refused(tmp_path: Path) -> None:
     r = rig(tmp_path)
-    late = during(r, "workspace.create", lambda: create_workspace(r.writer.client, "b"))
-    assert isinstance(create_workspace(r.writer.client, "a"), WorkspaceDone)
+    late = during(
+        r,
+        "workspace.create",
+        lambda: create_workspace(r.writer.client, "b", memory=r.writer.memory),
+    )
+    assert isinstance(create_workspace(r.writer.client, "a", memory=r.writer.memory), WorkspaceDone)
     in_flight(late)
     assert len(r.herd.writes("workspace.create")) == 1
 
@@ -505,8 +518,12 @@ def test_a_second_workspace_create_mid_create_is_refused(tmp_path: Path) -> None
 def test_a_second_rename_mid_rename_is_refused(tmp_path: Path) -> None:
     r = rig(tmp_path)
     r.herd.add_workspace("w2")
-    late = during(r, SNAPSHOT, lambda: rename_workspace(r.writer.client, "w2", "b"))
-    assert isinstance(rename_workspace(r.writer.client, "w2", "a"), WorkspaceDone)
+    late = during(
+        r, SNAPSHOT, lambda: rename_workspace(r.writer.client, "w2", "b", memory=r.writer.memory)
+    )
+    assert isinstance(
+        rename_workspace(r.writer.client, "w2", "a", memory=r.writer.memory), WorkspaceDone
+    )
     in_flight(late)
     assert len(r.herd.writes("workspace.rename")) == 1
 
@@ -516,7 +533,11 @@ def test_a_second_workspace_close_mid_close_is_refused(tmp_path: Path) -> None:
     r.herd.add_workspace("w2")
     close = WorkspaceCloseAsk("w2", confirmed=True)
     late = during(r, SNAPSHOT, lambda: close_workspace(r.writer, close))
-    renamed = during(r, "workspace.close", lambda: rename_workspace(r.writer.client, "w2", "b"))
+    renamed = during(
+        r,
+        "workspace.close",
+        lambda: rename_workspace(r.writer.client, "w2", "b", memory=r.writer.memory),
+    )
     assert isinstance(close_workspace(r.writer, close), WorkspaceDone)
     in_flight(late)
     in_flight(renamed)

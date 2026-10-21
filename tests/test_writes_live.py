@@ -211,13 +211,13 @@ def _late_identity_round(bench: _Bench) -> None:
 
 def test_every_write_end_to_end(writer: Writer, tmp_path: Path) -> None:
     client = writer.client
-    made = create_workspace(client, "hpw-live")
+    made = create_workspace(client, "hpw-live", memory=writer.memory)
     say("create_workspace", repr(made))
     assert isinstance(made, WorkspaceDone)
     assert made.verified
     workspace = made.workspace_id
     try:
-        renamed = rename_workspace(client, workspace, "hpw-live-renamed")
+        renamed = rename_workspace(client, workspace, "hpw-live-renamed", memory=writer.memory)
         say("rename_workspace", repr(renamed))
         assert isinstance(renamed, WorkspaceDone)
         assert renamed.verified

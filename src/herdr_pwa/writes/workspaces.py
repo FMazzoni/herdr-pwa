@@ -16,6 +16,7 @@ from herdr_pwa.engine import (
 )
 from herdr_pwa.writes.refusal import Refusal, Refused, failed_result, refusal_for
 from herdr_pwa.writes.resolve import (
+    WriteMemory,
     Writer,
     attempt,
     one_at_a_time,
@@ -102,10 +103,12 @@ def _after(client: HerdrClient, workspace_id: WorkspaceId) -> tuple[bool, Worksp
     return True, next((w for w in snap.workspaces if w.workspace_id == workspace_id), None)
 
 
-def create_workspace(client: HerdrClient, label: str) -> WorkspaceDone | Refused:
+def create_workspace(
+    client: HerdrClient, label: str, *, memory: WriteMemory
+) -> WorkspaceDone | Refused:
     """Make an empty workspace; nothing is started in it, so nothing asks twice."""
     # No workspace exists to key on yet, so one create at a time: a double tap makes one, not two.
-    return one_at_a_time("workspace-create", "created", lambda: _create(client, label))
+    return one_at_a_time(memory, "workspace-create", "created", lambda: _create(client, label))
 
 
 def _create(client: HerdrClient, label: str) -> WorkspaceDone | Refused:
@@ -120,10 +123,12 @@ def _create(client: HerdrClient, label: str) -> WorkspaceDone | Refused:
     return WorkspaceDone(made.workspace_id, read and found is not None)
 
 
-def rename_workspace(client: HerdrClient, workspace_id: str, label: str) -> WorkspaceDone | Refused:
+def rename_workspace(
+    client: HerdrClient, workspace_id: str, label: str, *, memory: WriteMemory
+) -> WorkspaceDone | Refused:
     """Relabel a workspace that exists now; reversible, so it asks nothing twice."""
     return one_at_a_time(
-        workspace_key(workspace_id), "renamed", lambda: _rename(client, workspace_id, label)
+        memory, workspace_key(workspace_id), "renamed", lambda: _rename(client, workspace_id, label)
     )
 
 
@@ -170,7 +175,9 @@ class WorkspaceCloseAsk:
 
 def close_workspace(writer: Writer, ask: WorkspaceCloseAsk) -> WorkspaceDone | Refused:
     """End every agent in a workspace, counted now, after the confirms its cost earns."""
-    return one_at_a_time(workspace_key(ask.workspace_id), "closed", lambda: _close(writer, ask))
+    return one_at_a_time(
+        writer.memory, workspace_key(ask.workspace_id), "closed", lambda: _close(writer, ask)
+    )
 
 
 def _close(writer: Writer, ask: WorkspaceCloseAsk) -> WorkspaceDone | Refused:

@@ -33,6 +33,7 @@ from herdr_pwa.push import (
     FanOut,
     Outlet,
     PushError,
+    PushLimits,
     SubjectError,
     Subscription,
     SubscriptionError,
@@ -162,8 +163,10 @@ class Notifier:
         self._stalled: frozenset[str] = frozenset()
         self._stores: PushStores = stores
         self._deliver: Deliver = seams.deliver or arm_sender(
-            stores.keys, subject=config.subject, ttl=config.ttl
+            stores.keys, subject=config.subject, ttl=config.ttl, limits=seams.push_limits
         )
+        self._limits: PushLimits = seams.push_limits
+        self._elapsed: Clock = seams.clock
         self._config: LoopConfig = config
         clock = seams.wall
         self._clock: Clock = clock
@@ -306,7 +309,9 @@ class Notifier:
         except PushError as exc:
             self._stores.health.failed(f"payload: {exc}")
             return FanOut()
-        outlet = Outlet(self._deliver, self._stores.devices, self._stores.health)
+        outlet = Outlet(
+            self._deliver, self._stores.devices, self._stores.health, self._limits, self._elapsed
+        )
         return fan_out(data, devices, outlet, now=self._clock())
 
 

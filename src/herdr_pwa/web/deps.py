@@ -28,6 +28,7 @@ from herdr_pwa.web.render import Pages
 from herdr_pwa.web.stalls import Stalls
 from herdr_pwa.writes.lifecycle import Which
 from herdr_pwa.writes.outcome import Pacing
+from herdr_pwa.writes.resolve import WriteMemory
 
 HIDDEN_HEADER: Final = "HP-Hidden"
 
@@ -60,6 +61,8 @@ class WebState:
     starts: ProcessStarts | None = None
     # Where a pane's process is looked up, for whether it holds the session herdr reports.
     proc: Path = PROC
+    # Which writes are in flight and which may have landed, for every request this app serves.
+    memory: WriteMemory = field(default_factory=WriteMemory)
 
     def snapshot(self) -> CachedValue[Snapshot]:
         """The shared snapshot, fetched only if nobody else is fetching it."""

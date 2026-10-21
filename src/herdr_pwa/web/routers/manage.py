@@ -129,7 +129,7 @@ def _workspace_routes(router: APIRouter, web: WebState) -> None:
     @router.post("/workspaces/new", response_model=None)
     def workspace_new(request: Request, body: FormBody = b"") -> Response:  # pyright: ignore[reportUnusedFunction]
         label = form(body).get("label", "")
-        result = create_workspace(web.client, label)
+        result = create_workspace(web.client, label, memory=web.memory)
         if isinstance(result, Refused):
             drawn = Redraw("workspace_new.html", {"label": label}, as_page=True)
             return refused(web.pages, drawn, result)
@@ -145,7 +145,7 @@ def _workspace_routes(router: APIRouter, web: WebState) -> None:
     @router.post("/workspaces/{workspace_id}/rename", response_model=None)
     def rename(workspace_id: str, request: Request, body: FormBody = b"") -> Response:  # pyright: ignore[reportUnusedFunction]
         label = form(body).get("label", "")
-        result = rename_workspace(web.client, workspace_id, label)
+        result = rename_workspace(web.client, workspace_id, label, memory=web.memory)
         if isinstance(result, Refused):
             found = _find(web.client.snapshot(), workspace_id)
             context = {"workspace": found, "label": label}

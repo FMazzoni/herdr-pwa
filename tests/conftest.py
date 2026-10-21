@@ -6,8 +6,6 @@ from typing import cast
 
 import pytest
 
-from herdr_pwa.writes import prompt, resolve
-
 FIXTURES = Path(__file__).parent / "fixtures"
 # Fixtures no test here has to open, each with its reason.
 UNOPENED_FIXTURES: dict[str, str] = {
@@ -108,10 +106,3 @@ def _isolated_home(
     # A started app warms its caches on a thread of its own; no test races one it did not ask for.
     monkeypatch.setenv("HP_PREWARM", "false")
     return home
-
-
-@pytest.fixture(autouse=True)
-def _fresh_write_memory(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Which writes are in flight, and which may have landed, is per process; never across tests.
-    monkeypatch.setattr(resolve, "IN_FLIGHT", resolve.InFlight())
-    monkeypatch.setattr(prompt, "UNSURE", prompt.Unsure())

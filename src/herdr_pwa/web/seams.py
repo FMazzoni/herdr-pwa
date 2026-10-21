@@ -9,7 +9,7 @@ from pathlib import Path
 from herdr_pwa.clock import Clock, Sleep
 from herdr_pwa.engine import EngineSettings, HerdrClient
 from herdr_pwa.managed import PROC
-from herdr_pwa.push import Deliver
+from herdr_pwa.push import PUSH_LIMITS, Deliver, PushLimits
 from herdr_pwa.tailscale import LocalApi
 from herdr_pwa.web.assets import STATIC_DIR
 from herdr_pwa.writes.lifecycle import Which, on_path
@@ -38,6 +38,8 @@ class Seams:
     client_factory: ClientFactory | None = None
     # None is the real sender, armed with this box's key.
     deliver: Deliver | None = None
+    # How long a send, and a whole fan-out, may hold the notifier.
+    push_limits: PushLimits = PUSH_LIMITS
     write: Callable[[str], object] = sys.stdout.write
     local_api: Callable[[Path], LocalApi] = LocalApi
     # Where each pane's process environment is read, for whether another agent manages it.

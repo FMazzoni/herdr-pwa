@@ -342,7 +342,9 @@ def _spawn(writer: Writer, launch: Launch, prompt: str) -> _Launched | Refused:
             return Refused(refusal_for(exc), "created", detail=str(exc))
     # The pane's key, as a first prompt typed by the form or the starting page would take it.
     key = f"pane:{launch.pane_id}"
-    return one_at_a_time(key, "created", lambda: _spawn_prompted(writer, launch, prompt))
+    return one_at_a_time(
+        writer.memory, key, "created", lambda: _spawn_prompted(writer, launch, prompt)
+    )
 
 
 def _spawn_prompted(writer: Writer, launch: Launch, prompt: str) -> _Launched | Refused:
@@ -379,7 +381,10 @@ def start_agent(
     # Keyed on the workspace: the new pane does not exist yet, and a close of this workspace
     # mid-start would end the agent it is starting.
     return one_at_a_time(
-        workspace_key(request.workspace_id), "created", lambda: _start_agent(writer, request)
+        writer.memory,
+        workspace_key(request.workspace_id),
+        "created",
+        lambda: _start_agent(writer, request),
     )
 
 
@@ -439,7 +444,9 @@ class EndAsk:
 def end_agent(writer: Writer, ask: EndAsk) -> AgentEnded | Refused:
     """Close the pane of the agent holding the session now, after both confirms it needs."""
     # The prompt and key writes' key, so nothing is typed at an agent while it is being ended.
-    return one_at_a_time(f"session:{ask.session}", "closed", lambda: _end_agent(writer, ask))
+    return one_at_a_time(
+        writer.memory, f"session:{ask.session}", "closed", lambda: _end_agent(writer, ask)
+    )
 
 
 def _end_agent(writer: Writer, ask: EndAsk) -> AgentEnded | Refused:

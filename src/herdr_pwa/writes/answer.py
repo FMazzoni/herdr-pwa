@@ -155,7 +155,9 @@ def _press(
 def send_key(writer: Writer, ask: KeyAsk) -> KeySent | Refused:
     """Send one key the screen offers right now to the agent holding the session."""
     # From the read the key is checked against to the last look at what it did, alone.
-    return one_at_a_time(f"session:{ask.session}", _VERB, lambda: _send_key(writer, ask))
+    return one_at_a_time(
+        writer.memory, f"session:{ask.session}", _VERB, lambda: _send_key(writer, ask)
+    )
 
 
 def _send_key(writer: Writer, ask: KeyAsk) -> KeySent | Refused:
@@ -185,7 +187,9 @@ class StartingKeyAsk:
 
 def send_starting_key(writer: Writer, ask: StartingKeyAsk) -> KeySent | Refused:
     """Send a pad key to a session-less agent stopped during launch (a trust dialog), by address."""
-    return one_at_a_time(f"pane:{ask.pane}", _VERB, lambda: _send_starting_key(writer, ask))
+    return one_at_a_time(
+        writer.memory, f"pane:{ask.pane}", _VERB, lambda: _send_starting_key(writer, ask)
+    )
 
 
 def _send_starting_key(writer: Writer, ask: StartingKeyAsk) -> KeySent | Refused:
