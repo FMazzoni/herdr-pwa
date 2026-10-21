@@ -323,6 +323,11 @@ const elsewhereNotification = await push(notify("blocked"));
 /* Open on that agent but in the background: still an alert. */
 windows.open = [makeClient("/agent/" + SESSION, "hidden")];
 const backgroundNotification = await push(notify("blocked"));
+/* A ping sounds even with the dashboard open on screen; only its own quiet (a snooze) mutes it. */
+const ping = (extra = {}) => notify("ping", { agent: "", tag: "ping", title: "waves-pi", body: "waves complete", ...extra });
+windows.open = [makeClient("/", "visible")];
+const pingOnScreen = await push(ping());
+const snoozedPingOnScreen = await push(ping({ quiet: true }));
 windows.open = [];
 
 /* The server says "this is a retraction, re-render without buzzing".
@@ -480,6 +485,8 @@ console.log(JSON.stringify({
   doneRequiresInteraction: !!doneNotification.requireInteraction,
   alertsWhenNobodyIsWatching,
   onScreen: { shown: !!onScreenNotification, silent: !!onScreenNotification.silent, renotify: !!onScreenNotification.renotify },
+  pingOnScreen: { silent: !!pingOnScreen.silent, renotify: !!pingOnScreen.renotify, requireInteraction: !!pingOnScreen.requireInteraction },
+  snoozedPingOnScreen: { silent: !!snoozedPingOnScreen.silent, renotify: !!snoozedPingOnScreen.renotify },
   elsewhereSilent: !!elsewhereNotification.silent,
   backgroundSilent: !!backgroundNotification.silent,
   unreadableTitle: unreadableShown && unreadableShown.title,

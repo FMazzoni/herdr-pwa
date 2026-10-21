@@ -158,6 +158,7 @@ self.addEventListener("fetch", function (event) {
 const PAYLOAD_VERSION = 1;
 const EVENT_BLOCKED = "blocked";
 const EVENT_CLEAR = "clear";
+const EVENT_PING = "ping";
 const HERD_TAG = "herd";
 const NOTIFY_ICON = "/static/icon-192.png";
 const KEY_ROUTE = "/push/key";
@@ -230,8 +231,9 @@ function onPush(data) {
   }
   return windowClients().then(function (open) {
     const onScreen = onScreenFor(open, payload.agent);
-    /* The server says quiet when the slot shrank; the browser says quiet when it is on screen. */
-    const quiet = onScreen || payload.quiet === true;
+    /* The server says quiet when the slot shrank or a snooze holds a ping; the browser says quiet
+     * when the agent is on screen, which a ping, being news from outside the herd, ignores. */
+    const quiet = payload.quiet === true || (onScreen && payload.event !== EVENT_PING);
     return self.registration.showNotification(payload.title || "herdr", {
       body: payload.body || "",
       tag: payload.tag || HERD_TAG,

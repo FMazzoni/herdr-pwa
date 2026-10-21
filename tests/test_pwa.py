@@ -189,6 +189,9 @@ def test_a_push_shows_the_servers_text_and_a_tap_opens_that_agent() -> None:
     assert (seen["liveBeforeClear"], seen["liveAfterClear"], seen["shownByClear"]) == (1, 0, 0)
     # A ping has its own tag: a herd clear leaves it up, and a tap on it opens the herd.
     assert seen["liveTagsAfterHerdClear"] == ["ping"]
+    # With the dashboard open on screen a ping still sounds; only a snooze's quiet mutes it.
+    assert seen["pingOnScreen"] == {"silent": False, "renotify": True, "requireInteraction": False}
+    assert seen["snoozedPingOnScreen"] == {"silent": True, "renotify": False}
     assert seen["pingUrl"] == "/"
 
 
