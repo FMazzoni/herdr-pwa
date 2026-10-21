@@ -10,7 +10,7 @@ from herdr_pwa.validation import MODEL_ID
 
 
 def _default_state_dir() -> Path:
-    return Path.home() / ".config" / "herdr-pwa-v2"
+    return Path.home() / ".config" / "herdr-pwa"
 
 
 class Settings(BaseSettings):

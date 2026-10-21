@@ -200,7 +200,7 @@ def test_roots_are_the_repositories_agents_stand_in_and_never_home(tmp_path: Pat
     assert not fence.may_root(Path("/"))
     assert not fence.may_root(home.parent)
     assert not fence.allows(home / ".ssh" / "id_ed25519")
-    assert not fence.allows(home / ".config" / "herdr-pwa-v2" / "audit.jsonl")
+    assert not fence.allows(home / ".config" / "herdr-pwa" / "audit.jsonl")
     assert not fence.allows((tmp_path / "state" / "vapid.pem").resolve())
     assert fence.may_root((tmp_path / "work").resolve())
 
