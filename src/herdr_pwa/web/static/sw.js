@@ -164,9 +164,10 @@ const KEY_ROUTE = "/push/key";
 const SUBSCRIBE_ROUTE = "/push/subscribe";
 const UNSUBSCRIBE_ROUTE = "/push/unsubscribe";
 
-/* The URL a tap opens is built from the payload, so its shape is checked, not trusted. */
+/* The URL a tap opens is built from the payload, so its shape is checked, not trusted:
+ * claude's UUID, opencode's ses_ id, or hermes's date_time_hex id. */
 const SESSION_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|ses_[A-Za-z0-9]{1,64}|[0-9]{8}_[0-9]{6}_[0-9a-f]{1,32})$/i;
 
 /* A pane: key (an agent with no session yet) has no page of its own here, so it opens the herd. */
 function agentUrl(session) {

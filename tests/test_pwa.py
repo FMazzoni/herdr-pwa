@@ -207,6 +207,16 @@ def test_a_tap_url_is_never_built_from_a_string_that_is_not_a_session() -> None:
 
 
 @needs_node
+def test_a_tap_opens_an_opencode_or_hermes_agent_by_its_own_session_id() -> None:
+    seen = observed()
+    assert (seen["opencodeUrl"], seen["hermesUrl"]) == (
+        "/agent/ses_3fd62ba5bffemIxWVhRda5wgS7",
+        "/agent/20260101_120000_aaaaaa",
+    )
+    assert (seen["opencodeOnScreenSilent"], seen["opencodeFromHerdSilent"]) == (True, False)
+
+
+@needs_node
 def test_a_rotated_subscription_re_registers_itself() -> None:
     seen = observed()
     assert seen["resubscribePosts"] == ["/push/key", "/push/subscribe", "/push/unsubscribe"]
@@ -301,11 +311,24 @@ def test_every_page_links_the_root_manifest_and_carries_its_build(tmp_path: Path
     assert f'<meta name="hp-build" content="{page.headers["hp-build"]}">' in page.text
 
 
+@pytest.mark.parametrize("route", ["/", "/offline"])
+def test_a_page_says_it_is_dark_before_its_stylesheet_arrives(tmp_path: Path, route: str) -> None:
+    page = build_rig(tmp_path).http.get(route).text
+    assert '<meta name="color-scheme" content="dark">' in page
+
+
 def test_the_update_offer_is_hidden_and_outside_every_polled_region(tmp_path: Path) -> None:
     page = build_rig(tmp_path).http.get("/").text
     assert '<div class="updatebar" id="hp-update" hidden>' in page
     assert page.index('id="hp-update"') < page.index("data-hp-poll")
     assert "updatebar" not in page.partition("data-hp-poll")[2]
+
+
+def test_the_lost_box_line_is_hidden_and_rides_in_the_sticky_bar(tmp_path: Path) -> None:
+    page = build_rig(tmp_path).http.get("/").text
+    header = page.partition('<header class="topbar">')[2].partition("</header>")[0]
+    assert '<p class="unreachable" id="hp-unreachable" hidden>' in header
+    assert "data-hp-poll" not in header
 
 
 def test_the_client_script_builds_no_markup_and_registers_the_root_worker() -> None:
@@ -316,6 +339,12 @@ def test_the_client_script_builds_no_markup_and_registers_the_root_worker() -> N
     # Only a second, different stamp moves the build; a reload follows only the user's tap.
     assert 'getResponseHeader("HP-Build")' in source
     assert "if (swapping)" in source
+
+
+def test_no_script_swallows_a_failure_without_saying_why() -> None:
+    own = sorted(p for p in STATIC_DIR.glob("*.js") if p.name != "htmx.min.js")
+    source = "\n".join(p.read_text(encoding="utf-8") for p in own)
+    assert re.findall(r"catch\s*\((?:function\s*)?\([^)]*\)\s*\{\s*\}", source) == []
 
 
 def test_the_worker_and_app_post_to_the_same_push_routes() -> None:
