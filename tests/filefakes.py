@@ -40,7 +40,7 @@ class Greeting:
 class Handler(BaseHTTPRequestHandler):
     """Routes GET requests to the two endpoints the service has."""
 
-    def do_GET(self) -> None:  # noqa: N802
+    def do_GET(self) -> None:  # noqa: N802 - http.server dispatches on the method's name
         if self.path == "/healthz":
             self._reply(200, {"status": "ok"})
         elif self.path.startswith("/hello/"):
