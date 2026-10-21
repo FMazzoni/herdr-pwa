@@ -714,7 +714,7 @@ def _copies(directory: Path) -> dict[str, list[Path]]:
 _Hop = tuple[str, Path]
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, frozen=True)
 class _Lineage:
     """What every hop of one walk shares: where it may go, who it is for, what it has seen."""
 
@@ -1472,6 +1472,7 @@ def _runs_compact(turn: TranscriptTurn) -> bool:
     )
 
 
+# Mutable: the fold fills it in as it walks the turns.
 @dataclass(slots=True)
 class _Compaction:
     """What waits for the /compact line: the summary, and the line as the person sent it."""

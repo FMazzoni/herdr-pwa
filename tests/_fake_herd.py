@@ -86,7 +86,8 @@ class FakeClock:
 type Hook = Callable[["FakeHerd", dict[str, JsonValue]], None]
 
 
-@dataclass
+# Mutable: a fake the test drives by changing what it answers.
+@dataclass(slots=True)
 class FakeHerd:
     """Answers the socket methods the writes use, from state a test arranges."""
 
@@ -290,7 +291,7 @@ class FakeHerd:
         return ok()
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class Rig:
     """A writer wired to a fake herd, a real audit log and a clock that never sleeps."""
 

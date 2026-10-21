@@ -81,7 +81,7 @@ def writer(tmp_path: Path) -> Writer:
     return Writer(client, Recorder(log, Origin(actor="live-test", via="config")))
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class _Bench:
     """The throwaway workspace a round launches its agents into, and the writer driving them."""
 

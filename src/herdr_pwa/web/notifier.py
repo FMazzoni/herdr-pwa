@@ -117,6 +117,7 @@ class Tick:
     error: str = ""
 
 
+# Mutable: the loop thread updates it each tick for the status page to read.
 @dataclass(slots=True)
 class LoopState:
     """The loop's own vital signs, read by the status route from another thread."""

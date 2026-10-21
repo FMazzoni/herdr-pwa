@@ -123,7 +123,7 @@ def _back(session: str) -> str:
         return ""
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class Explorer:
     """The explorer's state: one git reader, one viewer, and the fence around every root."""
 

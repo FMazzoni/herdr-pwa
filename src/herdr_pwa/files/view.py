@@ -116,7 +116,7 @@ def _lines_of(text: str) -> list[str]:
     return lines[:-1] if lines and not lines[-1] else lines
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class _Lru[K, V]:
     size: int
     items: OrderedDict[K, V] = field(default_factory=OrderedDict[K, V])
@@ -182,7 +182,7 @@ class Look(BaseModel):
 FIRST_LOOK: Final = Look()
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class Viewer:
     """Builds file views, holding the highlight cache and the limit on highlights in flight."""
 

@@ -730,7 +730,7 @@ def _load_problems(seen: dict[str, object], ready: str, *, scripted: bool) -> li
     return problems
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Size:
     """A phone width and an iPhone Text Size, as a multiple of the default."""
 
@@ -743,7 +743,8 @@ class Size:
         return f"{self.width}px {name}{text}"
 
 
-@dataclass
+# Mutable: every check adds its taps and problems as it runs.
+@dataclass(slots=True)
 class Tally:
     """Every problem found, and how often each argued exception was needed."""
 
@@ -758,7 +759,7 @@ class Tally:
         self.used[selector] = self.used.get(selector, 0) + 1
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Spot:
     """One state measured at one size: its name in the report, the size, and the tally it adds to."""
 

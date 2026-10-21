@@ -23,7 +23,7 @@ GOOD_STATUS: dict[str, object] = {
 }
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class Canned:
     """One fixed answer; ``raw`` bypasses HTTP framing, ``hang`` never answers, ``late`` stalls."""
 
@@ -36,7 +36,7 @@ class Canned:
     late: float = 0.0
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class Seen:
     """One request as the fake received it."""
 
@@ -46,7 +46,8 @@ class Seen:
     body: str
 
 
-@dataclass
+# Mutable: a fake the test drives by changing what it answers.
+@dataclass(slots=True)
 class FakeTailscaled:
     """Answers canned routes, and serve-config statefully with an ETag compare-and-swap."""
 
@@ -190,7 +191,7 @@ _SESSION = SessionId("5e550001-0000-0000-0000-000000000000")
 _PANE = PaneId("w1:p1")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Agent:
     """One agent in the shape the engine reports, as far as the notifier reads it."""
 

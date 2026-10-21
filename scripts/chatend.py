@@ -179,7 +179,7 @@ return { fresh: fresh, busy: !!busy, open: !!(fold && fold.open) };
 """
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Tab:
     """One tab's walk: the state it opens on, its newest line's text, and how it grows one."""
 
@@ -193,7 +193,7 @@ class Tab:
     scale: float = 1.0
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class WalkCtx:
     """What one walk is handed: the browser, the app's address, the tab, its rig and its home."""
 

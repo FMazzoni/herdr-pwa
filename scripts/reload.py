@@ -66,7 +66,7 @@ class Spot(BaseModel):
     path: str
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class Walk:
     """One page in one context, and whatever the walk found wrong."""
 

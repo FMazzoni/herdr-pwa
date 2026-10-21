@@ -331,6 +331,7 @@ def _slot_for_256(index: int) -> int | None:
     return _slot_for_rgb(level, level, level)
 
 
+# Mutable: one SGR sequence updates it code by code.
 @dataclass(slots=True)
 class _Style:
     """Live SGR state. Only what survives to the output is kept."""

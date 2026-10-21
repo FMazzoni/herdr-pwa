@@ -22,7 +22,7 @@ LITERAL: Final = re.compile(
 )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Finding:
     """One literal outside the token block: where, what, and the declaration it sits in."""
 

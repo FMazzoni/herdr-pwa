@@ -100,7 +100,7 @@ def _rooted(option: Option, here: Path) -> Option:
     return option.model_copy(update=update)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Source:
     """Where one option's pictures live: a saved folder, or this tree under some CSS."""
 
@@ -179,7 +179,7 @@ def _card(option: Option) -> str:
     )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Shelf:
     """What every picture on a page shares: the folder shots land in, and the phone."""
 

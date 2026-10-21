@@ -28,6 +28,7 @@ MAX_TAIL_FILES: Final = 6
 MAX_HELD_TURNS: Final = 1500
 
 
+# Mutable: the cache moves its cursor and seal on in place as the log grows.
 @dataclass(slots=True)
 class Held:
     """One file's turns from byte `cursor` to byte `end`, oldest first."""

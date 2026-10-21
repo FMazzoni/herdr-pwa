@@ -23,7 +23,7 @@ SHEETS: Final = ROOT / ".agents" / "sheets"
 TITLES: Final = MappingProxyType({s.name: s.title for s in STATES})
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Side:
     """One column of the sheet: its heading and the folder of PNGs it draws from."""
 
@@ -32,7 +32,7 @@ class Side:
     device: Device = IPHONE
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Page:
     """Where the sheet is written, and whether its shots are inlined or linked beside it."""
 

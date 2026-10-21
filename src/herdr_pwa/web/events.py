@@ -81,7 +81,8 @@ def changed(before: Mapping[str, object], after: Mapping[str, object]) -> set[st
     return moved | (set(before) - set(after))
 
 
-@dataclass(eq=False)
+# Mutable: the hub sets its pending and closed flags as events arrive.
+@dataclass(eq=False, slots=True)
 class Listener:
     """One open page: the topics it shows and the ones it has not been told about yet."""
 
@@ -114,6 +115,7 @@ class HubConfig:
     lifetime: float = 600.0
 
 
+# Mutable: a transcript that vanishes drops its path in place.
 @dataclass(slots=True)
 class _Watch:
     """One transcript a page is reading: where it is and what it looked like."""

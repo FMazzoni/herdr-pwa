@@ -283,7 +283,7 @@ def start(session: str, launch: Frame) -> dict[str, Any]:
     return until(attempt, SHELL_SECONDS, step=SETTLE_STEP)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Launch:
     """Which agent to start: its name, its harness, the model it runs and the folder it runs in."""
 

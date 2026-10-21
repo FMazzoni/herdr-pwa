@@ -60,7 +60,7 @@ def _record(session: str, index: int, ts: str, *, pad: int = 0) -> dict[str, obj
     }
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class _Log:
     """One log: its session, the newest timestamp it holds, and the session it was copied from."""
 
@@ -69,7 +69,7 @@ class _Log:
     parent: str = ""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class _Body:
     """How much a log carries: filler records, and the padding on the newest one."""
 
@@ -77,7 +77,7 @@ class _Body:
     pad: int = 0
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class _Head:
     """What the boundary a handoff opens with says about itself, and how far in it sits."""
 

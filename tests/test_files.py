@@ -4,6 +4,7 @@ import os
 import threading
 from collections.abc import Generator, Iterator
 from contextlib import contextmanager
+from dataclasses import replace
 from pathlib import Path
 from typing import Final
 
@@ -476,13 +477,14 @@ def _hold_both_slots(
         gate.wait(10)
         return ()
 
-    viewer.paint = slow
+    # The same slots and caches, painting slowly.
+    held = replace(viewer, paint=slow)
     reader = LocalReader(tmp_path.resolve())
     for n in range(2):
         (tmp_path / f"held{n}.py").write_text(f"x = {n}\n")
     busy = [
         threading.Thread(
-            target=viewer.open,
+            target=held.open,
             args=(reader, tmp_path / f"held{n}.py"),
         )
         for n in range(2)

@@ -98,7 +98,7 @@ WIZARD_STEP: Final = (
 )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class State:
     """One screen of the real app, the fake runner behind it, and the element proving it drew.
 
@@ -729,7 +729,7 @@ def _shell(
 OLD_SERVER: Final = ("Serve the site on port 8000", "python -m http.server 8000")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class LeftRunning:
     """What an agent left running: shells and agents its last turn started, servers an older one did."""
 

@@ -37,7 +37,7 @@ SETTLE_MS: Final = 400
 MAX_SHOT_PX: Final = 32_000
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Device:
     """A phone the shots are taken as: a CSS viewport, a pixel ratio, and Safari's identity."""
 
@@ -65,7 +65,7 @@ def missing_browser() -> str:
     return ""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Phone:
     """A running WebKit and the Playwright that knows the device descriptors."""
 
@@ -88,7 +88,7 @@ def webkit() -> Iterator[Phone]:
 WIRE_CSS: Final = Path(__file__).with_name("wire.css")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Look:
     """How a shot is taken beyond the device: at CSS pixels, and with CSS laid over app.css."""
 
@@ -162,7 +162,7 @@ def drive(page: Page, state: State, url: str) -> None:
         page.wait_for_function(HTMX_SETTLED, timeout=READY_MS)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Stage:
     """The browser, and the one server whose app each state swaps in."""
 

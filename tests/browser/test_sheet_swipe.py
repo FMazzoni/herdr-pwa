@@ -84,7 +84,7 @@ const head = document.querySelector("#agent-tray .tray__head");
 """
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Sheet:
     """The browser on one state's page with the row's sheet drawn open."""
 

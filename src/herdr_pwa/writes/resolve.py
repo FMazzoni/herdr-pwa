@@ -46,7 +46,7 @@ class Witness:
     proc: Path = PROC
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class InFlight:
     """Which agents, panes and workspaces have a write in flight, in this process."""
 
@@ -67,7 +67,7 @@ class InFlight:
                     self._held.discard(key)
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class Unsure:
     """The text each session was last sent with an unknown outcome, until something is sent."""
 

@@ -22,7 +22,7 @@ COMMIT_START, HEADER_END = "\x1e", "\x1f"
 LOG_FORMAT: Final = "%x1e%H%nauthor %an <%ae>%ncommitter %cn <%ce>%n%B%x1f"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Update:
     """One ref the push moves: what is sent, where it lands and what the remote had there."""
 

@@ -35,7 +35,7 @@ FINGERPRINT = control_token(BlockedPrompt.parse(PERMISSION))
 SETTLED_CLAIM = screen_digest(as_text_read(SETTLED))
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class Web:
     herd: FakeHerd
     http: TestClient
@@ -785,6 +785,7 @@ def test_a_model_posted_for_opencode_starts_it_when_declared(
     assert start["args"] == ["--model", PICKLE]
 
 
+# Mutable and unslotted like the FakeHerd it extends; a slotted copy would break its bare super().
 @dataclass
 class _Coloured(FakeHerd):
     """A runner that answers a colour read in colour and a text read with tmux's padding."""

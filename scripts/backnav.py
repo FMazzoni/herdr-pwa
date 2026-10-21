@@ -57,7 +57,8 @@ window.addEventListener("pageshow", (e) => { window.__hpPersisted = e.persisted;
 """
 
 
-@dataclass
+# Mutable: the walk keeps where it started, set once the page is up.
+@dataclass(slots=True)
 class Walk:
     """One driven journey and whatever it found wrong."""
 

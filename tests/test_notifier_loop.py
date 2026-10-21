@@ -43,7 +43,8 @@ PAST_THE_CACHE = 10.0
 OBJECT: TypeAdapter[dict[str, JsonValue]] = TypeAdapter(dict[str, JsonValue])
 
 
-@dataclass
+# Mutable: a fake the test drives by changing what it answers.
+@dataclass(slots=True)
 class Sender:
     """Records every payload instead of posting it; ``refuse`` answers as a push service would."""
 
@@ -58,7 +59,8 @@ class Sender:
         self.sent.append((subscription.endpoint, OBJECT.validate_json(data)))
 
 
-@dataclass
+# Mutable: the test's loop counts its ticks.
+@dataclass(slots=True)
 class Loop:
     """A notifier, its fake runner, clock, sender and stores."""
 

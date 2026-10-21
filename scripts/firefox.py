@@ -268,7 +268,7 @@ def phone_window(driver: Marionette, width: int, height: int) -> str:
     return handle
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Bench:
     """What a walk runs on: the browser, the app server's address, its door and a scratch dir."""
 
