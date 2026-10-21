@@ -10,7 +10,8 @@ There's no design doc: the code, tests and commit log are the truth.
 - Read the gate to its last line: the first `All checks passed!` is ruff, not the gate.
   To keep the exit code: `just check > out.txt 2>&1; echo "EXIT=$?" >> out.txt`.
 - The gate and browser harnesses are heavy, and the owner works on the same machine. Run
-  one at a time (`pgrep -f "just check"` first), under `nice -n 19`. Reproduce a flake by
+  one at a time, under `nice -n 19`: check `pgrep -f '^just check'` first. Keep the `^`,
+  or a wait loop's own command line matches and it waits forever. Reproduce a flake by
   stressing the test, not the machine.
 - Fix the code; never widen a limit in `ruff.toml` or `pyproject.toml`.
 - For a change under `web/templates` or `web/static`, run the `phone-look` skill before and
