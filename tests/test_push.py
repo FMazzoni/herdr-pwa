@@ -328,6 +328,11 @@ def test_a_string_escape_ends_where_a_terminal_ends_it(text: str, cleaned: str) 
     assert sanitise(text, limit=100) == cleaned
 
 
+def test_a_stray_esc_takes_the_character_after_it() -> None:
+    # ECMA-48 reads ESC and one final byte as one sequence, so the letter goes with it.
+    assert sanitise("\x1bhello", limit=100) == "ello"
+
+
 @pytest.mark.parametrize(
     "text",
     [
