@@ -203,15 +203,6 @@ function onScreenFor(open, session) {
   });
 }
 
-function closeTag(tag) {
-  return self.registration.getNotifications({ tag: tag }).then(function (open) {
-    open.forEach(function (notification) {
-      notification.close();
-    });
-    return open.length;
-  });
-}
-
 /* A push that shows nothing makes the browser show its own generic message instead. */
 function showUnreadable() {
   return self.registration.showNotification("herdr", {
@@ -221,13 +212,26 @@ function showUnreadable() {
   });
 }
 
+/* WebKit revokes a subscription after a few pushes that show nothing (its silent push quota), so
+ * a clear from an older server replaces the alert with a quiet one instead of closing it. */
+function showCleared(tag) {
+  return self.registration.showNotification("herdr", {
+    body: "Open the app to see your agents.",
+    tag: tag,
+    icon: NOTIFY_ICON,
+    renotify: false,
+    silent: true,
+    data: { session: "", event: EVENT_CLEAR, url: "/" },
+  });
+}
+
 function onPush(data) {
   const payload = readPayload(data);
   if (!payload) {
     return showUnreadable();
   }
   if (payload.event === EVENT_CLEAR) {
-    return closeTag(payload.tag || HERD_TAG);
+    return showCleared(payload.tag || HERD_TAG);
   }
   return windowClients().then(function (open) {
     const onScreen = onScreenFor(open, payload.agent);
@@ -252,7 +256,15 @@ function onPush(data) {
 }
 
 self.addEventListener("push", function (event) {
-  event.waitUntil(onPush(event.data));
+  /* A push whose handling failed must still show something, or it counts against the quota. */
+  const data = event.data;
+  event.waitUntil(
+    Promise.resolve()
+      .then(function () {
+        return onPush(data);
+      })
+      .catch(showUnreadable),
+  );
 });
 
 /* Reuse the open window: two copies of a live-state app are two truths. */

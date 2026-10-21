@@ -322,6 +322,11 @@ class HerdSlot:
         seen = self._desk.get(session)
         return seen is not None and self._clock() - seen <= self._desk_window
 
+    @property
+    def showing(self) -> bool:
+        """The herd notification last sent is still owed: something blocked or finished."""
+        return self._shown is not None
+
     def next_due(self) -> MonoTime | None:
         """When the earliest held alert may be shown, so the loop can wake for it."""
         return min((at for _, at in self._held.values()), default=None)
@@ -529,7 +534,7 @@ class Planner:
         return Step(tuple(changes), self.slot.update(changes))
 
     def retract(self) -> None:
-        """Forget whatever is showing so a snooze acts at once; the caller sends the clear."""
+        """Forget whatever is showing so a snooze acts at once; nothing is sent to the phone."""
         self.slot.reset()
 
     def _prior_for(self, current: Mapping[str, str]) -> dict[str, str] | None:

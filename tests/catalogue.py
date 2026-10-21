@@ -1113,6 +1113,13 @@ _CUT_NETWORK: Final = (
     " xhr.dispatchEvent(new ProgressEvent('error'));"
     " xhr.dispatchEvent(new ProgressEvent('loadend')); }, 0); };"
 )
+# A Home Screen app with Web Push whose owner has not yet granted it notifications.
+_ALERTS_NEVER_ASKED: Final = (
+    "window.PushManager = window.PushManager || function () {};"
+    " Object.defineProperty(window, 'Notification', {configurable: true, value:"
+    " {permission: 'default', requestPermission: () => Promise.resolve('default')}});"
+    " Object.defineProperty(navigator, 'standalone', {configurable: true, value: true});"
+)
 
 
 def _tamper(field_name: str, value: str, then: str) -> str:
@@ -1238,13 +1245,24 @@ FEED: Final = (
         armed="#feed-list .cards",
         act=_CUT_NETWORK + "hp.refetch(document.getElementById('feed-list'));",
     ),
+    # No engine here has Web Push, so the act stands in a Home Screen app never granted it; the
+    # banner is then app.js's own answer, reached the way a resume reaches it.
+    State(
+        "feed-alerts-off",
+        "/",
+        "#hp-alerts-off:not([hidden]) #hp-alerts-on",
+        runner(lambda: herd(**BLOCKED)),
+        title="Feed: this phone's alerts are off, with the button that turns them back on",
+        armed="#feed-list .cards",
+        act=_ALERTS_NEVER_ASKED + "document.dispatchEvent(new Event('visibilitychange'));",
+    ),
     # A failure fragment only swaps in because app.js overrides htmx 2's no-swap on 5xx.
     State(
         "unreachable",
         "/",
         "main > .failure .banner--failure",
         _unreachable,
-        title="Herd unreachable: the app is up and the runner is not",
+        title="Herd unreachable: the app is up and herdr is not",
         fails=True,
     ),
     State(

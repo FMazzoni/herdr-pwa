@@ -660,6 +660,29 @@ html { -webkit-tap-highlight-color: transparent; }
   font: inherit;
 }
 
+/* Alerts are off on this phone: in the flow, not sticky, so it never stacks on the update bar. */
+.alertsbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4) var(--space-6);
+  padding: var(--space-4) var(--gutter-right) var(--space-4) var(--gutter-left);
+  background: var(--surface-2);
+  border-bottom: var(--line-1) solid var(--rule);
+}
+.alertsbar[hidden] { display: none; }
+.alertsbar__what { flex: 1 1 12em; margin: 0; color: var(--unknown); }
+.alertsbar__button {
+  min-height: var(--tap);
+  padding: var(--space-5) var(--space-7);
+  color: var(--ink);
+  background: var(--surface);
+  border: var(--line-1) solid var(--accent);
+  border-radius: var(--radius-2);
+  font: inherit;
+}
+.alertsbar__button[hidden] { display: none; }
+
 /* The alerts sheet. */
 .sheet { padding: var(--space-6) var(--gutter-right) var(--space-11) var(--gutter-left); max-width: var(--sheet-max); margin: 0 auto; }
 .sheet__group { margin: 0 0 var(--space-10); }
