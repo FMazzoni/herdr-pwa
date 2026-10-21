@@ -14,6 +14,7 @@ def build(web: WebState) -> APIRouter:
     """The feed's routes."""
     router = APIRouter(dependencies=[Depends(viewer_guard(web))])
 
+    # Each reportUnusedFunction ignore marks a route: FastAPI registers it by decorator.
     @router.get("/")
     def feed_page(ws: str = "") -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
         # The filter is the address the user tapped, not agent state, so the shell stays rowless.

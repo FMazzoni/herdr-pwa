@@ -6,7 +6,7 @@ import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final
+from typing import Final, cast
 
 import pygit2
 from pygit2.enums import DeltaStatus, DiffFind, DiffOption, RepositoryOpenFlag
@@ -206,7 +206,8 @@ class Git:
         now = self._clock()
         hit = self._memo.get(key)
         if hit is not None and now - hit[0] < ttl:
-            return hit[1]  # pyright: ignore[reportReturnType]
+            # One memo holds every read; a key is only ever filled by the same read, so its T.
+            return cast("T", hit[1])
         value = read()
         self._memo[key] = (now, value)
         return value

@@ -452,6 +452,7 @@ class _Live:
 
     def _named(self, columns: str) -> tuple[object, ...] | None:
         """The session's own row, or ``None`` -- a store without *columns* included."""
+        # *columns* is always one of this class's literals, never input; only the id is bound.
         sql = f"select {columns} from session where id = ?"  # noqa: S608
         return self._db.first(sql, self._db.session)
 
@@ -463,6 +464,7 @@ class _Live:
         """One record's stored blob by id, refusing any name that is not the store's shape."""
         if not _ID.match(key):
             return None, 0
+        # *table* is always "part" or "message" from this class; the ids are bound.
         sql = f"select data from {table} where id = ? and session_id = ?"  # noqa: S608
         found = self._db.first(sql, key, self._db.session)
         if found is None:

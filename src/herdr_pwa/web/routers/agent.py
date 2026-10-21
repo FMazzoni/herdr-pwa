@@ -211,6 +211,7 @@ def _page_context(web: WebState, agent: Agent, tab: str, first: str) -> dict[str
 
 
 def _page_route(router: APIRouter, web: WebState) -> None:
+    # Each reportUnusedFunction ignore marks a route: FastAPI registers it by decorator.
     @router.get("")
     def agent_page(  # pyright: ignore[reportUnusedFunction]
         session: str, tab: str = "chat", first: str = ""

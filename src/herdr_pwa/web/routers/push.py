@@ -119,6 +119,7 @@ def _status(push: PushState) -> dict[str, object]:
 
 
 def _page_routes(router: APIRouter, web: WebState, push: PushState | None) -> None:
+    # Each reportUnusedFunction ignore marks a route: FastAPI registers it by decorator.
     @router.get("")
     def alerts_page() -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
         if push is None:

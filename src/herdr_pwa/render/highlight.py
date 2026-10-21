@@ -15,6 +15,7 @@ from pygments.token import (
     Number,
     Operator,
     String,
+    # pygments exports no public name for a token's type, and the class map is keyed on it.
     _TokenType,  # pyright: ignore[reportPrivateUsage]
 )
 from pygments.util import ClassNotFound

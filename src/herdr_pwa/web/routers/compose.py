@@ -336,6 +336,7 @@ def build(web: WebState) -> APIRouter:
 def _composer_routes(router: APIRouter, writes: WriteRoutes) -> None:
     web = writes.web
 
+    # Each reportUnusedFunction ignore marks a route: FastAPI registers it by decorator.
     @router.get("/agent/{session}/compose")
     def composer(session: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
         agent = find_agent(web, identity_of(session))
