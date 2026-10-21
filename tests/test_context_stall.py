@@ -10,10 +10,10 @@ from pydantic import JsonValue
 from herdr_pwa.decisions import Overlay, context_stalled, read_status, reads_stall
 from herdr_pwa.engine import AgentStatus, SessionId, Snapshot, TranscriptTurn
 from herdr_pwa.engine.notices import CONTEXT_FULL
-from herdr_pwa.engine.transcript import parse_claude_line
 from herdr_pwa.web.events import changed, herd_marks
 from tests._jsonpath import obj
 from tests.catalogue import api_error_records, slash_command_records
+from tests.engine_seam import parse_claude_line
 from tests.test_notifier_loop import PAST_THE_CACHE, build_loop
 from tests.test_opencode import errored_page
 from tests.webfakes import (

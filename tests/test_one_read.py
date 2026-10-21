@@ -6,7 +6,7 @@ import pytest
 from pydantic import JsonValue
 
 from herdr_pwa.engine import Source
-from herdr_pwa.engine.transcript import ClaudeAdapter
+from tests.engine_seam import ClaudeAdapter
 from tests.webfakes import (
     IDLE_SESSION,
     READ,

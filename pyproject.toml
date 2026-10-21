@@ -111,3 +111,32 @@ name = "Outside the engine, only its facade"
 type = "protected"
 protected_modules = ["herdr_pwa.engine.*"]
 allowed_importers = ["herdr_pwa.engine"]
+
+# The Claude reader's modules form one chain: records, lineage and turns, pages and tally, adapter.
+[[tool.importlinter.contracts]]
+name = "No import cycles between the Claude reader's modules"
+type = "acyclic_siblings"
+ancestors = ["herdr_pwa.engine.claude"]
+depth = 0
+
+# Named apart from the layers, so a reader of the Claude package sees what it may never reach.
+[[tool.importlinter.contracts]]
+name = "The Claude reader imports nothing above the engine"
+type = "forbidden"
+source_modules = ["herdr_pwa.engine.claude"]
+forbidden_modules = [
+    "herdr_pwa.cli",
+    "herdr_pwa.web",
+    "herdr_pwa.writes",
+    "herdr_pwa.notify",
+    "herdr_pwa.files",
+    "herdr_pwa.decisions",
+    "herdr_pwa.render",
+]
+
+# The adapters build on transcript.py and the facade registers them, so it never imports one.
+[[tool.importlinter.contracts]]
+name = "transcript.py imports no adapter"
+type = "forbidden"
+source_modules = ["herdr_pwa.engine.transcript"]
+forbidden_modules = ["herdr_pwa.engine.claude", "herdr_pwa.engine.opencode", "herdr_pwa.engine.hermes"]

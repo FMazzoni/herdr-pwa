@@ -8,6 +8,7 @@ from herdr_pwa.engine.cache import (
     ReadAbandoned,
     SnapshotCache,
 )
+from herdr_pwa.engine.claude import ClaudeAdapter, locate
 from herdr_pwa.engine.client import (
     INTERRUPT_KEY,
     NOT_READY_CODE,
@@ -30,6 +31,7 @@ from herdr_pwa.engine.dialog import (
     digits_masked,
     ends_a_question,
 )
+from herdr_pwa.engine.hermes import HermesAdapter
 from herdr_pwa.engine.holder import holds_session
 from herdr_pwa.engine.model import (
     Agent,
@@ -47,6 +49,7 @@ from herdr_pwa.engine.model import (
     screen_digest,
 )
 from herdr_pwa.engine.notices import CONTEXT, CONTEXT_FULL
+from herdr_pwa.engine.opencode import OpencodeAdapter
 from herdr_pwa.engine.tail import (
     MAX_TAIL_FILES,
     Ask,
@@ -80,7 +83,7 @@ from herdr_pwa.engine.transcript import (
     is_api_error,
     is_compact_summary,
     is_slash_command,
-    locate,
+    register,
     session_origin,
 )
 from herdr_pwa.engine.transport import (
@@ -100,6 +103,9 @@ from herdr_pwa.engine.transport import (
     WireReply,
 )
 from herdr_pwa.engine.usage import UsageCache
+
+# The adapters build on transcript.py, so it cannot import them: the facade hands them over.
+register(ClaudeAdapter(), OpencodeAdapter(), HermesAdapter())
 
 __all__ = [
     "CONTEXT",

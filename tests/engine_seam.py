@@ -9,7 +9,17 @@ place outside the engine that imports its submodules.
 
 from herdr_pwa.engine import cache as cache_module
 from herdr_pwa.engine import client as client_module
-from herdr_pwa.engine import dialog, generated, transcript
+from herdr_pwa.engine import dialog, generated
+from herdr_pwa.engine.claude import (
+    ClaudeAdapter,
+    ClaudeRecord,
+    claude_record,
+    parse_claude_line,
+    read_page,
+    tally_claude,
+)
+from herdr_pwa.engine.claude import lineage as claude_lineage
+from herdr_pwa.engine.claude.lineage import copied_from, head_records, head_window
 from herdr_pwa.engine.client import discovery_subscriptions, method_of, payload_field
 from herdr_pwa.engine.dialog import OPTION_RE, is_key_hint
 from herdr_pwa.engine.generated import request as wire_request
@@ -30,16 +40,12 @@ from herdr_pwa.engine.transcript import (
     MAX_NOTE_CHARS,
     MAX_PROSE_CHARS,
     MAX_RESULT_CHARS,
-    ClaudeRecord,
     Window,
     adapter_for,
-    claude_record,
     fold_page,
     fold_turns,
     history,
     is_message,
-    read_page,
-    tally_claude,
     usage,
 )
 from herdr_pwa.engine.transport import (
@@ -54,11 +60,8 @@ from herdr_pwa.engine.transport import (
 )
 
 # Private to their modules; a test pins each directly because no public call shows it.
-HEAD_BYTES = transcript._HEAD_BYTES  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
-HEAD_FINISH = transcript._HEAD_FINISH  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
-copied_from = transcript._copied_from  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
-head_records = transcript._head_records  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
-head_window = transcript._head_window  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
+HEAD_BYTES = claude_lineage._HEAD_BYTES  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
+HEAD_FINISH = claude_lineage._HEAD_FINISH  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
 dialog_chunks = dialog._chunks  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
 
 __all__ = [
@@ -79,6 +82,7 @@ __all__ = [
     "OPENCODE_ROOT",
     "OPENCODE_STORAGE_ROOT",
     "OPTION_RE",
+    "ClaudeAdapter",
     "ClaudeRecord",
     "EventKind",
     "HermesAdapter",
@@ -107,6 +111,7 @@ __all__ = [
     "is_key_hint",
     "is_message",
     "method_of",
+    "parse_claude_line",
     "payload_field",
     "raise_for_error_frame",
     "read_page",
