@@ -48,6 +48,25 @@ class LoginNotAllowedError(AuthError):
     reason: ClassVar[str] = "login_not_allowed"
 
 
+class NoLoginPinnedError(AuthError):
+    """No login is pinned and any-user mode was not chosen, so no tailnet user is trusted."""
+
+    reason: ClassVar[str] = "no_login_pinned"
+
+
+class DuplicateIdentityError(AuthError):
+    """More than one identity header, which tailscaled never sends."""
+
+    status_code: ClassVar[int] = 400
+    reason: ClassVar[str] = "duplicate_identity"
+
+
+class CrossSiteError(AuthError):
+    """A request another site started that is not a link followed to the app."""
+
+    reason: ClassVar[str] = "cross_site"
+
+
 class MissingOriginError(AuthError):
     """A write with no Origin header."""
 
@@ -91,6 +110,8 @@ class Access:
 
     tailnet_login: str = ""
     assume_login: str = ""
+    # With no login pinned, any tailnet user may enter; off, every header identity is refused.
+    any_login: bool = False
     # The one Host a header identity may arrive on, as ``host_name`` gives it; empty refuses all.
     served_host: str = ""
 
@@ -118,8 +139,7 @@ def _same_login(expected: str, actual: str) -> bool:
 
 def identify(headers: Mapping[str, str], access: Access) -> Identity:
     """Return the identity the ingress asserted, the assumed one, or refuse."""
-    lowered = _lower(headers)
-    login = lowered.get(IDENTITY_HEADER, "").strip()
+    login = _identity_header(headers)
     if not login:
         if access.assume_login:
             return Identity(login=access.assume_login, via=VIA_CONFIG)
@@ -128,6 +148,11 @@ def identify(headers: Mapping[str, str], access: Access) -> Identity:
             "name, not the loopback port."
         )
     pin = access.tailnet_login
+    if not pin and not access.any_login:
+        raise NoLoginPinnedError(
+            "This app has no login pinned, so it trusts no tailnet user. Set HP_TAILNET_LOGIN.",
+            log_detail=f"refused {login!r}: HP_TAILNET_LOGIN and HP_ALLOW_ANY_TAILNET_USER unset",
+        )
     if pin and not _same_login(pin, login):
         raise LoginNotAllowedError(
             "This tailnet user is not the one this app is configured for.",
@@ -137,13 +162,37 @@ def identify(headers: Mapping[str, str], access: Access) -> Identity:
     return Identity(login=login)
 
 
-def unpinned_warning(access: Access) -> str | None:
-    """A startup warning when no login is pinned, else None."""
+def login_policy(access: Access) -> str:
+    """Who may use the app, in one line, as startup and doctor say it."""
     if access.tailnet_login:
+        return f"only {access.tailnet_login} (HP_TAILNET_LOGIN)"
+    if access.any_login:
+        return "any user your tailnet lets reach this node (HP_ALLOW_ANY_TAILNET_USER)"
+    if access.assume_login:
+        return (
+            f"no tailnet user; scripts on this machine as {access.assume_login} (HP_ASSUME_LOGIN)"
+        )
+    return "nobody: HP_TAILNET_LOGIN is not set"
+
+
+def assert_login_chosen(access: Access) -> None:
+    """At startup: refuse to serve with no login chosen: pinned, any-user, or assumed locally."""
+    # An assumed login already refuses to start while serve is on, and identify refuses headers.
+    if access.tailnet_login or access.any_login or access.assume_login:
+        return
+    raise NoLoginPinnedError(
+        "Refusing to start: HP_TAILNET_LOGIN is not set. Set it to your Tailscale login, or set "
+        "HP_ALLOW_ANY_TAILNET_USER=1 to let any user your tailnet admits drive every agent."
+    )
+
+
+def unpinned_warning(access: Access) -> str | None:
+    """A startup warning when any tailnet user is let in, else None."""
+    if access.tailnet_login or not access.any_login:
         return None
     return (
-        "HP_TAILNET_LOGIN is not set: any user your tailnet lets reach this node can drive "
-        "every agent on this machine. Pin your own login unless that is what you want."
+        "HP_ALLOW_ANY_TAILNET_USER is set and HP_TAILNET_LOGIN is not: any user your tailnet lets "
+        "reach this node can drive every agent on this machine."
     )
 
 
@@ -167,6 +216,26 @@ def check_same_origin(headers: Mapping[str, str]) -> None:
         raise OriginMismatchError(
             f"Refusing a cross-origin write: Origin {origin!r} is not {host!r}."
         )
+
+
+def check_same_site(headers: Mapping[str, str], method: str = "GET") -> None:
+    """Refuse a cross-site request unless it is a GET navigation (the fetch-metadata policy)."""
+    lowered = _lower(headers)
+    if lowered.get("sec-fetch-site", "").strip().lower() != "cross-site":
+        return
+    # A link from another app opens a page, which shows nothing the other site can read.
+    navigation = lowered.get("sec-fetch-mode", "").strip().lower() == "navigate"
+    if navigation and method.strip().upper() == "GET":
+        return
+    raise CrossSiteError("Refusing a request another site's page started.")
+
+
+def _identity_header(headers: Mapping[str, str]) -> str:
+    # A Starlette Headers keeps every copy; one reader taking the first and another the last is ambiguity.
+    found = [value for key, value in headers.items() if key.lower() == IDENTITY_HEADER]
+    if len(found) > 1:
+        raise DuplicateIdentityError("This request has more than one Tailscale identity header.")
+    return found[0].strip() if found else ""
 
 
 def _check_scheme(parsed: SplitResult, forwarded_proto: str) -> None:

@@ -217,6 +217,8 @@ def build_rig(
         "push_notifier": False,
         # TestClient addresses every request to this name, as serve addresses the MagicDNS one.
         "public_host": "testserver",
+        # Pinned to the login IDENTITY carries, as a deployment must be.
+        "tailnet_login": LOGIN,
         **overrides,
     }
     settings = Settings.model_validate(fields)

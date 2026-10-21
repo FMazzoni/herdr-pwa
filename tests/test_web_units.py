@@ -38,7 +38,7 @@ from herdr_pwa.web.started import STARTED_FILENAME, StartedTree, fingerprint, re
 from herdr_pwa.writes.answer import KeySent
 from herdr_pwa.writes.lifecycle import declared_models, record_service_models, record_service_path
 from herdr_pwa.writes.outcome import Evidence, Outcome
-from tests.fakes import NODE, status_route, tailscaled
+from tests.fakes import LOGIN, NODE, status_route, tailscaled
 from tests.webfakes import (
     FIXTURES,
     SNAPSHOT,
@@ -286,6 +286,7 @@ def _doctor(
         opencode_models=opencode_models,
         tailscaled_socket=tmp_path / "no-tailscaled.sock",
         public_host=NODE,
+        tailnet_login=LOGIN,
     )
     out: list[str] = []
 
@@ -329,7 +330,7 @@ def _doctor_on(settings: Settings) -> tuple[int, str]:
 
 
 def test_doctor_names_the_served_host_and_fails_without_one(tmp_path: Path) -> None:
-    base = {"socket_path": tmp_path / "x.sock", "state_dir": tmp_path}
+    base = {"socket_path": tmp_path / "x.sock", "state_dir": tmp_path, "tailnet_login": LOGIN}
     code, out = _doctor_on(Settings.model_validate({**base, "public_host": f"{NODE.upper()}."}))
     assert code == 0
     assert f"served host: {NODE} (from HP_PUBLIC_HOST)" in out
@@ -343,6 +344,45 @@ def test_doctor_names_the_served_host_and_fails_without_one(tmp_path: Path) -> N
     assert code == 1
     assert "served host: unknown, so every Tailscale identity is refused" in out
     assert out.rstrip().endswith("doctor: FAIL")
+
+
+def test_doctor_says_who_may_drive_agents_and_fails_when_nobody_chose(tmp_path: Path) -> None:
+    base = {"socket_path": tmp_path / "x.sock", "state_dir": tmp_path, "public_host": NODE}
+    code, out = _doctor_on(Settings.model_validate({**base, "tailnet_login": LOGIN}))
+    assert code == 0
+    assert f"who may drive agents: only {LOGIN} (HP_TAILNET_LOGIN)\n" in out
+    code, out = _doctor_on(Settings.model_validate({**base, "allow_any_tailnet_user": True}))
+    assert code == 0
+    assert "any user your tailnet lets reach this node (HP_ALLOW_ANY_TAILNET_USER)  WARN" in out
+    code, out = _doctor_on(Settings.model_validate(base))
+    assert code == 1
+    assert "nobody: HP_TAILNET_LOGIN is not set, so serve refuses to start" in out
+    code, out = _doctor_on(Settings.model_validate({**base, "assume_login": LOGIN}))
+    assert code == 0
+    assert f"scripts on this machine as {LOGIN} (HP_ASSUME_LOGIN)\n" in out
+
+
+def test_doctor_fails_on_a_raw_tcp_forward_and_says_when_it_cannot_tell(tmp_path: Path) -> None:
+    base = {"socket_path": tmp_path / "x.sock", "state_dir": tmp_path, "tailnet_login": LOGIN}
+    forward = {"TCP": {"8443": {"TCPForward": "127.0.0.1:8772"}}}
+    with tailscaled(tmp_path, canned=status_route(), serve_config=forward) as fake:
+        code, out = _doctor_on(
+            Settings.model_validate({**base, "tailscaled_socket": fake.socket_path})
+        )
+    assert code == 1
+    assert "raw TCP forward: 'tailscale serve' forwards raw TCP from port 8443" in out
+    (tmp_path / "plain").mkdir()
+    with tailscaled(tmp_path / "plain", canned=status_route()) as fake:
+        code, out = _doctor_on(
+            Settings.model_validate({**base, "tailscaled_socket": fake.socket_path})
+        )
+    assert code == 0
+    assert "raw TCP forward: none to port 8772  ok" in out
+    unreadable = {**base, "public_host": NODE, "tailscaled_socket": tmp_path / "none.sock"}
+    code, out = _doctor_on(Settings.model_validate(unreadable))
+    assert code == 0
+    assert "raw TCP forward: unknown, the serve config is unreadable (No tailscaled socket" in out
+    assert "  WARN\n" in out.split("raw TCP forward:")[1]
 
 
 def test_doctor_says_when_push_last_sent_failed_and_held_back(tmp_path: Path) -> None:
@@ -523,6 +563,7 @@ def test_doctor_from_a_bare_shell_says_what_serve_was_declared(
 ) -> None:
     monkeypatch.setenv("HP_STATE_DIR", str(tmp_path))
     monkeypatch.setenv("HP_TAILSCALED_SOCKET", str(tmp_path / "none.sock"))
+    monkeypatch.setenv("HP_TAILNET_LOGIN", LOGIN)
     monkeypatch.setattr(cli.uvicorn, "run", _never_serves)
     # The unit's environment file declares them; the shell doctor is run from does not.
     monkeypatch.setenv("HP_OPENCODE_MODELS", f"{PICKLE},{SONNET}")

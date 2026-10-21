@@ -58,8 +58,16 @@ account that sent it. (Strictly, the Tailscale background service does this, and
   loopback address `127.0.0.1`, which other machines can't reach. So nobody on the network
   can send the app a forged header; only `tailscale serve` can pass requests to it.
 - **Pin your own account.** Set `HP_TAILNET_LOGIN` to your Tailscale login, and the app
-  refuses every other account. Without it, anyone your tailnet lets reach the machine can
-  control every agent, and the app warns you when it starts.
+  refuses every other account. If you leave it unset, the app refuses to start. That stops
+  a coworker on a shared or company tailnet from opening the URL and controlling your
+  agents. If you do want every account your tailnet lets in, set
+  `HP_ALLOW_ANY_TAILNET_USER` to a truthy value, such as `1`, `true` or `yes`, instead.
+  The app then warns you each time it starts.
+- **The app refuses a raw forward.** Only `tailscale serve` set up as a web proxy, as
+  `pair` does it, replaces the header with the real account. Some serve entries forward
+  raw TCP (the plain connection that web requests travel over), such as one made with
+  `tailscale serve --tcp`. They pass along whatever header the sender wrote, so the app
+  refuses to start while one points at its port.
 - **Web pages on the machine get nothing.** A page in a local browser could point its own
   web address at `127.0.0.1` and send requests to the app. The trick abuses the Domain
   Name System (DNS), so it is called DNS rebinding. The app ignores the header unless the request is addressed to the machine's Tailscale
@@ -67,7 +75,8 @@ account that sent it. (Strictly, the Tailscale background service does this, and
   send it.
 - **Scripts on the machine can skip the header.** `HP_ASSUME_LOGIN` lets requests that have
   no header act as the login it names. It works only for requests addressed to `127.0.0.1`
-  or `localhost`. The app refuses to start with it while `tailscale serve` is on.
+  or `localhost`. The app refuses to start with it while `tailscale serve` is on. It
+  counts as your choice of who may use the app, so it needs no `HP_TAILNET_LOGIN`.
 - **`pair` stays inside your tailnet.** It never uses Funnel, Tailscale's feature for
   sharing a machine with the whole internet. It refuses a machine that already has Funnel
   on. It adds itself beside an existing `tailscale serve` setup, and refuses to replace one.
@@ -110,6 +119,12 @@ Run `uv run herdr-pwa doctor` to check the setup. It fails if any of these is tr
 - herdr isn't answering, or speaks a protocol version the app doesn't know.
 - The running service started from older code than the code on disk, so it needs a restart.
 - The app can't learn the machine's Tailscale name, so it would refuse every request.
+- None of `HP_TAILNET_LOGIN`, `HP_ALLOW_ANY_TAILNET_USER` and `HP_ASSUME_LOGIN` is set,
+  so the app won't start.
+- `tailscale serve` forwards raw TCP to the app's port, so the app won't start.
+
+`doctor` also says who may drive your agents. If it can't read the `tailscale serve`
+setup, it says so, and the app starts anyway, because it can't tell either way.
 
 Every setting is an environment variable whose name starts with `HP_`; the full list is in
 `src/herdr_pwa/settings.py`. The app keeps its state, such as the audit log and the devices

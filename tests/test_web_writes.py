@@ -27,7 +27,7 @@ from herdr_pwa.writes.lifecycle import on_path
 from herdr_pwa.writes.outcome import Pacing
 from tests._fake_herd import P3, P5, S1, S2, SETTLED, FakeClock, FakeHerd, capture, echoed
 from tests._jsonpath import obj
-from tests.webfakes import IDENTITY
+from tests.webfakes import IDENTITY, LOGIN
 
 ORIGIN = {"Origin": "http://testserver"}
 PERMISSION = capture("capture-blocked-permission-prompt")
@@ -65,6 +65,7 @@ def web(
             "tailscaled_socket": tmp_path / "no-tailscaled.sock",
             "snapshot_cache_ttl": 0.001,
             "public_host": "testserver",
+            "tailnet_login": LOGIN,
             **(overrides or {}),
         }
     )

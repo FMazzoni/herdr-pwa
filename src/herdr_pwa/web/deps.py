@@ -71,6 +71,7 @@ class WebState:
         """Who the settings let in."""
         return auth.Access(
             tailnet_login=self.settings.tailnet_login,
+            any_login=self.settings.allow_any_tailnet_user,
             assume_login=self.settings.assume_login,
             served_host=auth.host_name(self.settings.public_host),
         )

@@ -43,8 +43,10 @@ class Settings(BaseSettings):
     # How often a page polls while its stream is down.
     events_fallback: int = Field(default=20, gt=0)
 
-    # Empty means any tailnet user may drive every agent; startup warns.
+    # The one tailnet login let in; empty refuses every Tailscale identity unless the next is set.
     tailnet_login: str = ""
+    # With no login pinned, let any user the tailnet admits drive every agent; startup warns.
+    allow_any_tailnet_user: bool = False
     # Waives the identity header for this named login, confined to a loopback Host.
     assume_login: str = ""
     tailscaled_socket: Path = Path("/var/run/tailscale/tailscaled.sock")

@@ -1,5 +1,6 @@
 """tailscaled's LocalAPI over its unix socket: no CLI, no cloud API, no PyPI wrapper."""
 
+import ipaddress
 import socket
 from dataclasses import dataclass
 from http import HTTPStatus
@@ -198,6 +199,16 @@ def serve_config(body: str) -> ServeConfig:
     return _SERVE_CONFIG.validate_json(body.strip()) or {}
 
 
+def read_serve_config(api: LocalApi) -> ServeConfig:
+    """The live serve config; raises ``LocalApiError`` when unreadable or not a JSON object."""
+    body = api.read(SERVE_CONFIG_PATH).body
+    try:
+        return serve_config(body)
+    except ValidationError as exc:
+        shape = "JSON" if is_not_json(exc) else "a JSON object"
+        raise LocalApiError(f"tailscaled's serve config was not {shape}.") from exc
+
+
 def is_serving(config: ServeConfig) -> bool:
     """Whether any section, known or not, carries anything at all."""
     # An allow-list of keys once read a serve as none.
@@ -212,6 +223,16 @@ def root_handler(config: ServeConfig, site: str) -> dict[str, JsonValue] | None:
     return handler if isinstance(handler, dict) else None
 
 
+def raw_forwards(api: LocalApi, *, port: int) -> tuple[str, ...]:
+    """The serve ports that forward raw TCP to this app's loopback *port*.
+
+    Raises:
+        LocalApiError: tailscaled could not be asked, or its serve config was not an object.
+    """
+    config = read_serve_config(api)
+    return tuple(dict.fromkeys(_tcp_forwards(config, port)))
+
+
 def _has_content(value: JsonValue) -> bool:
     """Whether one serve-config section carries anything at all."""
     if value is None or value is False:
@@ -219,3 +240,44 @@ def _has_content(value: JsonValue) -> bool:
     if isinstance(value, str | dict | list):
         return bool(value)
     return True
+
+
+def _tcp_forwards(value: JsonValue, port: int) -> list[str]:
+    return [
+        listen
+        for tcp in _tcp_maps(value)
+        for listen, entry in tcp.items()
+        if isinstance(entry, dict) and _forwards_to(entry.get("TCPForward"), port)
+    ]
+
+
+def _tcp_maps(value: JsonValue) -> list[dict[str, JsonValue]]:
+    # Walked like Funnel: a foreground serve sits under Foreground[*].TCP, a service under Services[*].TCP.
+    if isinstance(value, list):
+        return [tcp for item in value for tcp in _tcp_maps(item)]
+    if not isinstance(value, dict):
+        return []
+    own = value.get("TCP")
+    found = [own] if isinstance(own, dict) else []
+    return found + [tcp for item in value.values() for tcp in _tcp_maps(item)]
+
+
+def _forwards_to(target: JsonValue, port: int) -> bool:
+    # tailscaled stores "host:port"; a scheme is tolerated, since the CLI accepts tcp://.
+    if not isinstance(target, str):
+        return False
+    text = target.strip()
+    _, scheme, rest = text.partition("://")
+    host, _, found = (rest if scheme else text).rpartition(":")
+    return found == str(port) and _reaches_loopback(host.removeprefix("[").removesuffix("]"))
+
+
+def _reaches_loopback(name: str) -> bool:
+    # The unspecified address dials this machine too, so it reaches a loopback listener.
+    if name.casefold() == "localhost":
+        return True
+    try:
+        address = ipaddress.ip_address(name)
+    except ValueError:
+        return False
+    return address.is_loopback or address.is_unspecified

@@ -66,7 +66,12 @@ def test_check_reports_and_writes_nothing(tmp_path: Path) -> None:
 def test_an_unpinned_login_is_warned_about(tmp_path: Path) -> None:
     with tailscaled(tmp_path, canned=status_route(), serve_config={}) as fake:
         _, text = run(Settings(state_dir=tmp_path / "state"), fake.api)
-    assert "HP_TAILNET_LOGIN is empty" in text
+    assert "warning: who may drive agents: nobody: HP_TAILNET_LOGIN is not set, so serve" in text
+    anyone = Settings(state_dir=tmp_path / "state", allow_any_tailnet_user=True)
+    (tmp_path / "again").mkdir()
+    with tailscaled(tmp_path / "again", canned=status_route(), serve_config={}) as fake:
+        _, text = run(anyone, fake.api)
+    assert "warning: who may drive agents: any user your tailnet lets reach" in text
 
 
 def test_no_tailscaled_is_an_actionable_failure_from_the_command_line(

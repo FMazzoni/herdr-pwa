@@ -81,31 +81,70 @@ def _model_line(kind: str, models: tuple[str, ...]) -> str:
 
 
 @dataclass(frozen=True, slots=True)
-class HostLine:
-    """What doctor says of the served name, and whether one is known."""
+class CheckLine:
+    """What doctor says of one safeguard, and whether ``serve`` would run with it."""
 
     line: str
-    known: bool = field(kw_only=True)
+    ok: bool = field(kw_only=True)
 
 
-def served_host_line(settings: Settings, api: tailscale.LocalApi) -> HostLine:
+def served_host_line(settings: Settings, api: tailscale.LocalApi) -> CheckLine:
     """The Host a header identity must carry, resolved as ``serve`` resolves it."""
     source = "HP_PUBLIC_HOST" if settings.public_host else "tailscaled's MagicDNS name"
     try:
         host = auth.served_host(settings.public_host, api)
     except tailscale.LocalApiError as exc:
-        return HostLine(
+        return CheckLine(
             f"served host: unknown, so every Tailscale identity is refused ({exc})  FAIL",
-            known=False,
+            ok=False,
         )
-    return HostLine(f"served host: {host} (from {source}); any other Host is refused", known=True)
+    return CheckLine(f"served host: {host} (from {source}); any other Host is refused", ok=True)
+
+
+def login_line(settings: Settings) -> CheckLine:
+    """Who the settings let in; with no login pinned and no opt-in, ``serve`` refuses to start."""
+    access = access_of(settings)
+    policy = f"who may drive agents: {auth.login_policy(access)}"
+    if access.tailnet_login or access.assume_login:
+        return CheckLine(policy, ok=True)
+    if access.any_login:
+        return CheckLine(f"{policy}  WARN", ok=True)
+    return CheckLine(
+        f"{policy}, so serve refuses to start; set it, or HP_ALLOW_ANY_TAILNET_USER=1  FAIL",
+        ok=False,
+    )
+
+
+def raw_forward_line(settings: Settings, api: tailscale.LocalApi) -> CheckLine:
+    """Whether serve forwards raw TCP to the app, which would let a forged header through."""
+    try:
+        found = tailscale.raw_forwards(api, port=settings.port)
+    except tailscale.LocalApiError as exc:
+        return CheckLine(
+            f"raw TCP forward: unknown, the serve config is unreadable ({exc})  WARN", ok=True
+        )
+    if found:
+        return CheckLine(
+            f"raw TCP forward: {_raw_forward_problem(found, settings.port)}  FAIL", ok=False
+        )
+    return CheckLine(f"raw TCP forward: none to port {settings.port}  ok", ok=True)
+
+
+def access_of(settings: Settings) -> auth.Access:
+    """Who *settings* let in, before the served name is learned."""
+    return auth.Access(
+        tailnet_login=settings.tailnet_login,
+        assume_login=settings.assume_login,
+        any_login=settings.allow_any_tailnet_user,
+    )
 
 
 def doctor(settings: Settings, seams: Seams) -> int:
     """Check the runner's protocol against the pin and the service's code against the disk.
 
     Returns:
-        Non-zero on protocol drift, a silent runner, a moved tree or no served name.
+        Non-zero on protocol drift, a silent runner, a moved tree, no served name, no login
+        chosen, or a raw TCP forward to the app.
     """
     engine = engine_settings(settings)
     lines = [f"pinned protocol: {EXPECTED_PROTOCOL}"]
@@ -129,9 +168,14 @@ def doctor(settings: Settings, seams: Seams) -> int:
     lines.extend(model_lines(service_models(settings.state_dir.expanduser()), settings))
     tree = check_tree(settings.state_dir.expanduser())
     lines.append(tree.line)
-    host = served_host_line(settings, seams.local_api(settings.tailscaled_socket))
-    lines.append(host.line)
-    healthy = live == EXPECTED_PROTOCOL and not tree.stale and host.known
+    api = seams.local_api(settings.tailscaled_socket)
+    checks = (
+        served_host_line(settings, api),
+        login_line(settings),
+        raw_forward_line(settings, api),
+    )
+    lines.extend(check.line for check in checks)
+    healthy = live == EXPECTED_PROTOCOL and not tree.stale and all(check.ok for check in checks)
     lines.append("doctor: OK" if healthy else "doctor: FAIL")
     seams.write("\n".join(lines) + "\n")
     return 0 if healthy else 1
@@ -151,9 +195,7 @@ def pair(settings: Settings, seams: Seams, *, publish: bool = True) -> int:
         # No URL that resolves, no QR: a code for an unserved name is a dead end on the phone.
         lines += [pairing.qr_text(result.url), result.url, pairing.TAILNET_IS_THE_BOUNDARY]
     if not settings.tailnet_login:
-        lines.append(
-            "warning: HP_TAILNET_LOGIN is empty, so any tailnet user may drive every agent."
-        )
+        lines.append(f"warning: {login_line(settings).line}")
     lines.append(
         "On the phone: open the URL, add it to the Home Screen, open it from there, "
         "then turn alerts on under 'alerts'."
@@ -188,6 +230,18 @@ def assert_loopback_bind(host: str) -> None:
     )
 
 
+class RawForwardError(Exception):
+    """Serve passes raw TCP to the app, so a client's own identity header reaches it unchanged."""
+
+
+# Each stops the box serving, and is said in a line rather than a traceback.
+SERVE_REFUSALS: Final = (
+    auth.AuthError,
+    NonLoopbackBindError,
+    RawForwardError,
+    VapidKeyError,
+    AuditUnavailableError,
+)
 # Under the unit's TimeoutStopSec, so open streams are cut rather than the process killed.
 SHUTDOWN_GRACE: Final = 3
 
@@ -206,12 +260,34 @@ def _learned_host(settings: Settings, api: tailscale.LocalApi) -> str:
     return ""
 
 
+def _assert_no_raw_forward(api: tailscale.LocalApi, port: int) -> None:
+    try:
+        found = tailscale.raw_forwards(api, port=port)
+    except tailscale.LocalApiError as exc:
+        # Unreadable is not a forward; doctor reports it, and refusing would break a box without tailscaled.
+        log.warning("Could not check 'tailscale serve' for a raw TCP forward: %s", exc)
+        return
+    if found:
+        raise RawForwardError(f"Refusing to start: {_raw_forward_problem(found, port)}")
+
+
+def _raw_forward_problem(found: tuple[str, ...], port: int) -> str:
+    return (
+        f"'tailscale serve' forwards raw TCP from port {', '.join(found)} to this app on {port}, "
+        "which passes a client's own Tailscale-User-Login header through, so any tailnet device "
+        "could act as you. Remove it with 'tailscale serve --tcp=<port> off' and publish with "
+        "'herdr-pwa pair' instead."
+    )
+
+
 def serve(settings: Settings, port: int | None, seams: Seams) -> None:
-    """Refuse a reachable bind or an unsafe assumed login, then serve the app."""
+    """Refuse a reachable bind, no chosen login, an unsafe assumed login or a raw TCP forward."""
     assert_loopback_bind(settings.host)
-    access = auth.Access(tailnet_login=settings.tailnet_login, assume_login=settings.assume_login)
+    access = access_of(settings)
+    auth.assert_login_chosen(access)
     api = seams.local_api(settings.tailscaled_socket)
     auth.assert_assumed_login_safe(access, api)
+    _assert_no_raw_forward(api, port or settings.port)
     settings = settings.model_copy(update={"public_host": _learned_host(settings, api)})
     if settings.public_host:
         log.info("Tailscale identities are accepted on Host %r only", settings.public_host)
@@ -278,8 +354,7 @@ def main(argv: list[str] | None = None) -> int:
         return ping.ping(settings, seams, ping.Message(args.text, args.title))
     try:
         serve(settings, args.port, seams)
-    # A key or audit log that cannot be used stops the box serving; say why, not a traceback.
-    except (auth.AuthError, NonLoopbackBindError, VapidKeyError, AuditUnavailableError) as exc:
+    except SERVE_REFUSALS as exc:
         sys.stderr.write(f"serve: {exc}\n")
         return 1
     return 0
