@@ -116,9 +116,13 @@ class LocalApi:
         )
 
     def _transport_hint(self, exc: Exception, path: str) -> str:
-        where = f"the tailscaled socket {str(self.socket_path)!r}"
+        socket = repr(str(self.socket_path))
+        where = f"the tailscaled socket {socket}"
         if isinstance(exc, FileNotFoundError):
-            return f"No {where}. Install Tailscale, start tailscaled, then run 'tailscale up'."
+            return (
+                f"No tailscaled socket at {socket}. "
+                "Install Tailscale, start tailscaled, then run 'tailscale up'."
+            )
         if isinstance(exc, ConnectionRefusedError):
             return f"Nothing is listening on {where}; start tailscaled, then 'tailscale up'."
         if isinstance(exc, PermissionError):
@@ -127,7 +131,8 @@ class LocalApi:
                 "'sudo tailscale set --operator=<your-username>'."
             )
         if isinstance(exc, TimeoutError):
-            return f"Timed out after {self.timeout:.0f}s talking to tailscaled at {where}."
+            # :g keeps a sub-second budget from reading as "0s".
+            return f"Timed out after {self.timeout:g}s talking to tailscaled at {where}."
         return f"Could not reach {path} on {where}: {exc}"
 
 

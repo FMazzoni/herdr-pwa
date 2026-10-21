@@ -25,13 +25,15 @@ GOOD_STATUS: dict[str, object] = {
 
 @dataclass
 class Canned:
-    """One fixed answer; ``raw`` bypasses HTTP framing and ``hang`` never answers."""
+    """One fixed answer; ``raw`` bypasses HTTP framing, ``hang`` never answers, ``late`` stalls."""
 
     status: int = 200
     body: str = ""
     etag: str = ""
     raw: bytes | None = None
     hang: bool = False
+    # Seconds the answer waits, as a loaded box would make it.
+    late: float = 0.0
 
 
 @dataclass
@@ -57,8 +59,10 @@ class FakeTailscaled:
 
     @property
     def api(self) -> LocalApi:
-        """A client pointed at this fake, with a short timeout."""
-        return LocalApi(self.socket_path, timeout=0.5)
+        """A client pointed at this fake, with a generous ceiling."""
+        # The fake answers at once, so the budget is only reached on a loaded box; a hang test
+        # builds its own LocalApi with a short timeout.
+        return LocalApi(self.socket_path, timeout=30.0)
 
     def etag(self) -> str:
         """The ETag the current serve config is served with."""
@@ -98,6 +102,8 @@ def _handler(fake: FakeTailscaled) -> type[BaseHTTPRequestHandler]:
             if canned.hang:
                 _ = fake.released.wait(5.0)
                 return
+            if canned.late:
+                _ = fake.released.wait(canned.late)
             if canned.raw is not None:
                 _ = self.wfile.write(canned.raw)
                 self.close_connection = True
