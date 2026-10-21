@@ -167,7 +167,7 @@ def test_a_session_that_started_somewhere_unrelated_is_doubted() -> None:
 
 
 def test_a_sibling_whose_name_merely_starts_the_same_is_unrelated() -> None:
-    assert identity_doubt(f"{REPO}-v2", (REPO,)) != ""
+    assert identity_doubt(f"{REPO}-fork", (REPO,)) != ""
 
 
 # The hijack, through the write path

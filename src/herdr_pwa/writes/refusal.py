@@ -104,7 +104,7 @@ FAILURES: Final[dict[Refusal, Failure]] = {
     Refusal.KEY_NOT_OFFERED: Failure(
         400, "Nothing was {verb}: that key is not one this screen offers."
     ),
-    # Held for a second deliberate tap, not failed; legacy answered these 200 with the confirm.
+    # Held for a second deliberate tap, not failed, so it answers 200 with the confirm.
     Refusal.CONFIRM: Failure(200, "Nothing was {verb} yet: confirm it."),
     # The same text again after an attempt that may have landed: held for "Send again anyway".
     Refusal.RESEND: Failure(

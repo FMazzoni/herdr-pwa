@@ -27,10 +27,9 @@
 
     MASKABLE SAFE ZONE. Android may crop to a circle of r=205 about (256,256),
     and a mask must never cut into transparency, so the ground is full-bleed.
-    Computed, not eyeballed — the first version of this file asserted numbers
-    nobody had worked out and tests/test_pwa.py caught it: the cursor's far
-    corner was 230 from centre against the 205 a circular mask allows, so a
-    round mask would have clipped the end off the cursor. Now the chevron's
+    Computed, not eyeballed, and tests/test_pwa.py checks it: a cursor whose
+    far corner sat 230 from centre, against the 205 a circular mask allows,
+    would have its end clipped off by a round mask. Here the chevron's
     farthest point including its round cap reaches 148, and the cursor's far
     corner 189. Both inside 205.
 

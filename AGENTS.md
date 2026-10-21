@@ -15,8 +15,8 @@ There's no design doc: the code, tests and commit log are the truth.
 - Fix the code; never widen a limit in `ruff.toml` or `pyproject.toml`.
 - For a change under `web/templates` or `web/static`, run the `phone-look` skill before and
   after, and make the sheet. The owner checks it on a real phone before merge.
-- `tests/fixtures/ledger.json` records what the first implementation decided on each
-  captured screen and agent list (its verdict), and `tests/test_ledger.py` checks the code
+- `tests/fixtures/ledger.json` records the expected decision on each captured screen and
+  agent list (its verdict), and `tests/test_ledger.py` checks the code
   still agrees. Never edit a verdict, or the check proves nothing. A deliberate divergence
   goes in `DIVERGENCES` with its reason, which makes that case a strict xfail: an expected
   failure that fails the run if it starts passing. `tests/fixtures/README.md` explains more.
@@ -31,10 +31,12 @@ There's no design doc: the code, tests and commit log are the truth.
 - Commit messages: a subject of 72 characters or fewer, then a body of two sentences,
   five at most (the commit-msg hook checks). When a decision had alternatives, name the
   rejected one on a `Rejected:` line.
-- Write files in the state dir (`HP_STATE_DIR`, by default `~/.config/herdr-pwa-v2`)
+- Write files in the state dir (`HP_STATE_DIR`, by default `~/.config/herdr-pwa`)
   through `statedir.py`, which makes them private to their owner (mode 0600).
 - No ticket ids, other projects, or anyone's machine, login or tailnet, anywhere in the
   repo or its commit messages. Fixtures follow `tests/fixtures/README.md`.
+- Public docs describe provenance and process at a high level: no version history, no
+  breakdown of who did what.
 - Change `README.md`, `AGENTS.md` or `SECURITY.md` only when asked. Notes, scratch and
   reviews go in `.agents/`, which is gitignored except `.agents/skills/`.
 

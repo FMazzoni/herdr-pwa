@@ -395,7 +395,7 @@ windows.open = [];
 await dispatch("push", pushEvent(notify("blocked", { agent: "../../evil" })));
 const hostileUrl = notifications.shown[0].data.url;
 
-/* An agent with no session is filed under its ADDRESS; v2 has no page for it yet, so the tap
+/* An agent with no session is filed under its ADDRESS; the app has no page for it yet, so the tap
  * goes to the herd. Still a checked shape, not a passthrough. */
 notifications.shown.length = 0;
 windows.open = [];
