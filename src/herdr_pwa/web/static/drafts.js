@@ -3,7 +3,7 @@
   "use strict";
 
   /* A composer's draft survives navigation: kept per session in this tab only,
-   * restored as a value (never markup), dropped once sent or at a no-echo prompt. */
+   * restored as a value (never markup), dropped once sent. */
   var DRAFT = "hp-draft:";
 
   function keep(box) {
@@ -31,7 +31,7 @@
       var form = box.form;
       var sent = form && form.querySelector("[data-hp-sent]");
       try {
-        if (s && (sent || box.hasAttribute("data-hp-forget"))) {
+        if (s && sent) {
           s.removeItem(key);
         } else if (s && !box.value) {
           box.value = s.getItem(key) || "";

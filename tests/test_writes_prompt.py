@@ -4,17 +4,17 @@ import threading
 from pathlib import Path
 
 import pytest
+from hypothesis import HealthCheck, given, settings
+from hypothesis import strategies as st
 from pydantic import JsonValue
 
-from herdr_pwa.audit import AuditUnavailableError, Entry, Write
+from herdr_pwa.audit import AUDIT_FILENAME, AuditUnavailableError, Entry, Write
 from herdr_pwa.engine import EngineUnavailable, as_session_id, screen_digest
 from herdr_pwa.panetext import as_text_read
 from herdr_pwa.writes.guard import (
     MAX_PROMPT_CHARS,
-    NO_ECHO_MECHANISM,
     asks_a_question,
     landed,
-    no_echo_notice,
 )
 from herdr_pwa.writes.outcome import Evidence, Outcome
 from herdr_pwa.writes.prompt import (
@@ -216,19 +216,6 @@ def test_a_write_that_cannot_be_recorded_is_not_made(tmp_path: Path) -> None:
     assert r.herd.writes(PROMPT) == []
 
 
-def test_at_a_no_echo_prompt_the_payload_is_not_stored_and_the_bytes_are_the_same(
-    tmp_path: Path,
-) -> None:
-    r = idle_rig(tmp_path, "[sudo] password for owner:")
-    result = sent(send_prompt(r.writer, PromptAsk(S1, "hunter2-secret")))
-    assert result.no_echo == NO_ECHO_MECHANISM
-    assert r.herd.writes(PROMPT)[0]["text"] == "hunter2-secret"
-    attempt = r.audit_records[0]
-    assert attempt["phase"] == "attempt"
-    assert attempt["payload"] is None
-    assert attempt["payload_omitted"] == "no_echo_prompt"
-
-
 def test_protocol_drift_fails_closed(tmp_path: Path) -> None:
     r = idle_rig(tmp_path)
     r.herd.protocol = 23
@@ -284,33 +271,101 @@ def test_landing_needs_more_copies_than_before() -> None:
     assert not landed("hello world", "\u276f hello world", "\u276f hello world")
 
 
-@pytest.mark.parametrize(
-    "tail",
-    [
-        "[sudo] password for owner:",
-        "Enter passphrase for /k:",
-        "Enter passphrase:",
-        "enter the passphrase:",
-        "Retype password:",
-    ],
-)
-def test_no_echo_prompts_are_recognised(tail: str) -> None:
-    assert no_echo_notice("earlier\n" + tail) == NO_ECHO_MECHANISM
+# What a terminal draws under the line its cursor waits on.
+_STATUS_BAR = '[hp] 0:bash*  "host" 12:00 21-Oct-26'
+_FOOTER = "  esc to interrupt \u00b7 ctrl+c to exit"
 
 
 @pytest.mark.parametrize(
     "screen",
     [
-        "Password:",
-        "\u276f [sudo] password for owner:",
-        "Enter passphrase",
-        "enter passphrase for:",
-        SETTLED,
-        "",
+        pytest.param("[sudo] password for owner:", id="alone"),
+        pytest.param(f"[sudo] password for owner:\n{_STATUS_BAR}", id="status-line"),
+        pytest.param(f"Password:\n\n{_STATUS_BAR}\n0:zsh 1:vim\nrepo main*>", id="four-under"),
     ],
 )
-def test_anything_unsure_is_not_called_no_echo(screen: str) -> None:
-    assert no_echo_notice(screen) == ""
+def test_at_a_hidden_input_prompt_the_bytes_are_the_same_and_the_text_is_not_stored(
+    tmp_path: Path, screen: str
+) -> None:
+    r = idle_rig(tmp_path, screen)
+    result = sent(send_prompt(r.writer, PromptAsk(S1, "hunter2-secret")))
+    assert (result.outcome, result.evidence) == (Outcome.ACCEPTED, Evidence.NOECHO)
+    assert r.herd.writes(PROMPT)[0]["text"] == "hunter2-secret"
+    assert "hunter2-secret" not in _log_text(r)
+
+
+def _log_text(r: Rig) -> str:
+    log = r.state / AUDIT_FILENAME
+    return log.read_text() if log.exists() else ""
+
+
+def test_an_echoed_prompt_keeps_its_text_on_the_outcome_alone(tmp_path: Path) -> None:
+    r = idle_rig(tmp_path, SETTLED, echoed("\u276f hello there"))
+    assert sent(send_prompt(r.writer, PromptAsk(S1, "hello there"))).verified
+    attempt, outcome = r.audit_records
+    assert (attempt.get("payload"), attempt.get("payload_chars")) == (None, 11)
+    assert (outcome.get("result"), outcome.get("payload")) == ("confirmed:echo", "hello there")
+
+
+def test_an_unechoed_prompt_keeps_only_its_length(tmp_path: Path) -> None:
+    r = idle_rig(tmp_path, SETTLED)
+    result = sent(send_prompt(r.writer, PromptAsk(S1, "hunter2-secret")))
+    assert (result.outcome, result.evidence) == (Outcome.ACCEPTED, Evidence.NOECHO)
+    assert "hunter2-secret" not in _log_text(r)
+    assert r.audit_records[0].get("payload_chars") == 14
+
+
+def test_a_failed_prompt_keeps_only_its_length(tmp_path: Path) -> None:
+    r = idle_rig(tmp_path)
+    r.herd.fail["agent.prompt"] = EngineUnavailable("down")
+    _ = refused(send_prompt(r.writer, PromptAsk(S1, "hunter2-secret")))
+    assert "hunter2-secret" not in _log_text(r)
+    assert [rec["phase"] for rec in r.audit_records] == ["attempt", "outcome"]
+
+
+def test_a_refused_prompt_records_nothing(tmp_path: Path) -> None:
+    r = idle_rig(tmp_path, capture("capture-blocked-permission-prompt"))
+    _ = refused(send_prompt(r.writer, PromptAsk(S1, "hunter2-secret")))
+    assert "hunter2-secret" not in _log_text(r)
+
+
+_LINE = st.text(st.characters(codec="utf-8", exclude_categories=("Cs", "Cc")), max_size=40)
+_SCREEN = st.lists(
+    st.one_of(
+        _LINE,
+        st.sampled_from(
+            [
+                "[sudo] password for owner:",
+                "Password:",
+                "Enter passphrase:",
+                _STATUS_BAR,
+                _FOOTER,
+                "\u2502 \u2502",
+                "repo main*>",
+                "\u276f ",
+                "",
+            ]
+        ),
+    ),
+    max_size=10,
+).map("\n".join)
+_SECRET = st.from_regex(r"[A-Za-z0-9!@#%^&*_+=-]{8,32}", fullmatch=True)
+
+
+@settings(
+    max_examples=80, deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture]
+)
+@given(screens=st.tuples(_SCREEN, _SCREEN, st.booleans()), secret=_SECRET)
+def test_no_audit_file_holds_text_whose_send_was_not_echoed(
+    tmp_path_factory: pytest.TempPathFactory, screens: tuple[str, str, bool], secret: str
+) -> None:
+    # Whatever the screen shows, a miss by the detector can no longer leak the text.
+    before, after, echo = screens
+    later = f"{after}\n{secret}" if echo else after
+    r = idle_rig(tmp_path_factory.mktemp("audit"), before, later)
+    result = send_prompt(r.writer, PromptAsk(S1, secret))
+    if not (isinstance(result, PromptSent) and result.verified):
+        assert secret not in _log_text(r)
 
 
 def test_a_prompt_from_a_second_tab_mid_send_is_refused_not_typed_twice(tmp_path: Path) -> None:

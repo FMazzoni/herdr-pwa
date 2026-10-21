@@ -589,9 +589,11 @@ def test_opencode_takes_its_first_prompt_on_the_command_line(tmp_path: Path) -> 
     assert attempts_at_spawn == [["start", "prompt"]]
     prompt_attempt = r.audit_records[1]
     assert (prompt_attempt["phase"], prompt_attempt.get("target")) == ("attempt", NEW_PANE)
-    assert prompt_attempt.get("payload") == "-v fix it"
-    results = [rec.get("result") for rec in r.audit_records if rec["phase"] == "outcome"]
-    assert results == ["confirmed:echo", f"started:{NEW_PANE}"]
+    assert prompt_attempt.get("payload") is None
+    outcomes = [rec for rec in r.audit_records if rec["phase"] == "outcome"]
+    assert [rec.get("result") for rec in outcomes] == ["confirmed:echo", f"started:{NEW_PANE}"]
+    # Echoed on screen, so its text is kept on the outcome.
+    assert outcomes[0].get("payload") == "-v fix it"
 
 
 def test_a_launch_prompt_the_pane_never_shows_is_sent_unverified(tmp_path: Path) -> None:

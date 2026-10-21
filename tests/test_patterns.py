@@ -18,7 +18,6 @@ import herdr_pwa
 from herdr_pwa.panetext import plain, without_escapes
 from herdr_pwa.patterns import Rx
 from herdr_pwa.validation import MODEL_ID
-from herdr_pwa.writes.guard import no_echo_notice
 from tests.engine_seam import dialog_chunks, injected
 
 # The wire models are generated from herdr's schema and compile nothing of this app's.
@@ -171,14 +170,6 @@ _TAG_READER = pytest.param(
     _Reader(partial(injected, None, human=False), _TAG_EXAMPLES, ("", "></agent-message>")),
     id="notices.injected",
 )
-_PASSPHRASE_EXAMPLES = (
-    "Enter passphrase for key '/k':",
-    "Enter passphrase",
-    "enter passphrase for:",
-)
-_PASSPHRASE_READER = pytest.param(
-    _Reader(no_echo_notice, _PASSPHRASE_EXAMPLES), id="guard.no_echo_notice"
-)
 
 
 def _shapes(reader: _Reader) -> Iterator[tuple[str, str]]:
@@ -237,9 +228,7 @@ def _ratio(reader: _Reader) -> tuple[float, int] | None:
     return max(found, default=None)
 
 
-@pytest.mark.parametrize(
-    "reader", [*map(_pattern_reader, RECORDS), _TAG_READER, _PASSPHRASE_READER]
-)
+@pytest.mark.parametrize("reader", [*map(_pattern_reader, RECORDS), _TAG_READER])
 def test_no_pattern_costs_more_than_linear_time(reader: _Reader) -> None:
     measured = _ratio(reader)
     if measured is not None:

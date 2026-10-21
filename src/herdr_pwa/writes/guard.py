@@ -1,15 +1,12 @@
-"""What may be typed, how a send is known to have landed, and when it never can be."""
+"""What may be typed, how a send is known to have landed, and when a question stops it."""
 
-import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
 from typing import Final
 
-from herdr_pwa import glyphs
 from herdr_pwa.engine import AgentStatus, BlockedPrompt, MenuShape
 from herdr_pwa.panetext import idle_composer, pane_lines, plain_text
-from herdr_pwa.patterns import Rx
 
 MAX_PROMPT_CHARS: Final = 4000
 
@@ -32,41 +29,6 @@ def landed(sent: str, before: str, after: str) -> bool:
     if not needle:
         return False
     return _flat(_above_the_box(after)).count(needle) > _flat(_above_the_box(before)).count(needle)
-
-
-NO_ECHO_MECHANISM: Final = (
-    "This screen is asking for a password or passphrase, so the terminal has "
-    "turned echo off: nothing appears as it is typed, on purpose. There is no "
-    "way for this app to read the text back, now or later."
-)
-
-_COMPOSER_LEAD: Final = re.compile(rf"^\s*(?:{glyphs.one_of(glyphs.PROMPT)}|[$#%]\s)")
-
-# Anchored at end of line with the colon required; a bare "Password:" reads as prose.
-_NO_ECHO: Final[tuple[re.Pattern[str], ...]] = (
-    re.compile(r"\[sudo\] password for \S+:\s*$", re.IGNORECASE),
-    # ssh's ``user@host's password:``, entered at a word's start and its first @ after a letter.
-    re.compile(r"(?<!\S)\S[^\s@]*+@\S+'s password:\s*$", re.IGNORECASE),
-    re.compile(r"(?:verify|confirm|retype|repeat) password:\s*$", re.IGNORECASE),
-    re.compile(r"password \(again\):\s*$", re.IGNORECASE),
-)
-# Read on the last line with its closing colon cut off, so a run of openers ends at once at \Z.
-_PASSPHRASE: Final = re.compile(r"enter (?:the )?passphrase(?: for \S.*)?\Z", re.IGNORECASE)
-
-
-def _asks_passphrase(text: str) -> bool:
-    # What ``enter (?:the )?passphrase(?: for \S.*)?:\s*$`` matches, without its rescan per opener.
-    body = text.rstrip()
-    return body.endswith(":") and _PASSPHRASE.search(body[body.rfind("\n") + 1 : -1]) is not None
-
-
-def no_echo_notice(screen: str) -> str:
-    """Why nothing will ever appear on this screen, or ``""`` if that cannot be told."""
-    tail = next((line.rstrip() for line in reversed(screen.splitlines()) if line.strip()), "")
-    if not tail or _COMPOSER_LEAD.match(tail):
-        return ""
-    asks = any(p.search(tail) for p in _NO_ECHO) or _asks_passphrase(tail)
-    return NO_ECHO_MECHANISM if asks else ""
 
 
 def unsendable(text: str) -> bool | None:
@@ -214,34 +176,3 @@ def _recorded(drawn: Drawn, herdr: AgentStatus, pending: bool | None) -> Questio
         wording, refuse = SCREEN_ALONE, False
     doubt = wording.format(herdr=herdr)
     return QuestionCall(refuse=refuse, herdr=herdr, screen=drawn, record=pending, doubt=doubt)
-
-
-PATTERNS: Final = (
-    Rx(
-        _COMPOSER_LEAD,
-        ("\u276f draft", "> x", "$ ls", "  # note"),
-        ("$ls", "password:", "x > y"),
-        "match",
-    ),
-    Rx(
-        _NO_ECHO[0],
-        ("[sudo] password for user: ", "[SUDO] Password for u:"),
-        ("[sudo] password for user: typed", "[sudo] password for :"),
-    ),
-    Rx(
-        _NO_ECHO[1],
-        ("user@host's password:", "git@example.com's password: "),
-        ("user@host's password: x", "'s password:"),
-    ),
-    Rx(
-        _PASSPHRASE,
-        (
-            "Enter passphrase",
-            "Enter passphrase for key '/home/user/.ssh/id_ed25519'",
-            "enter the passphrase",
-        ),
-        ("Enter passphrase now", "enter passphrase for"),
-    ),
-    Rx(_NO_ECHO[2], ("Verify password:", "Retype password: "), ("password:", "new password:")),
-    Rx(_NO_ECHO[3], ("Password (again):",), ("Password again:",)),
-)

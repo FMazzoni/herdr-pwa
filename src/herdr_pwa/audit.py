@@ -34,7 +34,10 @@ ENDPOINTS: Final = frozenset({PROMPT, KEYS, START, CLOSE})
 ATTEMPT: Final = "attempt"
 OUTCOME: Final = "outcome"
 UNREADABLE: Final = "unreadable"
-OMITTED_NO_ECHO: Final = "no_echo_prompt"
+# A prompt's text waits for its echo: a screen detector can miss a hidden-input prompt.
+OMITTED_UNTIL_ECHO: Final = "pending_echo"
+# The one outcome whose text the screen already showed, so storing it reveals nothing new.
+ECHOED: Final = "confirmed:echo"
 UNRECORDED: Final = "unrecorded"
 _MARK: Final = "…[truncated: {total} chars sent]"
 
@@ -72,6 +75,9 @@ class Outcome(TypedDict):
     endpoint: str
     target: str
     result: str
+    # A prompt's text, present only on an echoed outcome; older logs keep it on the attempt.
+    payload: NotRequired[str]
+    payload_truncated: NotRequired[bool]
 
 
 class Unreadable(TypedDict):
@@ -101,8 +107,6 @@ class Write:
     target: str = ""
     session: str = ""
     payload: str = ""
-    # Set when the screen showed a no-echo prompt: the length is kept, the text is not.
-    omitted: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -138,7 +142,7 @@ def _iso(at: float) -> str:
 
 def _payload(text: str, *, limit: int, omitted: str) -> tuple[str | None, bool]:
     if omitted:
-        # Decided from the screen, never by guessing whether the text looks secret.
+        # Decided by the endpoint, never by guessing whether the text looks secret.
         return None, False
     if len(text) > limit:
         return text[:limit] + _MARK.format(total=len(text)), True
@@ -148,9 +152,10 @@ def _payload(text: str, *, limit: int, omitted: str) -> tuple[str | None, bool]:
 class Entry:
     """One write in flight: its attempt is on disk and its outcome is owed."""
 
-    def __init__(self, audit: "AuditLog", record: Attempt) -> None:
+    def __init__(self, audit: "AuditLog", record: Attempt, held: str = "") -> None:
         self._audit: AuditLog = audit
         self._record: Attempt = record
+        self._held: str = held
         self._outcome: str = ""
 
     @property
@@ -179,7 +184,8 @@ class Entry:
         if not result:
             result = UNRECORDED
             log.error("audit %s: the write named no outcome; this is a caller bug", self.id)
-        self._audit.close(self._record, result)
+        echoed = result == ECHOED and self._record["payload_omitted"] == OMITTED_UNTIL_ECHO
+        self._audit.close(self._record, result, self._held if echoed else None)
         return False
 
 
@@ -226,9 +232,8 @@ class AuditLog:
         """
         if write.endpoint not in ENDPOINTS:
             raise ValueError(f"{write.endpoint!r} is not one of {sorted(ENDPOINTS)}")
-        payload, truncated = _payload(
-            write.payload, limit=self._payload_chars, omitted=write.omitted
-        )
+        omitted = OMITTED_UNTIL_ECHO if write.endpoint == PROMPT else ""
+        payload, truncated = _payload(write.payload, limit=self._payload_chars, omitted=omitted)
         attempt: Attempt = {
             "v": 1,
             "phase": ATTEMPT,
@@ -246,17 +251,17 @@ class AuditLog:
             "payload": payload,
             "payload_chars": len(write.payload),
             "payload_truncated": truncated,
-            "payload_omitted": write.omitted,
+            "payload_omitted": omitted,
         }
         try:
             with self._lock:
                 self._append(attempt)
         except OSError as exc:
             raise AuditUnavailableError(f"cannot record {write.endpoint}: {exc}") from exc
-        return Entry(self, attempt)
+        return Entry(self, attempt, write.payload if omitted == OMITTED_UNTIL_ECHO else "")
 
-    def close(self, attempt: Attempt, result: str) -> None:
-        """Append the outcome; it cannot fail closed, so it fails loud and never raises."""
+    def close(self, attempt: Attempt, result: str, shown: str | None = None) -> None:
+        """Append the outcome, with *shown* when the screen echoed it; never raises."""
         outcome: Outcome = {
             "v": 1,
             "phase": OUTCOME,
@@ -266,6 +271,10 @@ class AuditLog:
             "target": attempt["target"],
             "result": result,
         }
+        if shown is not None:
+            text, truncated = _payload(shown, limit=self._payload_chars, omitted="")
+            outcome["payload"] = text or ""
+            outcome["payload_truncated"] = truncated
         try:
             with self._lock:
                 self._append(outcome)
@@ -362,7 +371,9 @@ def describe(record: Record) -> str:
         return f"{stamp}  UNREADABLE RECORD at {record['at']}"
     head = f"{stamp}  {record['endpoint']:<7} {record['target'] or '-':<12}"
     if record["phase"] == OUTCOME:
-        return f"{head} -> {record['result']}"
+        shown = record.get("payload")
+        tail = "" if shown is None else "  " + json.dumps(shown, ensure_ascii=False)
+        return f"{head} -> {record['result']}{tail}"
     where = record["forwarded_for"] or record["client_ip"] or "?"
     host = record.get("host", "")
     who = f"{record['actor']} via {record['actor_via']} from {where}" + (
@@ -373,6 +384,8 @@ def describe(record: Record) -> str:
 
 def _shown(record: Attempt) -> str:
     omitted = record["payload_omitted"]
+    if omitted == OMITTED_UNTIL_ECHO:
+        return f"<{record['payload_chars']} chars, text kept only once echoed>"
     if omitted:
         return f"<payload withheld: {omitted}, {record['payload_chars']} chars>"
     payload = record["payload"]
