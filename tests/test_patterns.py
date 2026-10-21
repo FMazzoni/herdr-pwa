@@ -24,6 +24,15 @@ _GENERATED = "herdr_pwa.engine.generated"
 _LONG = 5_000
 # CPU time, so a loaded machine cannot inflate it: generous, and still far under a backtrack.
 _CPU_SECONDS = 0.5
+# Linear costs ~4x at four times the length and quadratic ~16x; 8x sits between, whatever the machine.
+_SCALE = 4
+_MAX_RATIO = 8.0
+# Best of several runs, since noise only ever adds time.
+_REPEATS = 5
+# Below this the clock's grain and call overhead swamp the ratio, so the input grows first.
+_FLOOR_SECONDS = 0.002
+# Past this a pattern that is still under the floor costs nothing per character, so no ratio is read.
+_MAX_LONG = 320_000
 # A flood of 100k escapes took tens of seconds when quadratic; 5 s still catches that under a busy gate.
 _FLOOD_CPU_SECONDS = 5.0
 
@@ -100,13 +109,13 @@ def test_a_validator_refuses_a_trailing_newline(rx: Rx) -> None:
     assert [text for text in rx.matches if rx.found(text + "\n") is not None] == []
 
 
-def _long_inputs(rx: Rx) -> Iterator[str]:
+def _long_inputs(rx: Rx, length: int = _LONG) -> Iterator[str]:
     """Its own examples and their characters, repeated to a length no screen line reaches."""
     for example in (*rx.matches, *rx.rejects):
         if example:
-            yield (example * (_LONG // len(example) + 1))[:_LONG]
+            yield (example * (length // len(example) + 1))[:length]
     for char in sorted(set("".join((*rx.matches, *rx.rejects)))):
-        yield char * _LONG
+        yield char * length
 
 
 def _read(rx: Rx, text: str) -> int:
@@ -121,6 +130,48 @@ def test_no_pattern_backtracks_on_long_input(rx: Rx) -> None:
     started = time.process_time()
     _ = sum(_read(rx, text) for text in _long_inputs(rx))
     assert time.process_time() - started < _CPU_SECONDS
+
+
+def _best_times(rx: Rx, length: int) -> tuple[float, float]:
+    """The least CPU time over the repeats to read its inputs at *length* and at the scaled length."""
+    short, long = list(_long_inputs(rx, length)), list(_long_inputs(rx, length * _SCALE))
+    best = [float("inf"), float("inf")]
+    # Interleaved, so a slow spell on the machine lands on both sizes rather than one.
+    for _ in range(_REPEATS):
+        for at, texts in enumerate((short, long)):
+            started = time.process_time()
+            _ = sum(_read(rx, text) for text in texts)
+            best[at] = min(best[at], time.process_time() - started)
+    return best[0], best[1]
+
+
+# Measured at 14-16x: each scans to the end from every start a run of its opener offers.
+_SUPERLINEAR = frozenset(
+    {
+        "herdr_pwa.engine.dialog._KEY_PIECE",
+        "herdr_pwa.engine.notices._REMINDER",
+        "herdr_pwa.engine.notices._PEER",
+        "herdr_pwa.writes.guard._NO_ECHO[2]",
+    }
+)
+
+
+def _scaling_case(rx: Rx) -> object:
+    reason = "quadratic on a run of its opener; reported to the owner, not yet rewritten"
+    marks = [pytest.mark.xfail(strict=True, reason=reason)] if _name(rx) in _SUPERLINEAR else []
+    return pytest.param(rx, marks=marks, id=_name(rx))
+
+
+@pytest.mark.parametrize("rx", [_scaling_case(rx) for rx in RECORDS])
+def test_no_pattern_costs_more_than_linear_time(rx: Rx) -> None:
+    length = _LONG
+    short, long = _best_times(rx, length)
+    while short < _FLOOR_SECONDS and length < _MAX_LONG:
+        length *= _SCALE
+        short, long = _best_times(rx, length)
+    if short < _FLOOR_SECONDS:
+        return  # It bails out before reading the input, so there is no per-character cost to scale.
+    assert long / short < _MAX_RATIO, f"{long / short:.1f}x at {length * _SCALE:,} characters"
 
 
 @pytest.mark.parametrize("rx", VALIDATORS, ids=_name)
