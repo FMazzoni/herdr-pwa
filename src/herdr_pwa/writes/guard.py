@@ -6,6 +6,7 @@ from typing import Final
 from herdr_pwa import glyphs
 from herdr_pwa.engine import BlockedPrompt, MenuShape
 from herdr_pwa.panetext import pane_lines, plain_text
+from herdr_pwa.patterns import Rx
 
 MAX_PROMPT_CHARS: Final = 4000
 
@@ -76,3 +77,34 @@ def asks_a_question(screen: str) -> bool:
         or prompt.drew_rows
         or prompt.shape is not MenuShape.NONE
     )
+
+
+PATTERNS: Final = (
+    Rx(
+        _COMPOSER_LEAD,
+        ("\u276f draft", "> x", "$ ls", "  # note"),
+        ("$ls", "password:", "x > y"),
+        "match",
+    ),
+    Rx(
+        _NO_ECHO[0],
+        ("[sudo] password for user: ", "[SUDO] Password for u:"),
+        ("[sudo] password for user: typed", "[sudo] password for :"),
+    ),
+    Rx(
+        _NO_ECHO[1],
+        ("user@host's password:", "git@example.com's password: "),
+        ("user@host's password: x", "'s password:"),
+    ),
+    Rx(
+        _NO_ECHO[2],
+        (
+            "Enter passphrase:",
+            "Enter passphrase for key '/home/user/.ssh/id_ed25519':",
+            "enter the passphrase:",
+        ),
+        ("Enter passphrase", "enter passphrase for:"),
+    ),
+    Rx(_NO_ECHO[3], ("Verify password:", "Retype password: "), ("password:", "new password:")),
+    Rx(_NO_ECHO[4], ("Password (again):",), ("Password again:",)),
+)

@@ -21,6 +21,7 @@ from pydantic import (
 )
 
 from herdr_pwa import statedir
+from herdr_pwa.patterns import Rx
 from herdr_pwa.validation import or_default
 
 REPORT_FILENAME: Final = "device-report.jsonl"
@@ -139,3 +140,10 @@ def render(state_dir: Path, session: str = "") -> str:
     lines = [f"session {chosen}: {len(events)} event(s)"]
     lines.extend(format_event(e) for e in events)
     return "\n".join(lines) + "\n"
+
+
+PATTERNS: Final = (
+    Rx(
+        SESSION_PATTERN, ("abc_DEF-123",), ("", "a" * 65, "a b", "a.b"), "fullmatch", validator=True
+    ),
+)

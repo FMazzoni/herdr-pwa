@@ -36,6 +36,7 @@ from pywebpush import WebPushException
 from herdr_pwa import statedir
 from herdr_pwa.clock import Clock, ago
 from herdr_pwa.panetext import without_escapes
+from herdr_pwa.patterns import Rx
 from herdr_pwa.validation import is_not_json, or_default, summary
 
 log = logging.getLogger(__name__)
@@ -769,3 +770,12 @@ def fan_out(
         failed=outcomes.count("failed"),
         pruned=outcomes.count("pruned"),
     )
+
+
+PATTERNS: Final = (
+    Rx(
+        _URL_RE,
+        ("https://x.com", "see evil.example.com/pay", "javascript:alert(1)", "www.x", "x.io"),
+        ("plain words", "a.b", "1.5", "file.txt"),
+    ),
+)

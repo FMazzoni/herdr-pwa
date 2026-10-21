@@ -26,6 +26,7 @@ from herdr_pwa.engine import (
     harness_kinds,
     harness_of,
 )
+from herdr_pwa.patterns import Rx
 from herdr_pwa.settings import Settings
 from herdr_pwa.validation import MODEL_ID
 from herdr_pwa.writes.guard import unsendable
@@ -469,3 +470,15 @@ def _end_agent(writer: Writer, ask: EndAsk) -> AgentEnded | Refused:
             return Refused(refusal_for(exc), "closed", detail=str(exc))
         entry.outcome("closed")
     return AgentEnded(agent.target, verified=not _still_there(writer.client, ask.session))
+
+
+PATTERNS: Final = (
+    Rx(
+        _AGENT_NAME,
+        ("claude", "a-b_c1"),
+        ("1abc", "Claude", "a b", ""),
+        "fullmatch",
+        validator=True,
+    ),
+    Rx(_NOT_NAME, ("a b", "A", "\u00e9"), ("abc-_1",)),
+)

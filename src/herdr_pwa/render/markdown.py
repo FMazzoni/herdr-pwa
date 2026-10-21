@@ -15,6 +15,7 @@ from mdit_py_plugins.dollarmath import dollarmath_plugin
 from mdit_py_plugins.tasklists import tasklists_plugin
 from mdit_py_plugins.texmath import texmath_plugin
 
+from herdr_pwa.patterns import Rx
 from herdr_pwa.render.highlight import TOKEN_CLASSES, highlight, language_for
 from herdr_pwa.render.mathml import MATH_TAGS, math_node
 from herdr_pwa.render.mdnode import MdNode
@@ -287,3 +288,14 @@ def render_tree(text: str) -> tuple[MdNode, ...]:
     """Parse markdown into nodes the template emits; nothing here is markup."""
     root = SyntaxTreeNode(_PARSER.parse(text))
     return tuple(part for child in root.children for part in _convert(child))
+
+
+PATTERNS: Final = (
+    Rx(_LONE_TERM, ("x", "42", "3.14"), ("xy", "1.", "x1"), "fullmatch"),
+    Rx(_BREAKABLE_RUN, ("a/b", "src/x.py", "foo-bar", "2020\u20132021"), ("plain", "a b")),
+    Rx(
+        FILE_REF,
+        ("src/app.py:12", "./x/y.ts:3:4", "see main.rs:10.", "example.com:443"),
+        ("http://x/a.py:1", "a.py:0", "a.py:12/x", "a.py"),
+    ),
+)

@@ -4,6 +4,8 @@ import re
 from dataclasses import dataclass
 from typing import Final
 
+from herdr_pwa.patterns import Rx
+
 MAX_LINES: Final = 3000
 LINE_CHARS: Final = 2000
 BINARY: Final = "The file is binary; there is no text to compare."
@@ -94,3 +96,13 @@ def added(text: str) -> FileDiff:
     lines = lines[:-1] if lines and not lines[-1] else lines
     rows = [DiffLine("add", 0, n, *_cut(t)) for n, t in enumerate(lines[:MAX_LINES], start=1)]
     return FileDiff(tuple(rows), max(0, len(lines) - MAX_LINES))
+
+
+PATTERNS: Final = (
+    Rx(
+        _HUNK,
+        ("@@ -1,2 +3,4 @@", "@@ -10 +12 @@ def main():"),
+        ("@@ -a +1 @@", "@ -1 +1 @", "@@ -1 +1@@"),
+        "fullmatch",
+    ),
+)

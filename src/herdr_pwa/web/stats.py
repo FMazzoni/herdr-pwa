@@ -24,6 +24,7 @@ from herdr_pwa.engine import (
 )
 from herdr_pwa.facts import CONTEXT_WINDOWS
 from herdr_pwa.panetext import Run, plain_text, segments
+from herdr_pwa.patterns import Rx
 
 # The bar is drawn in tenths: a class per step, since no inline style may set a width.
 METER_STEPS: Final = 10
@@ -487,3 +488,13 @@ def with_statusline(stats: Stats, rows: list[list[Run]]) -> Stats:
     return replace(
         stats, status=status, sentence="Statusline: " + "; ".join(r.text for r in status)
     )
+
+
+PATTERNS: Final = (
+    Rx(
+        _CLAUDE,
+        ("claude-opus-4-5-20251101", "claude-sonnet-4", "claude-haiku-4-5"),
+        ("claude-opus", "claude-opus-4-123", "claude-gpt-4"),
+        "fullmatch",
+    ),
+)

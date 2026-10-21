@@ -8,7 +8,7 @@ from types import ModuleType
 import pytest
 from pydantic import JsonValue, TypeAdapter
 
-from herdr_pwa import glyphs, panetext
+from herdr_pwa import glyphs, panetext, patterns
 from herdr_pwa.engine import BlockedPrompt, EngineSettings, HerdrClient, WireReply, as_pane_id
 from herdr_pwa.panetext import (
     MAX_RUNS_PER_LINE,
@@ -387,9 +387,13 @@ def test_the_module_stays_a_leaf() -> None:
     """``panetext`` is imported by the engine and the render layer, so it imports neither."""
     imports = _imports(panetext)
     assert imports, imports
-    # The glyph sets are data that imports nothing of this app's, so they keep it a leaf.
-    assert [line for line in imports if "herdr_pwa" in line] == ["from herdr_pwa import glyphs"]
-    assert all("herdr_pwa" not in line for line in _imports(glyphs)), _imports(glyphs)
+    # The glyph sets and the pattern record import nothing of this app's, so they keep it a leaf.
+    assert [line for line in imports if "herdr_pwa" in line] == [
+        "from herdr_pwa import glyphs",
+        "from herdr_pwa.patterns import Rx",
+    ]
+    for leaf in (glyphs, patterns):
+        assert all("herdr_pwa" not in line for line in _imports(leaf)), _imports(leaf)
 
 
 # --------------------------------------------------------------------------

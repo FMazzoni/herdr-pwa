@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict, field_validator
 from herdr_pwa import facts, glyphs
 from herdr_pwa.engine.model import PaneId, SessionId, as_pane_id, as_session_id, screen_digest
 from herdr_pwa.panetext import as_text_read, composer_top, escape_at, plain
-from herdr_pwa.patterns import alternatives
+from herdr_pwa.patterns import Rx, alternatives
 
 _EDGE_RE: Final = re.compile(rf"^(?P<indent>\s*){glyphs.one_of(glyphs.SIDE, glyphs.LEFT_BLOCKS)}")
 """A box-edge bar at line start, with the indent that owns it.
@@ -1409,3 +1409,100 @@ def _question(lines: list[str], stop: int) -> str:
         return asked
     fallback = _askable(lines, 0, stop)
     return fallback[-1] if fallback else ""
+
+
+PATTERNS: Final = (
+    Rx(_EDGE_RE, ("│ text", "  ┃x", "▏"), ("text │", "x▏"), "match"),
+    Rx(
+        OPTION_RE,
+        ("1. Yes", "  2) No", "\u276f 1. Yes", "[1] Approve Once", "> 3: Other", "\u2022 4. Four"),
+        ("[1. x", "1] x", "1.Yes", "123. x", "Step 1. Do"),
+        "fullmatch",
+    ),
+    Rx(_DIVIDER_RE, ("────", "  ━━━━━  ", "----", "═══════"), ("───", "── x ──", ""), "fullmatch"),
+    Rx(_FOOTER_KEY, ("Enter to select", "ctrl+g", "↑/↓", "arrow keys"), ("entering", "the tablet")),
+    Rx(
+        _FOOTER_VERB,
+        ("to select", "Esc to cancel", "Tab to navigate"),
+        ("Enter to send", "any key"),
+    ),
+    Rx(
+        _CHECKBOX_RE,
+        ("[x] autumn", "[ ] spring", "[] none", "☑ done", "◻ todo", "[✔] picked"),
+        ("autumn", "[y] maybe", "[x]"),
+        "fullmatch",
+    ),
+    Rx(
+        _MARKER_RE,
+        ("\u276f 1. Yes", "  > 2. No", "▸ x"),
+        ("\u276f1. Yes", "1. \u276f Yes"),
+        "match",
+    ),
+    Rx(
+        _PARKED_RE,
+        ("\u276f Next", "▶  Submit"),
+        ("> quote", " \u276f indented", "\u276f "),
+        "match",
+    ),
+    Rx(_STEP_TOKEN_RE, ("☐ Seasons", "← ☒ Colour  ✔ Submit →"), ("no boxes", "[x] bracketed")),
+    Rx(
+        _STEPPER_RE,
+        ("← ☐ Seasons  ☒ Colour  ✔ Submit →", "←☐→"),
+        ("☐ Seasons →", "← Seasons →", "← ☐ a → b →"),
+        "fullmatch",
+    ),
+    Rx(
+        _HINT_RE,
+        ("Enter to select", "  esc to cancel", "ctrl+g to edit in Vim", "↑/↓ to navigate"),
+        ("Enter", "to select", "Press enter to 1"),
+        "fullmatch",
+    ),
+    Rx(
+        _VERB_HINT_RE,
+        ("enter submit", "⇆ select", "tab next question"),
+        ("enter", "", "1 2"),
+        "fullmatch",
+    ),
+    Rx(_HINT_SPLIT, ("a · b", "a  b", "a | b", "a\uff5cb"), ("a b", "a-b")),
+    Rx(
+        _TRAILING_PAREN_RE, ("Enter to confirm (36s)", "x (y)  "), ("(36s)", "a (b) c", "a (b (c))")
+    ),
+    Rx(_KEY_PIECE, ("ctrl+a / ctrl+b", "enter or space", "a, b", "a/b"), ("enter", "ctrl+a")),
+    Rx(
+        _KEY_TOKEN_RE,
+        ("enter", "Ctrl+Shift+F12", "arrow keys", "↑↓", "⇆", "x", "pgup"),
+        ("enter key", "ctrl+", "f123", "↑↓←", "foo"),
+        "fullmatch",
+    ),
+    Rx(_BUTTON_TOKENS, ("Allow  Deny", "a   b"), ("Allow once",)),
+    Rx(
+        _HEADER_TOKEN,
+        ("Seasons", "Q&A", "Colour / tone"),
+        ("1 question", "a" * 25, "What season is it?"),
+        "fullmatch",
+    ),
+    Rx(
+        _HANDOFF_RE,
+        ("edit in Vim", "open editor", "Shell", "suspend"),
+        ("editing", "shellac", "edit"),
+    ),
+    Rx(
+        _REQUEST_TITLE_RE,
+        ('MCP server "probe" requests your input', "mcp server “x” requests your input"),
+        ("MCP server probe requests your input", 'MCP server "x" requests your input now'),
+        "fullmatch",
+    ),
+    Rx(_DIGITS_RE, ("12", "a1b"), ("abc", "")),
+    Rx(
+        _COUNTER_RE,
+        ("Question 1/3\nWhich?", "Question 2/2 of the set\nx"),
+        ("Question 1/3", "question 1/3\nx", "Q 1/3\nx"),
+        "match",
+    ),
+    Rx(_QUESTION_MARK_RE, ("Proceed?", "(y/n)?", "“ok”?"), ("[!?]", "?", "a ?")),
+    Rx(_SIDE_TOP_RE, ("\u276f 1. Yes   ┌───", "x  ╭━━"), ("x ┌──", "  ┌──", "x  ┌ ")),
+    Rx(_STRIP_GAP, ("a   b", "a\t\t\tb"), ("a  b",)),
+    Rx(_TRAILING_SIDE_RE, ("text  │", "x┃", "a ║  "), ("text", "│ text"), "fullmatch"),
+    Rx(_BOX_BOTTOM_RE, ("╰────╯", "  └┘", "╚══╝"), ("╰──", "──╯", "╰─x─╯"), "fullmatch"),
+    Rx(_BOX_TEE_RE, ("├────┤", " ┝━━┥", "╞══╡"), ("├──", "│──┤"), "fullmatch"),
+)

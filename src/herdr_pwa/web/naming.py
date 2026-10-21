@@ -8,7 +8,7 @@ from herdr_pwa import facts
 from herdr_pwa.decisions import AgentRow, ScreenDecision
 from herdr_pwa.engine import CONTEXT_FULL, MenuShape, ends_a_question
 from herdr_pwa.panetext import plain
-from herdr_pwa.patterns import alternatives
+from herdr_pwa.patterns import Rx, alternatives
 
 # Spinner and status glyphs a harness prefixes its terminal title with.
 _GLYPH_CATEGORIES: Final = frozenset({"So", "Sk"})
@@ -82,3 +82,19 @@ def card_question(row: AgentRow) -> str:
 def card_text(text: str) -> str:
     """Terminal text a card prints, with its escape sequences and control bytes dropped."""
     return plain(text)
+
+
+PATTERNS: Final = (
+    Rx(
+        _UNNAMED,
+        ("new session - abc", "New Session-2026"),
+        ("new session", "new session - a b"),
+        "fullmatch",
+    ),
+    Rx(_LOCATOR, ("user@host:~/src", "u@h"), ("user@host: x", "a@b@c", "@host"), "fullmatch"),
+    Rx(
+        _PROMPT_OPENING,
+        ("Do you want to proceed", "  * Allow this?", "line\nPress enter"),
+        ("I do you", "Proceeding now", "Tell me"),
+    ),
+)

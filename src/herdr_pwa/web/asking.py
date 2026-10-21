@@ -11,6 +11,7 @@ from typing import Final
 
 from herdr_pwa.decisions import ScreenDecision
 from herdr_pwa.engine import BlockedPrompt, KeyHint, MenuShape
+from herdr_pwa.patterns import Rx
 from herdr_pwa.writes.keys import allowed_keys, answer_digits, pad_keys
 
 # A context line past these is on the Pane; the question's subject is its first few.
@@ -116,3 +117,13 @@ def keys_for(prompt: BlockedPrompt | None, decision: ScreenDecision | None) -> K
     extra = tuple(_key(key, verbs) for key in hinted)
     # Rows that answer with a tap make the keys the odd case; rows a cursor answers need them.
     return Keys(pad, extra, folded=bool(answer_digits(prompt)))
+
+
+PATTERNS: Final = (
+    Rx(
+        _MARKS,
+        ("# Heading", "> quote", "* item", "\u2022 x", "\u276f x"),
+        ("#nospace", "- item", "####### seven"),
+        "match",
+    ),
+)

@@ -8,6 +8,7 @@ from types import MappingProxyType
 from typing import Final
 
 from herdr_pwa import glyphs
+from herdr_pwa.patterns import Rx
 
 
 @dataclass(frozen=True, slots=True)
@@ -695,3 +696,26 @@ def pane_view(text: str, *, strip: bool = True) -> PaneView:
 def pane_lines(text: str, *, strip: bool = True) -> list[list[Run]]:
     """:func:`pane_view`'s viewport, without the chrome it split off."""
     return [line.runs for line in pane_view(text, strip=strip).lines]
+
+
+PATTERNS: Final = (
+    Rx(
+        _CSI,
+        ("\x1b[31m", "\x1b[?25h", "\x1b[38:2::1:2:3m", "\x1b[1 q"),
+        ("\x1b]0;t\x07", "x\x1b[31m", "\x1b[\x1b"),
+        "match",
+    ),
+    Rx(
+        _STRING_SEQ,
+        ("\x1b]0;title\x07", "\x1b]8;;http://x\x1b\\", "\x1bPq#0\x1b\\", "\x1b]0;unterminated"),
+        ("\x1b[31m", "\x1b(B"),
+        "match",
+    ),
+    Rx(_SHORT_ESC, ("\x1b(B", "\x1b7", "\x1b", "\x1b#8"), ("x", "[31m"), "match"),
+    Rx(_INNER_RULE, ("───", "x ━━━ y"), ("──", "---")),
+    Rx(_LEAD_FRAME, ("│ text", "  ╭─╮ x", "\u00a0┃"), ("text │", ""), "match"),
+    Rx(_PADDING, (" " * 12, "a" + "\u00a0" * 12 + "b"), (" " * 11, "\n" * 12)),
+    Rx(_WIDE_RULE_RUN, ("─" * 20, "x " + "=" * 20), ("─" * 19, "a" * 20)),
+    Rx(_SEGMENT_BREAK, ("a  b", "a\ue0b0b", "a | b", "|"), ("a b", "a|b")),
+    Rx(_BESIDE_BOX_RE, ("  ┌", "   │ x"), (" ┌", "  x"), "match"),
+)

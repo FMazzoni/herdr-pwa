@@ -24,6 +24,7 @@ from herdr_pwa.engine import (
     has_byte_frontier,
     locate,
 )
+from herdr_pwa.patterns import Rx
 from herdr_pwa.web.deps import WebState
 from herdr_pwa.web.herd import overlay_of
 
@@ -392,3 +393,14 @@ class _Upstream:
                 continue
             stop.wait(delay)
             delay = min(delay * 2, UPSTREAM_BACKOFF[1])
+
+
+PATTERNS: Final = (
+    Rx(
+        TOPIC,
+        ("feed", "agent:abc", "stats:a.b-c_d"),
+        ("feeds", "agent:", "agent:-x", "chat:" + "a" * 81, "pane:a b"),
+        "fullmatch",
+        validator=True,
+    ),
+)

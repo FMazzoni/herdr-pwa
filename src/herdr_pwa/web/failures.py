@@ -23,6 +23,7 @@ from herdr_pwa.engine import (
 )
 from herdr_pwa.files.reader import NotReadable, OutsideRoot
 from herdr_pwa.files.roots import UnknownRoot
+from herdr_pwa.patterns import Rx
 from herdr_pwa.web.render import Pages
 from herdr_pwa.writes.refusal import Refused
 
@@ -190,3 +191,14 @@ def refused(pages: Pages, redraw: Redraw, result: Refused) -> HTMLResponse:
     shown = {**redraw.context, "refused": result, "says": result.says}
     render = pages.page if redraw.as_page else pages.fragment
     return render(redraw.name, shown, status=result.status)
+
+
+PATTERNS: Final = (
+    Rx(
+        _REGION_ID,
+        ("answer", "agent-dot"),
+        ("Answer", "a-", "-a", "a--b", "a_b"),
+        "fullmatch",
+        validator=True,
+    ),
+)

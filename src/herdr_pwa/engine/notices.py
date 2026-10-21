@@ -13,6 +13,7 @@ from typing import Final
 from pydantic import BaseModel, ConfigDict, Field
 
 from herdr_pwa.panetext import plain
+from herdr_pwa.patterns import Rx
 from herdr_pwa.validation import Flag, Text
 
 # The harness's own wrapper, never shown: it is context for the model, not conversation.
@@ -424,3 +425,58 @@ def injected(origin: RecordOrigin | None, content: str, *, human: bool) -> Injec
     if human:
         return None
     return _by_tag(text)
+
+
+PATTERNS: Final = (
+    Rx(
+        _REMINDER,
+        ("<system-reminder>x</system-reminder>", "a<system-reminder>\nmany\n</system-reminder>b"),
+        ("<system-reminder>open", "system-reminder"),
+    ),
+    Rx(
+        _TASK,
+        ("<task-notification><summary>x</summary></task-notification>",),
+        (" <task-notification>x</task-notification>", "<task-notification>open"),
+        "match",
+    ),
+    Rx(
+        _PEER,
+        (
+            '<agent-message from="a">\nhi\n</agent-message>',
+            '<cross-session-message from="b">x</cross-session-message>',
+        ),
+        ('<agent-message from="a">x</cross-session-message>', "<agent-messages>x</agent-messages>"),
+    ),
+    Rx(_ATTR, ('from="a"', 'from-name="Bob B"'), ("from=a", "from='a'")),
+    Rx(
+        _SUMMARY,
+        (
+            'Agent "Review" finished',
+            'Background command "ls" completed (exit code 1: No matches found)',
+            'Task "t" was stopped by main session',
+            'Agent "x" is waiting on its own background work',
+        ),
+        ('Agent "x" done', 'Agents "x" finished', 'Agent "x"finished'),
+        "fullmatch",
+    ),
+    Rx(_EXIT, ("exit code 143", "(exit code -1)"), ("exit 1", "exit code x")),
+    Rx(
+        _OVERFLOW,
+        ("the model's maximum context length of 202752 tokens",),
+        ("maximum context lengths", "max context length"),
+    ),
+    Rx(
+        _LIMIT,
+        (
+            "You've hit your session limit · resets 5am (America/New_York)",
+            "You've hit your weekly limit · resets Mon",
+        ),
+        ("You've hit your session limit", "You have hit your session limit · resets 5am"),
+        "fullmatch",
+    ),
+    Rx(
+        _PASTE_TAG,
+        ('<pasted_content id="1">', '\n</pasted_content id="1">'),
+        ("<pasted_content>", "<pasted_content id=1>"),
+    ),
+)

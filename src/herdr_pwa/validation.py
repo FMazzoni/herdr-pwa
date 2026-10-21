@@ -15,6 +15,8 @@ from pydantic import (
 )
 from pydantic_core import CoreSchema, core_schema
 
+from herdr_pwa.patterns import Rx
+
 
 def or_default(default: object) -> WrapValidator:
     """A field validator that answers ``default`` for a value of the wrong shape.
@@ -70,3 +72,14 @@ def summary(exc: ValidationError) -> str:
 def is_not_json(exc: ValidationError) -> bool:
     """The text was not JSON at all, as opposed to JSON of the wrong shape."""
     return any(error["type"] == "json_invalid" for error in exc.errors())
+
+
+PATTERNS: Final = (
+    Rx(
+        MODEL_ID,
+        ("claude-opus-4-5", "openai/gpt-5.1", "moonshotai/Kimi-K2.5"),
+        ("-x", "a b", "a" * 97, ""),
+        "fullmatch",
+        validator=True,
+    ),
+)
