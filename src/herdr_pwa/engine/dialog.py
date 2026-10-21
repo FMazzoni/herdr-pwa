@@ -42,16 +42,24 @@ _DIVIDER_RE: Final = re.compile(
     rf"[\s{re.escape(glyphs.RULE + glyphs.DASHED_RULE + '—=_·•-')}]{{4,}}"
 )
 
-_FOOTER_RE: Final = re.compile(
-    "(?i)(?:"
-    + "|".join(
-        [rf"\b{re.escape(key)}\b" for key in facts.FOOTER_KEY_WORDS]
-        + [re.escape(mark) for mark in facts.FOOTER_KEY_MARKS]
-    )
-    + ").*(?:"
-    + "|".join(re.escape(verb) for verb in facts.FOOTER_VERBS)
-    + ")"
+# A footer names a key and then, later on the same line, what it does; read as two scans, since
+# one pattern bridging them with ``.*`` retried every key it passed (5.5 s on a 30k-character line).
+_FOOTER_KEY: Final = re.compile(
+    rf"\b(?:{alternatives(facts.FOOTER_KEY_WORDS)})\b|{alternatives(facts.FOOTER_KEY_MARKS)}",
+    re.IGNORECASE,
 )
+_FOOTER_VERB: Final = re.compile(alternatives(facts.FOOTER_VERBS), re.IGNORECASE)
+
+
+def _names_key_then_verb(text: str) -> bool:
+    """Does a line of *text* name a key and then, after it, a verb?"""
+    for line in text.split("\n"):
+        # The first key ends first, since no key's name holds another, so it is the one to try.
+        key = _FOOTER_KEY.search(line)
+        if key is not None and _FOOTER_VERB.search(line, key.end()) is not None:
+            return True
+    return False
+
 
 _MAX_CHROME_PARAGRAPHS: Final = 3
 
@@ -1320,7 +1328,7 @@ def _paragraphs(lines: list[str], start: int, stop: int) -> list[str]:
 
 def _is_chrome(line: str) -> bool:
     """True for a rule or a key-hint footer: furniture the terminal drew, not text."""
-    return bool(_DIVIDER_RE.fullmatch(line)) or bool(_FOOTER_RE.search(line)) or is_key_hint(line)
+    return bool(_DIVIDER_RE.fullmatch(line)) or _names_key_then_verb(line) or is_key_hint(line)
 
 
 _MARKS: Final = "\u25cf\u25cb\u2022\u00b7"
