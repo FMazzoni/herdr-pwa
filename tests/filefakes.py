@@ -138,7 +138,7 @@ def make_repo(repo: Path) -> Path:
         "dist/bundle.min.js": MINIFIED,
         "data/blob.bin": b"\x00\x01\x02binary\x00" * 64,
         "config/.env": "API_TOKEN=do-not-show-me\n",
-        "config/deploy.pem": "-----BEGIN PRIVATE KEY-----\nnot-a-real-key\n-----END PRIVATE KEY-----\n",
+        "config/deploy.pem": "synthetic key material, not-a-real-key\n",
         ".gitignore": "build/\n",
     }
     for rel, body in committed.items():
