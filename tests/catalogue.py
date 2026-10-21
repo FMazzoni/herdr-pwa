@@ -998,6 +998,28 @@ def _two_blocked(first: str, second: str) -> Replies:
     return per_pane(frame, {WORKING_PANE: capture(first), PANES[3]: capture(second)})
 
 
+def _showcase_herd() -> dict[str, JsonValue]:
+    """Four agents in plainly named workspaces, two blocked, for the README's picture."""
+    frame = snapshot_frame()
+    kept = {WORKING_PANE, PANES[3], PANES[1], PANES[5]}
+    snapshot = _snapshot(frame)
+    snapshot["agents"] = [a for a in agents_of(frame) if a.get("pane_id") in kept]
+    _set(frame, WORKING_PANE, agent_status="blocked", title="Tidy up the release branch")
+    _set(frame, PANES[3], agent_status="blocked", title="Check the status endpoint")
+    _set(frame, PANES[1], agent_status="working", title="Write the setup guide")
+    _set(frame, PANES[5], agent_status="idle", title="Bump the base image")
+    labels = {"w1": "api", "w4": "docs", "w2": "infra"}
+    workspaces = snapshot["workspaces"]
+    for workspace in workspaces if isinstance(workspaces, list) else []:
+        if isinstance(workspace, dict) and workspace.get("workspace_id") in labels:
+            workspace["label"] = labels[str(workspace["workspace_id"])]
+    return frame
+
+
+def _showcase() -> Replies:
+    return per_pane(_showcase_herd, {WORKING_PANE: capture(MENU), PANES[3]: capture(PERMISSION)})
+
+
 def _lonely_gone() -> dict[str, JsonValue]:
     """The snapshot with the one agent of its workspace closed."""
     frame = snapshot_frame()
@@ -1123,6 +1145,13 @@ FEED: Final = (
         "#feed-list .card--blocked",
         _two_blocked(MENU, PERMISSION),
         title="Feed: two blocked agents, their options as tap targets",
+    ),
+    State(
+        "feed-showcase",
+        "/",
+        "#feed-list .card--blocked",
+        _showcase(),
+        title="Feed: four agents in plainly named workspaces, two waiting on you",
     ),
     State(
         "feed-permission",
