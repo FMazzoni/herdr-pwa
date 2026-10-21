@@ -96,10 +96,14 @@ class SeenAgent(Protocol):
     """The fields the seen ledger reads off one agent."""
 
     @property
-    def session(self) -> str: ...
+    def session(self) -> str:
+        """The herdr session the agent reports."""
+        ...
 
     @property
-    def state_change_seq(self) -> int: ...
+    def state_change_seq(self) -> int:
+        """herdr's counter for the agent's status changes."""
+        ...
 
 
 class SeenRecord(BaseModel):
