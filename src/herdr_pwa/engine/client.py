@@ -235,10 +235,6 @@ class HerdrClient:
             f"expected_protocol={self.settings.expected_protocol!r})"
         )
 
-    def close(self) -> None:
-        """Release whatever the transport holds open; the client stays usable."""
-        self.transport.close()
-
     # --- The one choke point: guard, issue, validate ---
 
     def _call(
@@ -338,7 +334,7 @@ class HerdrClient:
             wire_request.SessionSnapshotRequest, wire_request.EmptyParams(), timeout=timeout
         )
         _, raw = self._result(reply, wire.SessionSnapshotResponseResult, degrade=True)
-        snap = Snapshot.from_raw(raw, expected_protocol=self.settings.expected_protocol)
+        snap = Snapshot.from_raw(raw)
         self._remember_protocol(snap.protocol)
         return snap
 

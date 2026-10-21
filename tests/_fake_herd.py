@@ -162,9 +162,6 @@ class FakeHerd:
             hook(self, params)
         return as_reply(answer)
 
-    def close(self) -> None:
-        pass
-
     def writes(self, method: str) -> list[dict[str, JsonValue]]:
         """The params of every call to ``method``."""
         return [params for name, params in self.calls if name == method]

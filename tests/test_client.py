@@ -187,12 +187,6 @@ def test_an_error_from_the_wire_is_not_swallowed() -> None:
         eng.agent(as_pane_id("nosuch"))
 
 
-def test_closing_the_client_releases_the_connection() -> None:
-    eng, wire = build()
-    eng.close()
-    assert wire.closed == 1
-
-
 # --------------------------------------------------------------------------
 # Reads
 # --------------------------------------------------------------------------
@@ -757,8 +751,6 @@ def test_the_socket_vocabulary_is_not_the_cli_vocabulary() -> None:
     """The two spellings that would silently 'work' if assumed derivable."""
     assert SEND_KEYS == "agent.send_keys"
     assert SNAPSHOT == "session.snapshot"
-    assert protocol.CMD_SNAPSHOT == ("api", "snapshot")
-    assert protocol.CMD_AGENT_SEND_KEYS == ("agent", "send-keys")
 
 
 def test_a_method_name_is_read_off_the_generated_literal() -> None:
@@ -973,7 +965,7 @@ def test_the_rendered_protocol_check_and_the_write_guard_agree() -> None:
     """One runner, one number. They used to be two."""
     eng, _ = build(settings=replace(SETTINGS, expected_protocol=DRIFTED), protocol_number=DRIFTED)
     snap = eng.snapshot()
-    assert snap.protocol == snap.expected_protocol  # what the snapshot reports...
+    assert snap.protocol == eng.settings.expected_protocol  # what the snapshot reports...
     eng.focus(P3)  # ...and what the guard allows
 
 
@@ -981,7 +973,7 @@ def test_an_unconfigured_snapshot_still_judges_itself_by_the_build() -> None:
     """Nobody who never configured anything sees a behaviour change."""
     eng, _ = build(protocol_number=DRIFTED)
     snap = eng.snapshot()
-    assert snap.protocol != snap.expected_protocol
+    assert snap.protocol != eng.settings.expected_protocol
 
 
 # --------------------------------------------------------------------------

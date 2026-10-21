@@ -204,7 +204,6 @@ def test_the_request_is_one_newline_terminated_json_object(
     assert server.requests[0]["method"] == "session.snapshot"
     assert server.requests[0]["params"] == {}
     assert set(server.requests[0]) == {"id", "method", "params"}
-    wire.close()
 
 
 def test_params_are_passed_through_unmangled(server: FakeHerdr, sock_path: Path) -> None:
@@ -213,7 +212,6 @@ def test_params_are_passed_through_unmangled(server: FakeHerdr, sock_path: Path)
     params: dict[str, JsonValue] = {"target": "w1:p3", "text": "--not-a-flag\nsecond line ✳"}
     wire.call("agent.prompt", params, idempotent=False)
     assert server.requests[0]["params"] == params
-    wire.close()
 
 
 def test_ids_are_unique(server: FakeHerdr, sock_path: Path) -> None:
@@ -223,7 +221,6 @@ def test_ids_are_unique(server: FakeHerdr, sock_path: Path) -> None:
     ids = [r["id"] for r in server.requests]
     assert len(set(ids)) == 5
     assert all(str(os.getpid()) in str(i) for i in ids)
-    wire.close()
 
 
 def test_a_reply_is_matched_to_the_id_that_asked_for_it(
@@ -242,7 +239,6 @@ def test_a_reply_is_matched_to_the_id_that_asked_for_it(
     assert at(wire.call("session.snapshot", {}).payload, "result", "echo") == "session.snapshot"
     with pytest.raises(EngineError):  # never a reply, and never the wrong one
         wire.call("agent.list", {})  # answered under the first call's id
-    wire.close()
 
 
 def test_two_transports_never_mint_the_same_id(server: FakeHerdr, sock_path: Path) -> None:
@@ -251,8 +247,6 @@ def test_two_transports_never_mint_the_same_id(server: FakeHerdr, sock_path: Pat
     one.call("agent.list", {})
     two.call("agent.list", {})
     assert server.requests[0]["id"] != server.requests[1]["id"]
-    one.close()
-    two.close()
 
 
 def test_each_call_gets_its_own_connection(server: FakeHerdr, sock_path: Path) -> None:
@@ -261,19 +255,6 @@ def test_each_call_gets_its_own_connection(server: FakeHerdr, sock_path: Path) -
     for _ in range(10):
         wire.call("agent.list", {})
     assert server.connections == 10
-    wire.close()
-
-
-def test_close_is_idempotent_and_the_transport_redials_after_it(
-    server: FakeHerdr, sock_path: Path
-) -> None:
-    wire = transport(sock_path)
-    wire.call("agent.list", {})
-    wire.close()
-    wire.close()
-    wire.call("agent.list", {})
-    assert server.connections == 2
-    wire.close()
 
 
 class NameOnly:
@@ -282,18 +263,12 @@ class NameOnly:
     def call(self) -> None:  # wrong signature, no reply, no wire
         pass
 
-    def close(self) -> None:
-        pass
-
 
 @pytest.mark.usefixtures("server")
 def test_satisfies_the_transport_protocol(sock_path: Path) -> None:
     """``isinstance`` on a ``@runtime_checkable`` Protocol is not a conformance test."""
     assert isinstance(NameOnly(), Transport), "isinstance only checks names"
-    pairs = (
-        ("call", SocketTransport.call, Transport.call),
-        ("close", SocketTransport.close, Transport.close),
-    )
+    pairs = (("call", SocketTransport.call, Transport.call),)
     for name, real, declared in pairs:
         assert inspect.signature(real) == inspect.signature(declared), (
             f"{name} does not have the signature the Protocol declares"
@@ -302,8 +277,6 @@ def test_satisfies_the_transport_protocol(sock_path: Path) -> None:
     wire: Transport = transport(sock_path)
     reply = wire.call("session.snapshot", {}, timeout=FAST, idempotent=True)
     assert at(reply.payload, "result", "echo") == "session.snapshot"
-    wire.close()
-    wire.close()  # "calling it twice must be harmless"
 
 
 # --------------------------------------------------------------------------
@@ -331,7 +304,6 @@ def test_an_error_frame_maps_onto_the_taxonomy(
         wire.call("agent.get", {"target": "nosuch"})
     assert exc.value.code == "agent_not_found"
     assert "nosuch" in exc.value.message
-    wire.close()
 
 
 def test_a_server_side_unavailable_code_is_not_a_transport_failure(
@@ -347,7 +319,6 @@ def test_a_server_side_unavailable_code_is_not_a_transport_failure(
     wire = transport(sock_path)
     with pytest.raises(EngineUnavailableError):
         wire.call("session.snapshot", {})
-    wire.close()
 
 
 def test_an_unknown_error_code_stays_a_plain_engine_error(
@@ -362,7 +333,6 @@ def test_an_unknown_error_code_stays_a_plain_engine_error(
         wire.call("agent.get", {"target": "w1:p3"})
     assert type(exc.value) is EngineError
     assert exc.value.code == "weird_new_code"
-    wire.close()
 
 
 def test_an_error_body_the_schema_does_not_describe_is_still_a_refusal(
@@ -380,7 +350,6 @@ def test_an_error_body_the_schema_does_not_describe_is_still_a_refusal(
     assert type(exc.value) is EngineError
     assert exc.value.code == "engine_error"
     assert exc.value.message == "the runner reported {'code': 7}"
-    wire.close()
 
 
 def test_an_error_that_is_not_an_object_is_left_to_the_reply_reader(
@@ -395,7 +364,6 @@ def test_an_error_that_is_not_an_object_is_left_to_the_reply_reader(
     wire = transport(sock_path)
     reply = wire.call("agent.get", {"target": "w1:p3"})
     assert at(reply.payload, "error") == "boom"
-    wire.close()
 
 
 def test_an_error_frame_is_a_conversation_not_a_failure(
@@ -420,7 +388,6 @@ def test_an_error_frame_is_a_conversation_not_a_failure(
     # Each call gets its own connection, which is the protocol rather than a symptom.
     wire.call("agent.get", {"target": "here"})
     assert fake.connections == 2
-    wire.close()
 
 
 # --------------------------------------------------------------------------
@@ -473,7 +440,6 @@ def test_the_runner_hanging_up_mid_answer_is_unavailable(
     with pytest.raises(EngineUnavailableError) as exc:
         wire.call("session.snapshot", {})
     assert "closed the connection" in exc.value.message
-    wire.close()
 
 
 # --------------------------------------------------------------------------
@@ -490,7 +456,6 @@ def test_a_runner_that_never_answers_times_out(
     with pytest.raises(EngineTimeoutError):
         wire.call("session.snapshot", {})
     assert time.monotonic() - started < 2.0
-    wire.close()
 
 
 def test_a_dribbling_peer_cannot_outlast_the_deadline(
@@ -513,7 +478,6 @@ def test_a_dribbling_peer_cannot_outlast_the_deadline(
     with pytest.raises(EngineTimeoutError):
         wire.call("session.snapshot", {})
     assert time.monotonic() - started < 2.0
-    wire.close()
 
 
 def test_a_timeout_destroys_the_connection(sock_path: Path, request: pytest.FixtureRequest) -> None:
@@ -535,7 +499,6 @@ def test_a_timeout_destroys_the_connection(sock_path: Path, request: pytest.Fixt
         release.set()
     assert len(wire.opened) == 1
     assert wire.still_open == []
-    wire.close()
 
 
 def test_an_exhausted_budget_times_out_before_dialling(sock_path: Path) -> None:
@@ -597,7 +560,6 @@ def test_every_wait_in_a_call_is_armed_from_its_one_deadline(
     assert armed[0] < budget, f"one budget, not a fresh one per wait: {armed}"
     assert all(later < earlier for earlier, later in itertools.pairwise(armed)), armed
     assert str(budget) in str(caught.value), "the message must name the real budget"
-    wire.close()
 
 
 @pytest.mark.filterwarnings("ignore:This process .* is multi-threaded")
@@ -635,7 +597,6 @@ def test_a_forked_child_gets_its_own_ids_and_its_own_connection(  # noqa: PLR091
     assert server.connections == 3
     ids = [r["id"] for r in server.requests]
     assert len(set(ids)) == len(ids) == 3
-    wire.close()
 
 
 # --------------------------------------------------------------------------
@@ -650,7 +611,6 @@ def test_a_non_json_frame_is_an_invalid_response(
     wire = transport(sock_path)
     with pytest.raises(InvalidResponseError):
         wire.call("session.snapshot", {})
-    wire.close()
 
 
 def test_a_json_array_is_an_invalid_response(
@@ -661,7 +621,6 @@ def test_a_json_array_is_an_invalid_response(
     with pytest.raises(InvalidResponseError) as exc:
         wire.call("session.snapshot", {})
     assert "list" in exc.value.message
-    wire.close()
 
 
 def test_undecodable_pane_bytes_come_back_replaced_rather_than_raising(
@@ -678,7 +637,6 @@ def test_undecodable_pane_bytes_come_back_replaced_rather_than_raising(
     assert "\ufffd" in str(
         at(wire.call("agent.read", {"target": "w1:p3"}).payload, "result", "text")
     )
-    wire.close()
 
 
 def test_undecodable_bytes_that_break_the_frame_are_an_invalid_response(
@@ -689,7 +647,6 @@ def test_undecodable_bytes_that_break_the_frame_are_an_invalid_response(
     wire = transport(sock_path)
     with pytest.raises(InvalidResponseError):
         wire.call("agent.read", {"target": "w1:p3"})
-    wire.close()
 
 
 def test_a_frame_with_no_terminator_is_cut_off_rather_than_buffered_forever(
@@ -711,7 +668,6 @@ def test_a_frame_with_no_terminator_is_cut_off_rather_than_buffered_forever(
         wire.call("session.snapshot", {})
     assert "terminator" in exc.value.message
     assert wire.still_open == []
-    wire.close()
 
 
 # --------------------------------------------------------------------------
@@ -738,7 +694,6 @@ def test_a_request_of_exactly_the_limit_is_sent(server: FakeHerdr, sock_path: Pa
     wire.call("session.snapshot", {"_pad": _pad_to(wire, MAX_REQUEST_BYTES)})
     sent = json.dumps(server.requests[0], separators=(",", ":"))
     assert len(sent) == MAX_REQUEST_BYTES, "the fake did not receive the whole line"
-    wire.close()
 
 
 def test_a_request_past_the_limit_is_refused_before_anything_is_sent(
@@ -753,7 +708,6 @@ def test_a_request_past_the_limit_is_refused_before_anything_is_sent(
     assert str(caught.value.size) in caught.value.message
     assert server.connections == 0, "an over-large call must not cost a connection"
     assert server.requests == []
-    wire.close()
 
 
 def test_the_refusal_is_still_an_invalid_request(sock_path: Path) -> None:
@@ -765,7 +719,6 @@ def test_the_refusal_is_still_an_invalid_request(sock_path: Path) -> None:
         wire.call("session.snapshot", {"_pad": "x" * (MAX_REQUEST_BYTES + 1)})
     with pytest.raises(EngineError):
         wire.call("session.snapshot", {"_pad": "x" * (MAX_REQUEST_BYTES + 1)})
-    wire.close()
 
 
 # --------------------------------------------------------------------------
@@ -788,7 +741,6 @@ def test_a_reply_for_an_id_nobody_awaits_is_skipped_with_a_warning(
         reply = wire.call("session.snapshot", {})
     assert at(reply.payload, "result", "echo") == "session.snapshot"
     assert "somebody-else" in caplog.text
-    wire.close()
 
 
 def test_a_stream_that_only_answers_other_ids_is_declared_out_of_step(
@@ -803,7 +755,6 @@ def test_a_stream_that_only_answers_other_ids_is_declared_out_of_step(
         wire.call("session.snapshot", {})
     assert "out of step" in exc.value.message
     assert wire.still_open == []
-    wire.close()
 
 
 def test_a_late_reply_left_in_the_pipe_is_never_returned_to_the_next_caller(
@@ -822,7 +773,6 @@ def test_a_late_reply_left_in_the_pipe_is_never_returned_to_the_next_caller(
     wire = transport(sock_path)
     wire.call("session.snapshot", {})
     assert at(wire.call("agent.list", {}).payload, "result", "echo") == "agent.list"
-    wire.close()
 
 
 # --------------------------------------------------------------------------
@@ -847,7 +797,6 @@ def test_a_dead_reused_connection_is_transparently_redialled(
     wire.call("agent.list", {})
     assert at(wire.call("agent.list", {}).payload, "result", "echo") == "agent.list"
     assert fake.connections == 2
-    wire.close()
 
 
 def test_a_write_is_never_resent(sock_path: Path, request: pytest.FixtureRequest) -> None:
@@ -862,7 +811,6 @@ def test_a_write_is_never_resent(sock_path: Path, request: pytest.FixtureRequest
     with pytest.raises(EngineUnavailableError):
         wire.call("agent.prompt", {"target": "w1:p3"}, idempotent=False)
     assert len(fake.requests) <= 1, "a write was sent more than once"
-    wire.close()
 
 
 def test_a_fresh_connection_that_fails_is_not_retried(
@@ -878,7 +826,6 @@ def test_a_fresh_connection_that_fails_is_not_retried(
     with pytest.raises(EngineUnavailableError):
         wire.call("agent.list", {})
     assert len(fake.requests) == 1
-    wire.close()
 
 
 class Clock:
@@ -928,7 +875,6 @@ def test_the_backoff_is_bounded_and_a_success_clears_it(
     wire.call("session.snapshot", {})
     assert wire._backoff == 0.0  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
     assert wire._retry_at == 0.0  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
-    wire.close()
 
 
 # --------------------------------------------------------------------------
@@ -957,7 +903,6 @@ def test_concurrent_callers_each_get_their_own_reply(server: FakeHerdr, sock_pat
     assert all(asked == echoed for asked, echoed in seen), "a caller got somebody else's reply"
     # Sixteen connections, not one: herdr never allowed reuse; the pairing above is the subject.
     assert server.connections == 16
-    wire.close()
 
 
 def test_calls_from_many_threads_are_in_flight_at_once(
@@ -1495,7 +1440,6 @@ def test_a_write_whose_answer_is_lost_is_marked_as_sent(
         wire.call("agent.send_keys", {"target": "w1:p3", "keys": ["1"]}, idempotent=False)
     assert exc.value.after_send
     assert len(fake.requests) == 1
-    wire.close()
 
 
 @pytest.mark.parametrize("handler", [_hang_up, _garbled, _silent])
@@ -1508,7 +1452,6 @@ def test_a_read_whose_answer_is_lost_is_not_marked(
     with pytest.raises(EngineError) as exc:
         wire.call("agent.get", {"target": "w1:p3"})
     assert not exc.value.after_send
-    wire.close()
 
 
 def test_a_write_that_never_left_is_not_marked(tmp_path: Path) -> None:
@@ -1539,4 +1482,3 @@ def test_a_write_the_runner_answered_with_an_error_is_not_marked(
     with pytest.raises(TargetNotFoundError) as exc:
         wire.call("agent.send_keys", {"target": "w1:p3", "keys": ["1"]}, idempotent=False)
     assert not exc.value.after_send
-    wire.close()

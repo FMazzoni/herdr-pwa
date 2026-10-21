@@ -339,13 +339,12 @@ class Snapshot(BaseModel):
 
     protocol: int = 0
     version: str = ""
-    expected_protocol: int = EXPECTED_PROTOCOL
     agents: tuple[Agent, ...] = ()
     workspaces: tuple[Workspace, ...] = ()
     focused_pane_id: str | None = None
 
     @classmethod
-    def from_raw(cls, raw: _Raw, *, expected_protocol: int | None = None) -> Self:
+    def from_raw(cls, raw: _Raw) -> Self:
         """Build from the inner ``snapshot`` object of a runner payload."""
         workspaces = tuple(Workspace.from_raw(w) for w in _records(raw.get("workspaces")))
         by_id = {w.workspace_id: w for w in workspaces}
@@ -359,9 +358,6 @@ class Snapshot(BaseModel):
             {
                 "protocol": _to_int(raw.get("protocol") or 0),
                 "version": str(raw.get("version") or ""),
-                "expected_protocol": (
-                    EXPECTED_PROTOCOL if expected_protocol is None else expected_protocol
-                ),
                 "agents": tuple(agents),
                 "workspaces": workspaces,
                 "focused_pane_id": raw.get("focused_pane_id"),

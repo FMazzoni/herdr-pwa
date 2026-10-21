@@ -20,7 +20,6 @@ from tests.engine_seam import (
     MAX_RESULT_CHARS,
     OPENCODE_DB,
     OPENCODE_ROOT,
-    OPENCODE_STORAGE_ROOT,
     OpencodeAdapter,
     SessionInfo,
     Window,
@@ -112,7 +111,6 @@ def test_opencode_is_registered_and_defaults_to_its_own_store() -> None:
     adapter = adapter_for("opencode")
     assert isinstance(adapter, OpencodeAdapter)
     assert adapter.default_roots == (OPENCODE_ROOT,)
-    assert OPENCODE_STORAGE_ROOT.startswith(OPENCODE_ROOT)
 
 
 def test_a_harness_with_no_adapter_still_simply_has_no_history() -> None:

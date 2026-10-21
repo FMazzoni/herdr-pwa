@@ -40,14 +40,13 @@ class Call:
     idempotent: bool
 
 
-# Mutable: a fake that records being closed.
+# Mutable: a fake that records every call.
 @dataclass(slots=True)
 class FakeTransport:
     """The wire seam, recording every request and answering canned frames."""
 
     replies: dict[str, Reply] = field(default_factory=dict[str, Reply])
     calls: list[Call] = field(default_factory=list)
-    closed: int = 0
 
     def call(
         self,
@@ -62,9 +61,6 @@ class FakeTransport:
         if isinstance(reply, Exception):
             raise reply
         return as_reply(reply(params) if callable(reply) else reply)
-
-    def close(self) -> None:
-        self.closed += 1
 
     @property
     def methods(self) -> list[str]:

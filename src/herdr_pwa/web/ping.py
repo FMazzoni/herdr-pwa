@@ -118,8 +118,6 @@ def caller_name(settings: Settings, seams: Seams) -> str:
         title = client.agent(as_pane_id(pane), timeout=NAME_TIMEOUT).title
     except (EngineError, ValueError):
         return DEFAULT_SENDER
-    finally:
-        client.close()
     return title or DEFAULT_SENDER
 
 

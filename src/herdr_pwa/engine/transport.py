@@ -271,10 +271,6 @@ class Transport(Protocol):
         """Issue one request and return its decoded reply."""
         ...
 
-    def close(self) -> None:
-        """Release whatever is held open. Calling it twice must be harmless."""
-        ...
-
 
 class SocketTransport:
     """JSON-RPC lines over AF_UNIX, a connection per call; the lock guards only ids and backoff."""
@@ -336,9 +332,6 @@ class SocketTransport:
         reply = self._exchange(params, call, request_id)
         raise_for_error_frame(reply)
         return reply
-
-    def close(self) -> None:
-        """Release nothing: every call opens and closes its own connection. Idempotent."""
 
     # -- the exchange ------------------------------------------------------
 

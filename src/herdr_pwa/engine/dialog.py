@@ -576,11 +576,6 @@ class PromptOption(BaseModel):
     label: str
     checked: bool | None = None
 
-    @property
-    def toggles(self) -> bool:
-        """True when this row keeps state a keystroke flips rather than answering."""
-        return self.checked is not None
-
 
 def _choices(labels: tuple[str, ...]) -> tuple[PromptOption, ...]:
     """Buttons as options: their position is their number, and no digit is earned."""

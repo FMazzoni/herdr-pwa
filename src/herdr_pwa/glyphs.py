@@ -36,9 +36,6 @@ PROMPT: Final = "\u276f>"
 
 ARROW_LEFT: Final = "←"
 ARROW_RIGHT: Final = "→"
-ARROW_UP: Final = "↑"
-ARROW_DOWN: Final = "↓"
-ARROWS: Final = ARROW_UP + ARROW_DOWN + ARROW_LEFT + ARROW_RIGHT
 
 # Checkbox glyphs, ticked and blank, as a checklist row draws them.
 TICKED_BOX: Final = "☑☒◼"

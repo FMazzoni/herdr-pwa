@@ -31,7 +31,6 @@ from herdr_pwa.engine.opencode import (
     OPENCODE_ASK,
     OPENCODE_DB,
     OPENCODE_ROOT,
-    OPENCODE_STORAGE_ROOT,
     OpencodeAdapter,
     SessionInfo,
 )
@@ -75,7 +74,6 @@ __all__ = [
     "OPENCODE_ASK",
     "OPENCODE_DB",
     "OPENCODE_ROOT",
-    "OPENCODE_STORAGE_ROOT",
     "OPTION_RE",
     "WIRE_LIMITS",
     "ClaudeAdapter",
