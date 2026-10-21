@@ -6,7 +6,7 @@
 <main class="agent">
   {% include "_notice.html" %}
   {% if cost %}
-  {{ ui.section_head("Close " ~ (cost.workspace.label or cost.workspace.workspace_id), cost.total) }}
+  {{ ui.section_head("Close " ~ (cost.workspace.label or cost.workspace.workspace_id), cost.total, level=1) }}
   {% if cost.total %}
   <p>{{ cost.reason }}</p>
   <ul class="cards">{% for agent in cost.agents %}{% call ui.card(agent.status.value, inner="span") %}{{ agent.title or agent.agent }} &middot; {{ agent.status.value }} &middot; {{ agent.target }}{% endcall %}{% endfor %}</ul>

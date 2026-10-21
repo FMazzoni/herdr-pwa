@@ -80,7 +80,9 @@
       keepalive: !!leaving,
       headers: { "Content-Type": "application/json" },
       body: body,
-    }).catch(function () {});
+    }).catch(function () {
+      /* A lost report is a gap in the log, never something to show the person using the page. */
+    });
   }
 
   function record(kind, detail) {

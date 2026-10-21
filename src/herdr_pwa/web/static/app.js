@@ -154,7 +154,9 @@
   if (worker && "Notification" in window && Notification.permission === "granted") {
     currentSubscription().then(function (subscription) {
       return subscription ? register(subscription) : null;
-    }).catch(function () {});
+    }).catch(function () {
+      /* Unasked for: the alerts page says what this device's state is when it is opened. */
+    });
   }
 
   function setText(id, text) {
@@ -266,7 +268,9 @@
     for (var s = 0; s < snoozes.length; s++) {
       snoozes[s].addEventListener("click", function (event) {
         var seconds = Number(event.currentTarget.getAttribute("data-hp-snooze"));
-        postJson("/push/snooze", { seconds: seconds }).then(showPolicy).catch(function () {});
+        postJson("/push/snooze", { seconds: seconds }).then(showPolicy).catch(function (reason) {
+          setText("snooze-state", "Could not snooze: " + String(reason));
+        });
       });
     }
   }

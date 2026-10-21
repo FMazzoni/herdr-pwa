@@ -4,7 +4,7 @@
 {% block title %}New workspace &mdash; herdr{% endblock %}
 {% block body %}
 <main class="agent">
-  {{ ui.section_head("New workspace") }}
+  {{ ui.section_head("New workspace", level=1) }}
   {% include "_notice.html" %}
   <form class="form" {{ sheet("/workspaces/new") }}>
     {% call ui.field("Name") %}<input name="label" value="{{ label }}" maxlength="40">{% endcall %}

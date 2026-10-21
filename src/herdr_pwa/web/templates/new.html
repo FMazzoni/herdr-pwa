@@ -7,7 +7,7 @@
 {% block topbar %}<a class="leave topbar__back" href="/" aria-label="Back to herd" {{ replace() }}>&lsaquo; Herd</a><span class="topbar__title">new agent</span>{% endblock %}
 {% block body %}
 <main class="agent">
-  {{ ui.section_head("New agent") }}
+  {{ ui.section_head("New agent", level=1) }}
   {% include "_notice.html" %}
   <form class="form" {{ sheet("/new") }}>
     {% call ui.field("Name") %}<input name="name" value="{{ values.get('name', '') }}" maxlength="32" required>{% endcall %}

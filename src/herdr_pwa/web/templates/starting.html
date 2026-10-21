@@ -5,7 +5,7 @@
 {% block body %}
 {% set base = "/starting/" ~ (pane|urlencode) %}
 <main class="agent">
-  {{ ui.section_head((agent.title if agent else "Starting") ~ " at " ~ pane) }}
+  {{ ui.section_head((agent.title if agent else "Starting") ~ " at " ~ pane, level=1) }}
   {% include "_notice.html" %}
   {% if first is defined and first %}{{ ui.banner(first.kind, first.what, first.why or none) }}{% endif %}
   {% if sent is defined %}

@@ -365,7 +365,8 @@ def test_static_is_cached_forever_only_at_its_hashed_url(tmp_path: Path) -> None
     page = rig.http.get("/").text
     start = page.index("/static/app.css?v=")
     url = page[start : page.index('"', start)]
-    assert "immutable" in rig.http.get(url).headers["cache-control"]
+    # Private, since the file is behind the identity gate.
+    assert rig.http.get(url).headers["cache-control"] == "private, max-age=31536000, immutable"
     assert rig.http.get("/static/app.css?v=stale").headers["cache-control"] == "no-cache"
     assert rig.http.get("/static/../settings.py").status_code == 404
     assert rig.http.get("/static/nope.js").status_code == 404

@@ -9,5 +9,6 @@
     <p class="boot" role="status">Reaching the herd&hellip;</p>
   </div>
 </main>
-<noscript><p class="boot">This dashboard refreshes with JavaScript; reload to see the herd.</p></noscript>
+{# The fragment is the herd drawn by the server, so it reads without a script: bare, and still. #}
+<noscript><p class="boot">The herd loads with JavaScript, which is off here. <a href="{{ src }}">Open it as a plain list</a>: unstyled, and it does not refresh.</p></noscript>
 {% endblock %}

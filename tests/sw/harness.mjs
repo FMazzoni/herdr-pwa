@@ -406,6 +406,24 @@ notifications.shown.length = 0;
 await dispatch("push", pushEvent(notify("blocked", { agent: "pane:../../evil" })));
 const hostilePaneUrl = notifications.shown[0].data.url;
 
+/* opencode and hermes name their sessions in their own shapes; each still opens its agent,
+ * and its alert is quiet while that agent is on screen. */
+const OPENCODE = "ses_3fd62ba5bffemIxWVhRda5wgS7";
+const HERMES = "20260101_120000_aaaaaa";
+notifications.shown.length = 0;
+await dispatch("push", pushEvent(notify("blocked", { agent: OPENCODE })));
+const opencodeUrl = notifications.shown[0].data.url;
+notifications.shown.length = 0;
+await dispatch("push", pushEvent(notify("blocked", { agent: HERMES })));
+const hermesUrl = notifications.shown[0].data.url;
+windows.open = [makeClient("/agent/" + OPENCODE, "visible")];
+const opencodeOnScreen = await push(notify("blocked", { agent: OPENCODE }));
+const opencodeOnScreenSilent = !!opencodeOnScreen.silent;
+windows.open = [makeClient("/", "visible")];
+const opencodeFromHerd = await push(notify("blocked", { agent: OPENCODE }));
+const opencodeFromHerdSilent = !!opencodeFromHerd.silent;
+windows.open = [];
+
 /* --- the subscription the browser rotated under us ----------------------- */
 windows.open = [];
 net.log.length = 0;
@@ -472,6 +490,10 @@ console.log(JSON.stringify({
   hostileUrl,
   paneUrl,
   hostilePaneUrl,
+  opencodeUrl,
+  hermesUrl,
+  opencodeOnScreenSilent,
+  opencodeFromHerdSilent,
   resubscribePosts,
   subscribeOptions: observations.subscribeOptions,
 }, null, 2));

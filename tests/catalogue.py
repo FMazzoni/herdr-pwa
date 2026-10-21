@@ -1085,6 +1085,14 @@ def _click(selector: str) -> str:
     return f"document.querySelector({selector!r}).click();"
 
 
+# Every request from here on fails as a dropped link does: an error, then the end, no response.
+_CUT_NETWORK: Final = (
+    "XMLHttpRequest.prototype.send = function () { const xhr = this; setTimeout(() => {"
+    " xhr.dispatchEvent(new ProgressEvent('error'));"
+    " xhr.dispatchEvent(new ProgressEvent('loadend')); }, 0); };"
+)
+
+
 def _tamper(field_name: str, value: str, then: str) -> str:
     return (
         f"for (const el of document.querySelectorAll('input[name={field_name}]')) "
@@ -1190,6 +1198,16 @@ FEED: Final = (
         runner(snapshot_frame),
         title="Feed: no contact for a quarter of an hour",
         prime=_outage(930, failing=True),
+    ),
+    State(
+        "feed-box-unreachable",
+        "/",
+        # The bar's line shows, and the feed under it is marked unheard, which hides its age.
+        ".topbar:has(#hp-unreachable:not([hidden])) ~ main #feed-list.is-stale[data-hp-unheard]",
+        runner(lambda: herd(**BLOCKED)),
+        title="Feed: the phone lost the box, so the herd it last read is marked stale",
+        armed="#feed-list .cards",
+        act=_CUT_NETWORK + "hp.refetch(document.getElementById('feed-list'));",
     ),
     # A failure fragment only swaps in because app.js overrides htmx 2's no-swap on 5xx.
     State(

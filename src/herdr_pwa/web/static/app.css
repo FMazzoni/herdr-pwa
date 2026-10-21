@@ -272,7 +272,8 @@ html { -webkit-tap-highlight-color: transparent; }
 /* 44px is Apple's minimum tap target; the bar's height comes from its links, not padding. */
 .brand, .topbar__link { display: inline-flex; align-items: center; min-height: var(--tap); min-width: var(--tap); }
 .topbar__link { margin-left: auto; color: var(--ink-2); font-size: var(--text-bar-link); }
-.topbar__title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); }
+/* An h1 on a page whose bar holds its only title, drawn as the bar's text. */
+.topbar__title { margin: 0; font-size: inherit; font-weight: inherit; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); }
 /* Flush with the gutter: the bar's own padding is the only indent. */
 .topbar__back { justify-content: flex-start; flex: none; text-decoration: none; }
 
@@ -305,9 +306,7 @@ html { -webkit-tap-highlight-color: transparent; }
 .spawned { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); margin: 0; padding: 0 0 0 var(--space-6); border-left: var(--line-1) solid var(--rule); list-style: none; font-size: var(--text-meta); color: var(--ink-3); }
 .spawned__row { display: flex; align-items: baseline; gap: var(--space-3); min-width: 0; white-space: nowrap; }
 .spawned__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--ink-2); }
-.spawned__state, .spawned__time { flex: none; font-variant-numeric: tabular-nums; }
-.spawned__row--running .spawned__state { color: var(--ink-2); }
-.spawned__row--failed .spawned__state { color: var(--blocked); font-weight: 600; }
+.spawned__time { flex: none; font-variant-numeric: tabular-nums; }
 /* The finished turn's receipt, in the row where the bubble was. */
 .chat__receipt { color: var(--ink-3); font-variant-numeric: tabular-nums; }
 /* Drawn as the bubble it replaces goes: it settles into place rather than appearing. */
@@ -315,7 +314,10 @@ html { -webkit-tap-highlight-color: transparent; }
 @keyframes receipt-fold { from { opacity: 0; transform: translateY(-0.5em); } }
 
 /* Freshness: everything but live dims the claim the cards make. */
-.feed.is-stale .cards { opacity: 0.55; }
+/* Stale cards lose their colour, not their contrast: dimming the whole card took its quietest text
+   below WCAG AA, so only the borders and the status dots go grey. */
+.feed.is-stale .card { border-color: var(--rule); }
+.feed.is-stale .dot { background: var(--ink-3); }
 
 .banner {
   display: flex;
@@ -1124,6 +1126,15 @@ body:has(#composer:focus-within) .stats { display: none; }
 /* On an agent's Files tab, Changes | Files | Find is a row in the page, under the agent's bar. */
 .tabs.subtabs { grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0 0 var(--space-4); }
 .subtabs .tab__label { padding: 0 var(--space-2); }
+
+/* The phone losing the box: one line across the foot of the sticky bar, under any strip. */
+.topbar:has(> .unreachable:not([hidden])) { flex-wrap: wrap; row-gap: 0; }
+.unreachable { flex: 1 0 100%; min-width: 0; margin: 0 calc(-1 * var(--gutter-right)) 0 calc(-1 * var(--gutter-left)); padding: var(--space-3) var(--gutter-right) var(--space-3) var(--gutter-left); border-top: var(--line-1) solid var(--rule); font-size: var(--text-small); color: var(--ink-2); }
+.unreachable[hidden] { display: none; }
+/* Amber, not the red of "needs you": a lost link is unknown state, not an agent asking. */
+.unreachable__what { font-weight: 600; color: var(--unknown); }
+/* The server's age stopped when the box went quiet; the bar's line says when, so it goes. */
+[data-hp-unheard] .summary__age { display: none; }
 
 /* ---- The stats strip ----
    One quiet line under the bar on Chat, Pane and Files, inside the sticky header so it never

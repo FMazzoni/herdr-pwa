@@ -37,7 +37,8 @@ from herdr_pwa.web.security import SecurityHeaders
 from herdr_pwa.web.stalls import Stalls
 from herdr_pwa.web.warm import warm_later
 
-IMMUTABLE: Final = "public, max-age=31536000, immutable"
+# Private: these files sit behind the identity gate, so no shared cache may keep them.
+IMMUTABLE: Final = "private, max-age=31536000, immutable"
 # Below this a gzip frame costs more than it saves.
 GZIP_MIN_BYTES: Final = 500
 

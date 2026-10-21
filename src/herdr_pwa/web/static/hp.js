@@ -93,6 +93,11 @@
       return heard.kind === "stale" && heard.data ? heard.data : null;
     }
 
+    // The server ending a stream at its lifetime, which loses nothing: the page just reconnects.
+    function rotates(block) {
+      return eventOf(block).kind === "rotate";
+    }
+
     // An open page watched the agent finish when a redraw first shows it done: say so once.
     function finishedNow(before, after) {
       return after === "done" && before !== "done";
@@ -273,6 +278,7 @@
       landing: landing,
       eventOf: eventOf,
       staleTopic: staleTopic,
+      rotates: rotates,
       finishedNow: finishedNow,
       blocks: blocks,
       backoff: backoff,

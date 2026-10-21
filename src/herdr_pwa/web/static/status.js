@@ -33,7 +33,9 @@
       fetch("/push/seen/" + encodeURIComponent(session), {
         method: "POST",
         credentials: "same-origin",
-      }).catch(function () {});
+      }).catch(function () {
+        /* Best effort: a finish left unmarked stays unseen, and the next visit marks it. */
+      });
     }
   }
   markSeen();
