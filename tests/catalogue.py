@@ -1773,7 +1773,7 @@ LIFECYCLE: Final = (
     ),
     State(
         "close-confirm",
-        "/agent/5b609dba-d756-493a-a3fc-b4e09bf0a183/close",
+        "/agent/5e55001c-0000-0000-0000-000000000000/close",
         "main form",
         runner(snapshot_frame),
         title="End this agent: the confirm",

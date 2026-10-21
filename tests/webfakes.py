@@ -44,9 +44,9 @@ PROMPT = method_of(wire_request.AgentPromptRequest)
 _PROCESS_INFO = method_of(wire_request.PaneProcessInfoRequest)
 
 # The fixture's working agent, and the first idle one.
-WORKING_SESSION = "6ae1e031-ddb4-4684-ab07-68073f7fec47"
+WORKING_SESSION = "5e550020-0000-0000-0000-000000000000"
 WORKING_PANE = "w1:p3"
-IDLE_SESSION = "5b609dba-d756-493a-a3fc-b4e09bf0a183"
+IDLE_SESSION = "5e55001c-0000-0000-0000-000000000000"
 
 # A callable answers from the request, as a runner answers a text and a colour read differently.
 type Reply = (

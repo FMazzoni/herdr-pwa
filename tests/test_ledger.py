@@ -36,7 +36,7 @@ FIXTURES = REPO / "tests" / "fixtures"
 LEDGER_PATH = FIXTURES / "ledger.json"
 # Pinned so the golden file can only change by a reviewed edit to this line. Verdicts never
 # change; input hashes are re-pinned when a capture is scrubbed or replaced (see meta.rehashed).
-LEDGER_SHA256 = "fcb402504bd6f25f913ca50f5ec5d42c7ac0d9d14702dad1873dd731efb09b16"
+LEDGER_SHA256 = "2f2190c53db0f51004f5e39ba5854722fcaf922b9ed7edc3ff2ed4340476e92f"
 FOREIGN_PREFIX = "foreign/"
 # collie's claude screens, vendored under tests/fixtures/foreign with collie's MIT notice.
 VENDORED_PREFIX = "foreign/collie/claude--"

@@ -20,7 +20,7 @@ from herdr_pwa.engine import (
 from tests.engine_seam import Window, is_message, read_page
 from tests.webfakes import build_rig
 
-SESSION = "6ae1e031-ddb4-4684-ab07-68073f7fec47"
+SESSION = "5e550020-0000-0000-0000-000000000000"
 # Measured on a real session: a screenshot result is a single line of a megabyte or more.
 SCREENSHOT = "A" * (1_400_000)
 
@@ -225,7 +225,7 @@ def test_chat_window_folds_results_and_names_a_missing_log(tmp_path: Path) -> No
     assert all(c.result.startswith("output") for c in calls)
     gone = chat_window(
         locate_log(
-            Source.of("5b609dba-d756-493a-a3fc-b4e09bf0a183", agent_kind="claude", root=str(root))
+            Source.of("5e55001c-0000-0000-0000-000000000000", agent_kind="claude", root=str(root))
         ),
         ask=Ask(messages=20),
         tails=TailCache(),

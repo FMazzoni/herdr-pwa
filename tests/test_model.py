@@ -93,7 +93,7 @@ def test_agent_normalizes_the_fixture_fields(raw_snapshot: dict[str, JsonValue])
     workspaces = {w.workspace_id: w for w in Snapshot.from_raw(raw_snapshot).workspaces}
     a = Agent.from_raw(raw, workspaces)
     assert a.target == "w652ae557d5b9c1:p2"
-    assert a.session == "5b609dba-d756-493a-a3fc-b4e09bf0a183"
+    assert a.session == "5e55001c-0000-0000-0000-000000000000"
     assert a.title == "Compare the feed with the design rubric"
     assert a.status is AgentStatus.IDLE
     assert a.agent == "claude"
