@@ -14,6 +14,7 @@ from herdr_pwa.engine import (
     AgentStatus,
     HistoryState,
     Located,
+    PaneId,
     SessionUsage,
     Source,
     SpawnedAgent,
@@ -268,8 +269,8 @@ def test_the_process_start_is_read_from_the_panes_claude(tmp_path: Path) -> None
             return (3, 7) if pane_id == "w1:p1" else ()
 
     starts = ProcessStarts(Panes(), proc=proc, clock=lambda: 0.0)
-    assert starts.started("w1:p1") == 1005.0
-    assert starts.started("w9:p9") is None
+    assert starts.started(PaneId("w1:p1")) == 1005.0
+    assert starts.started(PaneId("w9:p9")) is None
 
 
 # ---- The row and the sheet ----

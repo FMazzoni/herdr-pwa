@@ -7,6 +7,7 @@ from herdr_pwa.engine import (
     SPAWNED_SHELL,
     Agent,
     AgentStatus,
+    PaneId,
     SessionUsage,
     Source,
     has_byte_frontier,
@@ -17,7 +18,7 @@ from herdr_pwa.web.stats import SpawnedTime, spawned_times
 
 
 def background_times(
-    web: WebState, pane: str, usage: SessionUsage, now: float
+    web: WebState, pane: PaneId, usage: SessionUsage, now: float
 ) -> tuple[SpawnedTime, ...]:
     """*usage*'s background work as the page lists it, bounded by when *pane*'s process started."""
     # The runner is asked only when something is still open, which is rare.
@@ -38,7 +39,7 @@ def _pending(web: WebState, agent: Agent) -> Pending:
     roots = web.settings.transcript_roots or None
     found = locate_log(Source.of(agent.session, agent_kind=agent.agent, root=roots))
     usage = web.usage.read(found)
-    return pending_of(background_times(web, str(agent.target), usage, web.wall()))
+    return pending_of(background_times(web, agent.target, usage, web.wall()))
 
 
 def pending_by_session(

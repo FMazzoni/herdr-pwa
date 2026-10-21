@@ -17,6 +17,7 @@ from herdr_pwa.engine import (
     ProtocolMismatch,
     RequestTooLarge,
     TargetNotFound,
+    WorkspaceId,
     as_pane_id,
     harness_kinds,
 )
@@ -221,9 +222,9 @@ def test_a_close_into_a_recycled_pane_is_refused_on_the_wire(tmp_path: Path) -> 
 def test_workspace_create_and_rename_read_back(tmp_path: Path) -> None:
     r = rig(tmp_path)
     made = create_workspace(r.writer.client, "scratch")
-    assert made == WorkspaceDone("w7", verified=True)
+    assert made == WorkspaceDone(WorkspaceId("w7"), verified=True)
     renamed = rename_workspace(r.writer.client, "w7", "renamed")
-    assert renamed == WorkspaceDone("w7", verified=True)
+    assert renamed == WorkspaceDone(WorkspaceId("w7"), verified=True)
     assert refused(rename_workspace(r.writer.client, "w7", "")).refusal is Refusal.BAD_LABEL
     assert refused(rename_workspace(r.writer.client, "w404", "x")).refusal is Refusal.NO_WORKSPACE
     assert refused(create_workspace(r.writer.client, "a\nb")).refusal is Refusal.BAD_LABEL
@@ -234,7 +235,7 @@ def test_an_empty_workspace_closes_on_one_confirm(tmp_path: Path) -> None:
     r.herd.add_workspace("w2")
     assert refused(close_workspace(r.writer, WorkspaceCloseAsk("w2"))).refusal is Refusal.CONFIRM
     done = close_workspace(r.writer, WorkspaceCloseAsk("w2", confirmed=True))
-    assert done == WorkspaceDone("w2", verified=True)
+    assert done == WorkspaceDone(WorkspaceId("w2"), verified=True)
 
 
 def test_a_workspace_with_agents_needs_the_armed_count_it_was_shown(tmp_path: Path) -> None:
@@ -248,7 +249,7 @@ def test_a_workspace_with_agents_needs_the_armed_count_it_was_shown(tmp_path: Pa
     assert (moved.refusal, moved.status) == (Refusal.COUNT_CHANGED, 409)
     assert r.herd.writes("workspace.close") == []
     done = _second_tap(r, moved.screen)
-    assert done == WorkspaceDone("w1", verified=True)
+    assert done == WorkspaceDone(WorkspaceId("w1"), verified=True)
     attempt = r.audit_records[0]
     assert attempt["phase"] == "attempt"
     assert attempt["endpoint"] == "close"
@@ -286,7 +287,7 @@ def test_an_agent_that_started_working_since_the_confirm_refuses_it(tmp_path: Pa
 def test_the_armed_close_goes_through_when_nothing_moved(tmp_path: Path) -> None:
     r = end_rig(tmp_path)
     saw = _armed(r)
-    assert _second_tap(r, saw) == WorkspaceDone("w1", verified=True)
+    assert _second_tap(r, saw) == WorkspaceDone(WorkspaceId("w1"), verified=True)
 
 
 def test_every_refusal_has_one_row_in_the_failure_table() -> None:

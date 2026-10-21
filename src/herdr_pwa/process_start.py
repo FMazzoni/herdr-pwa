@@ -6,6 +6,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Final, Protocol
 
+from herdr_pwa.ids import PaneId
+
 log = logging.getLogger(__name__)
 
 # A pane's process changes rarely; a restart is seen within this many seconds.
@@ -17,7 +19,7 @@ _STARTTIME: Final = 19
 class PaneProcesses(Protocol):
     """The one thing this module needs from the runner."""
 
-    def pane_pids(self, pane_id: str) -> tuple[int, ...]: ...
+    def pane_pids(self, pane_id: PaneId) -> tuple[int, ...]: ...
 
 
 def _boot(proc: Path) -> float | None:
@@ -64,9 +66,9 @@ class ProcessStarts:
         self._proc: Path = proc
         self._clock: Callable[[], float] = clock
         self._ticks: int = os.sysconf("SC_CLK_TCK")
-        self._held: dict[str, tuple[float, float | None]] = {}
+        self._held: dict[PaneId, tuple[float, float | None]] = {}
 
-    def started(self, pane_id: str) -> float | None:
+    def started(self, pane_id: PaneId) -> float | None:
         """When the agent in *pane_id* started; ``None`` when the runner or /proc cannot say."""
         now = self._clock()
         held = self._held.get(pane_id)
@@ -76,7 +78,7 @@ class ProcessStarts:
         self._held[pane_id] = (now, found)
         return found
 
-    def _read(self, pane_id: str) -> float | None:
+    def _read(self, pane_id: PaneId) -> float | None:
         try:
             pids = self._panes.pane_pids(pane_id)
         except Exception:  # noqa: BLE001 - the engine's error type is a layer up; a failure loses the bound, never the page

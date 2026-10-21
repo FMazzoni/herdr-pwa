@@ -17,6 +17,7 @@ from herdr_pwa.engine import (
     PaneId,
     SessionId,
     TranscriptTurn,
+    WorkspaceId,
     ends_refused,
     rank,
 )
@@ -34,6 +35,8 @@ QUIET_AFTER: Final = 90
 DISCONNECTED_AFTER: Final = 60
 # A two-digit option needs two keystrokes, and the first one already answers row 1.
 MAX_TAPPABLE_OPTION: Final = 9
+# A row whose agent herdr reported outside any workspace.
+_NO_WORKSPACE: Final = WorkspaceId("")
 # Both measured on live screens: the digit addresses the row absolutely on either shape.
 TAPPABLE_SHAPES: Final = frozenset({MenuShape.SINGLE_CHOICE, MenuShape.MULTI_SELECT})
 # Once a row is its own button these only walked the cursor to it.
@@ -144,7 +147,7 @@ class AgentRow:
     effective_status: AgentStatus
     feed_key: tuple[int, int, int, str]
     answer: ScreenDecision | None
-    workspace_id: str = ""
+    workspace_id: WorkspaceId = _NO_WORKSPACE
     # Stopped on a full context: what it needs is said by the transcript, not asked on the screen.
     stalled: bool = False
     # Idle with work it started still to come back; such a card leads the idle ones.
@@ -330,11 +333,11 @@ def hides_dialog(status: AgentStatus) -> bool:
     return status in _STOPS
 
 
-def _unflagged(status: AgentStatus, session: str, overlay: Overlay) -> bool:
+def _unflagged(status: AgentStatus, session: SessionId, overlay: Overlay) -> bool:
     return session in overlay.asking and hides_dialog(status)
 
 
-def read_status(status: AgentStatus, session: str, overlay: Overlay) -> AgentStatus:
+def read_status(status: AgentStatus, session: SessionId, overlay: Overlay) -> AgentStatus:
     """The status every surface shows: a stall or a dialog needs you, a finish shown is idle."""
     # A full context asks for the person as surely as a question does, and outranks a finish.
     if session in overlay.stalled and status in _STALLABLE:
@@ -492,7 +495,7 @@ def decide_herd(
 class Chip:
     """One workspace the feed can be narrowed to, with how many agents it holds."""
 
-    workspace_id: str
+    workspace_id: WorkspaceId
     label: str
     count: int
     on: bool
@@ -510,8 +513,8 @@ class FeedView:
 
 
 def _chips(rows: tuple[AgentRow, ...], selected: str) -> tuple[Chip, ...]:
-    counts: dict[str, int] = {}
-    labels: dict[str, str] = {}
+    counts: dict[WorkspaceId, int] = {}
+    labels: dict[WorkspaceId, str] = {}
     for row in rows:
         if row.workspace_id:
             counts[row.workspace_id] = counts.get(row.workspace_id, 0) + 1

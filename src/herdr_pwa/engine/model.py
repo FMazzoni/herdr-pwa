@@ -6,10 +6,11 @@ from collections import Counter
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import NewType, Self, cast
+from typing import Self, cast
 
 from pydantic import BaseModel, ConfigDict, computed_field
 
+from herdr_pwa.ids import PaneId, SessionId, WorkspaceId
 from herdr_pwa.protocol import EXPECTED_PROTOCOL as _EXPECTED_PROTOCOL
 
 type _Raw = Mapping[str, object]
@@ -54,10 +55,6 @@ def screen_digest(screen: str) -> str:
 
 EXPECTED_PROTOCOL = _EXPECTED_PROTOCOL
 
-
-SessionId = NewType("SessionId", str)
-
-PaneId = NewType("PaneId", str)
 
 _PANE_SHAPE = re.compile(r"^[^\s:]+:[^\s:]+$")
 
@@ -138,7 +135,7 @@ class Workspace(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    workspace_id: str
+    workspace_id: WorkspaceId
     label: str = ""
     number: int | None = None
     status: AgentStatus = AgentStatus.UNKNOWN
@@ -209,7 +206,7 @@ class Agent(BaseModel):
     cwd: str = ""
     foreground_cwd: str = ""
     workspace: str = ""
-    workspace_id: str = ""
+    workspace_id: WorkspaceId = WorkspaceId("")
     workspace_number: int | None = None
     # Front pane of its tab, so several agents carry it; the global one is Snapshot.focused_pane_id.
     focused: bool = False
@@ -250,12 +247,12 @@ class Agent(BaseModel):
     def from_raw(
         cls,
         raw: _Raw,
-        workspaces: Mapping[str, Workspace] | None = None,
+        workspaces: Mapping[WorkspaceId, Workspace] | None = None,
         panes: Mapping[str, _Raw] | None = None,
     ) -> Self:
         """Normalize one snapshot ``agents[]`` entry, joining workspace and pane."""
         workspace_id = str(raw.get("workspace_id") or "")
-        ws = (workspaces or {}).get(workspace_id)
+        ws = (workspaces or {}).get(WorkspaceId(workspace_id))
         pane_id = str(raw.get("pane_id") or "")
         session_id, session_agent = _coerce_session(raw.get("agent_session"))
         return cls(
@@ -267,7 +264,7 @@ class Agent(BaseModel):
             cwd=str(raw.get("cwd") or ""),
             foreground_cwd=str(raw.get("foreground_cwd") or raw.get("cwd") or ""),
             workspace=ws.label if ws else "",
-            workspace_id=workspace_id,
+            workspace_id=WorkspaceId(workspace_id),
             workspace_number=ws.number if ws else None,
             focused=bool(raw.get("focused", False)),
             revision=_to_int(raw.get("revision") or 0),

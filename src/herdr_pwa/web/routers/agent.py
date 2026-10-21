@@ -125,7 +125,7 @@ def _turning(web: WebState, agent: Agent, usage: SessionUsage) -> Turning:
         stretch=f"{agent.session}:{turn}",
         asked=asked_by(web, agent) if needs_you(status) else "",
         times=turn_times(usage, now),
-        spawned=background_times(web, str(agent.target), usage, now),
+        spawned=background_times(web, agent.target, usage, now),
     )
 
 

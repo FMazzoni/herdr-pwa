@@ -11,6 +11,7 @@ from herdr_pwa.engine import (
     HerdrClient,
     Snapshot,
     Workspace,
+    WorkspaceId,
     screen_digest,
 )
 from herdr_pwa.writes.refusal import Refusal, Refused, failed_result, refusal_for
@@ -76,7 +77,7 @@ class WorkspaceCost:
 class WorkspaceDone:
     """A workspace write the runner took, and whether a snapshot afterwards agrees."""
 
-    workspace_id: str
+    workspace_id: WorkspaceId
     verified: bool
 
 
@@ -92,7 +93,7 @@ def _bad_label(label: str, *, required: bool) -> bool:
     return len(label) > MAX_WORKSPACE_LABEL or any(ch < " " for ch in label)
 
 
-def _after(client: HerdrClient, workspace_id: str) -> tuple[bool, Workspace | None]:
+def _after(client: HerdrClient, workspace_id: WorkspaceId) -> tuple[bool, Workspace | None]:
     # (read at all, what was found): an unreadable herd verifies nothing either way.
     try:
         snap = client.snapshot()

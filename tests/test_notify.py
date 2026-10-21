@@ -7,6 +7,7 @@ from typing import TypedDict
 import pytest
 from pydantic import JsonValue, TypeAdapter
 
+from herdr_pwa.ids import PaneId, SessionId
 from herdr_pwa.managed import ManagedHerd, carries_mark
 from herdr_pwa.notify import (
     Change,
@@ -38,7 +39,7 @@ SEEN_FILE: TypeAdapter[SeenFile] = TypeAdapter(SeenFile)
 
 
 def agent(session: str = A, status: str = "working", *, seq: int = 0, **fields: str) -> Agent:
-    return replace(Agent(session=session, status=status, state_change_seq=seq), **fields)
+    return replace(Agent(session=SessionId(session), status=status, state_change_seq=seq), **fields)
 
 
 def events(changes: list[Change]) -> list[tuple[str, str]]:
@@ -288,7 +289,7 @@ def test_a_finish_the_phone_already_opened_is_not_sent(tmp_path: Path) -> None:
     clock.advance(10)
     seen.observe([agent(A, "idle", seq=2)])
     clock.advance(1)
-    seen.mark_seen(A)
+    seen.mark_seen(SessionId(A))
     assert plan.step([agent(A, "idle", seq=2)]).changes == ()
 
 
@@ -407,7 +408,7 @@ def test_the_mark_is_read_from_the_process_environment(
 def test_every_failure_reading_the_mark_counts_as_unmanaged(tmp_path: Path) -> None:
     assert not carries_mark(7, proc=tmp_path)
     herd = ManagedHerd(Panes({}), proc=tmp_path)
-    assert not herd.is_managed("w1:p1")
+    assert not herd.is_managed(PaneId("w1:p1"))
 
 
 def test_a_recycled_pid_set_is_read_again(tmp_path: Path) -> None:
@@ -415,9 +416,9 @@ def test_a_recycled_pid_set_is_read_again(tmp_path: Path) -> None:
     fake_proc(tmp_path, 2, b"PATH=/bin\0")
     panes = Panes({"p": (1,)})
     herd = ManagedHerd(panes, proc=tmp_path)
-    assert herd.is_managed("p")
+    assert herd.is_managed(PaneId("p"))
     panes.pids["p"] = (2,)
-    assert not herd.is_managed("p")
+    assert not herd.is_managed(PaneId("p"))
     herd.forget([])
     del panes.pids["p"]
-    assert not herd.is_managed("p")
+    assert not herd.is_managed(PaneId("p"))

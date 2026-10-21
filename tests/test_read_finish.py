@@ -6,7 +6,7 @@ from pathlib import Path
 from pydantic import JsonValue
 
 from herdr_pwa.decisions import Overlay, read_status
-from herdr_pwa.engine import AgentStatus, Snapshot
+from herdr_pwa.engine import AgentStatus, SessionId, Snapshot
 from herdr_pwa.notify import Hooks
 from herdr_pwa.notify_state import SeenLedger
 from herdr_pwa.push import EVENT_CLEAR, EVENT_DONE
@@ -27,7 +27,7 @@ from tests.webfakes import (
 
 SAME_ORIGIN = {**IDENTITY, "Origin": "http://testserver"}
 FRAGMENT = {"HX-Request": "true"}
-S = IDLE_SESSION
+S = SessionId(IDLE_SESSION)
 
 
 def _frame(status: str, seq: int) -> dict[str, JsonValue]:
@@ -92,7 +92,7 @@ IDLE_EVERYWHERE = {
 
 
 def test_the_rule_is_one_function_and_only_a_read_finish_moves() -> None:
-    read = {S: False}
+    read: dict[str, bool] = {S: False}
     assert read_status(AgentStatus.DONE, S, Overlay(read)) is AgentStatus.IDLE
     assert read_status(AgentStatus.DONE, S, Overlay({S: True})) is AgentStatus.DONE
     # Never read, or nothing keeping track: still news.

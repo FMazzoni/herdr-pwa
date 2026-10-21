@@ -21,6 +21,7 @@ from herdr_pwa.engine import (
     SessionId,
     StartedAgent,
     StartRecipe,
+    WorkspaceId,
     as_pane_id,
     harness_kinds,
     harness_of,
@@ -285,7 +286,7 @@ def _prompt_refusal(request: StartRequest) -> Refused | None:
     return None
 
 
-def _abandon(client: HerdrClient, pane: str) -> None:
+def _abandon(client: HerdrClient, pane: PaneId) -> None:
     # The one close by bare pane id: a pane this same request created a moment ago.
     try:
         _ = client.close_pane(Seat(as_pane_id(pane)))
@@ -322,7 +323,7 @@ def _launch(writer: Writer, request: StartRequest, name: str) -> _Launched | Ref
     env = {**harness.env, "HISTFILE": ""} if prompt else harness.env
     try:
         pane = writer.client.create_tab(
-            NewTab(request.workspace_id, request.cwd.strip(), name, env=env)
+            NewTab(WorkspaceId(request.workspace_id), request.cwd.strip(), name, env=env)
         )
     except EngineError as exc:
         return Refused(refusal_for(exc), "created", detail=str(exc))

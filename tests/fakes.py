@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 
+from herdr_pwa.ids import PaneId, SessionId
 from herdr_pwa.tailscale import SERVE_CONFIG_PATH, STATUS_PATH, LocalApi, serve_config
 
 NODE = "host.tailnet.ts.net"
@@ -179,13 +180,17 @@ class Clock:
         self.now += seconds
 
 
+_SESSION = SessionId("5e550001-0000-0000-0000-000000000000")
+_PANE = PaneId("w1:p1")
+
+
 @dataclass(frozen=True)
 class Agent:
     """One agent in the shape the engine reports, as far as the notifier reads it."""
 
-    session: str = "5e550001-0000-0000-0000-000000000000"
+    session: SessionId = _SESSION
     status: str = "working"
-    target: str = "w1:p1"
+    target: PaneId = _PANE
     title: str = "fix the parser"
     workspace: str = "herdr"
     project: str = "herdr-pwa"

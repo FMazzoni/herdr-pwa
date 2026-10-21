@@ -15,6 +15,7 @@ from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from pydantic import JsonValue, TypeAdapter
 
 from herdr_pwa import audit, devreport, push
+from herdr_pwa.ids import SessionId
 from herdr_pwa.notify_state import Interrupts, InterruptStore, SeenLedger, StatusLedger
 from tests.fakes import Clock
 
@@ -178,7 +179,7 @@ def test_the_seen_ledger_loads_and_round_trips_its_shape(tmp_path: Path) -> None
     path = written(tmp_path / "seen.json", {"version": 1, "seen": {SESSION: record}})
     seen = SeenLedger(tmp_path, clock=Clock(NOW))
     assert seen.unread_sessions() == {SESSION}
-    seen.mark_seen(SESSION)
+    seen.mark_seen(SessionId(SESSION))
     seen.flush()
     assert OBJECT.validate_json(path.read_text()) == {
         "version": 1,

@@ -36,6 +36,7 @@ from herdr_pwa.engine import (
     Seat,
     SessionId,
     TargetNotFound,
+    WorkspaceId,
     as_pane_id,
     as_session_id,
     engine_settings,
@@ -1045,20 +1046,20 @@ def test_a_process_info_reply_the_schema_rejects_still_names_its_pids() -> None:
     frame = process_info_frame(settled=False)
     del obj(frame, "result")["type"]
     eng, _ = build({PROCESS_INFO: frame})
-    assert eng.pane_pids("w1:p9") == (4242, 4243)
+    assert eng.pane_pids(PaneId("w1:p9")) == (4242, 4243)
 
 
 def test_a_process_info_the_schema_rejects_names_no_pids() -> None:
     frame = process_info_frame()
     obj(frame, "result", "process_info")["shell_pid"] = "not a pid"
     eng, _ = build({PROCESS_INFO: frame})
-    assert eng.pane_pids("w1:p9") == ()
+    assert eng.pane_pids(PaneId("w1:p9")) == ()
 
 
 def test_a_process_info_reply_with_no_process_info_is_invalid() -> None:
     eng, _ = build({PROCESS_INFO: {"id": "x", "result": {"type": "pane_process_info"}}})
     with pytest.raises(InvalidResponse, match="no 'process_info' object"):
-        eng.pane_pids("w1:p9")
+        eng.pane_pids(PaneId("w1:p9"))
 
 
 def started_frame(session: str | None = None) -> dict[str, JsonValue]:
@@ -1108,7 +1109,7 @@ def tab_created_frame() -> dict[str, JsonValue]:
 def test_a_created_tab_answers_with_the_pane_to_start_in() -> None:
     """``tab.create`` carries two payload objects, which is why the lifecycle verbs cannot go through ``_result``: there is no single field to unwrap."""
     eng, wire = build({TAB_CREATE: tab_created_frame()})
-    assert eng.create_tab(NewTab("w1", "/somewhere", "x")) == "w1:p9"
+    assert eng.create_tab(NewTab(WorkspaceId("w1"), "/somewhere", "x")) == "w1:p9"
     assert wire.last.params["focus"] is False, (
         "creating an agent from a phone must not move the desktop's cursor"
     )
@@ -1117,7 +1118,7 @@ def test_a_created_tab_answers_with_the_pane_to_start_in() -> None:
 def test_a_create_is_never_re_sent_by_the_transport() -> None:
     """A re-sent create leaks a tab with a live shell in it that nothing tidies."""
     eng, wire = build({TAB_CREATE: tab_created_frame()})
-    eng.create_tab(NewTab("w1", "/somewhere", "x"))
+    eng.create_tab(NewTab(WorkspaceId("w1"), "/somewhere", "x"))
     assert wire.last.idempotent is False
 
 
@@ -1125,7 +1126,7 @@ def test_a_start_waits_for_the_shell_before_it_asks() -> None:
     """The readiness gate: ``agent.start`` does not wait for a settled shell, so this does."""
     busy = iter([process_info_frame(settled=False), process_info_frame()])
     eng, wire = build({PROCESS_INFO: lambda _: next(busy), START: started_frame("s-1")})
-    eng.start_agent(Launch("n", "claude", "w1:p9"))
+    eng.start_agent(Launch("n", "claude", PaneId("w1:p9")))
     assert wire.methods.count(PROCESS_INFO) == 2
     assert wire.methods[-1] == START, "the start went out after the pane settled"
 
@@ -1136,7 +1137,7 @@ def test_a_pane_that_never_settles_refuses_the_start_rather_than_hanging(
     monkeypatch.setattr(client_module, "_SHELL_POLLS", 3)
     eng, wire = build({PROCESS_INFO: process_info_frame(settled=False)})
     with pytest.raises(EngineError) as caught:
-        eng.start_agent(Launch("n", "claude", "w1:p9"))
+        eng.start_agent(Launch("n", "claude", PaneId("w1:p9")))
     assert caught.value.code == PANE_BUSY_CODE
     assert START not in wire.methods
 
@@ -1155,26 +1156,26 @@ def test_a_busy_pane_is_the_one_write_this_client_retries() -> None:
         return reply
 
     eng, wire = build({PROCESS_INFO: process_info_frame(), START: answer})
-    assert eng.start_agent(Launch("n", "claude", "w1:p9")).session == "s-1"
+    assert eng.start_agent(Launch("n", "claude", PaneId("w1:p9"))).session == "s-1"
     assert wire.methods.count(START) == 2
 
 
 def test_every_other_start_failure_is_raised_on_the_first_attempt() -> None:
     eng, wire = build({PROCESS_INFO: process_info_frame(), START: EngineTimeout("too slow")})
     with pytest.raises(EngineTimeout):
-        eng.start_agent(Launch("n", "claude", "w1:p9"))
+        eng.start_agent(Launch("n", "claude", PaneId("w1:p9")))
     assert wire.methods.count(START) == 1
 
 
 def test_a_started_agent_with_no_session_says_so_as_the_empty_string() -> None:
     """A start with no session yet says so as the empty string, never ``None``."""
     eng, _ = build({PROCESS_INFO: process_info_frame(), START: started_frame(None)})
-    assert eng.start_agent(Launch("n", "claude", "w1:p9")).session == ""
+    assert eng.start_agent(Launch("n", "claude", PaneId("w1:p9"))).session == ""
 
 
 def test_the_model_argument_reaches_the_runner_after_a_bare_dash_dash() -> None:
     eng, wire = build({PROCESS_INFO: process_info_frame(), START: started_frame("s")})
-    eng.start_agent(Launch("n", "claude", "w1:p9", ("--model", "haiku")))
+    eng.start_agent(Launch("n", "claude", PaneId("w1:p9"), ("--model", "haiku")))
     start = next(c for c in wire.calls if c.method == START)
     assert start.params["args"] == ["--model", "haiku"]
     timeout_ms = start.params["timeout_ms"]
