@@ -2175,7 +2175,7 @@
       }
     },
     "now": 1790000000.0,
-    "pruned": "Rows whose input is not in this repo (an AGPL corpus never shipped, and collie screens never vendored) were removed; every remaining verdict is as recorded.",
+    "pruned": "Rows whose input is not in this repo (an AGPL corpus never shipped, collie screens never vendored, and seven collie screens removed because they carried their author's email or home path) were removed; every remaining verdict is as recorded.",
     "rehashed": "Input hashes were re-pinned after a privacy scrub replaced or rewrote captures; no verdict changed.",
     "verdict_fields": [
       "shape",
@@ -2189,32 +2189,6 @@
     ]
   },
   "screens": {
-    "foreign/collie/claude--done.txt": {
-      "input": {
-        "call": "BlockedPrompt.parse(text)",
-        "decode": "plain_text",
-        "sha256": "3e3d2526498fd679fb198edadfa0c3b31316c33cff83cb9c95918305b6691485"
-      },
-      "render": {
-        "answer_hints": [],
-        "asked": false,
-        "corroborated": false,
-        "drew_rows": false,
-        "is_choice": false,
-        "numbers": [],
-        "rows_toggle": false
-      },
-      "verdict": {
-        "checkable": 0,
-        "digits": [],
-        "hints": [],
-        "options": 0,
-        "rows_answer": false,
-        "shape": "none",
-        "steps": null,
-        "ticked": []
-      }
-    },
     "foreign/collie/claude--draft-footer-empty.txt": {
       "input": {
         "call": "BlockedPrompt.parse(text)",
@@ -2376,58 +2350,6 @@
         "call": "BlockedPrompt.parse(text)",
         "decode": "plain_text",
         "sha256": "fa34dcebd5ef68d2f4a916a4856b0d7ea4706f00d2c32be3ead3333481984085"
-      },
-      "render": {
-        "answer_hints": [],
-        "asked": false,
-        "corroborated": false,
-        "drew_rows": false,
-        "is_choice": false,
-        "numbers": [],
-        "rows_toggle": false
-      },
-      "verdict": {
-        "checkable": 0,
-        "digits": [],
-        "hints": [],
-        "options": 0,
-        "rows_answer": false,
-        "shape": "none",
-        "steps": null,
-        "ticked": []
-      }
-    },
-    "foreign/collie/claude--fresh-idle.txt": {
-      "input": {
-        "call": "BlockedPrompt.parse(text)",
-        "decode": "plain_text",
-        "sha256": "7fad01e60bf5399122e2a3ef64244464570a529ab65399990dc2e4b4906158ca"
-      },
-      "render": {
-        "answer_hints": [],
-        "asked": false,
-        "corroborated": false,
-        "drew_rows": false,
-        "is_choice": false,
-        "numbers": [],
-        "rows_toggle": false
-      },
-      "verdict": {
-        "checkable": 0,
-        "digits": [],
-        "hints": [],
-        "options": 0,
-        "rows_answer": false,
-        "shape": "none",
-        "steps": null,
-        "ticked": []
-      }
-    },
-    "foreign/collie/claude--menu-model-picker-dismissed.txt": {
-      "input": {
-        "call": "BlockedPrompt.parse(text)",
-        "decode": "plain_text",
-        "sha256": "efc54d96bac9537948e20b3f776eeca514ccb3ec640425046e97a1f84ea2928c"
       },
       "render": {
         "answer_hints": [],
@@ -2701,46 +2623,6 @@
         "options": 0,
         "rows_answer": false,
         "shape": "unknown",
-        "steps": null,
-        "ticked": []
-      }
-    },
-    "foreign/collie/claude--plan-approval--numbered-body.txt": {
-      "input": {
-        "call": "BlockedPrompt.parse(text)",
-        "decode": "plain_text",
-        "sha256": "d27cd0f5e26f610645844fc754852d4c777be159fc67ecc5d0a117582ccd1153"
-      },
-      "render": {
-        "answer_hints": [
-          "ctrl-g"
-        ],
-        "asked": true,
-        "corroborated": true,
-        "drew_rows": true,
-        "is_choice": true,
-        "numbers": [
-          1,
-          2,
-          3,
-          4
-        ],
-        "rows_toggle": false
-      },
-      "verdict": {
-        "checkable": 0,
-        "digits": [
-          "1",
-          "2",
-          "3",
-          "4"
-        ],
-        "hints": [
-          "ctrl-g"
-        ],
-        "options": 4,
-        "rows_answer": true,
-        "shape": "single-choice",
         "steps": null,
         "ticked": []
       }
@@ -3021,62 +2903,6 @@
         "ticked": []
       }
     },
-    "foreign/collie/claude--select-multiselect-checked.txt": {
-      "input": {
-        "call": "BlockedPrompt.parse(text)",
-        "decode": "plain_text",
-        "sha256": "b91442f89af36a0c76c2fa6fbc43bf0ed8b9535a2105fbafa7c93c2b64780032"
-      },
-      "render": {
-        "answer_hints": [
-          "enter",
-          "up",
-          "down",
-          "esc"
-        ],
-        "asked": true,
-        "corroborated": true,
-        "drew_rows": true,
-        "is_choice": true,
-        "numbers": [
-          1,
-          2,
-          3,
-          4,
-          5,
-          6
-        ],
-        "rows_toggle": true
-      },
-      "verdict": {
-        "checkable": 5,
-        "digits": [
-          "1",
-          "2",
-          "3",
-          "4",
-          "5",
-          "6"
-        ],
-        "hints": [
-          "enter",
-          "up",
-          "down",
-          "esc"
-        ],
-        "options": 6,
-        "rows_answer": false,
-        "shape": "multi-select",
-        "steps": [
-          1,
-          1
-        ],
-        "ticked": [
-          1,
-          2
-        ]
-      }
-    },
     "foreign/collie/claude--select-multiselect-review.txt": {
       "input": {
         "call": "BlockedPrompt.parse(text)",
@@ -3105,59 +2931,6 @@
         "options": 2,
         "rows_answer": false,
         "shape": "single-choice",
-        "steps": [
-          0,
-          1
-        ],
-        "ticked": []
-      }
-    },
-    "foreign/collie/claude--select-multiselect-single.txt": {
-      "input": {
-        "call": "BlockedPrompt.parse(text)",
-        "decode": "plain_text",
-        "sha256": "36b2e35b2e8ab993d7bbffcde9f823f2710986800d826142bd9115bb1ba9175a"
-      },
-      "render": {
-        "answer_hints": [
-          "enter",
-          "up",
-          "down",
-          "esc"
-        ],
-        "asked": true,
-        "corroborated": true,
-        "drew_rows": true,
-        "is_choice": true,
-        "numbers": [
-          1,
-          2,
-          3,
-          4,
-          5,
-          6
-        ],
-        "rows_toggle": true
-      },
-      "verdict": {
-        "checkable": 5,
-        "digits": [
-          "1",
-          "2",
-          "3",
-          "4",
-          "5",
-          "6"
-        ],
-        "hints": [
-          "enter",
-          "up",
-          "down",
-          "esc"
-        ],
-        "options": 6,
-        "rows_answer": false,
-        "shape": "multi-select",
         "steps": [
           0,
           1
@@ -3295,43 +3068,6 @@
         "options": 0,
         "rows_answer": false,
         "shape": "none",
-        "steps": null,
-        "ticked": []
-      }
-    },
-    "foreign/collie/claude--trust-prompt.txt": {
-      "input": {
-        "call": "BlockedPrompt.parse(text)",
-        "decode": "plain_text",
-        "sha256": "a3f088cf3a6435a210519a46de27f1f3a8a70f3ee4f56ac5e7494aeee6af10a2"
-      },
-      "render": {
-        "answer_hints": [
-          "esc"
-        ],
-        "asked": true,
-        "corroborated": true,
-        "drew_rows": true,
-        "is_choice": true,
-        "numbers": [
-          1,
-          2
-        ],
-        "rows_toggle": false
-      },
-      "verdict": {
-        "checkable": 0,
-        "digits": [
-          "1",
-          "2"
-        ],
-        "hints": [
-          "enter",
-          "esc"
-        ],
-        "options": 2,
-        "rows_answer": true,
-        "shape": "single-choice",
         "steps": null,
         "ticked": []
       }

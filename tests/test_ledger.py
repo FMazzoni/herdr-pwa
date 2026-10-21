@@ -36,7 +36,7 @@ FIXTURES = REPO / "tests" / "fixtures"
 LEDGER_PATH = FIXTURES / "ledger.json"
 # Pinned so the golden file can only change by a reviewed edit to this line. Verdicts never
 # change; input hashes are re-pinned when a capture is scrubbed or replaced (see meta.rehashed).
-LEDGER_SHA256 = "48852a8ce658e822727775fde08fa74c1c70934ba5d6258f69a606992f1bf9d3"
+LEDGER_SHA256 = "0eadebd0fb90cadd21d717daa859031a85447a3d0b059e9fd355d834fa253663"
 FOREIGN_PREFIX = "foreign/"
 # collie's claude screens, vendored under tests/fixtures/foreign with collie's MIT notice.
 VENDORED_PREFIX = "foreign/collie/claude--"
@@ -46,7 +46,6 @@ HANDED_OFF = (
     "foreign/collie/claude--plan-approval--feedback-focused.txt",
     "foreign/collie/claude--plan-approval--feedback-typed.txt",
     "foreign/collie/claude--plan-approval--feedback-wrapped.txt",
-    "foreign/collie/claude--plan-approval--numbered-body.txt",
     "foreign/collie/claude--plan-approval--three-row-focused.txt",
     "foreign/collie/claude--plan-approval--three-row-typed-focused.txt",
     "foreign/collie/claude--plan-approval--three-row.txt",
