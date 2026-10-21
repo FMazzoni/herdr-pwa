@@ -84,11 +84,11 @@ def test_device_answers_yes_or_no_for_the_one_endpoint_asked(tmp_path: Path) -> 
     other = "https://fcm.googleapis.com/fcm/send/other"
     _ = rig.http.post("/push/subscribe", headers=SAME_ORIGIN, json=raw_subscription(other))
     unknown = rig.http.post("/push/device", headers=SAME_ORIGIN, json={"endpoint": ENDPOINT})
-    assert unknown.json() == {"known": False, "devices": 1, "armed": False}
+    assert unknown.json() == {"known": False, "devices": 1, "armed": False, "herdAlert": False}
     assert other not in unknown.text
     _ = rig.http.post("/push/subscribe", headers=SAME_ORIGIN, json=raw_subscription())
     known = rig.http.post("/push/device", headers=SAME_ORIGIN, json={"endpoint": ENDPOINT})
-    assert known.json() == {"known": True, "devices": 2, "armed": False}
+    assert known.json() == {"known": True, "devices": 2, "armed": False, "herdAlert": False}
 
 
 @pytest.mark.parametrize(

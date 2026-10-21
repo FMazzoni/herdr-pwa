@@ -209,6 +209,23 @@
     });
   }
 
+  /* The server sends no clear, since a push that shows nothing costs the subscription, so the
+   * page closes the herd alert once the server owes none; a ping keeps its own tag. */
+  function closeHerdAlert() {
+    if (!worker) {
+      return;
+    }
+    worker.ready.then(function (registration) {
+      return typeof registration.getNotifications === "function" ? registration.getNotifications({ tag: HERD_TAG }) : [];
+    }).then(function (open) {
+      open.forEach(function (notification) {
+        notification.close();
+      });
+    }).catch(function () {
+      /* No notifications to list here, so none is left showing to close. */
+    });
+  }
+
   /* This device as the box sees it: "on", "waiting" (held, box not sending), "off", "denied",
    * or "unknown" (subscribed here, but the box does not hold it, so nothing arrives). */
   function deviceState() {
@@ -224,6 +241,10 @@
       }
       return postJson("/push/device", { endpoint: subscription.endpoint }).then(function (answer) {
         showDevices(answer.devices);
+        /* Strictly false: a blocked agent's alert stays on the lock screen until it is answered. */
+        if (answer.herdAlert === false) {
+          closeHerdAlert();
+        }
         if (!answer.known) {
           return "unknown";
         }
@@ -277,30 +298,13 @@
     });
   }
 
-  /* The box sends no clear, since a push that shows nothing costs the subscription, so the herd
-   * alert left on the phone is closed when the app is opened; a ping keeps its own tag. */
-  function closeHerdAlert() {
-    if (!worker) {
-      return;
-    }
-    worker.ready.then(function (registration) {
-      return typeof registration.getNotifications === "function" ? registration.getNotifications({ tag: HERD_TAG }) : [];
-    }).then(function (open) {
-      open.forEach(function (notification) {
-        notification.close();
-      });
-    }).catch(function () {
-      /* No notifications to list here, so none is left showing to close. */
-    });
-  }
-
-  /* The banner asks the box about this endpoint only, and only where alerts could be on. */
+  /* Asks the server about this endpoint only; the banner itself shows only in a Home Screen app. */
   function checkDevice() {
     if (panel) {
       refreshDevice();
       return;
     }
-    if (!banner || !standalone()) {
+    if (!banner) {
       return;
     }
     deviceState().then(showBanner).catch(function () {
@@ -376,12 +380,10 @@
     });
   }
 
-  closeHerdAlert();
   checkDevice();
   /* A Home Screen app resumes rather than reloads, and its owner may be back from Settings. */
   document.addEventListener("visibilitychange", function () {
     if (!document.hidden) {
-      closeHerdAlert();
       checkDevice();
     }
   });

@@ -60,6 +60,7 @@ function service(endpoint) {
 function box(held) {
   const store = new Set(held);
   const sent = [];
+  const server = { owed: false };
   const answer = (data) => Promise.resolve({ ok: true, json: () => Promise.resolve(data) });
   const fetch = (url, init) => {
     const body = init && init.body ? JSON.parse(init.body) : null;
@@ -68,7 +69,7 @@ function box(held) {
       return answer({ enabled: true, publicKey: "AAAA" });
     }
     if (url === "/push/device") {
-      return answer({ known: store.has(body.endpoint), devices: store.size, armed: true });
+      return answer({ known: store.has(body.endpoint), devices: store.size, armed: true, herdAlert: server.owed });
     }
     if (url === "/push/subscribe") {
       if (body.replaces) {
@@ -82,7 +83,7 @@ function box(held) {
     }
     throw new Error(`unexpected ${url}`);
   };
-  return { store, sent, fetch };
+  return Object.assign(server, { store, sent, fetch });
 }
 
 function load({ panel = false, standalone = true, permission = "granted", endpoint = null, held = [], storage = memory() }) {
@@ -239,12 +240,20 @@ test("storage whose every call throws still subscribes, with nothing to replace"
   assert.equal(page.ids["push-state"].textContent, "Alerts are on for this device.");
 });
 
-test("opening or resuming the app closes the herd alert the box no longer clears, not a ping", async () => {
-  const page = load({ standalone: false });
+test("opening the app closes the herd alert only once the server owes none, never a ping", async () => {
+  const page = load({ standalone: false, endpoint: OLD, held: [OLD] });
+  page.server.owed = true;
   await settle();
-  assert.deepEqual(page.shown.map((n) => [n.tag, n.closed]), [["herd", true], ["ping", false]]);
-  page.shown.push({ tag: "herd", closed: false, close() { this.closed = true; } });
+  // A blocked agent's alert is still true, so it stays on the lock screen.
+  assert.deepEqual(page.shown.map((n) => n.closed), [false, false]);
+  page.server.owed = false;
   page.resume();
   await settle();
-  assert.equal(page.shown[2].closed, true);
+  assert.deepEqual(page.shown.map((n) => [n.tag, n.closed]), [["herd", true], ["ping", false]]);
+});
+
+test("with no answer from the server, the herd alert is left alone", async () => {
+  const page = load({ permission: "default" });
+  await settle();
+  assert.equal(page.shown[0].closed, false);
 });

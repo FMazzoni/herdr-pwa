@@ -228,6 +228,19 @@ def test_a_device_the_push_service_retired_is_pruned(tmp_path: Path) -> None:
     assert loop.stores.devices.list_all() == []
 
 
+def test_the_herd_alert_is_current_while_a_block_is_owed_and_not_after(tmp_path: Path) -> None:
+    loop = build_loop(tmp_path)
+    loop.subscribe()
+    _ = loop.notifier.tick()
+    assert not loop.notifier.herd_alert_current()
+    loop.set_status("blocked")
+    _ = loop.notifier.tick()
+    assert loop.notifier.herd_alert_current()
+    loop.set_status("working")
+    _ = loop.notifier.tick()
+    assert not loop.notifier.herd_alert_current()
+
+
 def test_retract_forgets_the_alert_and_sends_nothing(tmp_path: Path) -> None:
     loop = build_loop(tmp_path)
     loop.subscribe()
@@ -236,7 +249,7 @@ def test_retract_forgets_the_alert_and_sends_nothing(tmp_path: Path) -> None:
     _ = loop.notifier.tick()
     loop.notifier.retract()
     assert [payload["event"] for _, payload in loop.sender.sent] == ["blocked"]
-    assert loop.notifier.planner.slot.next_due() is None
+    assert not loop.notifier.herd_alert_current()
 
 
 def test_a_held_alert_shortens_the_sleep_to_when_it_falls_due(tmp_path: Path) -> None:

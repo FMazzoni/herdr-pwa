@@ -183,8 +183,12 @@ async def _device(push: PushState, request: Request) -> JSONResponse:
     except (BadBodyError, SubscriptionError, OSError) as exc:
         return _bad(str(exc))
     devices = await asyncio.to_thread(_devices, push.stores.devices)
+    notifier = push.notifier
+    # No clear is ever pushed, so the page closes the herd alert itself once nothing is owed.
+    owed = notifier is not None and notifier.herd_alert_current()
     # Yes or no for the endpoint the page sent, never the others.
-    return _json({"known": known, "devices": devices, "armed": push.notifier is not None})
+    armed = notifier is not None
+    return _json({"known": known, "devices": devices, "armed": armed, "herdAlert": owed})
 
 
 async def _set_prefs(push: PushState, request: Request) -> JSONResponse:

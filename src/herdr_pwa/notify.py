@@ -322,6 +322,11 @@ class HerdSlot:
         seen = self._desk.get(session)
         return seen is not None and self._clock() - seen <= self._desk_window
 
+    @property
+    def showing(self) -> bool:
+        """The herd notification last sent is still owed: something blocked or finished."""
+        return self._shown is not None
+
     def next_due(self) -> MonoTime | None:
         """When the earliest held alert may be shown, so the loop can wake for it."""
         return min((at for _, at in self._held.values()), default=None)

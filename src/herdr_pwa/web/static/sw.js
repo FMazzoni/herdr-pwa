@@ -216,7 +216,7 @@ function showUnreadable() {
  * a clear from an older server replaces the alert with a quiet one instead of closing it. */
 function showCleared(tag) {
   return self.registration.showNotification("herdr", {
-    body: "Nothing needs you right now.",
+    body: "Open the app to see your agents.",
     tag: tag,
     icon: NOTIFY_ICON,
     renotify: false,

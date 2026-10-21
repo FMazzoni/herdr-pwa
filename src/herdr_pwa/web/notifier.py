@@ -226,6 +226,10 @@ class Notifier:
         with self._lock:
             self.planner.retract()
 
+    def herd_alert_current(self) -> bool:
+        """The phone's herd alert still says something true; read unlocked, one attribute."""
+        return self.planner.slot.showing
+
     def interval(self) -> float:
         """Seconds until the next tick: the cadence, or sooner when a held alert falls due."""
         due = self.planner.slot.next_due()
