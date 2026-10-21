@@ -63,6 +63,8 @@ class IdentityGate:
         request = Request(scope)
         try:
             auth.authorize(request.headers, access=self.access, method=request.method)
+            # An <img> or prefetch from another site learns from load or error whether a path exists.
+            auth.check_same_site(request.headers, request.method)
         except auth.AuthError as exc:
             await failures.respond(self.pages, request, exc)(scope, receive, send)
             return

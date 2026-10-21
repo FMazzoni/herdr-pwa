@@ -62,7 +62,7 @@ class DuplicateIdentityError(AuthError):
 
 
 class CrossSiteError(AuthError):
-    """A read another site's page started, which only probes for what exists."""
+    """A request another site started that is not a link followed to the app."""
 
     reason: ClassVar[str] = "cross_site"
 
@@ -168,12 +168,17 @@ def login_policy(access: Access) -> str:
         return f"only {access.tailnet_login} (HP_TAILNET_LOGIN)"
     if access.any_login:
         return "any user your tailnet lets reach this node (HP_ALLOW_ANY_TAILNET_USER)"
+    if access.assume_login:
+        return (
+            f"no tailnet user; scripts on this machine as {access.assume_login} (HP_ASSUME_LOGIN)"
+        )
     return "nobody: HP_TAILNET_LOGIN is not set"
 
 
 def assert_login_chosen(access: Access) -> None:
-    """At startup: refuse to serve with no pinned login unless any-user mode was chosen."""
-    if access.tailnet_login or access.any_login:
+    """At startup: refuse to serve with no login chosen: pinned, any-user, or assumed locally."""
+    # An assumed login already refuses to start while serve is on, and identify refuses headers.
+    if access.tailnet_login or access.any_login or access.assume_login:
         return
     raise NoLoginPinnedError(
         "Refusing to start: HP_TAILNET_LOGIN is not set. Set it to your Tailscale login, or set "
@@ -213,10 +218,16 @@ def check_same_origin(headers: Mapping[str, str]) -> None:
         )
 
 
-def check_same_site(headers: Mapping[str, str]) -> None:
-    """Refuse a read another site started; Safari, Chrome and Firefox all send Sec-Fetch-Site."""
-    if _lower(headers).get("sec-fetch-site", "").strip().lower() == "cross-site":
-        raise CrossSiteError("Refusing a request another site's page started.")
+def check_same_site(headers: Mapping[str, str], method: str = "GET") -> None:
+    """Refuse a cross-site request unless it is a GET navigation (the fetch-metadata policy)."""
+    lowered = _lower(headers)
+    if lowered.get("sec-fetch-site", "").strip().lower() != "cross-site":
+        return
+    # A link from another app opens a page, which shows nothing the other site can read.
+    navigation = lowered.get("sec-fetch-mode", "").strip().lower() == "navigate"
+    if navigation and method.strip().upper() == "GET":
+        return
+    raise CrossSiteError("Refusing a request another site's page started.")
 
 
 def _identity_header(headers: Mapping[str, str]) -> str:

@@ -357,6 +357,9 @@ def test_doctor_says_who_may_drive_agents_and_fails_when_nobody_chose(tmp_path: 
     code, out = _doctor_on(Settings.model_validate(base))
     assert code == 1
     assert "nobody: HP_TAILNET_LOGIN is not set, so serve refuses to start" in out
+    code, out = _doctor_on(Settings.model_validate({**base, "assume_login": LOGIN}))
+    assert code == 0
+    assert f"scripts on this machine as {LOGIN} (HP_ASSUME_LOGIN)\n" in out
 
 
 def test_doctor_fails_on_a_raw_tcp_forward_and_says_when_it_cannot_tell(tmp_path: Path) -> None:
@@ -379,6 +382,7 @@ def test_doctor_fails_on_a_raw_tcp_forward_and_says_when_it_cannot_tell(tmp_path
     code, out = _doctor_on(Settings.model_validate(unreadable))
     assert code == 0
     assert "raw TCP forward: unknown, the serve config is unreadable (No tailscaled socket" in out
+    assert "  WARN\n" in out.split("raw TCP forward:")[1]
 
 
 def test_doctor_says_when_push_last_sent_failed_and_held_back(tmp_path: Path) -> None:

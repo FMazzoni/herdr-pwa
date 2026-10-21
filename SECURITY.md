@@ -72,15 +72,20 @@ never for ones that come in through Tailscale.
 
 If `HP_TAILNET_LOGIN` is not set, the app refuses to start. Leaving it unset would let
 anyone your tailnet admits drive your agents, such as a coworker on a company tailnet.
-You can choose that on purpose by setting `HP_ALLOW_ANY_TAILNET_USER=1` instead. A request
+You can choose that on purpose by setting `HP_ALLOW_ANY_TAILNET_USER` to a truthy value,
+such as `1`, `true` or `yes`, instead. `HP_ASSUME_LOGIN` alone is enough too, because the
+app then serves only scripts on the machine and refuses every Tailscale header. A request
 with two copies of the Tailscale header is refused, because Tailscale never sends two.
 
 The header can be trusted only because `tailscale serve`, set up as a web proxy, removes
 any copy the sender wrote and adds its own. A serve entry can instead forward raw TCP (the
 plain connection that web requests travel over) to the app. That passes the sender's bytes
-through unchanged, so any device on the tailnet could forge the header. The app checks the serve setup when it starts, and refuses to start if raw TCP is
-forwarded to its port. If it can't read the setup, it starts anyway, and `doctor` says
-the check could not be made.
+through unchanged, so any device on the tailnet could forge the header.
+
+The app checks the serve setup when it starts, and refuses to start if raw TCP is
+forwarded to its port. It looks everywhere `tailscale serve` keeps a forward, including
+one run without `--bg`. If it can't read the setup, it starts anyway, and `doctor` warns
+that the check could not be made.
 
 The `pair` command never uses Funnel, Tailscale's feature for sharing a machine with the
 whole internet. It also refuses to add the app to a machine that already has Funnel on.
@@ -103,9 +108,10 @@ address.
 
 A site can't read the app's replies, but it can still learn something from whether a
 request worked. For example, an image tag pointed at a file in your repository loads or
-fails, which tells the site whether that file exists. So the app refuses an image request
-that the browser marks as started by another site, through the `Sec-Fetch-Site` header
-that current browsers send.
+fails, which tells the site whether that file exists. So the app refuses any request that
+the browser marks as started by another site, through the `Sec-Fetch-Site` header that
+current browsers send. The one exception is following a link to open a page, so a link
+from another app still opens the app; the other site can't read that page.
 
 ### A tap landing on the wrong screen (tampering)
 
@@ -171,7 +177,7 @@ These follow from the design, and I've chosen not to fix them:
 
 - Any user or program on the machine can forge the Tailscale header, because the app
   can't tell `tailscale serve` apart from another local program. They are fully trusted.
-- If you set `HP_ALLOW_ANY_TAILNET_USER=1` and leave `HP_TAILNET_LOGIN` unset, anyone your
+- If you set `HP_ALLOW_ANY_TAILNET_USER` and leave `HP_TAILNET_LOGIN` unset, anyone your
   tailnet lets reach the machine can control every agent. The app prints a warning when it
   starts.
 - Another proxy in front of the app, other than `tailscale serve`, must remove any

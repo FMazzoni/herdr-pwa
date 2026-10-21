@@ -7,7 +7,7 @@ import pytest
 
 from herdr_pwa import auth, pairing, tailscale
 from herdr_pwa.settings import Settings
-from herdr_pwa.tailscale import STATUS_PATH, LocalApi, LocalApiError, magicdns
+from herdr_pwa.tailscale import SERVE_CONFIG_PATH, STATUS_PATH, LocalApi, LocalApiError, magicdns
 from tests.fakes import GOOD_STATUS, NODE, Canned, status_route, tailscaled
 
 
@@ -142,3 +142,44 @@ def test_exactly_one_function_writes_and_its_method_and_path_are_literal() -> No
     assert writers == [("call", "<variable>"), ("_write_serve_config", "POST")]
     source = inspect.getsource(pairing._write_serve_config)  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
     assert '"/localapi/v0/serve-config"' in source
+
+
+@pytest.mark.parametrize(
+    ("tcp", "found"),
+    [
+        ({"443": {"TCPForward": "127.0.0.1:8772", "TerminateTLS": NODE}}, ("443",)),
+        ({"8443": {"TCPForward": "tcp://LOCALHOST:8772"}}, ("8443",)),
+        (
+            {"443": {"TCPForward": "[::1]:8772"}, "80": {"TCPForward": "0.0.0.0:8772"}},
+            ("443", "80"),
+        ),
+        ({"443": {"TCPForward": "127.0.0.2:8772"}}, ("443",)),
+        ({"443": {"HTTPS": True}}, ()),
+        ({"443": {"TCPForward": "127.0.0.1:9000"}}, ()),
+        ({"443": {"TCPForward": "192.0.2.7:8772"}}, ()),
+        ({"443": {"TCPForward": 8772}}, ()),
+        ({"443": "127.0.0.1:8772"}, ()),
+        ([], ()),
+    ],
+)
+def test_a_raw_tcp_forward_to_this_port_is_found(
+    tmp_path: Path, tcp: object, found: tuple[str, ...]
+) -> None:
+    with tailscaled(tmp_path, serve_config={"TCP": tcp}) as fake:
+        assert tailscale.raw_forwards(fake.api, port=8772) == found
+
+
+@pytest.mark.parametrize("section", ["Foreground", "Services"])
+def test_a_raw_forward_nested_under_a_session_or_service_is_found(
+    tmp_path: Path, section: str
+) -> None:
+    # A serve run without --bg lives under Foreground[<session>], a service under Services[<svc>].
+    nested = {section: {"sess1": {"TCP": {"443": {"TCPForward": "localhost:8772"}}}}}
+    with tailscaled(tmp_path, serve_config=nested) as fake:
+        assert tailscale.raw_forwards(fake.api, port=8772) == ("443",)
+
+
+def test_an_unreadable_serve_config_hides_no_forward(tmp_path: Path) -> None:
+    canned = {("GET", SERVE_CONFIG_PATH): Canned(body="{")}
+    with tailscaled(tmp_path, canned=canned) as fake, pytest.raises(LocalApiError):
+        _ = tailscale.raw_forwards(fake.api, port=8772)

@@ -105,7 +105,7 @@ def login_line(settings: Settings) -> CheckLine:
     """Who the settings let in; with no login pinned and no opt-in, ``serve`` refuses to start."""
     access = access_of(settings)
     policy = f"who may drive agents: {auth.login_policy(access)}"
-    if access.tailnet_login:
+    if access.tailnet_login or access.assume_login:
         return CheckLine(policy, ok=True)
     if access.any_login:
         return CheckLine(f"{policy}  WARN", ok=True)
@@ -118,10 +118,10 @@ def login_line(settings: Settings) -> CheckLine:
 def raw_forward_line(settings: Settings, api: tailscale.LocalApi) -> CheckLine:
     """Whether serve forwards raw TCP to the app, which would let a forged header through."""
     try:
-        found = pairing.raw_forwards(api, port=settings.port)
-    except (tailscale.LocalApiError, pairing.PairingError) as exc:
+        found = tailscale.raw_forwards(api, port=settings.port)
+    except tailscale.LocalApiError as exc:
         return CheckLine(
-            f"raw TCP forward: unknown, the serve config is unreadable ({exc})", ok=True
+            f"raw TCP forward: unknown, the serve config is unreadable ({exc})  WARN", ok=True
         )
     if found:
         return CheckLine(
@@ -230,11 +230,15 @@ def assert_loopback_bind(host: str) -> None:
     )
 
 
+class RawForwardError(Exception):
+    """Serve passes raw TCP to the app, so a client's own identity header reaches it unchanged."""
+
+
 # Each stops the box serving, and is said in a line rather than a traceback.
 SERVE_REFUSALS: Final = (
     auth.AuthError,
     NonLoopbackBindError,
-    pairing.RawForwardError,
+    RawForwardError,
     VapidKeyError,
     AuditUnavailableError,
 )
@@ -258,13 +262,13 @@ def _learned_host(settings: Settings, api: tailscale.LocalApi) -> str:
 
 def _assert_no_raw_forward(api: tailscale.LocalApi, port: int) -> None:
     try:
-        found = pairing.raw_forwards(api, port=port)
-    except (tailscale.LocalApiError, pairing.PairingError) as exc:
+        found = tailscale.raw_forwards(api, port=port)
+    except tailscale.LocalApiError as exc:
         # Unreadable is not a forward; doctor reports it, and refusing would break a box without tailscaled.
         log.warning("Could not check 'tailscale serve' for a raw TCP forward: %s", exc)
         return
     if found:
-        raise pairing.RawForwardError(f"Refusing to start: {_raw_forward_problem(found, port)}")
+        raise RawForwardError(f"Refusing to start: {_raw_forward_problem(found, port)}")
 
 
 def _raw_forward_problem(found: tuple[str, ...], port: int) -> str:

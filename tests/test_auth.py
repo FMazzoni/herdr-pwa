@@ -124,8 +124,13 @@ def test_a_pin_still_wins_over_any_user_mode() -> None:
         )
 
 
-def test_an_assumed_login_needs_no_pin() -> None:
-    assert identify({}, Access(assume_login=LOGIN)).is_assumed
+def test_an_assumed_login_needs_no_pin_and_still_refuses_every_header() -> None:
+    local = Access(assume_login=LOGIN)
+    assert identify({}, local).is_assumed
+    assert_login_chosen(local)
+    assert "HP_ASSUME_LOGIN" in login_policy(local)
+    with pytest.raises(NoLoginPinnedError):
+        _ = identify({"Tailscale-User-Login": LOGIN}, local)
 
 
 @pytest.mark.parametrize("second", [LOGIN, "mallory@example.com"])
@@ -138,15 +143,29 @@ def test_two_identity_headers_are_refused_rather_than_one_picked(second: str) ->
         _ = identify(headers, PINNED)
 
 
-@pytest.mark.parametrize("site", ["cross-site", "Cross-Site"])
-def test_a_read_another_site_started_is_refused(site: str) -> None:
+@pytest.mark.parametrize(
+    ("mode", "method"),
+    [("no-cors", "GET"), ("cors", "GET"), ("", "GET"), ("navigate", "POST"), ("navigate", "HEAD")],
+)
+def test_a_cross_site_request_that_is_not_a_get_navigation_is_refused(
+    mode: str, method: str
+) -> None:
     with pytest.raises(CrossSiteError):
-        check_same_site({"Sec-Fetch-Site": site})
+        check_same_site({"Sec-Fetch-Site": "Cross-Site", "Sec-Fetch-Mode": mode}, method)
 
 
-@pytest.mark.parametrize("site", ["same-origin", "same-site", "none", ""])
-def test_a_read_the_app_or_the_user_started_passes(site: str) -> None:
-    check_same_site({"Sec-Fetch-Site": site})
+@pytest.mark.parametrize(
+    ("site", "mode"),
+    [
+        ("same-origin", "no-cors"),
+        ("same-site", "cors"),
+        ("none", "navigate"),
+        ("", ""),
+        ("cross-site", "navigate"),
+    ],
+)
+def test_the_apps_own_a_typed_url_and_a_followed_link_pass(site: str, mode: str) -> None:
+    check_same_site({"Sec-Fetch-Site": site, "Sec-Fetch-Mode": mode}, "GET")
 
 
 @pytest.mark.parametrize(

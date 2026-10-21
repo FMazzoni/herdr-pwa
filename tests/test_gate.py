@@ -12,7 +12,6 @@ from fastapi.testclient import TestClient
 from starlette.types import Message, Receive, Scope, Send
 
 from herdr_pwa import auth, cli
-from herdr_pwa.pairing import RawForwardError
 from herdr_pwa.settings import Settings
 from herdr_pwa.web.gate import MAX_BODY_BYTES
 from herdr_pwa.web.seams import Seams
@@ -92,6 +91,44 @@ def test_a_forged_header_on_a_rebinding_host_is_refused_on_every_route(tmp_path:
     assert _refusals(rig, {**IDENTITY, **REBINDING}, 403) == []
     assert rig.wire.calls == []
     assert rig.http.get("/").status_code == 200
+
+
+def test_a_cross_site_subresource_is_refused_on_every_route(tmp_path: Path) -> None:
+    # An <img>, <link rel=prefetch> or form from another site reads a status from load or error.
+    rig = build_rig(tmp_path, device_report=True)
+    probe = {"Sec-Fetch-Site": "cross-site", "Sec-Fetch-Mode": "no-cors", **SAME_ORIGIN}
+    assert _refusals(rig, probe, 403) == []
+    assert rig.wire.calls == []
+
+
+@pytest.mark.parametrize(
+    ("site", "mode", "dest"),
+    [
+        # The phone's own fragment and image loads.
+        ("same-origin", "cors", "empty"),
+        ("same-origin", "no-cors", "image"),
+        # A typed or bookmarked URL, and the home-screen icon.
+        ("none", "navigate", "document"),
+        # A notification tap, or a link inside the app: a same-origin navigation.
+        ("same-origin", "navigate", "document"),
+        # A link from another app.
+        ("cross-site", "navigate", "document"),
+    ],
+)
+def test_the_phones_own_loads_a_typed_url_and_a_notification_tap_pass(
+    tmp_path: Path, site: str, mode: str, dest: str
+) -> None:
+    rig = build_rig(tmp_path)
+    headers = {"Sec-Fetch-Site": site, "Sec-Fetch-Mode": mode, "Sec-Fetch-Dest": dest}
+    assert rig.http.get("/", headers=headers).status_code == 200
+    assert rig.http.get(f"/agent/{WORKING_SESSION}", headers=headers).status_code == 200
+
+
+def test_a_cross_site_navigation_cannot_write(tmp_path: Path) -> None:
+    rig = build_rig(tmp_path)
+    headers = {"Sec-Fetch-Site": "cross-site", "Sec-Fetch-Mode": "navigate", **FORM, **SAME_ORIGIN}
+    assert rig.http.post(PROMPT, content=b"text=hi", headers=headers).status_code == 403
+    assert rig.wire.calls == []
 
 
 def test_another_tailnet_login_is_refused_on_every_route(tmp_path: Path) -> None:
@@ -192,7 +229,7 @@ def test_serve_refuses_a_raw_tcp_forward_to_its_port(
         settings = Settings(
             state_dir=tmp_path, tailnet_login=LOGIN, port=8772, tailscaled_socket=fake.socket_path
         )
-        with pytest.raises(RawForwardError, match="forwards raw TCP from port 443"):
+        with pytest.raises(cli.RawForwardError, match="forwards raw TCP from port 443"):
             cli.serve(settings, 0, Seams())
 
 
