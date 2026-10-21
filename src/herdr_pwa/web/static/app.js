@@ -104,6 +104,21 @@
 
   /* ---- Web Push ---- */
 
+  /* The endpoint this page registered last, sent as "replaces" so a re-subscribe swaps it out. */
+  var REGISTERED = "hp-push-endpoint";
+  /* The owner turned alerts off here, so the banner does not nag about a choice. */
+  var DECLINED = "hp-alerts-declined";
+  var NO_PUSH = "this browser has no Web Push here (on iPhone, open the Home Screen app)";
+  var DEVICE_TEXT = {
+    on: "Alerts are on for this device.",
+    waiting: "This device is subscribed, but the box is not sending yet.",
+    off: "Alerts are off on this device.",
+    unknown: "Alerts are off on this device: the box no longer has it.",
+    denied: "Alerts are blocked for this app; allow its notifications in Settings.",
+  };
+  var panel = document.querySelector("[data-hp-push]");
+  var banner = document.getElementById("hp-alerts-off");
+
   function postJson(url, body) {
     return fetch(url, {
       method: "POST",
@@ -130,7 +145,7 @@
 
   function pushManager() {
     if (!worker || !("PushManager" in window)) {
-      return Promise.reject("this browser has no Web Push here (on iPhone, open the Home Screen app)");
+      return Promise.reject(NO_PUSH);
     }
     return worker.ready.then(function (registration) {
       return registration.pushManager;
@@ -143,20 +158,24 @@
     });
   }
 
-  /* The server confirms by echoing the endpoint; nothing else counts as "on". */
-  function register(subscription) {
-    return postJson("/push/subscribe", subscription.toJSON()).then(function (answer) {
-      return answer.endpoint === subscription.endpoint ? answer : Promise.reject("not confirmed");
-    });
+  function registered() {
+    try {
+      var device = hp.storage("localStorage");
+      return device ? device.getItem(REGISTERED) : null;
+    } catch (err) {
+      return null;
+    }
   }
 
-  /* Re-post on every load, so a store that lost this device learns it again. */
-  if (worker && "Notification" in window && Notification.permission === "granted") {
-    currentSubscription().then(function (subscription) {
-      return subscription ? register(subscription) : null;
-    }).catch(function () {
-      /* Unasked for: the alerts page says what this device's state is when it is opened. */
-    });
+  function remember(endpoint) {
+    try {
+      var device = hp.storage("localStorage");
+      if (device) {
+        device.setItem(REGISTERED, endpoint);
+      }
+    } catch (err) {
+      /* blocked storage: the next subscribe swaps nothing, and the push service prunes the old one. */
+    }
   }
 
   function setText(id, text) {
@@ -166,36 +185,113 @@
     }
   }
 
-  function showButtons(on) {
-    var enable = document.getElementById("push-on");
-    var disable = document.getElementById("push-off");
-    if (enable) {
-      enable.hidden = on;
-    }
-    if (disable) {
-      disable.hidden = !on;
+  function showDevices(count) {
+    if (typeof count === "number") {
+      setText("push-devices", count + (count === 1 ? " device" : " devices") + " subscribed on this box.");
     }
   }
 
-  function refreshDevice() {
+  /* The server confirms by echoing the endpoint; nothing else counts as "on". */
+  function register(subscription) {
+    var body = subscription.toJSON();
+    var previous = registered();
+    if (previous && previous !== subscription.endpoint) {
+      body.replaces = previous;
+    }
+    return postJson("/push/subscribe", body).then(function (answer) {
+      if (answer.endpoint !== subscription.endpoint) {
+        return Promise.reject("not confirmed");
+      }
+      remember(answer.endpoint);
+      showDevices(answer.devices);
+      return answer;
+    });
+  }
+
+  /* This device as the box sees it: "on", "waiting" (held, box not sending), "off", "denied",
+   * or "unknown" (subscribed here, but the box does not hold it, so nothing arrives). */
+  function deviceState() {
+    if (!worker || !("PushManager" in window) || !("Notification" in window)) {
+      return Promise.reject(NO_PUSH);
+    }
+    if (Notification.permission !== "granted") {
+      return Promise.resolve(Notification.permission === "denied" ? "denied" : "off");
+    }
     return currentSubscription().then(function (subscription) {
       if (!subscription) {
-        setText("push-state", "Alerts are off on this device.");
-        showButtons(false);
-        return null;
+        return "off";
       }
-      return register(subscription).then(function (answer) {
-        setText("push-state", answer.armed ? "Alerts are on for this device." : "This device is subscribed, but the box is not sending yet.");
-        showButtons(true);
+      return postJson("/push/device", { endpoint: subscription.endpoint }).then(function (answer) {
+        showDevices(answer.devices);
+        if (!answer.known) {
+          return "unknown";
+        }
+        remember(subscription.endpoint);
+        return answer.armed ? "on" : "waiting";
       });
-    }).catch(function (reason) {
+    });
+  }
+
+  /* Only a Home Screen app can get alerts on iPhone, so only there is their absence news. */
+  function standalone() {
+    return navigator.standalone === true || (!!window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
+  }
+
+  function showButtons(canEnable, canDisable) {
+    var enable = document.getElementById("push-on");
+    var disable = document.getElementById("push-off");
+    if (enable) {
+      enable.hidden = !canEnable;
+    }
+    if (disable) {
+      disable.hidden = !canDisable;
+    }
+  }
+
+  /* The alerts page says it in its own words, so the banner is for every other page. */
+  function showBanner(state) {
+    if (!banner) {
+      return;
+    }
+    var off = state === "off" || state === "unknown" || state === "denied";
+    banner.hidden = !off || !!panel || !standalone() || hp.kept(DECLINED);
+    var denied = state === "denied";
+    setText("hp-alerts-off-what", denied ? "Alerts are off on this phone: allow herdr's notifications in Settings." : "Alerts are off on this phone.");
+    var button = document.getElementById("hp-alerts-on");
+    if (button) {
+      button.hidden = denied;
+    }
+  }
+
+  function showDevice(state) {
+    setText("push-state", DEVICE_TEXT[state]);
+    showButtons(state === "off" || state === "unknown", state === "on" || state === "waiting");
+    showBanner(state);
+  }
+
+  function refreshDevice() {
+    return deviceState().then(showDevice).catch(function (reason) {
       setText("push-state", "Alerts are unavailable: " + String(reason));
-      showButtons(false);
+      showButtons(true, false);
+    });
+  }
+
+  /* The banner asks the box about this endpoint only, and only where alerts could be on. */
+  function checkDevice() {
+    if (panel) {
+      refreshDevice();
+      return;
+    }
+    if (!banner || !standalone()) {
+      return;
+    }
+    deviceState().then(showBanner).catch(function () {
+      /* No Web Push here, or push is off on the box: nothing the banner's button can fix. */
     });
   }
 
   function enableDevice() {
-    Notification.requestPermission().then(function (permission) {
+    return Notification.requestPermission().then(function (permission) {
       if (permission !== "granted") {
         return Promise.reject("permission was not granted");
       }
@@ -204,10 +300,17 @@
       });
     }).then(function (body) {
       return pushManager().then(function (manager) {
-        return manager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(body.publicKey) });
+        /* One the box does not hold may be one the push service dropped, so start afresh. */
+        return manager.getSubscription().then(function (stale) {
+          return stale ? stale.unsubscribe() : null;
+        }).then(function () {
+          return manager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(body.publicKey) });
+        });
       });
-    }).then(register).then(refreshDevice).catch(function (reason) {
-      setText("push-state", "Could not turn alerts on: " + String(reason));
+    }).then(register).then(function (answer) {
+      hp.keep(DECLINED, false);
+      /* The subscribe's own answer is the confirmation; asking again would post a second one. */
+      showDevice(answer.armed ? "on" : "waiting");
     });
   }
 
@@ -216,10 +319,14 @@
       if (!subscription) {
         return null;
       }
-      return postJson("/push/unsubscribe", { endpoint: subscription.endpoint }).then(function () {
+      return postJson("/push/unsubscribe", { endpoint: subscription.endpoint }).then(function (answer) {
+        showDevices(answer.devices);
         return subscription.unsubscribe();
       });
-    }).then(refreshDevice).catch(function (reason) {
+    }).then(function () {
+      hp.keep(DECLINED, true);
+      return refreshDevice();
+    }).catch(function (reason) {
       setText("push-state", "Could not turn alerts off: " + String(reason));
     });
   }
@@ -251,13 +358,30 @@
     });
   }
 
-  var panel = document.querySelector("[data-hp-push]");
+  checkDevice();
+  /* A Home Screen app resumes rather than reloads, and its owner may be back from Settings. */
+  document.addEventListener("visibilitychange", function () {
+    if (!document.hidden) {
+      checkDevice();
+    }
+  });
+  var bannerButton = document.getElementById("hp-alerts-on");
+  if (bannerButton) {
+    bannerButton.addEventListener("click", function () {
+      enableDevice().catch(function (reason) {
+        setText("hp-alerts-off-what", "Could not turn alerts on: " + String(reason));
+      });
+    });
+  }
   if (panel) {
-    refreshDevice();
     var enable = document.getElementById("push-on");
     var disable = document.getElementById("push-off");
     if (enable) {
-      enable.addEventListener("click", enableDevice);
+      enable.addEventListener("click", function () {
+        enableDevice().catch(function (reason) {
+          setText("push-state", "Could not turn alerts on: " + String(reason));
+        });
+      });
     }
     if (disable) {
       disable.addEventListener("click", disableDevice);

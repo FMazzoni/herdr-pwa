@@ -31,8 +31,13 @@ class BadBodyError(Exception):
     """The request body is too big to be what the route needs."""
 
 
-class _Unsubscribe(BaseModel):
+class _Endpoint(BaseModel):
     endpoint: Annotated[StrictStr, StringConstraints(min_length=1)]
+
+
+class _Replaces(BaseModel):
+    # The endpoint this page registered last; absent or not a string, nothing is swapped.
+    replaces: Annotated[StrictStr | None, or_default(None)] = None
 
 
 class _Kinds(BaseModel):
@@ -144,7 +149,9 @@ def _page_routes(router: APIRouter, web: WebState, push: PushState | None) -> No
 async def _subscribe(push: PushState, request: Request) -> JSONResponse:
     try:
         subscription = await _body(request, Subscription)
-        stored = await asyncio.to_thread(push.stores.devices.add, subscription)
+        replaces = (await _body(request, _Replaces)).replaces
+        devices = push.stores.devices
+        stored = await asyncio.to_thread(devices.add, subscription, replaces=replaces)
     except ValidationError as exc:
         return _bad(summary(exc))
     except (BadBodyError, SubscriptionError, OSError) as exc:
@@ -157,7 +164,7 @@ async def _subscribe(push: PushState, request: Request) -> JSONResponse:
 
 async def _unsubscribe(push: PushState, request: Request) -> JSONResponse:
     try:
-        endpoint = (await _body(request, _Unsubscribe)).endpoint
+        endpoint = (await _body(request, _Endpoint)).endpoint
         removed = await asyncio.to_thread(push.stores.devices.remove, endpoint)
     except ValidationError as exc:
         return _bad(summary(exc))
@@ -165,6 +172,19 @@ async def _unsubscribe(push: PushState, request: Request) -> JSONResponse:
         return _bad(str(exc))
     devices = await asyncio.to_thread(_devices, push.stores.devices)
     return _json({"removed": removed, "devices": devices})
+
+
+async def _device(push: PushState, request: Request) -> JSONResponse:
+    try:
+        endpoint = (await _body(request, _Endpoint)).endpoint
+        known = await asyncio.to_thread(push.stores.devices.holds, endpoint)
+    except ValidationError as exc:
+        return _bad(summary(exc))
+    except (BadBodyError, SubscriptionError, OSError) as exc:
+        return _bad(str(exc))
+    devices = await asyncio.to_thread(_devices, push.stores.devices)
+    # Yes or no for the endpoint the page sent, never the others.
+    return _json({"known": known, "devices": devices, "armed": push.notifier is not None})
 
 
 async def _set_prefs(push: PushState, request: Request) -> JSONResponse:
@@ -207,6 +227,11 @@ def _device_routes(router: APIRouter, push: PushState | None) -> None:
     @router.post("/unsubscribe")
     async def unsubscribe(request: Request) -> JSONResponse:
         return _off() if push is None else await _unsubscribe(push, request)
+
+    # A POST, so the endpoint, which is itself a send capability, stays out of URLs and logs.
+    @router.post("/device")
+    async def device(request: Request) -> JSONResponse:
+        return _off() if push is None else await _device(push, request)
 
 
 def _preference_routes(router: APIRouter, web: WebState, push: PushState | None) -> None:

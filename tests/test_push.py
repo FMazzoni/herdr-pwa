@@ -217,6 +217,31 @@ def test_remove_forgets_one_device_and_is_idempotent(store: SubscriptionStore) -
     assert [one.endpoint for one in store.list_all()] == ["https://fcm.googleapis.com/fcm/send/two"]
 
 
+TWO = "https://fcm.googleapis.com/fcm/send/two"
+
+
+def test_a_resubscribe_swaps_out_the_endpoint_it_replaces(store: SubscriptionStore) -> None:
+    _ = store.add(subscribed())
+    _ = store.add(subscribed(TWO))
+    _ = store.add(subscribed("https://fcm.googleapis.com/fcm/send/new"), replaces=ENDPOINT)
+    assert [one.endpoint for one in store.list_all()] == [
+        TWO,
+        "https://fcm.googleapis.com/fcm/send/new",
+    ]
+    assert store.holds(TWO)
+    assert not store.holds(ENDPOINT)
+
+
+def test_replacing_an_endpoint_the_store_lacks_or_itself_removes_nothing(
+    store: SubscriptionStore,
+) -> None:
+    first = store.add(subscribed())
+    _ = store.add(subscribed(TWO), replaces="https://fcm.googleapis.com/fcm/send/never")
+    again = store.add(subscribed(auth=bytes(16)), replaces=ENDPOINT)
+    assert [one.endpoint for one in store.list_all()] == [TWO, ENDPOINT]
+    assert again.added_at == first.added_at
+
+
 @pytest.mark.parametrize(
     "raw",
     [
@@ -660,6 +685,9 @@ def test_an_eleventh_device_is_refused_but_a_known_one_still_updates(
         _ = store.add(subscribed("https://fcm.googleapis.com/fcm/send/eleventh"))
     _ = store.add(subscribed(endpoints[0], auth=bytes(16)))
     assert [one.endpoint for one in store.list_all()] == [*endpoints[1:], endpoints[0]]
+    # A swap frees its own place first, so a full store can still take the replacement.
+    _ = store.add(subscribed("https://fcm.googleapis.com/fcm/send/eleventh"), replaces=endpoints[1])
+    assert len(store.list_all()) == PUSH_LIMITS.max_devices
 
 
 def unchecked(endpoint: str) -> Subscription:

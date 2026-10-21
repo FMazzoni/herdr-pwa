@@ -19,6 +19,8 @@ WRITES = (
     ("/push/prefs", {"done": True}),
     ("/push/snooze", {"seconds": 60}),
 )
+# A question about one endpoint, posted so the endpoint stays out of the URL; it writes nothing.
+POSTS = (*WRITES, ("/push/device", {"endpoint": ENDPOINT}))
 READS = ("/push", "/push/key", "/push/status", "/push/prefs")
 
 
@@ -53,6 +55,42 @@ def test_unsubscribe_forgets_only_that_device(tmp_path: Path) -> None:
     assert gone.json() == {"removed": False, "devices": 1}
 
 
+def test_a_resubscribe_replaces_the_endpoint_it_names_and_only_if_held(tmp_path: Path) -> None:
+    rig = build_rig(tmp_path)
+    other = "https://fcm.googleapis.com/fcm/send/other"
+    fresh = "https://fcm.googleapis.com/fcm/send/fresh"
+    for body in (raw_subscription(), raw_subscription(other)):
+        _ = rig.http.post("/push/subscribe", headers=SAME_ORIGIN, json=body)
+    swap = {**raw_subscription(fresh), "replaces": ENDPOINT}
+    answer = rig.http.post("/push/subscribe", headers=SAME_ORIGIN, json=swap)
+    assert answer.json() == {"endpoint": fresh, "devices": 2, "armed": False}
+    stray = {**raw_subscription(fresh), "replaces": "https://fcm.googleapis.com/fcm/send/never"}
+    assert rig.http.post("/push/subscribe", headers=SAME_ORIGIN, json=stray).json()["devices"] == 2
+    stored = SubscriptionStore(rig.settings.state_dir).list_all()
+    assert [one.endpoint for one in stored] == [other, fresh]
+
+
+def test_a_refused_subscribe_replaces_nothing(tmp_path: Path) -> None:
+    rig = build_rig(tmp_path)
+    _ = rig.http.post("/push/subscribe", headers=SAME_ORIGIN, json=raw_subscription())
+    bad = {"endpoint": "http://plain.example/x", "replaces": ENDPOINT}
+    assert rig.http.post("/push/subscribe", headers=SAME_ORIGIN, json=bad).status_code == 400
+    stored = SubscriptionStore(rig.settings.state_dir).list_all()
+    assert [one.endpoint for one in stored] == [ENDPOINT]
+
+
+def test_device_answers_yes_or_no_for_the_one_endpoint_asked(tmp_path: Path) -> None:
+    rig = build_rig(tmp_path)
+    other = "https://fcm.googleapis.com/fcm/send/other"
+    _ = rig.http.post("/push/subscribe", headers=SAME_ORIGIN, json=raw_subscription(other))
+    unknown = rig.http.post("/push/device", headers=SAME_ORIGIN, json={"endpoint": ENDPOINT})
+    assert unknown.json() == {"known": False, "devices": 1, "armed": False}
+    assert other not in unknown.text
+    _ = rig.http.post("/push/subscribe", headers=SAME_ORIGIN, json=raw_subscription())
+    known = rig.http.post("/push/device", headers=SAME_ORIGIN, json={"endpoint": ENDPOINT})
+    assert known.json() == {"known": True, "devices": 2, "armed": False}
+
+
 @pytest.mark.parametrize(
     ("route", "body"),
     [
@@ -61,6 +99,8 @@ def test_unsubscribe_forgets_only_that_device(tmp_path: Path) -> None:
         ("/push/subscribe", json.dumps({"endpoint": "http://plain.example/x"}).encode()),
         ("/push/subscribe", b"{" + b" " * 9000 + b"}"),
         ("/push/unsubscribe", b"{}"),
+        ("/push/device", b"{}"),
+        ("/push/device", json.dumps({"endpoint": 7}).encode()),
         ("/push/prefs", b"null"),
         ("/push/snooze", json.dumps({"seconds": "soon"}).encode()),
     ],
@@ -158,7 +198,7 @@ def test_with_push_off_every_route_says_so_and_no_key_is_minted(tmp_path: Path) 
         answer = rig.http.get(route)
         assert answer.status_code == 503, route
         assert answer.json()["enabled"] is False
-    for route, body in WRITES:
+    for route, body in POSTS:
         assert rig.http.post(route, headers=SAME_ORIGIN, json=body).status_code == 503
     assert "switched off" in rig.http.get("/push").text
     assert not (rig.settings.state_dir / "vapid.json").exists()
@@ -170,7 +210,7 @@ def test_every_read_refuses_a_request_without_identity(tmp_path: Path, route: st
     assert rig.http.get(route).status_code == 401
 
 
-@pytest.mark.parametrize(("route", "body"), WRITES)
+@pytest.mark.parametrize(("route", "body"), POSTS)
 def test_every_write_refuses_a_request_without_identity(
     tmp_path: Path, route: str, body: object
 ) -> None:
@@ -188,7 +228,7 @@ def test_a_login_other_than_the_pinned_one_is_refused(tmp_path: Path, route: str
     assert pinned.http.get(route).status_code == 200
 
 
-@pytest.mark.parametrize(("route", "body"), WRITES)
+@pytest.mark.parametrize(("route", "body"), POSTS)
 @pytest.mark.parametrize("origin", ["https://evil.example", "null", None])
 def test_every_write_refuses_another_or_no_origin(
     tmp_path: Path, route: str, body: object, origin: str | None

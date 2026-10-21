@@ -14,7 +14,7 @@
     <p class="sheet__state" id="push-state" role="status">Checking this device&hellip;</p>
     <button type="button" class="sheet__button" id="push-on" hidden>Turn on alerts here</button>
     <button type="button" class="sheet__button" id="push-off" hidden>Turn off alerts here</button>
-    <p class="sheet__note">{{ devices }} device{{ "" if devices == 1 else "s" }} subscribed on this box. On iPhone, alerts work only from the Home Screen app (iOS 16.4 or later).</p>
+    <p class="sheet__note"><span id="push-devices">{{ devices }} device{{ "" if devices == 1 else "s" }} subscribed on this box.</span> On iPhone, alerts work only from the Home Screen app (iOS 16.4 or later).</p>
   </section>
   <section class="sheet__group">
     <h2 class="sheet__heading">What may interrupt</h2>

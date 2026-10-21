@@ -38,6 +38,11 @@
 <div class="updatebar" id="hp-update" hidden>
   <button type="button" class="updatebar__button" id="hp-update-button">New build &mdash; tap to update</button>
 </div>
+{# Shown only by app.js, on a Home Screen app whose alerts are off without its owner choosing it. #}
+<div class="alertsbar" id="hp-alerts-off" hidden>
+  <p class="alertsbar__what" id="hp-alerts-off-what" role="status">Alerts are off on this phone.</p>
+  <button type="button" class="alertsbar__button" id="hp-alerts-on">Turn alerts back on</button>
+</div>
 {# The one place VoiceOver hears news: a write's outcome and a new message. A poll redraws the
    regions around it, and a live role inside them would be read out again on every redraw. #}
 <p class="sr-only" id="hp-live" aria-live="polite"></p>
