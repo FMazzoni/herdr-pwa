@@ -10,12 +10,12 @@
      hx-target="this"
      hx-swap="outerHTML"
      data-hp-topic="feed"
-     {#- The stream says when the herd changed; a runner that is not answering is retried here. #}
+     {#- The stream says when the herd changed; herdr not answering is retried here. #}
      hx-trigger="{% if f.condition.value != 'live' %}every {{ herd.cadence }}s, {% endif %}hp:stale, hp:poke from:body">
   {% if f.condition.value == "offline" %}
-  {% call ui.banner("offline", what="runner offline") %}<span class="banner__why">no contact for over a minute &middot; last seen {{ f.age_label }}</span>{% endcall %}
+  {% call ui.banner("offline", what="can’t reach herdr") %}<span class="banner__why">no contact for over a minute &middot; last seen {{ f.age_label }}</span>{% endcall %}
   {% elif f.condition.value == "degraded" %}
-  {% call ui.banner("degraded", what="runner is not answering") %}<span class="banner__why">retrying every {{ herd.cadence }}s{% if f.age_label %} &middot; last read {{ f.age_label }}{% endif %}</span>{% endcall %}
+  {% call ui.banner("degraded", what="herdr is not answering") %}<span class="banner__why">retrying every {{ herd.cadence }}s{% if f.age_label %} &middot; last read {{ f.age_label }}{% endif %}</span>{% endcall %}
   {% elif f.condition.value == "stale" %}
   {{ ui.banner("stale", what="stale", why="snapshot " ~ f.age_label) }}
   {% endif %}

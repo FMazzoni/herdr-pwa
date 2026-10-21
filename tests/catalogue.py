@@ -1262,7 +1262,7 @@ FEED: Final = (
         "/",
         "main > .failure .banner--failure",
         _unreachable,
-        title="Herd unreachable: the app is up and the runner is not",
+        title="Herd unreachable: the app is up and herdr is not",
         fails=True,
     ),
     State(

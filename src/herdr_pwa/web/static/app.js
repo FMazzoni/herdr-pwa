@@ -112,9 +112,9 @@
   var NO_PUSH = "this browser has no Web Push here (on iPhone, open the Home Screen app)";
   var DEVICE_TEXT = {
     on: "Alerts are on for this device.",
-    waiting: "This device is subscribed, but the box is not sending yet.",
+    waiting: "This device is subscribed, but the server is not sending alerts yet.",
     off: "Alerts are off on this device.",
-    unknown: "Alerts are off on this device: the box no longer has it.",
+    unknown: "Alerts are off on this device: the server no longer has it.",
     denied: "Alerts are blocked for this app; allow its notifications in Settings.",
   };
   var panel = document.querySelector("[data-hp-push]");
@@ -188,7 +188,7 @@
 
   function showDevices(count) {
     if (typeof count === "number") {
-      setText("push-devices", count + (count === 1 ? " device" : " devices") + " subscribed on this box.");
+      setText("push-devices", count + (count === 1 ? " device" : " devices") + " subscribed on this server.");
     }
   }
 

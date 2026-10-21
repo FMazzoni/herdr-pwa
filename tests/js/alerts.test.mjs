@@ -152,7 +152,7 @@ test("opening the alerts page asks about this endpoint only and subscribes nothi
   await settle();
   assert.deepEqual(page.server.sent, [["/push/device", { endpoint: OLD }]]);
   assert.equal(page.ids["push-state"].textContent, "Alerts are on for this device.");
-  assert.equal(page.ids["push-devices"].textContent, "2 devices subscribed on this box.");
+  assert.equal(page.ids["push-devices"].textContent, "2 devices subscribed on this server.");
   assert.equal(page.ids["push-off"].hidden, false);
   assert.equal(page.storage.getItem("hp-push-endpoint"), OLD);
 });
@@ -170,7 +170,7 @@ test("turning alerts on sends one subscribe, swapping out the endpoint registere
   assert.deepEqual([...page.server.store], ["https://web.push.apple.com/new-1"]);
   assert.equal(storage.getItem("hp-push-endpoint"), "https://web.push.apple.com/new-1");
   assert.equal(storage.getItem("hp-alerts-declined"), "0");
-  assert.equal(page.ids["push-devices"].textContent, "1 device subscribed on this box.");
+  assert.equal(page.ids["push-devices"].textContent, "1 device subscribed on this server.");
   assert.equal(page.ids["push-state"].textContent, "Alerts are on for this device.");
 });
 

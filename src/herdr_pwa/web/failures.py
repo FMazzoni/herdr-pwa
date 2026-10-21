@@ -85,8 +85,8 @@ FAILURES: Final[tuple[tuple[type[Exception], Failure], ...]] = (
         ProtocolMismatchError,
         Failure(
             409,
-            "runner version drift",
-            "The runner is speaking a version this build cannot safely drive.",
+            "herdr version drift",
+            "herdr is speaking a version this build cannot safely drive.",
             retry=True,
         ),
     ),
@@ -96,25 +96,25 @@ FAILURES: Final[tuple[tuple[type[Exception], Failure], ...]] = (
     ),
     (
         EngineTimeoutError,
-        Failure(503, "runner too slow", "The runner did not answer in time.", retry=True),
+        Failure(503, "herdr too slow", "herdr did not answer in time.", retry=True),
     ),
     (
         EngineUnavailableError,
         Failure(
-            503, "runner unreachable", "This app is up and the runner is not answering.", retry=True
+            503, "can\u2019t reach herdr", "This app is up, but herdr is not answering.", retry=True
         ),
     ),
     (
         InvalidResponseError,
-        Failure(502, "runner answered nonsense", "The runner's reply did not parse.", retry=True),
+        Failure(502, "herdr answered nonsense", "herdr's reply did not parse.", retry=True),
     ),
     (
         EngineMisconfiguredError,
-        Failure(500, "misconfigured", "This box's runner configuration will not load."),
+        Failure(500, "misconfigured", "The settings for reaching herdr will not load."),
     ),
     (
         EngineError,
-        Failure(502, "runner error", "The runner refused the read.", retry=True),
+        Failure(502, "herdr error", "herdr refused the read.", retry=True),
     ),
 )
 

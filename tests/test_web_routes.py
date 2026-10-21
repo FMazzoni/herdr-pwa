@@ -161,7 +161,7 @@ def test_an_unreachable_runner_renders_honestly_and_keeps_polling(tmp_path: Path
     rig = build_rig(tmp_path, {SNAPSHOT: EngineUnavailableError("socket gone")})
     response = rig.http.get("/feed", headers=FRAGMENT)
     assert response.status_code == 503
-    assert "runner unreachable" in response.text
+    assert "can\u2019t reach herdr" in response.text
     assert 'hx-get="/feed"' in response.text
     assert "every 12s" in response.text
     assert "socket gone" not in response.text
@@ -176,7 +176,7 @@ def test_a_failed_refresh_over_a_good_snapshot_is_degraded_not_empty(tmp_path: P
     rig.clock.now += 5
     response = rig.http.get("/feed")
     assert response.status_code == 200
-    assert "runner is not answering" in response.text
+    assert "herdr is not answering" in response.text
     assert WORKING_SESSION in response.text
 
 
@@ -197,12 +197,12 @@ def _failure_name(row: _Row) -> str:
 @pytest.mark.parametrize(
     "row",
     [
-        _Row(EngineUnavailableError("x"), 503, "runner unreachable", polls=True),
-        _Row(EngineTimeoutError("x"), 503, "runner too slow", polls=True),
-        _Row(InvalidResponseError("x"), 502, "runner answered nonsense", polls=True),
-        _Row(ProtocolMismatchError("x"), 409, "runner version drift", polls=True),
+        _Row(EngineUnavailableError("x"), 503, "can\u2019t reach herdr", polls=True),
+        _Row(EngineTimeoutError("x"), 503, "herdr too slow", polls=True),
+        _Row(InvalidResponseError("x"), 502, "herdr answered nonsense", polls=True),
+        _Row(ProtocolMismatchError("x"), 409, "herdr version drift", polls=True),
         _Row(EngineMisconfiguredError("x"), 500, "misconfigured", polls=False),
-        _Row(EngineError("x"), 502, "runner error", polls=True),
+        _Row(EngineError("x"), 502, "herdr error", polls=True),
     ],
     ids=_failure_name,
 )
