@@ -9,16 +9,20 @@ There's no design doc: the code, tests and commit log are the truth.
   once per tree state, at the end, after one `npm ci --ignore-scripts` per worktree.
 - Read the gate to its last line: the first `All checks passed!` is ruff, not the gate.
   To keep the exit code: `just check > out.txt 2>&1; echo "EXIT=$?" >> out.txt`.
-- The gate and browser harnesses are heavy: one at a time (`pgrep -f "just check"` first),
-  under `nice -n 19`. Reproduce a flake by stressing the test, not the machine.
+- The gate and browser harnesses are heavy, and the owner works on the same machine. Run
+  one at a time (`pgrep -f "just check"` first), under `nice -n 19`. Reproduce a flake by
+  stressing the test, not the machine.
 - Fix the code; never widen a limit in `ruff.toml` or `pyproject.toml`.
 - For a change under `web/templates` or `web/static`, run the `phone-look` skill before and
   after, and make the sheet. The owner checks it on a real phone before merge.
-- `tests/fixtures/ledger.json` is the first implementation's decisions, frozen. Never edit
-  a verdict: a deliberate divergence is a strict xfail with its reason in `DIVERGENCES`
-  (`tests/test_ledger.py`).
-- Re-pin an input hash (and `LEDGER_SHA256`) only when a capture was scrubbed or replaced
-  and no verdict changes. Remove a row whose input isn't in the repo.
+- `tests/fixtures/ledger.json` records what the first implementation decided on each
+  captured screen and agent list (its verdict), and `tests/test_ledger.py` checks the code
+  still agrees. Never edit a verdict, or the check proves nothing. A deliberate divergence
+  goes in `DIVERGENCES` with its reason, which makes that case a strict xfail: an expected
+  failure that fails the run if it starts passing. `tests/fixtures/README.md` explains more.
+- Re-pin an input hash (a row's `sha256`, and `LEDGER_SHA256`, the test's hash of the
+  ledger file) only when a capture was scrubbed or replaced and no verdict changes; note it
+  in `meta.rehashed`. Remove a row whose input isn't in the repo.
 
 ## Writing
 
@@ -27,7 +31,8 @@ There's no design doc: the code, tests and commit log are the truth.
 - Commit messages: a subject of 72 characters or fewer, then a body of two sentences,
   five at most (the commit-msg hook checks). When a decision had alternatives, name the
   rejected one on a `Rejected:` line.
-- Write state-dir files through `statedir.py`, which makes them 0600.
+- Write files in the state dir (`HP_STATE_DIR`, by default `~/.config/herdr-pwa-v2`)
+  through `statedir.py`, which makes them private to their owner (mode 0600).
 - No ticket ids, other projects, or anyone's machine, login or tailnet, anywhere in the
   repo or its commit messages. Fixtures follow `tests/fixtures/README.md`.
 - Change `README.md`, `AGENTS.md` or `SECURITY.md` only when asked. Notes, scratch and
@@ -42,7 +47,10 @@ There's no design doc: the code, tests and commit log are the truth.
   started there. herdr's default session belongs to whoever runs it.
 - Serve builds on port 8772 (`HP_PORT`). Leave other servers and any `tailscale serve`
   config as you found them.
+- A harness is an agent program herdr runs, such as Claude Code. One started from inside an
+  agent pane inherits that pane's environment, so its hooks report its session as your
+  pane's. Strip the environment as `scripts/live_session.py`'s `clean_env` does: every
+  `HERDR_*` and `CLAUDE_CODE_*` variable, plus `CLAUDECODE`, `CLAUDE_PID`, `CLAUDE_EFFORT`
+  and `AI_AGENT`.
 - Keep a harness's credentials where it put them, never in a fixture, log or test home.
-- Starting a harness from an agent pane, strip the env as `scripts/live_session.py`'s
-  `clean_env` does, or its hooks overwrite your pane's session.
 - After changing what a running service serves, restart it and run `herdr-pwa doctor`.

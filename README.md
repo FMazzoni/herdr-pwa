@@ -1,7 +1,8 @@
 # herdr-pwa
 
 I run several AI coding agents at once in [herdr](https://herdr.dev), a terminal
-workspace where each agent lives in its own pane. They stall whenever they need me, for
+workspace where each agent lives in its own pane; herdr groups panes into tabs, and tabs
+into workspaces. The agents stall whenever they need me, for
 a permission prompt, a question or a plan to approve, and the work waits until I'm back
 at the desk. herdr-pwa is the phone app I built so I can see which one is waiting, read
 what it's doing, and answer it from wherever I am. It's unofficial, for one person, and
@@ -17,12 +18,14 @@ reachable only over your [Tailscale](https://tailscale.com) network.
 ## What it does
 
 - **Feed.** Every agent in every workspace, sorted by what needs you, with what it's doing,
-  and greyed out under a "can't reach herdr" bar when the phone loses touch.
+  and greyed out under a "can't reach herdr" bar when the phone can't reach the app, or the
+  app can't reach herdr.
 - **Answer.** Permission prompts, menus, checklists and plan approvals are read off the
   screen and drawn as buttons. You can also type a prompt or press any key it offers.
-- **Chat, Pane, Files.** The transcript as a chat (Claude Code, opencode and
-  [Hermes Agent](https://github.com/NousResearch/hermes-agent)), the live terminal, and a
-  read-only browser and diff for the git repos your agents work in.
+- **Chat.** An agent's conversation drawn as a chat, for Claude Code, opencode and
+  [Hermes Agent](https://github.com/NousResearch/hermes-agent).
+- **Pane.** The agent's live terminal, as herdr shows it.
+- **Files.** A read-only file browser and diff view for the git repos your agents work in.
 - **Start and stop.** Open a new agent in a fresh tab, stop one, or close a workspace.
 - **Push.** A notification when an agent needs you, or finishes something you haven't read.
 
@@ -34,75 +37,122 @@ screen and there are keystrokes. Every tap travels this path, and any step can r
 1. **Find the agent by its session (its conversation), not its pane** (the terminal it
    sits in), because herdr reuses pane ids.
 2. **Read the screen again.** If it changed since your phone drew it, the tap is refused.
-3. **Send only keys that screen offers.** A key that would open an editor is never offered.
+3. **Send only keys that screen offers.** A key that would open an editor is never offered,
+   because the phone couldn't drive or leave the program it opens.
 4. **Write the audit record, then send.** If the record can't be written, nothing is sent.
-5. **Read back, never re-send.** "Sent, unverified" waits for an explicit "Send again anyway".
+5. **Read back, never re-send.** After sending, the app reads the screen to confirm the keys
+   landed. If it can't tell, it shows "Sent, unverified", and sends again only if you tap
+   "Send again anyway".
 
 ## Security model
 
-- **Tailscale is the boundary.** The app trusts the `Tailscale-User-Login` header that
-  `tailscale serve` adds: no password, no token. The one exception is `HP_ASSUME_LOGIN`,
-  for local scripts, honoured only on a loopback Host. `herdr-pwa serve` listens only on
-  loopback, so no other machine can reach it to forge the header.
-- **Only on this machine's Tailscale name.** The header counts only when the request is
-  addressed to the machine's MagicDNS name (the `*.ts.net` name Tailscale gives it), so a
-  web page that points its own name at `127.0.0.1` gets nothing.
-- **Pin your login** with `HP_TAILNET_LOGIN`. Without it, anyone your tailnet lets reach
-  the machine can drive every agent, and startup warns you.
-- **`pair` never uses Funnel** (Tailscale's public-internet sharing), refuses a node that
-  has Funnel on, and never resets an existing `tailscale serve` config.
-- **Anyone with a shell on the machine is trusted**, since they reach loopback too.
-- **Agents run what they're told.** What a prompt asks for is left to the agent's own
-  permission prompts.
+Tailscale is the only lock on the door. It joins your own devices into a private network,
+called a tailnet. `tailscale serve`, a command that runs on the same machine as
+herdr-pwa, receives each request from your phone and adds a header naming the Tailscale
+account that sent it. (Strictly, the Tailscale background service does this, and the
+`tailscale serve` command sets it up.) The app trusts that header, so there is no password or token.
 
-The threat model and how to report a hole are in [SECURITY.md](SECURITY.md).
+- **Only the machine can reach the app directly.** `herdr-pwa serve` listens only on the
+  loopback address `127.0.0.1`, which other machines can't reach. So nobody on the network
+  can send the app a forged header; only `tailscale serve` can pass requests to it.
+- **Pin your own account.** Set `HP_TAILNET_LOGIN` to your Tailscale login, and the app
+  refuses every other account. Without it, anyone your tailnet lets reach the machine can
+  control every agent, and the app warns you when it starts.
+- **Web pages on the machine get nothing.** A page in a local browser could point its own
+  web address at `127.0.0.1` and send requests to the app. The trick abuses the Domain
+  Name System (DNS), so it is called DNS rebinding. The app ignores the header unless the request is addressed to the machine's Tailscale
+  name. That is the `*.ts.net` name that Tailscale's MagicDNS gives it, and the page can't
+  send it.
+- **Scripts on the machine can skip the header.** `HP_ASSUME_LOGIN` lets requests that have
+  no header act as the login it names. It works only for requests addressed to `127.0.0.1`
+  or `localhost`. The app refuses to start with it while `tailscale serve` is on.
+- **`pair` stays inside your tailnet.** It never uses Funnel, Tailscale's feature for
+  sharing a machine with the whole internet. It refuses a machine that already has Funnel
+  on. It adds itself beside an existing `tailscale serve` setup, and refuses to replace one.
+- **Anyone with a shell on the machine is trusted**, since they can reach the loopback
+  address too.
+- **Agents do what they're told.** Whether a prompt is safe to run is left to the agent's
+  own permission prompts.
+
+The full threat model, and how to report a security problem, are in
+[SECURITY.md](SECURITY.md).
 
 ## Running it
 
-You need Linux, Python 3.13+ with [uv](https://docs.astral.sh/uv/), herdr on the same
-machine, and Tailscale with MagicDNS and HTTPS certificates on. The app pins herdr's
-protocol and won't type into a version it doesn't know.
+You need Linux, Python 3.13 or later with [uv](https://docs.astral.sh/uv/), and herdr on
+the same machine. You also need Tailscale, with MagicDNS (names for your machines) and
+HTTPS certificates turned on in its admin console. The app knows exactly one version of
+the protocol herdr uses to talk to other programs (version 22 today), and it won't type
+into a herdr that speaks another. A misread screen could send the wrong keys, so it
+refuses instead. `doctor`, below, tells you whether your herdr matches.
 
 ```sh
 uv sync
 export HP_TAILNET_LOGIN=you@example.com
-export HP_PUSH_SUBJECT=mailto:you@your-real-domain  # a real address, or Apple drops pushes
-uv run herdr-pwa serve   # listens on 127.0.0.1:8772
-uv run herdr-pwa pair    # publishes it with tailscale serve, prints a QR
+export HP_PUSH_SUBJECT=mailto:you@your-real-domain
+uv run herdr-pwa serve   # listens on 127.0.0.1:8772 and keeps running
+# then, in another terminal:
+uv run herdr-pwa pair    # publishes it with tailscale serve, prints a QR code
 ```
 
-On the phone, open the URL, add it to the Home Screen, open it from there and turn
-alerts on (on iPhone, push needs the Home Screen app and iOS 16.4+).
+`HP_PUSH_SUBJECT` is the contact address the app gives to push services when it sends a
+notification. Use an address at a real domain: Apple rejects a placeholder, and then your
+iPhone gets no notifications.
 
-`uv run herdr-pwa doctor` exits non-zero if herdr is unreachable or speaks another
-protocol, the service is older than the code, or the node's name is unknown. Settings
-are `HP_*` environment variables (`src/herdr_pwa/settings.py`), and state lives in
-`~/.config/herdr-pwa-v2`.
+On the phone, open the URL from the QR code, add it to the Home Screen, open it from there,
+and tap "alerts" at the top, then "Turn on alerts here". On an iPhone, notifications need iOS 16.4 or later, and they work only
+in the app opened from the Home Screen.
+
+Run `uv run herdr-pwa doctor` to check the setup. It fails if any of these is true:
+
+- herdr isn't answering, or speaks a protocol version the app doesn't know.
+- The running service started from older code than the code on disk, so it needs a restart.
+- The app can't learn the machine's Tailscale name, so it would refuse every request.
+
+Every setting is an environment variable whose name starts with `HP_`; the full list is in
+`src/herdr_pwa/settings.py`. The app keeps its state, such as the audit log and the devices
+that get notifications, in `~/.config/herdr-pwa-v2`.
 
 ## How it fits together
 
 Python (FastAPI, Jinja) on the server, htmx and a little plain JS on the phone, with no
-build step. The layers in `src/herdr_pwa/` only point down, and import-linter holds them:
+build step. The code in `src/herdr_pwa/` is in layers, listed here from the top. Each layer
+imports only the layers below it, and import-linter checks that in the test run:
 
-- `engine/` talks to herdr over its socket, reads screens and transcripts, ranks agents.
-- `decisions.py` decides what every view and push shows, so they all agree.
-- `writes/` is the path above: resolve, check, audit, send, read back.
 - `web/` holds the routes, templates, the event stream and the push notifier.
-- `files/` reads git in-process through libgit2, so no command a repo configures ever runs.
+- `writes/` is the path above: resolve, check, audit, send, read back.
+- `files/` reads git in-process through libgit2, so no command a repo configures, such as
+  a git hook or filter, ever runs.
+- `decisions.py` decides what every view and push shows, so they all agree.
 - `render/` turns Markdown, code and maths into element trees, so agent text never becomes HTML.
+- `engine/` talks to herdr over its socket, reads screens and transcripts, ranks agents.
 
 ## How it's checked
 
-`just check` runs lint, strict types, the tests, and a phone-width layout check in
-headless Firefox; CI runs the same recipe.
-Tests never touch a real herdr: they run on captured screens and transcripts in
-`tests/fixtures/`. Every decision an earlier version of this app made over those screens
-is frozen in `tests/fixtures/ledger.json`, and where this one deliberately disagrees, the
-test is a strict xfail that says why.
+`just check` runs the linter, a strict type checker, the tests, and a layout check at
+phone widths in headless Firefox. CI (the automated checks GitHub runs) uses the same
+recipe on every pull request and every push to `main`.
+
+Tests never touch a real herdr. They run on screens and transcripts captured from real
+agents, kept in `tests/fixtures/`. This app is a rewrite of an earlier version. Before
+rewriting it, I recorded every decision the first version made on those screens, such as "this screen is a permission prompt".
+
+The tests check that the current version makes the same decisions. Where it deliberately
+decides differently, the test is marked as an expected failure, with the reason.
 
 For development you also need [just](https://just.systems), Node and Firefox. Once per
-clone, run `npm ci --ignore-scripts` and install the git hooks the way
-`.pre-commit-config.yaml`'s header says. `just live-session` starts a throwaway herdr.
+clone, run these:
+
+```sh
+npm ci --ignore-scripts
+uvx pre-commit install --hook-type pre-commit --hook-type commit-msg
+ln -s ../../scripts/hooks/pre_push.py .git/hooks/pre-push
+```
+
+The hooks run the formatter and linter on each commit, check the commit message's length,
+and refuse a push that would publish a private name, such as a real login, a home folder path
+or a tailnet name. `just live-session` starts a
+throwaway herdr session, so you can try the app without touching your own agents.
 
 ## How it was built
 
@@ -115,10 +165,12 @@ rewrite had to agree with it or explain why.
 
 ## Contributing
 
-A personal project: issues and pull requests are welcome, handled when I can, no SLA.
+Issues and pull requests are welcome. This is a personal project, so I handle them when I
+can and can't promise how quickly.
 
 ## Licence
 
-MIT, see [LICENSE](LICENSE). Vendored: htmx 2.0.10 (0BSD), in `src/herdr_pwa/web/static/`.
-The screens in `tests/fixtures/foreign/collie/` come from
-[collie](https://github.com/AltanS/collie) and keep its MIT notice beside them.
+herdr-pwa is released under the MIT licence; see [LICENSE](LICENSE). It includes a copy of
+htmx 2.0.10, under its own 0BSD licence, in `src/herdr_pwa/web/static/`. The test screens
+in `tests/fixtures/foreign/collie/` come from [collie](https://github.com/AltanS/collie),
+and its MIT notice sits beside them.
