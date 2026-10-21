@@ -10,7 +10,7 @@ from typing import Final, cast
 
 from herdr_pwa.clock import MonoClock, mono_now
 from herdr_pwa.engine.model import Snapshot
-from herdr_pwa.engine.transport import EngineUnavailable
+from herdr_pwa.engine.transport import EngineUnavailableError
 
 log = logging.getLogger(__name__)
 
@@ -18,7 +18,7 @@ log = logging.getLogger(__name__)
 _SNAPSHOT: Final = "snapshot"
 
 
-class ReadAbandoned(EngineUnavailable):
+class ReadAbandonedError(EngineUnavailableError):
     """The leader of a fetch died without publishing anything."""
 
 
@@ -154,7 +154,7 @@ class SnapshotCache:
         with self._lock:
             if shelf.in_flight is not fetch:
                 return
-            shelf.error = ReadAbandoned("the read was abandoned before it finished")
+            shelf.error = ReadAbandonedError("the read was abandoned before it finished")
             shelf.in_flight = None
             survivor = self._entry_locked(shelf)
             error = shelf.error
@@ -173,7 +173,7 @@ class SnapshotCache:
             return fetch.entry
         if fetch.error is not None:
             raise fetch.error
-        raise EngineUnavailable("the herd could not be read")
+        raise EngineUnavailableError("the herd could not be read")
 
     def _entry_locked(self, shelf: _Shelf) -> CachedValue[object] | None:
         """The stored value with its real age, or ``None`` if nothing is stored."""

@@ -15,7 +15,7 @@ from fastapi.routing import APIRoute
 
 from herdr_pwa.files import fuzzy
 from herdr_pwa.files.git import Git
-from herdr_pwa.files.reader import Listing, LocalReader, OutsideRoot, Stat
+from herdr_pwa.files.reader import Listing, LocalReader, OutsideRootError, Stat
 from herdr_pwa.files.roots import Fence, is_secret, root_id
 from herdr_pwa.files.view import (
     BUSY_NOTE,
@@ -173,9 +173,9 @@ def test_the_reader_checks_what_it_opened_not_only_what_it_was_asked(tmp_path: P
     root.mkdir()
     (tmp_path / "secret.txt").write_text("no")
     reader = LocalReader(root.resolve())
-    with pytest.raises(OutsideRoot):
+    with pytest.raises(OutsideRootError):
         reader.read_range(tmp_path / "secret.txt", 0, 10)
-    with pytest.raises(OutsideRoot):
+    with pytest.raises(OutsideRootError):
         reader.list_dir(tmp_path)
 
 

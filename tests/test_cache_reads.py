@@ -9,9 +9,9 @@ from pydantic import JsonValue, TypeAdapter
 from herdr_pwa.clock import MonoTime
 from herdr_pwa.engine import (
     CachedSnapshot,
-    EngineTimeout,
-    EngineUnavailable,
-    ReadAbandoned,
+    EngineTimeoutError,
+    EngineUnavailableError,
+    ReadAbandonedError,
     Snapshot,
     SnapshotCache,
 )
@@ -97,7 +97,7 @@ def test_a_leader_that_runs_to_the_full_command_budget_takes_its_followers_with_
     def timing_out() -> Snapshot:
         assert gate.until(readers - 1), "the followers never blocked on the leader's fetch"
         timer.advance(budget)
-        raise EngineTimeout("the runner did not answer in time")
+        raise EngineTimeoutError("the runner did not answer in time")
 
     waits: list[float] = []
     raised: list[str] = []
@@ -118,7 +118,7 @@ def test_a_leader_that_runs_to_the_full_command_budget_takes_its_followers_with_
     for thread in threads:
         thread.join(timeout=30)
 
-    assert raised == ["EngineTimeout"] * 8, raised
+    assert raised == ["EngineTimeoutError"] * 8, raised
     assert max(waits) >= budget, "somebody did not wait for the read it rode on"
     assert max(waits) < budget * 4, "the wait is bounded by the leader's own budget"
 
@@ -164,10 +164,10 @@ def test_a_killed_leader_releases_its_followers_with_a_failure_attached(  # noqa
 
     assert not follower.is_alive(), "stranded on a fetch that will never publish"
     assert entries["entry"].age == pytest.approx(30.0), "the age is never invented"
-    assert isinstance(entries["entry"].error, ReadAbandoned), (
+    assert isinstance(entries["entry"].error, ReadAbandonedError), (
         "a value 15x past its TTL, handed over with error=None"
     )
-    assert isinstance(entries["entry"].error, EngineUnavailable), (
+    assert isinstance(entries["entry"].error, EngineUnavailableError), (
         "it must map to a 503 like every other unreadable herd, not to a 500"
     )
 
@@ -188,10 +188,10 @@ def test_a_follower_takes_the_error_of_the_fetch_it_actually_waited_on(  # noqa:
     def mine() -> Snapshot:
         leading.set()
         assert hold.wait(timeout=10), "the test never released the leader"
-        raise EngineTimeout("my leader")
+        raise EngineTimeoutError("my leader")
 
     def theirs() -> Snapshot:
-        raise EngineUnavailable("somebody else's failure")
+        raise EngineUnavailableError("somebody else's failure")
 
     entries: dict[str, CachedSnapshot] = {}
 
@@ -213,7 +213,7 @@ def test_a_follower_takes_the_error_of_the_fetch_it_actually_waited_on(  # noqa:
     follower.join(timeout=5)
 
     entry = entries["entry"]
-    assert isinstance(entry.error, EngineTimeout), (
+    assert isinstance(entry.error, EngineTimeoutError), (
         "the follower was handed the second leader's failure"
     )
     assert "somebody else" not in str(entry.error)

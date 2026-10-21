@@ -22,7 +22,7 @@ from herdr_pwa.managed import PROC
 from herdr_pwa.notify_state import SeenLedger
 from herdr_pwa.process_start import ProcessStarts
 from herdr_pwa.settings import Settings
-from herdr_pwa.web.failures import PageHidden
+from herdr_pwa.web.failures import PageHiddenError
 from herdr_pwa.web.render import Pages
 from herdr_pwa.web.stalls import Stalls
 from herdr_pwa.writes.lifecycle import Which
@@ -88,4 +88,4 @@ def viewer_guard(web: WebState) -> Callable[[Request], auth.Identity]:
 def hidden_tick(request: Request) -> None:
     """Stop a hidden page's poll on the server, since htmx trigger filters need eval."""
     if request.headers.get(HIDDEN_HEADER) == "1":
-        raise PageHidden
+        raise PageHiddenError

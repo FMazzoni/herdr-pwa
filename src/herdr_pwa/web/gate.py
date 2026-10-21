@@ -18,7 +18,7 @@ MAX_BODY_BYTES: Final = 64 * 1024
 TOO_LARGE: Final = f"body is over {MAX_BODY_BYTES} bytes"
 
 
-class BodyTooLarge(HTTPException):
+class BodyTooLargeError(HTTPException):
     """A streamed body that outgrew the cap; FastAPI re-raises an HTTPException untouched."""
 
     def __init__(self) -> None:
@@ -41,7 +41,7 @@ def _bounded(receive: Receive) -> Receive:
             seen += len(cast("bytes", message.get("body", b"")))
             # Counted as it arrives, so a missing or lying Content-Length buys nothing.
             if seen > MAX_BODY_BYTES:
-                raise BodyTooLarge
+                raise BodyTooLargeError
         return message
 
     return bounded

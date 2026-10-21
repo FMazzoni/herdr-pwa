@@ -10,7 +10,7 @@ from typing import Final
 
 from pydantic import JsonValue, TypeAdapter
 
-from herdr_pwa.engine import EngineUnavailable
+from herdr_pwa.engine import EngineUnavailableError
 from herdr_pwa.panetext import as_text_read
 from tests._jsonpath import obj
 from tests.filefakes import make_repo, stand_in
@@ -927,11 +927,11 @@ def per_pane(frame: Callable[[], dict[str, JsonValue]], screens: dict[str, str])
 
 
 def _unreachable() -> dict[str, Reply]:
-    return {SNAPSHOT: EngineUnavailable("catalogue: no runner")}
+    return {SNAPSHOT: EngineUnavailableError("catalogue: no runner")}
 
 
 def _unreadable(frame: Callable[[], dict[str, JsonValue]]) -> Replies:
-    return lambda: {SNAPSHOT: frame(), READ: EngineUnavailable("catalogue: the read failed")}
+    return lambda: {SNAPSHOT: frame(), READ: EngineUnavailableError("catalogue: the read failed")}
 
 
 def _outage(after: float, *, failing: bool) -> Prime:
@@ -940,7 +940,7 @@ def _outage(after: float, *, failing: bool) -> Prime:
     def prime(rig: Rig) -> None:
         _ = rig.http.get("/feed")
         if failing:
-            rig.wire.replies[SNAPSHOT] = EngineUnavailable("catalogue: the runner went away")
+            rig.wire.replies[SNAPSHOT] = EngineUnavailableError("catalogue: the runner went away")
         rig.clock.now += after
 
     return prime

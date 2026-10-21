@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from herdr_pwa.engine import EngineUnavailable
+from herdr_pwa.engine import EngineUnavailableError
 from tests.catalogue import BLOCKED, STATES, State, build, herd
 from tests.webfakes import (
     READ,
@@ -185,7 +185,7 @@ LIVE = re.compile(r'role="(?:status|alert)"|aria-live')
 def test_a_polled_region_carries_no_live_role(tmp_path: Path, path: str) -> None:
     """A poll redraws these whole; a live role in them is read out again on every redraw."""
     # Blocked, and its screen unreadable: the answer region's loudest drawing.
-    replies = {SNAPSHOT: herd(**BLOCKED), READ: EngineUnavailable("the read failed")}
+    replies = {SNAPSHOT: herd(**BLOCKED), READ: EngineUnavailableError("the read failed")}
     write_transcript(tmp_path / "transcripts", WORKING_SESSION, [assistant_says("ran it")])
     rig = build_rig(tmp_path, replies)
     body = rig.http.get(path.format(s=WORKING_SESSION), headers=FRAGMENT).text

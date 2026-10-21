@@ -26,7 +26,7 @@ from herdr_pwa.engine import (
 )
 from herdr_pwa.web.asking import keys_for, wording
 from herdr_pwa.web.deps import WebState, viewer_guard
-from herdr_pwa.web.failures import AgentGone, Redraw, refused
+from herdr_pwa.web.failures import AgentGoneError, Redraw, refused
 from herdr_pwa.web.herd import agent_status, asks, find_agent, overlay_of, prompt_of
 from herdr_pwa.web.writing import (
     Posted,
@@ -231,7 +231,7 @@ def said(sent: KeySent) -> Said:
 def _lookup(web: WebState, session: SessionId) -> Agent | None:
     try:
         return find_agent(web, session)
-    except AgentGone:
+    except AgentGoneError:
         return None
 
 
@@ -239,7 +239,7 @@ def _after(web: WebState, session: SessionId, prior: Agent | None) -> Agent:
     # A write that ended its agent (Ctrl+C, /exit) still says what it did; only nothing to draw is 404.
     agent = _lookup(web, session) or prior
     if agent is None:
-        raise AgentGone(session)
+        raise AgentGoneError(session)
     return agent
 
 

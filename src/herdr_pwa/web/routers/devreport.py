@@ -15,7 +15,7 @@ MAX_BODY_BYTES: Final = 64 * 1024
 JSON_TYPE: Final = "application/json"
 
 
-class _Refusal(Exception):  # noqa: N818 - named for the answer it becomes
+class _RefusalError(Exception):
     def __init__(self, status: int, detail: str) -> None:
         super().__init__(detail)
         self.status: int = status
@@ -24,20 +24,20 @@ class _Refusal(Exception):  # noqa: N818 - named for the answer it becomes
 async def _bounded_body(request: Request) -> bytes:
     declared = request.headers.get("content-length", "")
     if declared.isdigit() and int(declared) > MAX_BODY_BYTES:
-        raise _Refusal(413, f"body is over {MAX_BODY_BYTES} bytes")
+        raise _RefusalError(413, f"body is over {MAX_BODY_BYTES} bytes")
     raw = bytearray()
     async for chunk in request.stream():
         raw.extend(chunk)
         # Checked while reading, so a lying Content-Length cannot make the server buffer it all.
         if len(raw) > MAX_BODY_BYTES:
-            raise _Refusal(413, f"body is over {MAX_BODY_BYTES} bytes")
+            raise _RefusalError(413, f"body is over {MAX_BODY_BYTES} bytes")
     return bytes(raw)
 
 
 async def _batch(request: Request) -> Batch:
     kind = request.headers.get("content-type", "").split(";")[0].strip().lower()
     if kind != JSON_TYPE:
-        raise _Refusal(415, f"expected {JSON_TYPE}")
+        raise _RefusalError(415, f"expected {JSON_TYPE}")
     raw = await _bounded_body(request)
     return Batch.model_validate_json(raw.decode("utf-8", errors="replace"))
 
@@ -51,7 +51,7 @@ def build(web: WebState) -> APIRouter:
     async def device_report(request: Request) -> Response:
         try:
             store.append(await _batch(request))
-        except _Refusal as exc:
+        except _RefusalError as exc:
             return JSONResponse({"error": str(exc)}, status_code=exc.status)
         except ValidationError as exc:
             return JSONResponse({"error": f"not a report: {summary(exc)}"}, status_code=400)

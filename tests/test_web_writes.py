@@ -13,7 +13,7 @@ from herdr_pwa.audit import Record, records
 from herdr_pwa.engine import (
     BlockedPrompt,
     EngineSettings,
-    EngineUnavailable,
+    EngineUnavailableError,
     HerdrClient,
     screen_digest,
 )
@@ -180,7 +180,7 @@ def test_a_shell_command_prompt_is_sent_on_the_first_tap(tmp_path: Path) -> None
 
 
 def _lost_after_send(_herd: FakeHerd, _params: dict[str, JsonValue]) -> None:
-    lost = EngineUnavailable("the runner closed the connection while answering")
+    lost = EngineUnavailableError("the runner closed the connection while answering")
     lost.after_send = True
     raise lost
 

@@ -11,9 +11,9 @@ from fastapi.responses import RedirectResponse, Response
 
 from herdr_pwa import auth
 from herdr_pwa.audit import Origin, Recorder
-from herdr_pwa.engine import InvalidRequest, PaneId, SessionId, as_pane_id, as_session_id
+from herdr_pwa.engine import InvalidRequestError, PaneId, SessionId, as_pane_id, as_session_id
 from herdr_pwa.web.deps import WebState
-from herdr_pwa.web.failures import AgentGone
+from herdr_pwa.web.failures import AgentGoneError
 from herdr_pwa.writes.lifecycle import declared_models
 from herdr_pwa.writes.prompt import PromptSent
 from herdr_pwa.writes.refusal import FAILURES, Refusal, Refused
@@ -42,7 +42,7 @@ def identity_of(session: str) -> SessionId:
     try:
         return as_session_id(session)
     except ValueError as exc:
-        raise InvalidRequest(str(exc)) from exc
+        raise InvalidRequestError(str(exc)) from exc
 
 
 def address_of(pane: str) -> PaneId:
@@ -50,7 +50,7 @@ def address_of(pane: str) -> PaneId:
     try:
         return as_pane_id(pane)
     except ValueError as exc:
-        raise InvalidRequest(str(exc)) from exc
+        raise InvalidRequestError(str(exc)) from exc
 
 
 def expected(values: dict[str, str]) -> PaneId | None:
@@ -117,7 +117,7 @@ def agent_url(session: str) -> str:
 def raise_if_gone(result: Refused) -> None:
     """A write refused because its agent is gone is answered by the read table's 404."""
     if result.refusal is Refusal.GONE:
-        raise AgentGone(result.detail)
+        raise AgentGoneError(result.detail)
 
 
 def opened(request: Request, where: str) -> Response:

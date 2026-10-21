@@ -11,7 +11,7 @@ from pydantic import JsonValue, TypeAdapter
 
 from herdr_pwa.clock import WallTime
 from herdr_pwa.engine import (
-    EngineUnavailable,
+    EngineUnavailableError,
     HistoryState,
     ModelRef,
     ModelSpend,
@@ -652,7 +652,7 @@ def test_a_pane_without_a_statusline_leaves_the_strip_as_it_was(tmp_path: Path) 
 def test_an_unreadable_pane_still_serves_the_strip_from_the_log(tmp_path: Path) -> None:
     _transcript(tmp_path)
     rig = build_rig(
-        tmp_path, {SNAPSHOT: snapshot_frame(), READ: EngineUnavailable("the runner is away")}
+        tmp_path, {SNAPSHOT: snapshot_frame(), READ: EngineUnavailableError("the runner is away")}
     )
     answer = rig.http.get(f"/agent/{WORKING_SESSION}/stats")
     assert answer.status_code == 200

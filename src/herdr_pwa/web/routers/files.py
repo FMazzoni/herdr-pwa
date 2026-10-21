@@ -10,15 +10,15 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from pydantic import BaseModel, Field
 
-from herdr_pwa.engine import Agent, InvalidRequest, as_session_id
+from herdr_pwa.engine import Agent, InvalidRequestError, as_session_id
 from herdr_pwa.files import diffs, fuzzy
 from herdr_pwa.files.git import Git, Status
-from herdr_pwa.files.reader import LocalReader, NotReadable, OutsideRoot, inside
+from herdr_pwa.files.reader import LocalReader, NotReadableError, OutsideRootError, inside
 from herdr_pwa.files.roots import (
     ROOT_ID,
     Fence,
     Root,
-    UnknownRoot,
+    UnknownRootError,
     discover,
     is_git_dir,
     is_secret,
@@ -36,7 +36,7 @@ from herdr_pwa.files.view import (
     image_type,
 )
 from herdr_pwa.web.deps import WebState, hidden_tick, viewer_guard
-from herdr_pwa.web.failures import AgentGone
+from herdr_pwa.web.failures import AgentGoneError
 from herdr_pwa.web.herd import agent_status, find_agent
 from herdr_pwa.web.routers.agent import read_stats
 
@@ -138,12 +138,12 @@ class Explorer:
         return discover(((a.cwd, a.session) for a in agents if a.cwd), self.git, self.fence)
 
     def root(self, root_id: str) -> Root:
-        """The root with this id, or UnknownRoot."""
+        """The root with this id, or UnknownRootError."""
         if ROOT_ID.fullmatch(root_id):
             for root in self.roots():
                 if root.id == root_id:
                     return root
-        raise UnknownRoot(root_id)
+        raise UnknownRootError(root_id)
 
     def page(self, name: str, root: Root, nav: Nav, view: str, **context: object) -> HTMLResponse:
         """One explorer page, with the bar, the root's status and its links."""
@@ -179,7 +179,7 @@ class Explorer:
             return None
         try:
             return find_agent(self.web, session)
-        except (AgentGone, InvalidRequest):
+        except (AgentGoneError, InvalidRequestError):
             return None
 
 
@@ -230,14 +230,14 @@ def _diff(explorer: Explorer, spot: _Spot, status: Status) -> diffs.FileDiff:
 def _agent_root(explorer: Explorer, cwd: Path) -> Root:
     holding = [r for r in explorer.roots() if inside(cwd, r.path)]
     if not holding:
-        raise UnknownRoot(str(cwd))
+        raise UnknownRootError(str(cwd))
     # A worktree nested inside its main checkout is the nearer, and the right, root.
     return max(holding, key=lambda r: len(str(r.path)))
 
 
 def _agent_target(explorer: Explorer, root: Root, cwd: Path, path: str) -> Path:
     if "\0" in path:
-        raise OutsideRoot("a NUL in a path")
+        raise OutsideRootError("a NUL in a path")
     # Agents write paths from where they stand; fall back to the top of the repository.
     for base in (cwd, root.path):
         real = (base / path).resolve()
@@ -315,18 +315,18 @@ def _diff_page(explorer: Explorer, root_id: str, query: DiffQuery) -> HTMLRespon
 def _image(root: Root, real: Path, path: str) -> Response:
     reader = LocalReader(root.path)
     if reader.stat(real).size > IMAGE_BYTES:
-        raise NotReadable(f"{path} is over the image cap")
+        raise NotReadableError(f"{path} is over the image cap")
     body = reader.read_range(real, 0, IMAGE_BYTES)
     media = image_type(real.name, body[:SNIFF_BYTES])
     if not media:
-        raise NotReadable(f"{path} is not an image this viewer shows")
+        raise NotReadableError(f"{path} is not an image this viewer shows")
     return Response(body, media_type=media, headers=NO_STORE)
 
 
 def _version(root: Root, real: Path) -> str:
     try:
         return LocalReader(root.path).stat(real).version
-    except NotReadable:
+    except NotReadableError:
         return ""
 
 
@@ -336,7 +336,7 @@ def _register_bytes(router: APIRouter, explorer: Explorer) -> None:
         root = explorer.root(root_id)
         real = resolve(root, query.path, explorer.fence)
         if is_secret(real.name) and not query.reveal:
-            raise OutsideRoot(query.path)
+            raise OutsideRootError(query.path)
         return _image(root, real, query.path)
 
     @router.get("/files/{root_id}/watch", dependencies=[Depends(hidden_tick)])
@@ -359,7 +359,7 @@ def _register_agent(router: APIRouter, explorer: Explorer) -> None:
         agent = find_agent(explorer.web, session)
         try:
             return _redirect(_agent_url(explorer, agent, query))
-        except UnknownRoot:
+        except UnknownRootError:
             # The tab stays, so the bar keeps its shape; the page says why it is empty.
             context = {
                 "agent": agent,

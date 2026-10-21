@@ -9,7 +9,7 @@ from pydantic import JsonValue, TypeAdapter
 from herdr_pwa.clock import MonoTime
 from herdr_pwa.engine import (
     CachedSnapshot,
-    EngineUnavailable,
+    EngineUnavailableError,
     Snapshot,
     SnapshotCache,
 )
@@ -121,7 +121,7 @@ def test_followers_take_the_leaders_failure_rather_than_retrying(
     gate.install(monkeypatch)
     cache = SnapshotCache(ttl=60.0)
     hold = threading.Event()
-    load = Loader(hold=hold, error=EngineUnavailable("runner is down"))
+    load = Loader(hold=hold, error=EngineUnavailableError("runner is down"))
     ready = threading.Barrier(CALLERS)
     raised: list[BaseException] = []
 
@@ -142,7 +142,7 @@ def test_followers_take_the_leaders_failure_rather_than_retrying(
 
     assert load.calls == 1, f"an outage cost {load.calls} engine calls"
     assert len(raised) == CALLERS, "every caller must hear about the failure"
-    assert all(isinstance(exc, EngineUnavailable) for exc in raised)
+    assert all(isinstance(exc, EngineUnavailableError) for exc in raised)
 
 
 # The age — the deliverable, not a side effect
@@ -183,11 +183,11 @@ def test_a_failed_refresh_keeps_serving_the_old_value_with_a_growing_age():
     cache.get(load)
 
     clock.advance(30.0)
-    load.error = EngineUnavailable("runner is down")
+    load.error = EngineUnavailableError("runner is down")
     entry = cache.get(load)
     assert entry.value is SNAPSHOT, "a stale value beats no dashboard"
     assert entry.age == 30.0, "the age is the truth about the value, not the fetch"
-    assert isinstance(entry.error, EngineUnavailable)
+    assert isinstance(entry.error, EngineUnavailableError)
 
     clock.advance(30.0)
     later = cache.get(load)
@@ -198,8 +198,8 @@ def test_a_failed_refresh_keeps_serving_the_old_value_with_a_growing_age():
 def test_a_first_fetch_that_fails_surfaces_rather_than_inventing_a_herd():
     """With nothing to fall back on the error is the answer."""
     cache = SnapshotCache(ttl=2.0)
-    load = Loader(error=EngineUnavailable("runner is down"))
-    with pytest.raises(EngineUnavailable):
+    load = Loader(error=EngineUnavailableError("runner is down"))
+    with pytest.raises(EngineUnavailableError):
         cache.get(load)
 
 
@@ -209,7 +209,7 @@ def test_a_recovered_refresh_clears_the_failure_and_resets_the_age():
     load = Loader()
     cache.get(load)
     clock.advance(10.0)
-    load.error = EngineUnavailable("runner is down")
+    load.error = EngineUnavailableError("runner is down")
     assert cache.get(load).error is not None
     clock.advance(10.0)
     load.error = None

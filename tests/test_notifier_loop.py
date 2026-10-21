@@ -10,7 +10,7 @@ from pydantic import JsonValue, TypeAdapter
 
 from herdr_pwa.engine import (
     EngineSettings,
-    EngineUnavailable,
+    EngineUnavailableError,
     HerdrClient,
     SnapshotCache,
     engine_settings,
@@ -201,11 +201,11 @@ def test_the_notifier_never_calls_a_write_method(tmp_path: Path) -> None:
 def test_a_runner_that_will_not_answer_skips_the_tick_and_says_why(tmp_path: Path) -> None:
     loop = build_loop(tmp_path)
     loop.subscribe()
-    loop.wire.replies[SNAPSHOT] = EngineUnavailable("no socket")
+    loop.wire.replies[SNAPSHOT] = EngineUnavailableError("no socket")
     tick = loop.notifier.tick()
     assert tick.step is None
-    assert "EngineUnavailable" in tick.error
-    assert "EngineUnavailable" in loop.notifier.state.read_error
+    assert "EngineUnavailableError" in tick.error
+    assert "EngineUnavailableError" in loop.notifier.state.read_error
 
 
 def test_a_device_the_push_service_retired_is_pruned(tmp_path: Path) -> None:

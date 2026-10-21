@@ -9,7 +9,7 @@ from hypothesis import strategies as st
 from pydantic import JsonValue
 
 from herdr_pwa.audit import AUDIT_FILENAME, AuditUnavailableError, Entry, Write
-from herdr_pwa.engine import EngineUnavailable, as_session_id, screen_digest
+from herdr_pwa.engine import EngineUnavailableError, as_session_id, screen_digest
 from herdr_pwa.panetext import as_text_read
 from herdr_pwa.writes.guard import (
     MAX_PROMPT_CHARS,
@@ -123,7 +123,7 @@ def test_settled_and_working_panes_are_not_questions(fixture: str) -> None:
 
 def test_a_pane_that_cannot_be_read_refuses_rather_than_sending_blind(tmp_path: Path) -> None:
     r = idle_rig(tmp_path)
-    r.herd.fail["agent.read"] = EngineUnavailable("down")
+    r.herd.fail["agent.read"] = EngineUnavailableError("down")
     result = refused(send_prompt(r.writer, PromptAsk(S1, "hello")))
     assert (result.refusal, result.status) == (Refusal.UNREADABLE, 503)
     assert r.herd.writes(PROMPT) == []
@@ -131,7 +131,7 @@ def test_a_pane_that_cannot_be_read_refuses_rather_than_sending_blind(tmp_path: 
 
 def test_a_herd_that_cannot_be_read_refuses_with_503(tmp_path: Path) -> None:
     r = idle_rig(tmp_path)
-    r.herd.fail["session.snapshot"] = EngineUnavailable("down")
+    r.herd.fail["session.snapshot"] = EngineUnavailableError("down")
     result = refused(send_prompt(r.writer, PromptAsk(S1, "hello")))
     assert (result.refusal, result.status) == (Refusal.UNREACHABLE, 503)
     assert r.herd.writes(PROMPT) == []
@@ -177,7 +177,7 @@ def test_a_recycled_pane_is_caught_on_the_wire_and_nothing_is_typed(tmp_path: Pa
     assert r.herd.writes(PROMPT) == []
     outcome = r.audit_records[-1]
     assert outcome["phase"] == "outcome"
-    assert outcome["result"] == "refused:TargetNotFound"
+    assert outcome["result"] == "refused:TargetNotFoundError"
 
 
 def test_a_screen_digest_that_no_longer_matches_refuses_and_reissues(tmp_path: Path) -> None:
@@ -317,7 +317,7 @@ def test_an_unechoed_prompt_keeps_only_its_length(tmp_path: Path) -> None:
 
 def test_a_failed_prompt_keeps_only_its_length(tmp_path: Path) -> None:
     r = idle_rig(tmp_path)
-    r.herd.fail["agent.prompt"] = EngineUnavailable("down")
+    r.herd.fail["agent.prompt"] = EngineUnavailableError("down")
     _ = refused(send_prompt(r.writer, PromptAsk(S1, "hunter2-secret")))
     assert "hunter2-secret" not in _log_text(r)
     assert [rec["phase"] for rec in r.audit_records] == ["attempt", "outcome"]
@@ -498,7 +498,7 @@ def test_in_flight_is_held_across_threads_until_the_write_ends() -> None:
 
 
 def _lost(_herd: FakeHerd, _params: dict[str, JsonValue]) -> None:
-    lost = EngineUnavailable("the runner closed the connection while answering")
+    lost = EngineUnavailableError("the runner closed the connection while answering")
     lost.after_send = True
     raise lost
 
