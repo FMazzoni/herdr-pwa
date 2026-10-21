@@ -17,7 +17,7 @@ check:
 
 # Headless Firefox over the real templates at 390px, 430px and 320px: no sideways scroll, 44px tap
 # targets, content inside the viewport. Skips when a receipt for this exact tree exists in
-# ~/.cache/herdr-pwa-v2/geometry, which every worktree shares. The walks already moved into
+# ~/.cache/herdr-pwa/geometry, which every worktree shares. The walks already moved into
 # tests/browser skip the same way, one receipt per test.
 geometry:
     uv run python scripts/geometry_gate.py
@@ -54,7 +54,7 @@ reload *ARGS:
 webkit:
     uv run playwright install webkit
 
-# Print the latest phone device report from the state dir (HP_STATE_DIR, default ~/.config/herdr-pwa-v2).
+# Print the latest phone device report from the state dir (HP_STATE_DIR, default ~/.config/herdr-pwa).
 device-report *args:
     uv run herdr-pwa device-report {{args}}
 

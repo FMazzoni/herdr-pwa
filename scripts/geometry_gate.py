@@ -15,7 +15,7 @@ from tests.catalogue import CAPTURES  # noqa: E402
 
 # Per user rather than per worktree: a fresh worktree whose guarded files match a tree already
 # measured reuses that receipt. A cache of a result, never a record anyone reviews.
-CACHE = Path.home() / ".cache" / "herdr-pwa-v2"
+CACHE = Path.home() / ".cache" / "herdr-pwa"
 RECEIPTS = CACHE / "geometry"
 # One receipt per browser test that passed, under the tree's fingerprint, so pytest skips it.
 WALK_RECEIPTS = RECEIPTS / "walks"

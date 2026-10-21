@@ -1,4 +1,4 @@
-"""The golden ledger: every recorded decision of the previous implementation, recomputed here."""
+"""The golden ledger: every recorded decision, recomputed here."""
 
 import copy
 import hashlib
@@ -91,15 +91,15 @@ PREVIEWED: dict[str, dict[str, dict[str, JsonValue]]] = {
 DIVERGENCES: dict[str, str] = {
     **dict.fromkeys(
         HANDED_OFF,
-        "claude's footer offers ctrl+g to edit the plan or note in $EDITOR, and the old app "
-        "drew it as a button: one tap put Vim in the pane, which no key the phone sends can "
+        "claude's footer offers ctrl+g to edit the plan or note in $EDITOR, and the ledger "
+        "counts it as a hint, so it became a button: one tap put Vim in the pane, which no key the phone sends can "
         "work or quit. The hint is still read, so the screen still asks, but its key is no "
         "longer a hint or a control. test_a_hand_off_key_is_all_that_leaves_the_ledger holds "
         "the rest of each entry.",
     ),
     **dict.fromkeys(
         PARKED,
-        "The old app read this checklist as unknown with no rows because the cursor sat on "
+        "The ledger reads this checklist as unknown with no rows because the cursor sat on "
         "its unnumbered Next row, which broke the run; with the cursor on row 1 the same "
         "screen read as a six-row checklist. A cursor move is not a new question, and the "
         "flip refused the next tap as a changed screen. "
@@ -107,7 +107,7 @@ DIVERGENCES: dict[str, str] = {
     ),
     **dict.fromkeys(
         PREVIEWED,
-        "claude draws an option's preview as a box beside the rows, and the old app read the "
+        "claude draws an option's preview as a box beside the rows, and the ledger reads the "
         "box's sides as text after the last row, so no run was read and the question offered "
         "only its printed keys. The rows are now read with the box cut away, still with no "
         "digit, and on a wizard step the strip above them says the question is one step of two. "
@@ -204,7 +204,7 @@ def _rows_toggle(prompt: BlockedPrompt) -> bool:
 
 
 def _screen_json(decision: ScreenDecision, prompt: BlockedPrompt) -> dict[str, JsonValue]:
-    """The ledger's row: the decision, and the per-screen reads the old app also recorded."""
+    """The ledger's row: the decision, and the per-screen reads the ledger also records."""
     steps = decision.steps
     return {
         "verdict": {
@@ -230,7 +230,7 @@ def _screen_json(decision: ScreenDecision, prompt: BlockedPrompt) -> dict[str, J
 
 
 def _freshness_json(fresh: Freshness, error: str | None) -> dict[str, JsonValue]:
-    """The ledger's row: the freshness, and the three flags the old app derived beside it."""
+    """The ledger's row: the freshness, and the three flags the ledger records beside it."""
     return {
         "age": fresh.age,
         "age_label": fresh.age_label,

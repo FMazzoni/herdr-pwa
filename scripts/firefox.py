@@ -29,7 +29,7 @@ CONNECT_STEP = 0.25
 POPUP_SECONDS = 10.0
 # Per user, so every browser job on the machine (gate, geometry, shots, a walk) queues for one
 # browser: several at once under load is where the 'worker died' and NOT LOADED reds came from.
-LOCK = Path.home() / ".cache" / "herdr-pwa-v2" / "geometry.lock"
+LOCK = Path.home() / ".cache" / "herdr-pwa" / "geometry.lock"
 # The holder's descriptor for the lock, which its own workers inherit so they run under it.
 HELD_FD = "HP_BROWSER_LOCK_FD"
 

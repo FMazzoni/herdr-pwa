@@ -76,14 +76,12 @@ Python and JavaScript tests both read it, so the server and the phone word time 
 
 ## The golden record
 
-This app is a rewrite. Before rewriting it, I recorded the first version's decisions on
-these screens and on sample agent lists in `ledger.json`. A decision says what kind of
-question a screen holds, which answers it offers, or how a list of agents is sorted and
-labelled. `tests/test_ledger.py` makes the current
-code take each decision again and compares the answers. That is how the rewrite proves it
-agrees with the first version.
+`ledger.json` records the decision expected on each of these screens and on some sample
+agent lists. A decision says what kind of question a screen holds, which answers it
+offers, or how a list of agents is sorted and labelled. `tests/test_ledger.py` makes the
+code take each decision again and compares its answer with the recorded one.
 
-- Never edit a recorded decision, because then the test would prove nothing. If the new
+- Never edit a recorded decision, because then the test would prove nothing. If the
   code deliberately decides differently, add the case to `DIVERGENCES` in
   `tests/test_ledger.py`, with the reason. The test then expects that case to fail, and it
   fails loudly if the case ever starts passing.

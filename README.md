@@ -111,7 +111,7 @@ Run `uv run herdr-pwa doctor` to check the setup. It fails if any of these is tr
 
 Every setting is an environment variable whose name starts with `HP_`; the full list is in
 `src/herdr_pwa/settings.py`. The app keeps its state, such as the audit log and the devices
-that get notifications, in `~/.config/herdr-pwa-v2`.
+that get notifications, in `~/.config/herdr-pwa`.
 
 ## How it fits together
 
@@ -134,10 +134,10 @@ phone widths in headless Firefox. CI (the automated checks GitHub runs) uses the
 recipe on every pull request and every push to `main`.
 
 Tests never touch a real herdr. They run on screens and transcripts captured from real
-agents, kept in `tests/fixtures/`. This app is a rewrite of an earlier version. Before
-rewriting it, I recorded every decision the first version made on those screens, such as "this screen is a permission prompt".
+agents, kept in `tests/fixtures/`. Beside those screens sits a record of the decision
+expected on each one, such as "this screen is a permission prompt".
 
-The tests check that the current version makes the same decisions. Where it deliberately
+The tests check that the code still makes each recorded decision. Where it deliberately
 decides differently, the test is marked as an expected failure, with the reason.
 
 For development you also need [just](https://just.systems), Node and Firefox. Once per
@@ -156,12 +156,8 @@ throwaway herdr session, so you can try the app without touching your own agents
 
 ## How it was built
 
-<!-- OWNER: edit this paragraph -->
-Most of the code was written by AI coding agents, each on its own branch, working to the
-rules in [AGENTS.md](AGENTS.md). My part was deciding what to build, writing those rules,
-reviewing and merging every change, and checking each screen on my own phone. Before
-rewriting the first version, I recorded what it decided on dozens of real screens, so the
-rewrite had to agree with it or explain why.
+The code was written by AI coding agents, working to the rules in [AGENTS.md](AGENTS.md)
+and directed by me.
 
 ## Contributing
 
