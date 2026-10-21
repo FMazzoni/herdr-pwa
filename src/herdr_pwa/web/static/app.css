@@ -1129,6 +1129,8 @@ body:has(#composer:focus-within) .stats { display: none; }
 .unreachable { flex: 1 0 100%; min-width: 0; margin: 0 calc(-1 * var(--gutter-right)) 0 calc(-1 * var(--gutter-left)); padding: var(--space-3) var(--gutter-right) var(--space-3) var(--gutter-left); border-top: var(--line-1) solid var(--rule); font-size: var(--text-small); color: var(--ink-2); }
 .unreachable[hidden] { display: none; }
 .unreachable__what { font-weight: 600; color: var(--blocked); }
+/* The server's age stopped when the box went quiet; the bar's line says when, so it goes. */
+[data-hp-unheard] .summary__age { display: none; }
 
 /* ---- The stats strip ----
    One quiet line under the bar on Chat, Pane and Files, inside the sticky header so it never

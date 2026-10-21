@@ -1202,7 +1202,8 @@ FEED: Final = (
     State(
         "feed-box-unreachable",
         "/",
-        "#hp-unreachable:not([hidden])",
+        # The bar's line shows, and the feed under it is marked unheard, which hides its age.
+        ".topbar:has(#hp-unreachable:not([hidden])) ~ main #feed-list.is-stale[data-hp-unheard]",
         runner(lambda: herd(**BLOCKED)),
         title="Feed: the phone lost the box, so the herd it last read is marked stale",
         armed="#feed-list .cards",

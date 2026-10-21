@@ -329,6 +329,10 @@ def test_the_lost_box_line_is_hidden_and_rides_in_the_sticky_bar(tmp_path: Path)
     header = page.partition('<header class="topbar">')[2].partition("</header>")[0]
     assert '<p class="unreachable" id="hp-unreachable" hidden>' in header
     assert "data-hp-poll" not in header
+    # A region the box stopped answering shows no age that would claim it is fresh.
+    assert (
+        "[data-hp-unheard] .summary__age { display: none; }" in (STATIC_DIR / "app.css").read_text()
+    )
 
 
 def test_the_client_script_builds_no_markup_and_registers_the_root_worker() -> None:
