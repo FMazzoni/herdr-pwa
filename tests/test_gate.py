@@ -168,6 +168,7 @@ class _Counting:
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         async def counted() -> Message:
             message = await receive()
+            # An ASGI http.request message carries its body as bytes.
             self.read += len(cast("bytes", message.get("body", b"")))
             return message
 

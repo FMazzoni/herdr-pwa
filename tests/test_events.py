@@ -111,6 +111,7 @@ def _hub(tmp_path: Path, *, lifetime: float = 600.0, clients: int = 16) -> tuple
     )
     app = rig.http.app
     assert isinstance(app, FastAPI)
+    # Starlette's state is Any; object makes the isinstance below narrow it.
     hub = cast("object", app.state.events)
     assert isinstance(hub, Hub)
     return hub, rig

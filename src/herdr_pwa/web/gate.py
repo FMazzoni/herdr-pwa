@@ -38,6 +38,7 @@ def _bounded(receive: Receive) -> Receive:
         nonlocal seen
         message = await receive()
         if message["type"] == "http.request":
+            # An ASGI http.request message carries its body as bytes.
             seen += len(cast("bytes", message.get("body", b"")))
             # Counted as it arrives, so a missing or lying Content-Length buys nothing.
             if seen > MAX_BODY_BYTES:

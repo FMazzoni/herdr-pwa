@@ -677,6 +677,7 @@ def a_sender(tmp_path: Path, limits: PushLimits = PUSH_LIMITS) -> WebPushSender:
 def test_a_push_service_that_never_answers_fails_within_the_timeout(tmp_path: Path) -> None:
     limits = replace(PUSH_LIMITS, send_timeout=0.5)
     with socket.create_server(("127.0.0.1", 0)) as silent:
+        # An IPv4 socket's name is (host, port).
         port = cast("tuple[str, int]", silent.getsockname())[1]
         started = time.monotonic()
         with pytest.raises(DeliveryError) as refused:

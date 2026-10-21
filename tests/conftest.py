@@ -74,6 +74,7 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
 @pytest.hookimpl(optionalhook=True)
 def pytest_testnodedown(node: object, error: object) -> None:
     del error
+    # Xdist hands back what this plugin's worker wrote: lists of names.
     output = cast("dict[str, list[str]]", getattr(node, "workeroutput", {}))
     _OPENED.update(output.get("fixtures_opened", []))
 

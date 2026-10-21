@@ -58,6 +58,7 @@ class SessionStore:
         """Every row *sql* answers, or none when the store cannot answer it."""
         try:
             with closing(self._db.execute(sql, params)) as cursor:
+                # Sqlite3 types fetchall as list[Any]; a row is a tuple.
                 return cast("list[Row]", cursor.fetchall())
         except sqlite3.Error as exc:
             # An older schema reads as no rows; a held store must reach `consult` as held.

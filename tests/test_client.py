@@ -917,10 +917,13 @@ def test_a_session_id_cannot_reach_a_write_verb(tmp_path: Path) -> None:
     probe = tmp_path / "probe.py"
     probe.write_text(PROBE)
     report = _pyright(probe)
+    # Pyright's JSON report lists its diagnostics.
     diagnostics = [obj(d) for d in cast("list[JsonValue]", at(report, "generalDiagnostics"))]
     errors = [d for d in diagnostics if d["severity"] == "error"]
     assert {
-        cast("int", at(d, "range", "start", "line")) + 1 for d in errors
+        # A diagnostic's line is an int.
+        cast("int", at(d, "range", "start", "line")) + 1
+        for d in errors
     } == PROBE_ERROR_LINES, f"expected an error on each probe line, got {errors}"
     assert all(d["rule"] == "reportArgumentType" for d in errors)
 

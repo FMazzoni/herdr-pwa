@@ -323,6 +323,7 @@ def test_a_status_change_with_no_new_line_is_stale_for_the_chat(tmp_path: Path) 
     rig = build_rig(tmp_path, {SNAPSHOT: _status("working")}, events_interval=0.05)
     app = rig.http.app
     assert isinstance(app, FastAPI)
+    # Starlette's state is Any; object makes the isinstance below narrow it.
     hub = cast("object", app.state.events)
     assert isinstance(hub, Hub)
     topic = f"chat:{WORKING_SESSION}"

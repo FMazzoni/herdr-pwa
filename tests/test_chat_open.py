@@ -34,6 +34,7 @@ FETCHED_ON_LOAD = 'hx-trigger="load"'
 def _web(rig: Rig) -> WebState:
     app = rig.http.app
     assert isinstance(app, FastAPI)
+    # Starlette's state is Any; object makes the isinstance below narrow it.
     web = cast("object", app.state.web)
     assert isinstance(web, WebState)
     return web

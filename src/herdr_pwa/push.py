@@ -544,6 +544,7 @@ def _refusal(exc: Exception) -> DeliveryError:
     # An HTTP library's text can carry the endpoint URL, a device capability, so only fixed words go on.
     if not isinstance(exc, WebPushException):
         return DeliveryError(f"push service not reached ({type(exc).__name__})")
+    # Pywebpush leaves response untyped, and it posts with requests.
     response = cast("requests.Response | None", exc.response)
     if response is None:
         return DeliveryError("push not sent: pywebpush refused it before posting")

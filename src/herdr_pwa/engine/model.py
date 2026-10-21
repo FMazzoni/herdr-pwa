@@ -33,9 +33,11 @@ def _records(value: object) -> list[_Raw]:
     if not isinstance(value, Iterable):
         raise TypeError(f"{type(value).__name__!r} object is not iterable")
     found: list[_Raw] = []
+    # An Iterable of unknown parts; each is checked below.
     for item in cast("Iterable[object]", value):
         if not isinstance(item, Mapping):
             raise TypeError(f"{type(item).__name__!r} object is not a JSON object")
+        # A JSON object, so its keys are strings.
         found.append(cast("_Raw", item))
     return found
 
@@ -46,6 +48,7 @@ def _panes(value: object) -> list[_Raw]:
         return []
     if not isinstance(value, Iterable):
         raise TypeError(f"{type(value).__name__!r} object is not iterable")
+    # An Iterable of unknown parts, and a JSON dict has string keys.
     return [cast("_Raw", p) for p in cast("Iterable[object]", value) if isinstance(p, dict)]
 
 
@@ -204,6 +207,7 @@ def _coerce_session(raw: object) -> tuple[str, str]:
     if isinstance(raw, str):
         return raw.strip(), ""
     if isinstance(raw, dict):
+        # A JSON object, so its keys are strings.
         session = cast("_Raw", raw)
         return str(session.get("value") or "").strip(), str(session.get("agent") or "")
     return "", ""

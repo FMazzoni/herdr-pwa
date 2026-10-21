@@ -297,6 +297,7 @@ class HerdrClient:
             raise InvalidResponse(
                 f"{method} answered {type(root).__name__} where {arm.__name__} was expected"
             )
+        # Payload_field names the arm's field that holds its BaseModel payload.
         member = cast("BaseModel", getattr(root, key))
         return root, member.model_dump(mode="json", exclude_none=True)
 
