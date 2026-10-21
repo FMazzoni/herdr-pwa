@@ -4,7 +4,7 @@ import logging
 from dataclasses import dataclass
 from typing import Final
 
-from herdr_pwa.audit import OMITTED_NO_ECHO, PROMPT, Write
+from herdr_pwa.audit import PROMPT, Entry, Write
 from herdr_pwa.engine import (
     VISIBLE_READ,
     AgentStatus,
@@ -21,8 +21,8 @@ from herdr_pwa.writes.guard import (
     QuestionCall,
     asks_a_question,
     landed,
-    no_echo_notice,
     question_call,
+    shown_whole,
     unsendable,
 )
 from herdr_pwa.writes.outcome import Evidence, Outcome, Pacing, audit_result
@@ -51,7 +51,6 @@ class PromptSent:
     target: PaneId
     outcome: Outcome
     evidence: Evidence
-    no_echo: str = ""
     # Sent though the screen looked like a question: which signals outvoted it, in words.
     doubt: str = ""
 
@@ -136,17 +135,23 @@ class Echo:
 
 def read_back(
     client: HerdrClient, echo: Echo, pacing: Pacing, *, reads: int = CONFIRM_ATTEMPTS
-) -> bool:
-    """Whether the pane comes to show the text more often than before, within *reads* looks."""
+) -> str | None:
+    """The first screen within *reads* looks that shows the text more often than before."""
     for _ in range(reads):
         try:
             after = client.screen(echo.target)
         except EngineError:
             after = ""
         if landed(echo.text, echo.before, after):
-            return True
+            return after
         pacing.sleep(CONFIRM_INTERVAL)
-    return False
+    return None
+
+
+def keep_if_shown(entry: Entry, echo: Echo, after: str | None) -> None:
+    """Let the audit keep the text only when the whole of it newly shows on the same screen."""
+    if after is not None and shown_whole(echo.text, echo.before, after):
+        entry.shown()
 
 
 def _type(writer: Writer, send: _Send) -> PromptSent | Refused:
@@ -158,10 +163,8 @@ def _type(writer: Writer, send: _Send) -> PromptSent | Refused:
     stop = _preflight(send, before, writer.memory.unsure, asked)
     if stop is not None:
         return stop
-    # Changes what is stored and said, never what is sent.
-    no_echo = no_echo_notice(before)
-    write = Write(PROMPT, send.target, send.session, send.text, OMITTED_NO_ECHO if no_echo else "")
-    entry = attempt(writer.audit, write, verb=_VERB)
+    # The attempt keeps the length; the log keeps the text only once the read-back sees it.
+    entry = attempt(writer.audit, Write(PROMPT, send.target, send.session, send.text), verb=_VERB)
     if isinstance(entry, Refused):
         return entry
     with entry:
@@ -170,13 +173,16 @@ def _type(writer: Writer, send: _Send) -> PromptSent | Refused:
         except EngineError as exc:
             entry.outcome(failed_result(exc))
             return _failed(writer, send, exc)
-        ok = read_back(client, Echo(send.target, send.text, before), writer.pacing)
+        echo = Echo(send.target, send.text, before)
+        after = read_back(client, echo, writer.pacing)
+        keep_if_shown(entry, echo, after)
+        ok = after is not None
         outcome, evidence = (
             (Outcome.CONFIRMED, Evidence.ECHO) if ok else (Outcome.ACCEPTED, Evidence.NOECHO)
         )
         entry.outcome(audit_result(outcome, evidence))
     writer.memory.unsure.clear(send.session)
-    return PromptSent(send.target, outcome, evidence, no_echo, asked.doubt)
+    return PromptSent(send.target, outcome, evidence, asked.doubt)
 
 
 def _failed(writer: Writer, send: _Send, exc: EngineError) -> Refused:

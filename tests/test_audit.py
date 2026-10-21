@@ -1,3 +1,4 @@
+import json
 import logging
 import stat
 from datetime import UTC, datetime
@@ -10,7 +11,7 @@ from herdr_pwa import audit
 from herdr_pwa.audit import (
     CLOSE,
     KEYS,
-    OMITTED_NO_ECHO,
+    OMITTED_UNTIL_ECHO,
     PROMPT,
     START,
     AuditLog,
@@ -125,28 +126,66 @@ def test_an_outcome_that_cannot_be_written_logs_loudly_and_never_raises(
 
 
 def test_a_long_payload_is_truncated_visibly_in_band(tmp_path: Path) -> None:
-    _ = make_log(tmp_path, payload_chars=10).record(ME, Write(PROMPT, payload="a" * 25))
+    _ = make_log(tmp_path, payload_chars=10).record(ME, Write(KEYS, payload="a" * 25))
     (attempt,) = lines(tmp_path)
     assert attempt["payload"] == "a" * 10 + "…[truncated: 25 chars sent]"
     assert (attempt["payload_truncated"], attempt["payload_chars"]) == (True, 25)
 
 
+def test_an_echoed_prompt_is_truncated_on_its_outcome(tmp_path: Path) -> None:
+    with make_log(tmp_path, payload_chars=10).record(ME, Write(PROMPT, payload="a" * 25)) as entry:
+        entry.shown()
+        entry.outcome("confirmed:echo")
+    attempt, outcome = lines(tmp_path)
+    assert (attempt["payload"], attempt["payload_chars"]) == (None, 25)
+    assert outcome["payload"] == "a" * 10 + "…[truncated: 25 chars sent]"
+    assert outcome["payload_truncated"] is True
+
+
 def test_a_payload_within_the_cap_is_stored_verbatim_on_one_line(tmp_path: Path) -> None:
-    _ = make_log(tmp_path).record(ME, Write(PROMPT, payload="two\nlines"))
-    assert len((tmp_path / audit.AUDIT_FILENAME).read_text().splitlines()) == 1
-    (attempt,) = lines(tmp_path)
-    assert (attempt["payload"], attempt["payload_truncated"]) == ("two\nlines", False)
+    with make_log(tmp_path).record(ME, Write(PROMPT, payload="two\nlines")) as entry:
+        entry.shown()
+        entry.outcome("confirmed:echo")
+    assert len((tmp_path / audit.AUDIT_FILENAME).read_text().splitlines()) == 2
+    _, outcome = lines(tmp_path)
+    assert (outcome["payload"], outcome["payload_truncated"]) == ("two\nlines", False)
 
 
-def test_a_no_echo_prompt_keeps_the_length_and_never_the_text(tmp_path: Path) -> None:
-    _ = make_log(tmp_path).record(ME, Write(PROMPT, payload="hunter2", omitted=OMITTED_NO_ECHO))
+def test_a_prompt_attempt_holds_its_length_and_never_its_text(tmp_path: Path) -> None:
+    _ = make_log(tmp_path).record(ME, Write(PROMPT, target="w1:p1", payload="hunter2"))
     assert "hunter2" not in (tmp_path / audit.AUDIT_FILENAME).read_text()
     (attempt,) = lines(tmp_path)
     assert (attempt["payload"], attempt["payload_omitted"], attempt["payload_chars"]) == (
         None,
-        OMITTED_NO_ECHO,
+        OMITTED_UNTIL_ECHO,
         7,
     )
+
+
+@pytest.mark.parametrize(
+    # A confirmed echo alone keeps nothing: the caller must say the whole text showed.
+    "result",
+    [
+        "confirmed:echo",
+        "accepted:noecho",
+        "accepted:argv",
+        "failed:unavailable",
+        "refused:EngineError",
+    ],
+)
+def test_a_prompt_not_echoed_never_stores_its_text(tmp_path: Path, result: str) -> None:
+    with make_log(tmp_path).record(ME, Write(PROMPT, payload="hunter2")) as entry:
+        entry.outcome(result)
+    assert "hunter2" not in (tmp_path / audit.AUDIT_FILENAME).read_text()
+
+
+def test_a_prompt_that_raised_mid_send_never_stores_its_text(tmp_path: Path) -> None:
+    with (
+        pytest.raises(RuntimeError),
+        make_log(tmp_path).record(ME, Write(PROMPT, payload="hunter2")),
+    ):
+        raise RuntimeError
+    assert "hunter2" not in (tmp_path / audit.AUDIT_FILENAME).read_text()
 
 
 def test_actor_both_addresses_host_and_origin_are_kept_on_both_auth_paths(
@@ -189,7 +228,7 @@ def test_two_generations_bound_the_disk(tmp_path: Path) -> None:
 def test_reading_back_crosses_the_rotation_in_order(tmp_path: Path) -> None:
     log = make_log(tmp_path, max_bytes=4096)
     for n in range(40):
-        _ = log.record(ME, Write(PROMPT, payload=f"{n:02d}" + "x" * 100))
+        _ = log.record(ME, Write(KEYS, payload=f"{n:02d}" + "x" * 100))
     found = records(tmp_path, limit=0)
     numbers = [str(one["payload"])[:2] for one in found if one["phase"] == "attempt"]
     assert numbers == sorted(numbers)
@@ -207,11 +246,18 @@ def test_a_damaged_line_is_reported_not_skipped(tmp_path: Path) -> None:
 
 def test_describe_shows_who_what_and_a_withheld_payload(tmp_path: Path) -> None:
     log = make_log(tmp_path)
-    with log.record(
-        ME, Write(PROMPT, target="w1:p1", payload="pw", omitted=OMITTED_NO_ECHO)
-    ) as entry:
+    with log.record(ME, Write(PROMPT, target="w1:p1", payload="pw")) as entry:
         entry.outcome("sent")
-    attempt, outcome = (describe(one) for one in records(tmp_path))
+    # Older builds withheld a prompt's text when the screen looked like a password prompt.
+    older = {
+        **lines(tmp_path)[0],
+        "id": "0123456789abcdef",
+        "payload_omitted": "no_echo_prompt",
+    }
+    with (tmp_path / audit.AUDIT_FILENAME).open("a") as handle:
+        _ = handle.write(json.dumps(older) + "\n")
+    attempt, outcome, old = (describe(one) for one in records(tmp_path))
     assert "you@example.com via tailscale from 198.51.100.7" in attempt
-    assert "<payload withheld: no_echo_prompt, 2 chars>" in attempt
+    assert "<2 chars, text kept only once echoed>" in attempt
+    assert "<payload withheld: no_echo_prompt, 2 chars>" in old
     assert outcome.endswith("-> sent")
