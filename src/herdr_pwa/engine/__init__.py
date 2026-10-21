@@ -106,6 +106,8 @@ from herdr_pwa.engine.usage import UsageCache
 
 # The adapters build on transcript.py, so it cannot import them: the facade hands them over.
 register(ClaudeAdapter(), OpencodeAdapter(), HermesAdapter())
+# Registered, they leave the namespace, so the facade is no wider than __all__.
+del ClaudeAdapter, OpencodeAdapter, HermesAdapter, register
 
 __all__ = [
     "CONTEXT",
