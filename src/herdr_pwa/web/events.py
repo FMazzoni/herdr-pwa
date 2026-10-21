@@ -24,12 +24,19 @@ from herdr_pwa.engine import (
     has_byte_frontier,
     locate,
 )
+from herdr_pwa.patterns import Rx
 from herdr_pwa.web.deps import WebState
 from herdr_pwa.web.herd import overlay_of
 
 log = logging.getLogger(__name__)
 
-TOPIC: Final = re.compile(r"(feed|(agent|chat|pane|stats):[0-9A-Za-z][0-9A-Za-z_.-]{0,79})")
+TOPIC: Final = re.compile(
+    r"""
+    feed  # every card
+  | (?:agent|chat|pane|stats) : [0-9A-Za-z][0-9A-Za-z_.-]{0,79}  # one agent's, by its id
+    """,
+    re.VERBOSE,
+)
 MAX_TOPICS: Final = 8
 # A transcript is found again this often, so a fork the conversation moved to is followed.
 RELOCATE_SECONDS: Final = 10.0
@@ -386,3 +393,14 @@ class _Upstream:
                 continue
             stop.wait(delay)
             delay = min(delay * 2, UPSTREAM_BACKOFF[1])
+
+
+PATTERNS: Final = (
+    Rx(
+        TOPIC,
+        ("feed", "agent:abc", "stats:a.b-c_d"),
+        ("feeds", "agent:", "agent:-x", "chat:" + "a" * 81, "pane:a b"),
+        "fullmatch",
+        validator=True,
+    ),
+)

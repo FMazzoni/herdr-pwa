@@ -14,12 +14,17 @@ ALLOW: Final = ROOT / "scripts" / "css_tokens.allow"
 
 COMMENT: Final = re.compile(r"/\*.*?\*/", re.DOTALL)
 ROOT_BLOCK: Final = re.compile(r":root\s*\{[^}]*\}")
-DECLARATION: Final = re.compile(r"([\w-]+)\s*:\s*([^;{}]+)")
+DECLARATION: Final = re.compile(r"(?P<property>[\w-]+)\s*:\s*(?P<value>[^;{}]+)")
 LITERAL: Final = re.compile(
-    r"#[0-9a-fA-F]{3,8}\b"
-    r"|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\("
-    r"|(?<![\w.-])\d*\.?\d+px\b"
+    r"""
+    \#[0-9a-fA-F]{3,8}\b  # a hex colour
+  | \b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\(  # a colour function
+  | (?<![\w.-])\d*\.?\d+px\b  # a length in px
+    """,
+    re.VERBOSE,
 )
+# Any character but a newline, so a blanked comment keeps its line count.
+_NOT_NEWLINE: Final = re.compile(r"[^\n]")
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,7 +41,7 @@ class Finding:
 
 def _blank(match: re.Match[str]) -> str:
     # Keeps newlines so line numbers still point at the source.
-    return re.sub(r"[^\n]", " ", match.group(0))
+    return _NOT_NEWLINE.sub(" ", match[0])
 
 
 def scan(css: str) -> list[Finding]:
@@ -44,11 +49,9 @@ def scan(css: str) -> list[Finding]:
     text = ROOT_BLOCK.sub(_blank, COMMENT.sub(_blank, css))
     found: list[Finding] = []
     for decl in DECLARATION.finditer(text):
-        declaration = f"{decl.group(1)}: {decl.group(2).strip()}"
+        declaration = f"{decl['property']}: {decl['value'].strip()}"
         line = text.count("\n", 0, decl.start()) + 1
-        found.extend(
-            Finding(line, hit.group(0), declaration) for hit in LITERAL.finditer(decl.group(2))
-        )
+        found.extend(Finding(line, hit[0], declaration) for hit in LITERAL.finditer(decl["value"]))
     return found
 
 

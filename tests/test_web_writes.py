@@ -145,9 +145,9 @@ def _lost_after_send(_herd: FakeHerd, _params: dict[str, JsonValue]) -> None:
 def _posted_back(page: str) -> dict[str, str]:
     """What the rendered composer would post: its hidden fields and its textarea."""
     fields = dict(re.findall(r'<input type="hidden" name="(\w+)" value="([^"]*)"', page))
-    text = re.search(r"<textarea[^>]*>([^<]*)</textarea>", page)
+    text = re.search(r"<textarea[^>]*>(?P<text>[^<]*)</textarea>", page)
     assert text is not None
-    return {**fields, "text": text.group(1)}
+    return {**fields, "text": text["text"]}
 
 
 def test_a_prompt_that_may_have_landed_is_not_sent_again_without_saying_so(
@@ -394,7 +394,7 @@ def test_workspace_new_rename_and_close(tmp_path: Path) -> None:
     assert bad.status_code == 400
     first = w.http.post("/workspaces/w1/close", data={"confirm": "1"}, headers=ORIGIN)
     assert first.status_code == 200
-    saw = re.search(r'name="saw" value="([0-9a-f]+)"', first.text)
+    saw = re.search(r'name="saw" value="(?P<value>[0-9a-f]+)"', first.text)
     assert saw is not None
     assert herd.writes("workspace.close") == []
     stale = w.http.post(
@@ -404,7 +404,7 @@ def test_workspace_new_rename_and_close(tmp_path: Path) -> None:
     assert herd.writes("workspace.close") == []
     closed = w.http.post(
         "/workspaces/w1/close",
-        data={"confirm": "1", "armed": "1", "saw": saw.group(1)},
+        data={"confirm": "1", "armed": "1", "saw": saw["value"]},
         headers=ORIGIN,
         follow_redirects=False,
     )
@@ -803,9 +803,9 @@ class _Coloured(FakeHerd):
 
 def _claimed(page: str) -> str:
     form = next(f for f in _forms(page) if 'id="composer"' in f)
-    found = re.search(r'name="screen" value="([0-9a-f]*)"', form)
+    found = re.search(r'name="screen" value="(?P<value>[0-9a-f]*)"', form)
     assert found is not None, form
-    return found.group(1)
+    return found["value"]
 
 
 @pytest.mark.parametrize("herd", [FakeHerd(), _Coloured()], ids=["plain", "coloured"])

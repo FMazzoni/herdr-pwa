@@ -236,21 +236,21 @@ def test_a_failure_takes_only_a_plain_region_id_from_the_request(
 
 TEMPLATES = Path(__file__).parents[1] / "src" / "herdr_pwa" / "web" / "templates"
 TAG = re.compile(r"<[a-z][^>]*>", re.DOTALL)
-TARGET = re.compile(r'hx-target="([^"]*)"')
-ID = re.compile(r'\sid="([^"]*)"')
+TARGET = re.compile(r'hx-target="(?P<target>[^"]*)"')
+ID = re.compile(r'\sid="(?P<id>[^"]*)"')
 
 
 def region_ids() -> set[str]:
     """Every element a fragment replaces, by id: a ``this`` target's own, or a ``#id`` target."""
     found: set[str] = set()
     for template in TEMPLATES.glob("*.html"):
-        for tag in (m.group(0) for m in TAG.finditer(template.read_text())):
+        for tag in (m[0] for m in TAG.finditer(template.read_text())):
             target = TARGET.search(tag)
             own = ID.search(tag)
-            if target and target.group(1).startswith("#"):
-                found.add(target.group(1)[1:])
-            elif target and target.group(1) == "this" and own and own.group(1) != "{{ region }}":
-                found.add(own.group(1))
+            if target and target["target"].startswith("#"):
+                found.add(target["target"][1:])
+            elif target and target["target"] == "this" and own and own["id"] != "{{ region }}":
+                found.add(own["id"])
     return found
 
 
@@ -444,9 +444,11 @@ def test_the_row_says_it_is_working_while_the_agent_works(tmp_path: Path) -> Non
 
 
 def _verb_in(body: str) -> str:
-    found = re.search(r'<span class="bubble__text" aria-hidden="true">(\w+)\u2026</span>', body)
+    found = re.search(
+        r'<span class="bubble__text" aria-hidden="true">(?P<verb>\w+)\u2026</span>', body
+    )
     assert found is not None, body
-    return found.group(1)
+    return found["verb"]
 
 
 def _working_at(tmp_path: Path, seq: int, revision: int = 1) -> str:
@@ -629,9 +631,11 @@ def _state(directory: Path) -> dict[str, bytes]:
 
 def _idle_card(rig: Rig) -> str:
     feed = rig.http.get("/feed", headers=FRAGMENT).text
-    found = re.search(r'card card--(\w+)"[^>]*>\s*<a[^>]*href="/agent/' + IDLE_SESSION, feed)
+    found = re.search(
+        r'card card--(?P<status>\w+)"[^>]*>\s*<a[^>]*href="/agent/' + IDLE_SESSION, feed
+    )
     assert found is not None, feed
-    return found.group(1)
+    return found["status"]
 
 
 def test_no_get_writes_anything_that_matters(tmp_path: Path) -> None:

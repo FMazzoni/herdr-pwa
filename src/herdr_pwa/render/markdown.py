@@ -15,6 +15,7 @@ from mdit_py_plugins.dollarmath import dollarmath_plugin
 from mdit_py_plugins.tasklists import tasklists_plugin
 from mdit_py_plugins.texmath import texmath_plugin
 
+from herdr_pwa.patterns import Rx
 from herdr_pwa.render.highlight import TOKEN_CLASSES, highlight, language_for
 from herdr_pwa.render.mathml import MATH_TAGS, math_node
 from herdr_pwa.render.mdnode import MdNode
@@ -66,7 +67,8 @@ SHORT_CELL: Final = 24
 # A run with no space in it that a browser would still break: after a slash, a backslash or a dash
 # (hyphen, en or em), which a sha range, a path or a ticket ref is full of.
 _BREAKS: Final = r"/\\\-\u2010\u2013\u2014"
-_BREAKABLE_RUN: Final = re.compile(rf"[^\s{_BREAKS}]*[{_BREAKS}]\S*")
+# Entered only where a word starts, so a long word with no break in it is read once.
+_BREAKABLE_RUN: Final = re.compile(rf"(?<!\S)[^\s{_BREAKS}]*+[{_BREAKS}]\S*")
 _ALIGN: Final = MappingProxyType(
     {"text-align:center": "align-center", "text-align:right": "align-right"}
 )
@@ -75,8 +77,18 @@ _TASK_BOX: Final = "task-list-item-checkbox"
 # path:line, as agents and compilers write it: a file with an extension, then a line number,
 # then perhaps a column. Not inside a word or a URL, and not followed by more path.
 FILE_REF: Final = re.compile(
-    r"(?<![\w/.~:@-])((?:\.{1,2}/|/)?(?:[\w.@+-]+/)*[\w@+-][\w.@+-]*\.[A-Za-z][\w]{0,9})"
-    r":([1-9]\d{0,6})(?::\d{1,5})?(?![\w/:])"
+    r"""
+    (?<![\w/.~:@-])  # not inside a word, a path or a URL
+    (?P<path>
+        (?:\.{1,2}/|/)?  # ./, ../ or /
+        (?:[\w.@+-]+/)*  # its folders
+        [\w@+-][\w.@+-]*\.[A-Za-z][\w]{0,9}  # a file name with an extension
+    )
+    :(?P<line>[1-9]\d{0,6})  # the line
+    (?::\d{1,5})?  # perhaps a column
+    (?![\w/:])  # and no more path after it
+    """,
+    re.VERBOSE,
 )
 
 
@@ -96,11 +108,11 @@ def _file_refs(text: str) -> list[MdNode]:
     parts: list[MdNode] = []
     at = 0
     for found in FILE_REF.finditer(text):
-        if not _names_a_file(found.group(1)):
+        if not _names_a_file(found["path"]):
             continue
         if found.start() > at:
             parts.append(MdNode(text=text[at : found.start()]))
-        parts.append(_file_ref(found.group(1), found.group(2), (MdNode(text=found.group(0)),)))
+        parts.append(_file_ref(found["path"], found["line"], (MdNode(text=found[0]),)))
         at = found.end()
     if at < len(text):
         parts.append(MdNode(text=text[at:]))
@@ -110,9 +122,9 @@ def _file_refs(text: str) -> list[MdNode]:
 def _inline_code(node: SyntaxTreeNode) -> MdNode:
     code = MdNode("code", text=node.content)
     found = FILE_REF.fullmatch(node.content.strip())
-    if found is None or not _names_a_file(found.group(1)) or _in_link(node):
+    if found is None or not _names_a_file(found["path"]) or _in_link(node):
         return code
-    return _file_ref(found.group(1), found.group(2), (code,))
+    return _file_ref(found["path"], found["line"], (code,))
 
 
 def _in_link(node: SyntaxTreeNode) -> bool:
@@ -208,7 +220,7 @@ def _token_spans(text: str) -> list[MdNode]:
     for found in _BREAKABLE_RUN.finditer(text):
         if found.start() > at:
             parts.append(MdNode(text=text[at : found.start()]))
-        parts.append(MdNode("span", cls="cell-token", children=(MdNode(text=found.group(0)),)))
+        parts.append(MdNode("span", cls="cell-token", children=(MdNode(text=found[0]),)))
         at = found.end()
     if at < len(text):
         parts.append(MdNode(text=text[at:]))
@@ -276,3 +288,14 @@ def render_tree(text: str) -> tuple[MdNode, ...]:
     """Parse markdown into nodes the template emits; nothing here is markup."""
     root = SyntaxTreeNode(_PARSER.parse(text))
     return tuple(part for child in root.children for part in _convert(child))
+
+
+PATTERNS: Final = (
+    Rx(_LONE_TERM, ("x", "42", "3.14"), ("xy", "1.", "x1"), "fullmatch"),
+    Rx(_BREAKABLE_RUN, ("a/b", "src/x.py", "foo-bar", "2020\u20132021"), ("plain", "a b")),
+    Rx(
+        FILE_REF,
+        ("src/app.py:12", "./x/y.ts:3:4", "see main.rs:10.", "example.com:443"),
+        ("http://x/a.py:1", "a.py:0", "a.py:12/x", "a.py"),
+    ),
+)

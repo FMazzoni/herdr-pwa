@@ -131,7 +131,16 @@ DIVERGENCES: dict[str, str] = {
 REWORDED: dict[str, str] = {"60s ago": "59s ago"}
 
 # CSI, OSC and two-byte escapes, exactly as the ledger's decoder stripped them.
-_ANSI = re.compile(r"\x1b(?:\[[0-9;?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[@-Z\\-_])")
+_ANSI = re.compile(
+    r"""
+    \x1b
+    (?: \[ [0-9;?]* [ -/]* [@-~]  # CSI
+      | \] [^\x07\x1b]* (?:\x07|\x1b\\)  # OSC, closed by BEL or ST
+      | [@-Z\\-_]  # any other two-byte escape
+    )
+    """,
+    re.VERBOSE,
+)
 
 
 def _obj(value: JsonValue) -> dict[str, JsonValue]:

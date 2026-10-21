@@ -96,7 +96,7 @@ layers = [
     "writes | notify | files",
     "decisions | render",
     "engine",
-    "audit : pairing : devreport : notify_state : push : auth : tailscale : settings : statedir : clock : managed : panetext : process_start : protocol : validation : ids",
+    "audit : pairing : devreport : facts : glyphs : patterns : notify_state : push : auth : tailscale : settings : statedir : clock : managed : panetext : process_start : protocol : validation : ids",
 ]
 
 # The foundations layer is non-independent, so this is what keeps its modules from a cycle.

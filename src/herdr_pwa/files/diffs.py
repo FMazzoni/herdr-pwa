@@ -4,10 +4,19 @@ import re
 from dataclasses import dataclass
 from typing import Final
 
+from herdr_pwa.patterns import Rx
+
 MAX_LINES: Final = 3000
 LINE_CHARS: Final = 2000
 BINARY: Final = "The file is binary; there is no text to compare."
-_HUNK: Final = re.compile(r"^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@(.*)$")
+_HUNK: Final = re.compile(
+    r"""
+    @@\ -(?P<old>\d+)(?:,\d+)?  # where the hunk starts in the old file, and its length
+    \ \+(?P<new>\d+)(?:,\d+)?\ @@  # and in the new one
+    (?P<heading>.*)  # the function or section git names it after
+    """,
+    re.VERBOSE,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,8 +56,8 @@ class _Walk:
         self.rows: list[DiffLine] = []
 
     def hunk(self, found: re.Match[str]) -> None:
-        self.old, self.new = int(found.group(1)), int(found.group(2))
-        self.rows.append(DiffLine("hunk", 0, self.new, found.group(3).strip()))
+        self.old, self.new = int(found["old"]), int(found["new"])
+        self.rows.append(DiffLine("hunk", 0, self.new, found["heading"].strip()))
 
     def body(self, raw: str) -> None:
         mark, text = raw[:1], raw[1:]
@@ -69,7 +78,7 @@ def parse(text: str) -> FileDiff:
     """Unified diff text, as rows; a binary change is a note, not rows."""
     walk = _Walk()
     for raw in text.splitlines():
-        found = _HUNK.match(raw)
+        found = _HUNK.fullmatch(raw)
         if found:
             walk.hunk(found)
         elif raw.startswith("Binary files") and not walk.rows:
@@ -87,3 +96,13 @@ def added(text: str) -> FileDiff:
     lines = lines[:-1] if lines and not lines[-1] else lines
     rows = [DiffLine("add", 0, n, *_cut(t)) for n, t in enumerate(lines[:MAX_LINES], start=1)]
     return FileDiff(tuple(rows), max(0, len(lines) - MAX_LINES))
+
+
+PATTERNS: Final = (
+    Rx(
+        _HUNK,
+        ("@@ -1,2 +3,4 @@", "@@ -10 +12 @@ def main():"),
+        ("@@ -a +1 @@", "@ -1 +1 @", "@@ -1 +1@@"),
+        "fullmatch",
+    ),
+)

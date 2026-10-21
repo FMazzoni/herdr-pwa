@@ -6,6 +6,7 @@ from typing import Final
 
 from latex2mathml.converter import convert
 
+from herdr_pwa.patterns import Rx
 from herdr_pwa.render.mdnode import MdNode
 
 # MathML Core, plus menclose, which WebKit draws and latex2mathml emits for \boxed and \cancel.
@@ -86,3 +87,10 @@ def math_node(tex: str, *, block: bool) -> MdNode:
         code = MdNode("code", text=tex.strip())
         return MdNode("p", children=(code,)) if block else code
     return MdNode("div", cls="math-block", children=(math,)) if block else math
+
+
+PATTERNS: Final = (
+    Rx(
+        _VALUE, ("1em", "-0.5 em", "100%"), ("url(x)", "a;b", "a" * 41), "fullmatch", validator=True
+    ),
+)

@@ -7,6 +7,9 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Final
 
+from herdr_pwa import glyphs
+from herdr_pwa.patterns import Rx
+
 
 @dataclass(frozen=True, slots=True)
 class Run:
@@ -63,11 +66,18 @@ _ITALIC: Final = "ansi-i"
 _UNDERLINE: Final = "ansi-u"
 
 
-# Escape-sequence grammar. Everything here is a discard rule except SGR.
+# Escape-sequence grammar, after ECMA-48; the one reading of escapes in this app.
 
-_CSI: Final = re.compile(r"\x1b\[([0-9;:<=>?]*)([ -/]*)([@-~])")
-# OSC, DCS, SOS, PM, APC: swallowed whole, so an OSC 8 hyperlink cannot inject a URL.
-_STRING_SEQ: Final = re.compile(r"\x1b[]PX^_](?:[^\x07\x1b]|\x1b(?!\\))*(?:\x07|\x1b\\|\Z)")
+_CSI: Final = re.compile(
+    r"""
+    \x1b\[ (?P<params>[0-9;:<=>?]*)  # parameter bytes
+    (?P<between>[ -/]*)  # intermediate bytes
+    (?P<final>[@-~])  # the final byte, which names the function
+    """,
+    re.VERBOSE,
+)
+# OSC, DCS, SOS, PM, APC go whole (no OSC 8 link gets in); unclosed, one ends at an ESC or a line.
+_STRING_SEQ: Final = re.compile(r"\x1b[]PX^_][^\x07\x1b\n]*(?:\x07|\x1b\\|(?=[\x1b\n])|\Z)")
 _SHORT_ESC: Final = re.compile(r"\x1b[ -/]*[0-~]?")
 _MAX_SGR_PARAMS: Final = 64
 
@@ -92,9 +102,9 @@ def cells(text: str) -> int:
 # Decoration.
 
 # Box drawing (U+2500-257F) and block elements (U+2580-259F), plus the spaces around them.
-_FRAME_TRIM: Final = "".join(chr(c) for c in range(0x2500, 0x25A0)) + " \t\u00a0\u2000\u2003"
+_FRAME_TRIM: Final = glyphs.BOX_AND_BLOCK + " \t\u00a0\u2000\u2003"
 # herdr's two-column welcome box draws its rules inside a line.
-_INNER_RULE: Final = re.compile("[─-╿]{3,}")
+_INNER_RULE: Final = re.compile(f"[{glyphs.BOX_DRAWING[0]}-{glyphs.BOX_DRAWING[-1]}]{{3,}}")
 _RULE_LINE_CHARS: Final = frozenset(_FRAME_TRIM + "-_=~·•")
 _RULE_MIN: Final = 4
 
@@ -104,11 +114,10 @@ def _is_rule_line(text: str) -> bool:
     return len(body) >= _RULE_MIN and all(c in _RULE_LINE_CHARS for c in body)
 
 
-_BOX: Final = "".join(chr(c) for c in range(0x2500, 0x25A0))
+_BOX: Final = glyphs.BOX_AND_BLOCK
 _WS: Final = " \t\u00a0"
 
 _LEAD_FRAME: Final = re.compile(f"^[{re.escape(_WS)}]*(?:[{re.escape(_BOX)}][{re.escape(_WS)}]*)+")
-_TAIL_FRAME: Final = re.compile(f"[{re.escape(_WS)}{re.escape(_BOX)}]*$")
 # Twelve, not four: four spaces is code indentation behind a diff gutter.
 _PADDING: Final = re.compile(f"[{re.escape(_WS)}]{{12,}}")
 
@@ -117,7 +126,7 @@ _PADDING: Final = re.compile(f"[{re.escape(_WS)}]{{12,}}")
 
 BORDER_GLYPH: Final = "─"
 BORDER_MIN_CELLS: Final = 20
-_PROMPT_GLYPHS: Final = "\u276f>"
+_PROMPT_GLYPHS: Final = glyphs.PROMPT
 
 
 def is_box_border(text: str) -> bool:
@@ -198,8 +207,11 @@ def _split_chrome(
 # (Nerd Font icons and powerline arrows, U+E000-U+F8FF), which a phone draws as a blank box:
 # noise, so the gap between the pieces stands in for it.
 _SEGMENT_BREAK: Final = re.compile(
-    f"(?P<drop>[{re.escape(_WS)}]{{2,}}|[\ue000-\uf8ff]+)"
-    f"|(?:^|(?<=[{re.escape(_WS)}]))[|\u2502\u2022](?:$|(?=[{re.escape(_WS)}]))"
+    rf"""
+    (?P<drop> [{re.escape(_WS)}]{{2,}} | [\ue000-\uf8ff]+ )  # padding or a private-use glyph: gone
+  | (?:^|(?<=[{re.escape(_WS)}])) [|\u2502\u2022] (?:$|(?=[{re.escape(_WS)}]))  # a separator: kept
+    """,
+    re.VERBOSE,
 )
 
 
@@ -251,8 +263,8 @@ def _strip_frame(runs: list[Run]) -> list[Run]:
     flat = plain_text(out)
     lead = _LEAD_FRAME.match(flat)
     start = lead.end() if lead else 0
-    tail = _TAIL_FRAME.search(flat, start)
-    end = tail.start() if tail else len(flat)
+    # One line's text holds no newline, so the frame's tail is what an rstrip of it takes.
+    end = len(flat.rstrip(_WS + _BOX))
     out = _slice_runs(out, start, max(start, end))
     return [run for run in _collapse_padding(out) if run.text]
 
@@ -444,17 +456,36 @@ def _apply_sgr(style: _Style, raw: str) -> None:
 _DROP: Final = frozenset(chr(c) for c in range(0x20) if c not in (0x09, 0x0A)) | frozenset("\x7f")
 
 
-def _skip_escape(text: str, position: int) -> tuple[int, str | None]:
-    """Consume one escape sequence. Returns (next position, SGR params or None)."""
+@dataclass(frozen=True, slots=True)
+class Escape:
+    """One escape sequence: where it ends, and its parameters when it sets the style (SGR)."""
+
+    end: int
+    sgr: str | None = None
+
+
+def escape_at(text: str, position: int) -> Escape:
+    """The escape sequence that the ESC at ``text[position]`` opens, framed as ECMA-48 frames it."""
     match = _STRING_SEQ.match(text, position)
     if match is not None:
-        return match.end(), None
+        return Escape(match.end())
     match = _CSI.match(text, position)
     if match is not None:
-        is_sgr = match.group(3) == "m" and not match.group(2)
-        return match.end(), match.group(1) if is_sgr else None
+        is_sgr = match["final"] == "m" and not match["between"]
+        return Escape(match.end(), match["params"] if is_sgr else None)
     match = _SHORT_ESC.match(text, position)
-    return (match.end() if match else position + 1), None
+    return Escape(match.end() if match else position + 1)
+
+
+def without_escapes(text: str) -> str:
+    """*text* with every escape sequence taken out and every other character kept."""
+    kept: list[str] = []
+    position = 0
+    while (start := text.find("\x1b", position)) >= 0:
+        kept.append(text[position:start])
+        position = escape_at(text, start).end
+    kept.append(text[position:])
+    return "".join(kept)
 
 
 def _plain_run(text: str, position: int) -> tuple[int, str]:
@@ -471,8 +502,8 @@ def _next_event(text: str, position: int) -> tuple[int, tuple[str, str] | None]:
     if char == "\n":
         return position + 1, ("newline", "")
     if char == "\x1b":
-        position, params = _skip_escape(text, position)
-        return position, None if params is None else ("sgr", params)
+        escape = escape_at(text, position)
+        return escape.end, None if escape.sgr is None else ("sgr", escape.sgr)
     position, chunk = _plain_run(text, position)
     return position, ("text", chunk) if chunk else None
 
@@ -549,7 +580,9 @@ def _screen_width(rows: list[str]) -> int:
     return max((cells(row.rstrip()) for row in rows), default=0)
 
 
-_BESIDE_BOX_RE: Final = re.compile(r"\s{2,}[┌╭│┃├┝└╰]")
+_BESIDE_BOX_RE: Final = re.compile(
+    rf"\s{{2,}}{glyphs.one_of(glyphs.PREVIEW_TOP, glyphs.PREVIEW_SIDE, glyphs.PREVIEW_BOTTOM)}"
+)
 """The gap and the side of a box drawn right of a row, as a preview beside an option is."""
 
 
@@ -663,3 +696,26 @@ def pane_view(text: str, *, strip: bool = True) -> PaneView:
 def pane_lines(text: str, *, strip: bool = True) -> list[list[Run]]:
     """:func:`pane_view`'s viewport, without the chrome it split off."""
     return [line.runs for line in pane_view(text, strip=strip).lines]
+
+
+PATTERNS: Final = (
+    Rx(
+        _CSI,
+        ("\x1b[31m", "\x1b[?25h", "\x1b[38:2::1:2:3m", "\x1b[1 q"),
+        ("\x1b]0;t\x07", "x\x1b[31m", "\x1b[\x1b"),
+        "match",
+    ),
+    Rx(
+        _STRING_SEQ,
+        ("\x1b]0;title\x07", "\x1b]8;;http://x\x1b\\", "\x1bPq#0\x1b\\", "\x1b]0;open\nnext"),
+        ("\x1b[31m", "\x1b(B"),
+        "match",
+    ),
+    Rx(_SHORT_ESC, ("\x1b(B", "\x1b7", "\x1b", "\x1b#8"), ("x", "[31m"), "match"),
+    Rx(_INNER_RULE, ("───", "x ━━━ y"), ("──", "---")),
+    Rx(_LEAD_FRAME, ("│ text", "  ╭─╮ x", "\u00a0┃"), ("text │", ""), "match"),
+    Rx(_PADDING, (" " * 12, "a" + "\u00a0" * 12 + "b"), (" " * 11, "\n" * 12)),
+    Rx(_WIDE_RULE_RUN, ("─" * 20, "x " + "=" * 20), ("─" * 19, "a" * 20)),
+    Rx(_SEGMENT_BREAK, ("a  b", "a\ue0b0b", "a | b", "|"), ("a b", "a|b")),
+    Rx(_BESIDE_BOX_RE, ("  ┌", "   │ x"), (" ┌", "  x"), "match"),
+)

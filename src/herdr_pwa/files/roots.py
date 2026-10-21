@@ -9,6 +9,7 @@ from typing import Final
 
 from herdr_pwa.files.git import Git
 from herdr_pwa.files.reader import NotReadable, OutsideRoot, inside
+from herdr_pwa.patterns import Rx
 
 ROOT_ID: Final = re.compile(r"[0-9a-f]{12}")
 # Credentials and this app's own state never show, even inside a root, even behind a tap.
@@ -142,3 +143,20 @@ def relative(root: Root, real: Path) -> str:
 
 class UnknownRoot(Exception):  # noqa: N818 - named for what the screen says
     """A root id no agent is standing in now, or an agent standing in no repository."""
+
+
+PATTERNS: Final = (
+    Rx(
+        ROOT_ID,
+        ("0123456789ab",),
+        ("0123456789AB", "0123456789a", "0123456789abc"),
+        "fullmatch",
+        validator=True,
+    ),
+    Rx(
+        _SECRET,
+        (".env", ".env.local", "id_ed25519", "key.pem", "tokens.json", "api-token", ".env\nx"),
+        ("tokenizer.py", "tokens.css", "README.md"),
+        "match",
+    ),
+)

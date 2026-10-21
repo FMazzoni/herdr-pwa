@@ -24,7 +24,8 @@ CSS = (STATIC / "app.css").read_text(encoding="utf-8")
 JS = client_scripts()
 ROOT_BLOCK = CSS[CSS.index(":root {") : CSS.index("}", CSS.index(":root {"))]
 TOKENS: dict[str, str] = {
-    m.group(1): m.group(2) for m in re.finditer(r"(--[\w-]+):\s*([^;]+);", ROOT_BLOCK)
+    m["name"]: m["value"]
+    for m in re.finditer(r"(?P<name>--[\w-]+):\s*(?P<value>[^;]+);", ROOT_BLOCK)
 }
 FRAGMENT = {"HX-Request": "true"}
 
@@ -100,24 +101,30 @@ def test_every_type_size_follows_the_root() -> None:
 
 def test_nothing_is_set_under_13px_at_the_default_text_size() -> None:
     for name, value in _type_tokens().items():
-        sizes = [float(m.group(1)) * DEFAULT_ROOT_PX for m in re.finditer(r"([\d.]+)rem", value)]
+        sizes = [
+            float(m["rem"]) * DEFAULT_ROOT_PX for m in re.finditer(r"(?P<rem>[\d.]+)rem", value)
+        ]
         assert min(sizes) >= SMALLEST_TEXT_PX, f"{name} is {value}, {min(sizes):.1f}px"
 
 
 def test_the_root_takes_the_system_body_size_on_ios() -> None:
-    supports = re.search(r"@supports \(font: -apple-system-body\)[^{]*\{\s*html \{([^}]*)\}", CSS)
+    supports = re.search(
+        r"@supports \(font: -apple-system-body\)[^{]*\{\s*html \{(?P<rule>[^}]*)\}", CSS
+    )
     assert supports is not None
-    assert "font: -apple-system-body" in supports.group(1)
+    assert "font: -apple-system-body" in supports["rule"]
     # The family and leading are put back after the shorthand resets them.
-    assert "font-family: var(--sans)" in supports.group(1)
+    assert "font-family: var(--sans)" in supports["rule"]
 
 
 def test_reduce_motion_stills_every_transition_and_animation() -> None:
-    block = re.search(r"@media \(prefers-reduced-motion: reduce\) \{(.*?)\n\}", CSS, re.DOTALL)
+    block = re.search(
+        r"@media \(prefers-reduced-motion: reduce\) \{(?P<rules>.*?)\n\}", CSS, re.DOTALL
+    )
     assert block is not None
-    assert "transition: none !important" in block.group(1)
-    assert "animation: none !important" in block.group(1)
-    assert "scroll-behavior: auto" in block.group(1)
+    assert "transition: none !important" in block["rules"]
+    assert "animation: none !important" in block["rules"]
+    assert "scroll-behavior: auto" in block["rules"]
     assert "smooth" not in JS
 
 
@@ -192,6 +199,6 @@ def test_a_polled_region_carries_no_live_role(tmp_path: Path, path: str) -> None
 
 
 def test_a_stale_feed_keeps_its_text_contrast() -> None:
-    stale = [m.group(1) for m in re.finditer(r"\.feed\.is-stale[^{]*\{([^}]*)\}", CSS)]
+    stale = [m["rule"] for m in re.finditer(r"\.feed\.is-stale[^{]*\{(?P<rule>[^}]*)\}", CSS)]
     assert stale, "the stale feed has no rule of its own"
     assert not any("opacity" in rule for rule in stale), "a dimmed card takes its text below AA"

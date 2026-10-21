@@ -35,6 +35,8 @@ from pywebpush import WebPushException
 
 from herdr_pwa import statedir
 from herdr_pwa.clock import Clock, ago
+from herdr_pwa.panetext import without_escapes
+from herdr_pwa.patterns import Rx
 from herdr_pwa.validation import is_not_json, or_default, summary
 
 log = logging.getLogger(__name__)
@@ -251,7 +253,15 @@ def load_or_create_vapid_keys(state_dir: Path, *, clock: Clock = time.time) -> V
     return document.keys(path)
 
 
-_ENDPOINT_RE: Final = re.compile(r"https://[^\s/@]+(?:/\S*)?")
+_HTTPS: Final = "https://"
+
+
+def _is_https_url(endpoint: str) -> bool:
+    # A host with no userinfo, then any path: whitespace nowhere, a trailing newline included.
+    host = endpoint.removeprefix(_HTTPS).partition("/")[0]
+    if not endpoint.startswith(_HTTPS) or not host or "@" in host:
+        return False
+    return not any(c.isspace() for c in endpoint)
 
 
 def _is_push_service(host: str) -> bool:
@@ -261,7 +271,7 @@ def _is_push_service(host: str) -> bool:
 def _checked_endpoint(endpoint: str) -> str:
     if len(endpoint) > MAX_ENDPOINT_CHARS:
         raise ValueError(f"endpoint is over the {MAX_ENDPOINT_CHARS} character cap")
-    if not _ENDPOINT_RE.fullmatch(endpoint):
+    if not _is_https_url(endpoint):
         raise ValueError("endpoint must be an https:// URL")
     parts = urlsplit(endpoint)
     try:
@@ -399,11 +409,6 @@ class SubscriptionStore:
         statedir.write_secret(self.path, document.model_dump_json(indent=2, by_alias=True) + "\n")
 
 
-_ANSI_RE: Final = re.compile(
-    r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)"  # OSC, e.g. a title-setting sequence
-    r"|\x1b\[[0-?]*[ -/]*[@-~]"  # CSI, e.g. colour
-    r"|\x1b[@-Z\\-_]"  # any other two-character escape
-)
 _LINKY_TLDS: Final = "com|net|org|io|dev|ai|co|me|app|sh|xyz|gg|to|ly"
 # Schemes with no // that still navigate or execute.
 _BARE_SCHEMES: Final = "data|javascript|vbscript|file|blob|tel|mailto|sms|intent|market"
@@ -441,7 +446,7 @@ def _unlinked(found: re.Match[str]) -> str:
 
 def sanitise(text: str, *, limit: int) -> str:
     """Agent output reduced to what is safe on a lock screen: no escapes, controls or links."""
-    cleaned = _ANSI_RE.sub("", text)
+    cleaned = without_escapes(text)
     cleaned = "".join(" " if unicodedata.category(ch) in _INVISIBLE else ch for ch in cleaned)
     cleaned = " ".join(cleaned.split())
     if len(cleaned) > _MAX_SCANNED:
@@ -765,3 +770,12 @@ def fan_out(
         failed=outcomes.count("failed"),
         pruned=outcomes.count("pruned"),
     )
+
+
+PATTERNS: Final = (
+    Rx(
+        _URL_RE,
+        ("https://x.com", "see evil.example.com/pay", "javascript:alert(1)", "www.x", "x.io"),
+        ("plain words", "a.b", "1.5", "file.txt"),
+    ),
+)

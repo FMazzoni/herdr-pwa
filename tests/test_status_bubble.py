@@ -303,11 +303,12 @@ def test_the_route_draws_the_receipt_once_the_turn_is_done(tmp_path: Path) -> No
     body = _chat(tmp_path, "done", "done")
     assert '<span class="bubble' not in body
     found = re.search(
-        r'<span class="tray__words chat__receipt" data-hp-bubble="done"[^>]*>(.*?)</span>', body
+        r'<span class="tray__words chat__receipt" data-hp-bubble="done"[^>]*>(?P<words>.*?)</span>',
+        body,
     )
     assert found is not None, body[-1500:]
-    assert "Worked 4m 1" in found.group(1)
-    assert "3 tool calls" in found.group(1)
+    assert "Worked 4m 1" in found["words"]
+    assert "3 tool calls" in found["words"]
 
 
 def test_the_old_working_line_is_gone(tmp_path: Path) -> None:
@@ -368,9 +369,9 @@ def _verb_at_seq(tmp_path: Path, seq: int) -> str:
         agent["state_change_seq"] = seq
     rig = build_rig(tmp_path, {SNAPSHOT: frame})
     body = rig.http.get(f"/agent/{WORKING_SESSION}/tray", headers=FRAGMENT).text
-    found = re.search(r'class="bubble__text" aria-hidden="true">(\w+)…<', body)
+    found = re.search(r'class="bubble__text" aria-hidden="true">(?P<verb>\w+)…<', body)
     assert found is not None, body[-1500:]
-    return found.group(1)
+    return found["verb"]
 
 
 def test_the_verb_is_the_turns_and_survives_a_question_answered_mid_turn(tmp_path: Path) -> None:

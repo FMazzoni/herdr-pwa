@@ -301,6 +301,39 @@ def test_ansi_osc_controls_bidi_and_zero_width_are_stripped() -> None:
 
 
 @pytest.mark.parametrize(
+    ("text", "cleaned"),
+    [
+        ("before \x1b]0;evil title, no terminator", "before"),
+        ("\x1bPq#0;2;0;0;0sixel\x1b\\after", "after"),
+        ("\x1b_APC payload\x1b\\after", "after"),
+        ("\x1b(Bafter", "after"),
+        ("\x1b7saved\x1b8", "saved"),
+    ],
+)
+def test_escapes_are_read_as_the_screen_reads_them(text: str, cleaned: str) -> None:
+    # One grammar for escapes: a payload the pane never shows never reaches the lock screen.
+    assert sanitise(text, limit=100) == cleaned
+
+
+@pytest.mark.parametrize(
+    ("text", "cleaned"),
+    [
+        ("\x1b]0;broken title\nthe build passed", "the build passed"),
+        ("\x1b_stray \x1b[31mred text", "red text"),
+        ("\x1bPno end\x1b]0;t\x07after", "after"),
+    ],
+)
+def test_a_string_escape_ends_where_a_terminal_ends_it(text: str, cleaned: str) -> None:
+    # A terminal aborts a string sequence at the next ESC, and a newline starts a new line.
+    assert sanitise(text, limit=100) == cleaned
+
+
+def test_a_stray_esc_takes_the_character_after_it() -> None:
+    # ECMA-48 reads ESC and one final byte as one sequence, so the letter goes with it.
+    assert sanitise("\x1bhello", limit=100) == "ello"
+
+
+@pytest.mark.parametrize(
     "text",
     [
         "go to https://evil.example/pay now",

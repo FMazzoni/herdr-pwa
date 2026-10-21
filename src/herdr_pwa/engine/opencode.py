@@ -38,6 +38,7 @@ from herdr_pwa.engine.transcript import (
     spend_of,
     token_count,
 )
+from herdr_pwa.patterns import Rx
 from herdr_pwa.validation import OR_NONE, Count, Flag, Number, Text
 
 # opencode auto-approves bash by default, so its agent would never block and never notify.
@@ -821,3 +822,14 @@ def _origin(store: _Store) -> str:
 
 def _info(store: _Store) -> SessionInfo:
     return store.info()
+
+
+PATTERNS: Final = (
+    Rx(
+        _ID,
+        ("ses_abc123", "msg_X", "prt_1"),
+        ("ses_", "ses-abc", "sess_abc", "ses_a/b"),
+        "fullmatch",
+        validator=True,
+    ),
+)

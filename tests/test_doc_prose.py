@@ -49,7 +49,11 @@ LINK = re.compile(r"\]\([^)]*\)")
 ACRONYM = re.compile(r"\b[A-Z]{2,}(?=s?\b)")
 SENTENCE_END = re.compile(r"(?<=[.!?])\s+(?=[A-Z`\"(*0-9])")
 PATHLIKE = re.compile(
-    r"^[\w.-]+(/[\w.-]*)+$|^[\w.-]+\.(py|json|jsonl|md|toml|yaml|yml|html|css|js|txt)$"
+    r"""
+    [\w.-]+ (?:/[\w.-]*)+  # a path with a folder in it
+  | [\w.-]+ \.(?:py|json|jsonl|md|toml|yaml|yml|html|css|js|txt)  # or a file this repo keeps
+    """,
+    re.VERBOSE,
 )
 SEARCH = ("", "src/herdr_pwa")
 # A word in capitals stands for a value the reader fills in, as in KEY.png.
@@ -161,8 +165,8 @@ def _exists(path: str, bases: list[Path]) -> bool:
 
 def missing_paths(name: str, text: str) -> list[str]:
     """Backticked paths found nowhere: beside the doc, at the root, in src, or as a file name."""
-    names = (m.group(0).strip("`") for m in CODE.finditer(FENCE.sub("", text)))
-    paths = [n for n in names if PATHLIKE.match(n) and not PLACEHOLDER.search(n)]
+    names = (m[0].strip("`") for m in CODE.finditer(FENCE.sub("", text)))
+    paths = [n for n in names if PATHLIKE.fullmatch(n) and not PLACEHOLDER.search(n)]
     paths = [p for p in paths if p not in OUTSIDE.get(name, frozenset())]
     # Notes and screenshots under .agents/ are gitignored, so a fresh clone never has them.
     paths = [p for p in paths if not p.startswith(".agents/") or p.startswith(".agents/skills/")]

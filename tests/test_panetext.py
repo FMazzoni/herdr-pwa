@@ -3,11 +3,12 @@
 import re
 import time
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 from pydantic import JsonValue, TypeAdapter
 
-from herdr_pwa import panetext
+from herdr_pwa import glyphs, panetext, patterns
 from herdr_pwa.engine import BlockedPrompt, EngineSettings, HerdrClient, WireReply, as_pane_id
 from herdr_pwa.panetext import (
     MAX_RUNS_PER_LINE,
@@ -373,16 +374,26 @@ def test_a_blocked_look_reads_the_visible_screen_beside_the_detection_it_draws()
     assert look.screen == "visible text"
 
 
-def test_the_module_stays_a_leaf() -> None:
-    """``panetext`` is imported by the engine and the render layer, so it imports neither."""
-    source = Path(panetext.__file__).read_text(encoding="utf-8")
-    imports = [
+def _imports(module: ModuleType) -> list[str]:
+    source = Path(str(module.__file__)).read_text(encoding="utf-8")
+    return [
         line
         for line in source.splitlines()
         if line.startswith(("import ", "from ")) and not line.startswith("from __future__")
     ]
+
+
+def test_the_module_stays_a_leaf() -> None:
+    """``panetext`` is imported by the engine and the render layer, so it imports neither."""
+    imports = _imports(panetext)
     assert imports, imports
-    assert all("herdr_pwa" not in line for line in imports), imports
+    # The glyph sets and the pattern record import nothing of this app's, so they keep it a leaf.
+    assert [line for line in imports if "herdr_pwa" in line] == [
+        "from herdr_pwa import glyphs",
+        "from herdr_pwa.patterns import Rx",
+    ]
+    for leaf in (glyphs, patterns):
+        assert all("herdr_pwa" not in line for line in _imports(leaf)), _imports(leaf)
 
 
 # --------------------------------------------------------------------------

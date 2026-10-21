@@ -9,7 +9,7 @@ place outside the engine that imports its submodules.
 
 from herdr_pwa.engine import cache as cache_module
 from herdr_pwa.engine import client as client_module
-from herdr_pwa.engine import generated, transcript
+from herdr_pwa.engine import dialog, generated, transcript
 from herdr_pwa.engine.client import discovery_subscriptions, method_of, payload_field
 from herdr_pwa.engine.dialog import OPTION_RE, is_key_hint
 from herdr_pwa.engine.generated import request as wire_request
@@ -59,6 +59,7 @@ HEAD_FINISH = transcript._HEAD_FINISH  # pyright: ignore[reportPrivateUsage]
 copied_from = transcript._copied_from  # pyright: ignore[reportPrivateUsage]
 head_records = transcript._head_records  # pyright: ignore[reportPrivateUsage]
 head_window = transcript._head_window  # pyright: ignore[reportPrivateUsage]
+dialog_chunks = dialog._chunks  # pyright: ignore[reportPrivateUsage]
 
 __all__ = [
     "BACKOFF_CAP",
@@ -94,6 +95,7 @@ __all__ = [
     "client_module",
     "copied_from",
     "decode_frame",
+    "dialog_chunks",
     "discovery_subscriptions",
     "fold_page",
     "fold_turns",

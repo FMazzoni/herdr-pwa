@@ -5,15 +5,17 @@ from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
-from types import MappingProxyType
+from string import ascii_lowercase
 from typing import Final, Self
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
+from herdr_pwa import facts, glyphs
 from herdr_pwa.engine.model import PaneId, SessionId, as_pane_id, as_session_id, screen_digest
-from herdr_pwa.panetext import as_text_read, composer_top, plain
+from herdr_pwa.panetext import as_text_read, composer_top, escape_at, plain
+from herdr_pwa.patterns import Rx, alternatives
 
-_EDGE_RE: Final = re.compile(r"^(\s*)[│┃║▏▍▎▊]")
+_EDGE_RE: Final = re.compile(rf"^(?P<indent>\s*){glyphs.one_of(glyphs.SIDE, glyphs.LEFT_BLOCKS)}")
 """A box-edge bar at line start, with the indent that owns it.
 
 opencode draws its dialogs with a left border only (SplitBorder in its TUI
@@ -23,8 +25,12 @@ description keeps its depth.
 """
 
 OPTION_RE: Final = re.compile(
-    r"^\s*[>\u276f▸▶‣*\-•]?\s*(?P<open>\[)?(?P<number>\d{1,2})(?(open)\]|\s*[.):])"
-    r"\s+(?P<label>\S.*?)\s*$"
+    rf"""
+    \s*+ {glyphs.one_of(glyphs.QUOTE_CURSOR, glyphs.CURSOR, "*-•")}?  # a cursor or a bullet
+    \s*+ (?P<open>\[)? (?P<number>\d{{1,2}}) (?(open)\]|\s*[.):])  # 1. or 2) or [3], closed alike
+    \s+ (?P<label>\S(?:.*\S)?) \s*  # the label, first to last letter, without the padding
+    """,
+    re.VERBOSE,
 )
 """One numbered row: ``1. Yes``, ``2) No``, or hermes's bracketed ``[1] Approve Once``.
 
@@ -32,12 +38,27 @@ The bracket must close on the same number it opened on, so ``[1. x`` and ``1] x`
 are not rows: a half-bracketed number is prose, not a menu.
 """
 
-_DIVIDER_RE: Final = re.compile(r"^[\s─━╌╍┄┅┈┉═—=_·•\-]{4,}$")
-
-_FOOTER_RE: Final = re.compile(
-    r"(?i)(?:\benter\b|\besc\b|\btab\b|\bctrl\b|↑|↓|←|→|arrow)"
-    r".*(?:select|cancel|navigate|confirm|choose|toggle|continue|submit|expand|manage)"
+_DIVIDER_RE: Final = re.compile(
+    rf"[\s{re.escape(glyphs.RULE + glyphs.DASHED_RULE + '—=_·•-')}]{{4,}}"
 )
+
+# A key, then later on its line a verb: two scans, as one ``.*`` bridge took 5 s on 30k characters.
+_FOOTER_KEY: Final = re.compile(
+    rf"\b(?:{alternatives(facts.FOOTER_KEY_WORDS)})\b|{alternatives(facts.FOOTER_KEY_MARKS)}",
+    re.IGNORECASE,
+)
+_FOOTER_VERB: Final = re.compile(alternatives(facts.FOOTER_VERBS), re.IGNORECASE)
+
+
+def _names_key_then_verb(text: str) -> bool:
+    """Does a line of *text* name a key and then, after it, a verb?"""
+    for line in text.split("\n"):
+        # The first key ends first, since no key's name holds another, so it is the one to try.
+        key = _FOOTER_KEY.search(line)
+        if key is not None and _FOOTER_VERB.search(line, key.end()) is not None:
+            return True
+    return False
+
 
 _MAX_CHROME_PARAGRAPHS: Final = 3
 
@@ -46,72 +67,77 @@ _MIN_MENU_OPTIONS: Final = 2
 _MIN_CHECKBOX_ROWS: Final = 2
 
 
-_TICKED_BOX: Final = "xX*✔✓"
+_TICKED_BOX: Final = "xX*" + glyphs.CHECK
 
 _BLANK_BOX: Final = " ·"
 
-_TICKED_GLYPH: Final = "☑☒◼"
-
-_BLANK_GLYPH: Final = "☐◻"
-
 _CHECKBOX_RE: Final = re.compile(
-    rf"^\s*(?:\[(?P<box>[{_TICKED_BOX}{_BLANK_BOX}]?)\]"
-    rf"|(?P<glyph>[{_TICKED_GLYPH}{_BLANK_GLYPH}]))"
-    r"\s*(?P<rest>\S.*?)\s*$"
+    rf"""
+    \s*
+    (?: \[ (?P<box>{glyphs.one_of(_TICKED_BOX, _BLANK_BOX)}?) \]  # a mark in brackets, [x] or [ ]
+      | (?P<glyph>{glyphs.one_of(glyphs.TICKED_BOX, glyphs.BLANK_BOX)})  # or a checkbox glyph
+    )
+    \s* (?P<rest>\S(?:.*\S)?) \s*  # the label beside it
+    """,
+    re.VERBOSE,
 )
 
 
 def _ticked(label: str) -> tuple[bool | None, str]:
     """Split ``"[✔] autumn"`` into the tick state and the label the terminal drew."""
-    match = _CHECKBOX_RE.match(label)
+    match = _CHECKBOX_RE.fullmatch(label)
     if match is None:
         return None, label
     mark = match.group("box") or match.group("glyph") or ""
-    return bool(mark) and mark in _TICKED_BOX + _TICKED_GLYPH, match.group("rest")
+    return bool(mark) and mark in _TICKED_BOX + glyphs.TICKED_BOX, match.group("rest")
 
 
-_SELECT_VERBS: Final = (
-    "select",
-    "choose",
-    "pick",
-    "confirm",
-    "proceed",
-    "approve",
-    "lock",
-)
+_MARKER_RE: Final = re.compile(rf"^\s*{glyphs.one_of(glyphs.QUOTE_CURSOR, glyphs.CURSOR)}\s")
 
-_TOGGLE_VERBS: Final = ("toggle", "check", "uncheck", "deselect", "select all")
-
-_MARKER_RE: Final = re.compile(r"^\s*[>\u276f▸▶‣]\s")
-
-_PARKED_RE: Final = re.compile(r"^[\u276f▸▶‣]\s+\S")
+_PARKED_RE: Final = re.compile(rf"^{glyphs.one_of(glyphs.CURSOR)}\s+\S")
 """The cursor parked on a menu's own unnumbered row, such as claude's checklist ``Next``.
 
 Only a glyph in the first column counts: ``>`` there is a markdown quote in a
 recap, and an indented glyph is body text under a row.
 """
 
+_STEP_EDGES: Final = glyphs.ARROW_LEFT + glyphs.ARROW_RIGHT
+
 _STEP_TOKEN_RE: Final = re.compile(
-    r"(?P<box>[\u2610\u2612\u2611\u2714\u2713])\s*(?P<label>[^\u2610\u2612\u2611\u2714\u2713\u2190\u2192]*)"
+    rf"""
+    (?P<box>{glyphs.one_of(glyphs.STEP_BOXES)})  # a step's box
+    \s* (?P<label>[^{re.escape(glyphs.STEP_BOXES + _STEP_EDGES)}]*)  # its label, up to the next
+    """,
+    re.VERBOSE,
 )
 
-_STEP_TICKED: Final = "\u2612\u2611"
-
-_STEP_SUBMIT: Final = "\u2714\u2713"
-
 _STEPPER_RE: Final = re.compile(
-    r"^\u2190[^\u2190\u2192]*[\u2610\u2612\u2611\u2714\u2713][^\u2190\u2192]*\u2192$"
+    rf"""
+    {glyphs.ARROW_LEFT} [^{_STEP_EDGES}]*  # the strip opens on an arrow
+    {glyphs.one_of(glyphs.STEP_BOXES)}  # holds at least one step box
+    [^{_STEP_EDGES}]* {glyphs.ARROW_RIGHT}  # and closes on the other arrow
+    """,
+    re.VERBOSE,
 )
 
 
 _HINT_RE: Final = re.compile(
-    r"^\s*(?P<keys>[^\s].{0,29}?)\s+to\s+(?P<verb>[A-Za-z][A-Za-z0-9 /+-]{0,28}?)\s*$"
+    r"""
+    \s* (?P<keys>[^\s].{0,29}?)  # the keys, a few words at most
+    \s+ to \s+
+    (?P<verb>[A-Za-z][A-Za-z0-9 /+-]{0,28}?) \s*  # what they do
+    """,
+    re.VERBOSE,
 )
 """One ``<keys> to <verb>`` hint, the form most harnesses print."""
 
 
 _VERB_HINT_RE: Final = re.compile(
-    r"^\s*(?P<keys>[^\s].{0,29}?)\s+(?P<verb>[A-Za-z][A-Za-z0-9 /+-]{0,28}?)\s*$"
+    r"""
+    \s* (?P<keys>[^\s].{0,29}?)  # the keys, a few words at most
+    \s+ (?P<verb>[A-Za-z][A-Za-z0-9 /+-]{0,28}?) \s*  # then what they do, with no "to"
+    """,
+    re.VERBOSE,
 )
 """One verb-first hint: ``<keys> <verb>`` with no "to" at all.
 
@@ -121,10 +147,6 @@ what status bars print -- claude's ``← for agents`` is not an offer.
 """
 
 
-_VERB_FIRST_VERBS: Final = frozenset({"select", "submit", "confirm", "toggle", "dismiss", "tab"})
-"""The verbs a verb-first pair must carry to be believed."""
-
-
 def _hint_match(text: str) -> "re.Match[str] | None":
     """One hint out of a footer piece, the "to" form taking precedence.
 
@@ -132,11 +154,11 @@ def _hint_match(text: str) -> "re.Match[str] | None":
     into keys="tab" and a verb that swallows the rest; the "to" form is the
     more specific one and is tried first.
     """
-    if (m := _HINT_RE.match(text)) is not None:
+    if (m := _HINT_RE.fullmatch(text)) is not None:
         return m
-    if (m := _VERB_HINT_RE.match(text)) is not None and m.group(
+    if (m := _VERB_HINT_RE.fullmatch(text)) is not None and m.group(
         "verb"
-    ).lower() in _VERB_FIRST_VERBS:
+    ).lower() in facts.VERB_FIRST_VERBS:
         return m
     return None
 
@@ -148,7 +170,6 @@ opencode puts two spaces between hint pairs on the same line (measured on its
 permission dialog, where the buttons share that line).
 """
 
-_LIST_OR: Final = re.compile(r"(?i)^\s*or\s+")
 
 _TRAILING_PAREN_RE: Final = re.compile(r"(?<=\S)\s*\([^()]*\)\s*$")
 
@@ -164,17 +185,25 @@ def _whole_hint(text: str) -> bool:
     if match is None:
         return False
     pieces = _key_pieces(match.group("keys"))
-    return bool(pieces) and all(_KEY_TOKEN_RE.match(piece) for piece in pieces)
+    return bool(pieces) and all(_KEY_TOKEN_RE.fullmatch(piece) for piece in pieces)
 
 
 _KEY_PIECE: Final = re.compile(r"\s*/\s*|\s+or\s+|\s*,\s*")
 
+_KEY_NAMES: Final = tuple(
+    name for name in (*facts.KEY_ALIASES, *facts.UNSENT_KEYS) if " " not in name
+)
+
 _KEY_TOKEN_RE: Final = re.compile(
-    r"(?i)^(?:(?:ctrl|shift|alt|opt|option|cmd|meta|super)[+-])*"
-    r"(?:f\d{1,2}|enter|return|esc|escape|tab|space|spacebar|backspace|del|delete"
-    r"|up|down|left|right|arrows?(?:\s+keys?)?|pgup|pgdn|home|end"
-    r"|[a-z0-9]|[\u2191\u2193\u2190\u2192\u21b5\u23ce]"
-    r"|[\u2191][\u2193]|[\u2193][\u2191]|\u21c6)$"
+    rf"""
+    (?: (?:{alternatives(facts.KEY_MODIFIERS)}) [+-] )*  # ctrl+, shift-, ...
+    (?: f\d{{1,2}}  # a function key
+      | arrows? (?:\s+ keys?)?  # "arrow keys", however it is spaced
+      | [a-z0-9]  # one letter or digit
+      | {alternatives(_KEY_NAMES)}  # a named key, or the glyph a footer draws for it
+    )
+    """,
+    re.IGNORECASE | re.VERBOSE,
 )
 """A token that NAMES a key, including the paired glyphs a footer prints whole.
 
@@ -182,41 +211,9 @@ opencode advertises a horizontal select as ``⇆`` and a vertical one as ``↑�
 one token each (measured on its dialogs).
 """
 
-_KEY_ALIASES: Final[MappingProxyType[str, tuple[str, ...]]] = MappingProxyType(
-    {
-        "enter": ("enter",),
-        "return": ("enter",),
-        "↵": ("enter",),
-        "⏎": ("enter",),
-        "esc": ("esc",),
-        "escape": ("esc",),
-        "tab": ("tab",),
-        "space": ("space",),
-        "spacebar": ("space",),
-        "up": ("up",),
-        "down": ("down",),
-        "left": ("left",),
-        "right": ("right",),
-        "↑": ("up",),
-        "↓": ("down",),
-        "←": ("left",),
-        "→": ("right",),
-        "↑↓": ("up", "down"),
-        "↓↑": ("up", "down"),
-        # "Arrow keys" means the vertical pair; left/right only count where the screen draws them.
-        "arrow": ("up", "down"),
-        "arrows": ("up", "down"),
-        "arrow keys": ("up", "down"),
-        "arrow key": ("up", "down"),
-    }
-)
-"""The key names this app is willing to send, spelled the way herdr's ``send_keys`` spells them.
+_CTRL: Final = ("ctrl+", "ctrl-")
 
-``⇆`` is absent on purpose: which keys it names depends on the verb printed
-beside it, and that decision lives in :func:`_keys_in`.
-"""
-
-_CTRL_RE: Final = re.compile(r"^ctrl[+-]([a-z])$")
+_CTRL_KEY_CHARS: Final = len("ctrl+e")
 
 _MAX_HINTS: Final = 4
 
@@ -241,13 +238,11 @@ Measured on opencode: the labels get three spaces between them (one-space pads
 plus its box gap), the hint pairs two.
 """
 
-_HEADER_TOKEN: Final = re.compile(r"^[A-Za-z][A-Za-z0-9 '/&+.-]{0,23}$")
+_HEADER_TOKEN: Final = re.compile(r"[A-Za-z][A-Za-z0-9 '/&+.-]{0,23}")
 """One tab-strip header: a short word or two, nothing that looks like a sentence."""
 
 _MIN_STRIP_TOKENS: Final = 2
 _MAX_STRIP_TOKENS: Final = 6
-
-_CONFIRM_TOKENS: Final = frozenset({"confirm", "submit", "done"})
 
 _FOCUS_DISTINCT: Final = 2
 """A focus exists only when the choices carry exactly two backgrounds."""
@@ -290,14 +285,21 @@ class KeyHint(BaseModel):
 
     @property
     def hands_off(self) -> bool:
-        """True when the key gives the terminal to another program: see ``HANDOFF_VERBS``."""
+        """True when the key gives the terminal to another program: see ``facts.HANDOFF_VERBS``."""
         return _HANDOFF_RE.search(self.verb) is not None
+
+
+def _ctrl_letter(key: str) -> str | None:
+    """The letter a ``ctrl+e`` or ``ctrl-e`` key names, or ``None``."""
+    if len(key) == _CTRL_KEY_CHARS and key.startswith(_CTRL) and key[-1] in ascii_lowercase:
+        return key[-1]
+    return None
 
 
 def _key_label(key: str) -> str:
     """A key name as a human reads it on a button: ``ctrl-e`` -> ``Ctrl+E``."""
-    if (m := _CTRL_RE.match(key)) is not None:
-        return f"Ctrl+{m.group(1).upper()}"
+    if (letter := _ctrl_letter(key)) is not None:
+        return f"Ctrl+{letter.upper()}"
     return key.capitalize()
 
 
@@ -314,8 +316,8 @@ def _keys_in(token: str, verb: str = "") -> tuple[str, ...]:
         piece = raw.strip().strip(".")
         if not piece:
             continue
-        if (ctrl := _CTRL_RE.match(piece)) is not None:
-            found.append(f"ctrl-{ctrl.group(1)}")
+        if (letter := _ctrl_letter(piece)) is not None:
+            found.append(f"ctrl-{letter}")
             continue
         if piece == "\u21c6":
             # The glyph names whatever moves between the things the screen shows: on a
@@ -323,7 +325,7 @@ def _keys_in(token: str, verb: str = "") -> tuple[str, ...]:
             # "⇆ tab" (the tab key). The verb it printed is the only honest reading.
             found.extend(("tab",) if verb == "tab" else ("left", "right"))
             continue
-        found.extend(_KEY_ALIASES.get(piece, ()))
+        found.extend(facts.KEY_ALIASES.get(piece, ()))
     return tuple(dict.fromkeys(found))
 
 
@@ -334,7 +336,7 @@ def is_key_hint(line: str) -> bool:
         if match is None:
             continue
         pieces = _key_pieces(match.group("keys"))
-        if pieces and all(_KEY_TOKEN_RE.match(piece) for piece in pieces):
+        if pieces and all(_KEY_TOKEN_RE.fullmatch(piece) for piece in pieces):
             return True
     return False
 
@@ -352,12 +354,20 @@ def _footer_lines(lines: list[str]) -> list[str]:
         end -= 1
     found: list[str] = []
     for line in reversed(lines[:end]):
-        if not line.strip() or _DIVIDER_RE.match(line) or not _is_chrome(line):
+        if not line.strip() or _DIVIDER_RE.fullmatch(line) or not _is_chrome(line):
             break
         found.append(line)
         if len(found) >= _MAX_FOOTER_LINES:
             break
     return list(reversed(found))
+
+
+def _without_list_or(part: str) -> str:
+    """*part* without the ``or`` that closes a list, as in ``type 1/2/3, or ↑/↓``."""
+    rest = part.lstrip()
+    if rest[:2].lower() == "or" and rest[2:3].isspace():
+        return rest[2:].lstrip()
+    return part
 
 
 def _segments(line: str) -> list[str]:
@@ -369,7 +379,7 @@ def _segments(line: str) -> list[str]:
             pieces.append(segment)
             continue
         # "type 1/2/3, or ↑/↓ to select" (hermes): the "or" closes the list, it names no key.
-        parts = (_LIST_OR.sub("", part) for part in whole.split(","))
+        parts = (_without_list_or(part) for part in whole.split(","))
         pieces.extend(part for part in parts if part.strip())
     return pieces
 
@@ -385,22 +395,7 @@ def _hints(footer: list[str]) -> tuple[KeyHint, ...]:
     return tuple(found[:_MAX_HINTS])
 
 
-HANDOFF_VERBS: Final = ("edit in", "editor", "shell", "suspend")
-"""Words that, whole in a hint's verb, say its key hands the terminal to another program.
-
-claude prints ``ctrl+g to edit in Vim`` (or nano, or VS Code: whatever $EDITOR names) on its
-plan approval and its question notes; the editor then owns the pane, and no key this app sends
-can work it or quit it. A shell or a suspend leaves the pane the same way. Such a hint is still
-read, because it is still evidence that the screen asks, but it is never offered as a control.
-"""
-
-_HANDOFF_RE: Final = re.compile(
-    r"\b(?:" + "|".join(re.escape(verb) for verb in HANDOFF_VERBS) + r")\b", re.IGNORECASE
-)
-
-_OFFER_REFUSED: Final = frozenset({"fullscreen"})
-"""Verbs the screen may print that this app will not offer: a pane-local
-fullscreen toggle redraws the whole screen from the phone for nothing."""
+_HANDOFF_RE: Final = re.compile(rf"\b(?:{alternatives(facts.HANDOFF_VERBS)})\b", re.IGNORECASE)
 
 
 def _line_hints(line: str) -> list[KeyHint]:
@@ -410,7 +405,7 @@ def _line_hints(line: str) -> list[KeyHint]:
         if (m := _hint_match(_hint_text(segment))) is None:
             continue
         verb = " ".join(m.group("verb").lower().split())
-        if verb in _OFFER_REFUSED:
+        if verb in facts.OFFER_REFUSED:
             continue
         found.extend(KeyHint(key=key, verb=verb) for key in _keys_in(m.group("keys"), verb))
     return found
@@ -428,12 +423,12 @@ class _Seen:
 def _is_multi_select(seen: _Seen) -> bool:
     """Positive evidence that this screen TOGGLES rather than chooses."""
     lines, run = seen.lines, seen.run
-    if any(v in hint.verb for hint in seen.hints for v in _TOGGLE_VERBS):
+    if any(v in hint.verb for hint in seen.hints for v in facts.TOGGLE_VERBS):
         return True
     if run is not None:
-        return any(_CHECKBOX_RE.match(label) for _, _, label in run)
+        return any(_CHECKBOX_RE.fullmatch(label) for _, _, label in run)
     start = _dialog_start(lines, len(lines))
-    return sum(bool(_CHECKBOX_RE.match(line)) for line in lines[start:]) >= _MIN_CHECKBOX_ROWS
+    return sum(bool(_CHECKBOX_RE.fullmatch(line)) for line in lines[start:]) >= _MIN_CHECKBOX_ROWS
 
 
 def _corroborated(seen: _Seen) -> bool:
@@ -469,10 +464,10 @@ def _steps(line: str) -> Stepper | None:
     for token in _STEP_TOKEN_RE.finditer(line):
         box = token.group("box")
         # The strip's own Submit tab is not a question, so it is not a step.
-        if box in _STEP_SUBMIT:
+        if box in glyphs.STEP_SUBMIT:
             continue
         steps.append(" ".join(token.group("label").split()))
-        answered += box in _STEP_TICKED
+        answered += box in glyphs.STEP_ANSWERED
     return Stepper(steps=tuple(steps), answered=answered) if steps else None
 
 
@@ -485,12 +480,12 @@ def _stepper(lines: list[str], stop: int) -> Stepper | None:
     box, is what keeps transcript text out.
     """
     for index in range(stop - 1, -1, -1):
-        if _STEPPER_RE.match(lines[index].strip()):
+        if _STEPPER_RE.fullmatch(lines[index].strip()):
             return _steps(lines[index].strip())
     return None
 
 
-_REQUEST_TITLE_RE: Final = re.compile(r"(?i)^MCP server [\"“].+[\"”] requests your input$")
+_REQUEST_TITLE_RE: Final = re.compile(r"(?i)MCP server [\"“].+[\"”] requests your input")
 """claude's title over an MCP server's request for input: the same line herdr's
 ``mcp_elicitation_prompt`` rule calls blocked on."""
 
@@ -499,7 +494,7 @@ def _titled_message(paragraphs: list[str]) -> str:
     """The message under a request title, which is what the form asks, or ``""``."""
     for at, paragraph in enumerate(paragraphs):
         title, *rest = paragraph.split("\n")
-        if not _REQUEST_TITLE_RE.match(title):
+        if not _REQUEST_TITLE_RE.fullmatch(title):
             continue
         # Fields below it may carry a "?" of their own; the server's message is the question.
         if rest:
@@ -508,8 +503,15 @@ def _titled_message(paragraphs: list[str]) -> str:
     return ""
 
 
-# A counter or clock in a row label ticks while the question stays put.
+# A run of digits: what a countdown, a clock or a token counter changes while a question stays put.
 _DIGITS_RE: Final = re.compile(r"\d+")
+
+
+def digits_masked(text: str) -> str:
+    """*text* with every run of digits drawn as ``#``, so a ticking count reads as the same."""
+    return _DIGITS_RE.sub("#", text)
+
+
 _COUNTER_RE: Final = re.compile(r"^Question \d+/\d+\b[^\n]*\n")
 """codex's ``Question N/M`` counter, heading the question it counts, whatever that ends with."""
 
@@ -564,7 +566,7 @@ def _rows_are_the_answer(seen: _Seen) -> bool:
     if _asks(seen.lines, seen.run[0][0]):
         return True
     return any(
-        hint.key == "enter" and any(verb in hint.verb for verb in _SELECT_VERBS)
+        hint.key == "enter" and any(verb in hint.verb for verb in facts.SELECT_VERBS)
         for hint in seen.hints
     )
 
@@ -738,7 +740,7 @@ class BlockedPrompt(BaseModel):
             options=_choices(buttons) if shape is MenuShape.BUTTONS else _options(run, shape),
             stepper=_stepper(lines, stop) or _tabs_strip(lines, stop, hints),
             body=_body(lines, box),
-            drawn_labels=tuple(_DIGITS_RE.sub("#", label) for _, _, label in found or ()),
+            drawn_labels=tuple(digits_masked(label) for _, _, label in found or ()),
             asked=bool(_asks(lines, stop)),
             raw=screen.text,
             shape=shape,
@@ -800,25 +802,27 @@ def _prepared(text: str, ansi: str = "") -> _Screen:
     rows = _beside_rows(drawn)
     barred = [bool(_EDGE_RE.match(line)) for line in rows]
     # Padded to the pane's width or not, a row reads the same: a blank row of spaces is no rule.
-    lines = [_EDGE_RE.sub(r"\1", line).rstrip() for line in rows]
+    lines = [_EDGE_RE.sub(r"\g<indent>", line).rstrip() for line in rows]
     if (panel := _panel_screen(lines)) is not None:
         return _Screen(panel, [False] * len(panel), "\n".join(panel), ("",) * len(panel))
     colour = _dialog_colour(text, ansi, barred)
     return _Screen(_reframed(lines), barred, text, colour, beside=rows != drawn)
 
 
-_SIDE_TOP_RE: Final = re.compile(r"\S\s{2,}(?P<corner>[┌╭])[─━]")
+_SIDE_TOP_RE: Final = re.compile(
+    rf"\S\s{{2,}}(?P<corner>{glyphs.one_of(glyphs.PREVIEW_TOP)}){glyphs.one_of(glyphs.LINE_RULE)}"
+)
 """A box opening on an option row, right of its label: the preview beside the rows."""
 
 # A tall preview is drawn folded, a tee row across it saying how many lines it hid.
-_SIDE_EDGE: Final = "│┃├┝"
+_SIDE_EDGE: Final = glyphs.PREVIEW_SIDE
 
-_SIDE_BOTTOM: Final = "└╰"
+_SIDE_BOTTOM: Final = glyphs.PREVIEW_BOTTOM
 
 
 def _side_column(line: str) -> int | None:
     """The column a preview box beside *line*'s option opens at, or ``None``."""
-    if OPTION_RE.match(line) is None or (m := _SIDE_TOP_RE.search(line)) is None:
+    if OPTION_RE.fullmatch(line) is None or (m := _SIDE_TOP_RE.search(line)) is None:
         return None
     return m.start("corner")
 
@@ -858,7 +862,7 @@ def _cut_side(rows: list[str], box: range, column: int) -> list[str]:
     cut = list(rows)
     below = len(rows)
     for i in range(box.start, len(rows)):
-        if _DIVIDER_RE.match(rows[i]):
+        if _DIVIDER_RE.fullmatch(rows[i]):
             below = i + 1
             break
         if i >= box.stop and rows[i][:column].strip():
@@ -951,9 +955,9 @@ def _hint_shaped(text: str) -> bool:
     fullscreen") must not turn the pair into a button.
     """
     for pattern in (_HINT_RE, _VERB_HINT_RE):
-        if (m := pattern.match(_hint_text(text))) is not None:
+        if (m := pattern.fullmatch(_hint_text(text))) is not None:
             pieces = _key_pieces(m.group("keys"))
-            return bool(pieces) and all(_KEY_TOKEN_RE.match(p) for p in pieces)
+            return bool(pieces) and all(_KEY_TOKEN_RE.fullmatch(p) for p in pieces)
     return False
 
 
@@ -961,7 +965,7 @@ def _button_token(token: str) -> str | None:
     """A button label, or ``None`` when the token ends the run or voids the line."""
     if not token or len(token) > _MAX_BUTTON_CHARS:
         return None
-    if token[:1].isdigit() or _CHECKBOX_RE.match(token):
+    if token[:1].isdigit() or _CHECKBOX_RE.fullmatch(token):
         return None
     return token
 
@@ -982,7 +986,7 @@ def _button_labels(line: str) -> tuple[str, ...]:
 def _advertises(hints: tuple[KeyHint, ...]) -> bool:
     """Does the screen say the arrows take a choice and enter confirms it?"""
     sideways = any(h.key in ("left", "right") for h in hints)
-    enter = any(h.key == "enter" and any(v in h.verb for v in _SELECT_VERBS) for h in hints)
+    enter = any(h.key == "enter" and any(v in h.verb for v in facts.SELECT_VERBS) for h in hints)
     return sideways and enter
 
 
@@ -990,14 +994,18 @@ _STRIP_WINDOW: Final = 4
 """How far above the options a tabs strip may sit and still be its own."""
 
 
+# A tabs strip's headers stand three or more spaces apart, wider than the words inside one.
+_STRIP_GAP: Final = re.compile(r"\s{3,}")
+
+
 def _strip_tokens(line: str) -> tuple[str, ...]:
     """A candidate tabs-strip line as its header tokens, or ``()``."""
-    tokens = [t.strip() for t in re.split(r"\s{3,}", line.strip()) if t.strip()]
+    tokens = [t.strip() for t in _STRIP_GAP.split(line.strip()) if t.strip()]
     if not _MIN_STRIP_TOKENS <= len(tokens) <= _MAX_STRIP_TOKENS:
         return ()
-    if not all(_HEADER_TOKEN.match(t) for t in tokens):
+    if not all(_HEADER_TOKEN.fullmatch(t) for t in tokens):
         return ()
-    if tokens[-1].lower() in _CONFIRM_TOKENS:
+    if tokens[-1].lower() in facts.CONFIRM_TABS:
         tokens = tokens[:-1]
     return tuple(tokens)
 
@@ -1043,17 +1051,37 @@ def _sgr_bg(codes: list[str], bg: str) -> str:
     return bg
 
 
+# Codes are read ";"-separated only, so an SGR with ":" sub-parameters is left as text.
+_SGR_CHARS: Final = frozenset("0123456789;")
+
+
+def _sgr_at(line: str, at: int) -> tuple[int, str] | None:
+    """Where the SGR at ``line[at]`` ends and its codes, or ``None`` for any other sequence."""
+    # Only a CSI can be one; a string sequence's frame would be read again from each ESC inside it.
+    if not line.startswith("\x1b[", at):
+        return None
+    escape = escape_at(line, at)
+    if escape.sgr is None or not set(escape.sgr) <= _SGR_CHARS:
+        return None
+    return escape.end, escape.sgr
+
+
 def _chunks(line: str) -> list[tuple[str, str]]:
     """One ANSI line as ``(background, text)`` chunks, reset splitting them."""
     found: list[tuple[str, str]] = []
     bg = ""
     pos = 0
-    for m in re.finditer(r"\x1b\[([0-9;]*)m", line):
-        chunk = line[pos : m.start()]
-        if chunk:
-            found.append((bg, chunk))
-        bg = _sgr_bg(m.group(1).split(";") if m.group(1) else ["0"], bg)
-        pos = m.end()
+    at = line.find("\x1b")
+    while at >= 0:
+        if (sgr := _sgr_at(line, at)) is None:
+            # Any other sequence stays in the chunk's text, and an SGR inside it still counts.
+            at = line.find("\x1b", at + 1)
+            continue
+        if line[pos:at]:
+            found.append((bg, line[pos:at]))
+        pos, codes = sgr
+        bg = _sgr_bg(codes.split(";") if codes else ["0"], bg)
+        at = line.find("\x1b", pos)
     if line[pos:]:
         found.append((bg, line[pos:]))
     return found
@@ -1152,14 +1180,16 @@ def _is_interleave(line: str) -> bool:
     return _is_inert(line) or line[:1].isspace() or bool(_PARKED_RE.match(line))
 
 
-_PANEL_TOP_RE: Final = re.compile(r"^\s*[╭┌╔]")
+def _opens_with(line: str, corners: str) -> bool:
+    """Does *line*, past its indent, open with one of *corners*?"""
+    rest = line.lstrip()
+    return bool(rest) and rest[0] in corners
 
-_PANEL_BOTTOM_RE: Final = re.compile(r"^\s*[╰└╚]")
 
 _PANEL_TAIL: Final = 6
 
 
-_TRAILING_SIDE_RE: Final = re.compile(r"^(.*?)[│┃║]\s*$")
+_TRAILING_SIDE_RE: Final = re.compile(rf"(?P<row>.*?){glyphs.one_of(glyphs.SIDE)}\s*")
 """A row whose opening side the edge-strip already removed, closing side left."""
 
 
@@ -1170,16 +1200,16 @@ def _unboxed(line: str) -> str:
     row is a column rule inside the panel, and what follows it is that
     column's body: a plan's numbered steps beside its outline are not options.
     """
-    tail = _TRAILING_SIDE_RE.match(line)
+    tail = _TRAILING_SIDE_RE.fullmatch(line)
     # The pad up to the closing side goes too: a padded blank row would read as a rule.
-    return tail.group(1).rstrip() if tail is not None else line
+    return tail["row"].rstrip() if tail is not None else line
 
 
 def _panel_footer(lines: list[str]) -> list[str]:
     """The key hints drawn BELOW a panel, which is where hermes puts them."""
     found: list[str] = []
     for line in lines[:_PANEL_TAIL]:
-        if _DIVIDER_RE.match(line):
+        if _DIVIDER_RE.fullmatch(line):
             break
         if _is_chrome(line) and line.strip():
             found.append(line)
@@ -1189,29 +1219,33 @@ def _panel_footer(lines: list[str]) -> list[str]:
 def _panel_screen(lines: list[str]) -> list[str] | None:
     """A drawn dialog panel and its footer, as a screen of its own."""
     top = next(
-        (i for i in range(len(lines) - 1, -1, -1) if _PANEL_TOP_RE.match(lines[i])),
+        (i for i in range(len(lines) - 1, -1, -1) if _opens_with(lines[i], glyphs.TOP_LEFT)),
         None,
     )
     if top is None:
         return None
     bottom = next(
-        (i for i in range(top + 1, len(lines)) if _PANEL_BOTTOM_RE.match(lines[i])),
+        (i for i in range(top + 1, len(lines)) if _opens_with(lines[i], glyphs.BOTTOM_LEFT)),
         None,
     )
     if bottom is None:
         return None
     inside = [_unboxed(line) for line in lines[top + 1 : bottom]]
-    if not any(OPTION_RE.match(line) for line in inside):
+    if not any(OPTION_RE.fullmatch(line) for line in inside):
         return None
     return _upto_last_option(inside) + _panel_footer(lines[bottom + 1 :])
 
 
-_BOX_BOTTOM_RE: Final = re.compile(r"^\s*[╰└╚][─━═]*[╯┘╝]$")
+_BOX_BOTTOM_RE: Final = re.compile(
+    rf"\s*{glyphs.one_of(glyphs.BOTTOM_LEFT)}{glyphs.one_of(glyphs.RULE)}*{glyphs.one_of(glyphs.BOTTOM_RIGHT)}"
+)
 
-_BOX_TEE_RE: Final = re.compile(r"^\s*[├┝┠╞╟][─━═]*[┤┥┨╡╢]$")
+_BOX_TEE_RE: Final = re.compile(
+    rf"\s*{glyphs.one_of(glyphs.TEE_LEFT)}{glyphs.one_of(glyphs.RULE)}*{glyphs.one_of(glyphs.TEE_RIGHT)}"
+)
 """A rule across a drawn box, which parts its sections as a blank row would."""
 
-_BOX_RULE: Final = "─" * 4
+_BOX_RULE: Final = glyphs.LINE_RULE[0] * 4
 
 
 def _closing_box(lines: list[str]) -> range | None:
@@ -1219,14 +1253,14 @@ def _closing_box(lines: list[str]) -> range | None:
     end = len(lines)
     while end and not lines[end - 1].strip():
         end -= 1
-    if not end or not _BOX_BOTTOM_RE.match(lines[end - 1]):
+    if not end or not _BOX_BOTTOM_RE.fullmatch(lines[end - 1]):
         return None
-    top = next((i for i in range(end - 2, -1, -1) if _PANEL_TOP_RE.match(lines[i])), None)
+    top = next((i for i in range(end - 2, -1, -1) if _opens_with(lines[i], glyphs.TOP_LEFT)), None)
     if top is None:
         return None
     inside = range(top + 1, end - 1)
     # Only the shape measured: a box with no inner rule is left as the grammar read it before.
-    return inside if any(_BOX_TEE_RE.match(lines[i]) for i in inside) else None
+    return inside if any(_BOX_TEE_RE.fullmatch(lines[i]) for i in inside) else None
 
 
 def _reframed(lines: list[str]) -> list[str]:
@@ -1238,7 +1272,7 @@ def _reframed(lines: list[str]) -> list[str]:
     if (box := _closing_box(lines)) is None:
         return lines
     inside = [
-        "" if _BOX_TEE_RE.match(row) else _unboxed(row) for row in lines[box.start : box.stop]
+        "" if _BOX_TEE_RE.fullmatch(row) else _unboxed(row) for row in lines[box.start : box.stop]
     ]
     # The bottom stays: a footer is the dialog's own only on the screen's last row.
     return [*lines[: box.start - 1], _BOX_RULE, *inside, *lines[box.stop :]]
@@ -1246,7 +1280,7 @@ def _reframed(lines: list[str]) -> list[str]:
 
 def _upto_last_option(inside: list[str]) -> list[str]:
     """A panel's rows, cut after its last option row."""
-    last = max(i for i, line in enumerate(inside) if OPTION_RE.match(line))
+    last = max(i for i, line in enumerate(inside) if OPTION_RE.fullmatch(line))
     kept = inside[: last + 1]
     return kept + [line for line in inside[last + 1 :] if _is_inert(line)]
 
@@ -1256,7 +1290,7 @@ def _trailing_menu(lines: list[str]) -> list[tuple[int, int, str]] | None:
     matches = [
         (i, int(m.group("number")), m.group("label"))
         for i, line in enumerate(lines)
-        if (m := OPTION_RE.match(line))
+        if (m := OPTION_RE.fullmatch(line))
     ]
     # A menu is what the agent waits on now, so only blanks, rules and hints may follow it.
     if not matches or not all(_is_inert(line) for line in lines[matches[-1][0] + 1 :]):
@@ -1303,10 +1337,18 @@ def _paragraphs(lines: list[str], start: int, stop: int) -> list[str]:
 
 def _is_chrome(line: str) -> bool:
     """True for a rule or a key-hint footer: furniture the terminal drew, not text."""
-    return bool(_DIVIDER_RE.match(line)) or bool(_FOOTER_RE.search(line)) or is_key_hint(line)
+    return bool(_DIVIDER_RE.fullmatch(line)) or _names_key_then_verb(line) or is_key_hint(line)
 
 
-_MARKER_LEAD: Final = re.compile(r"^[\s\u25cf\u25cb\u2022\u00b7]+")
+_MARKS: Final = "\u25cf\u25cb\u2022\u00b7"
+
+
+def _unmarked(line: str) -> str:
+    """*line* without the indent and the bullets a dialog leads its text with."""
+    at = 0
+    while at < len(line) and (line[at].isspace() or line[at] in _MARKS):
+        at += 1
+    return line[at:]
 
 
 def _box_start(lines: list[str], stop: int, barred: list[bool] | None = None) -> int:
@@ -1325,14 +1367,14 @@ def _box_start(lines: list[str], stop: int, barred: list[bool] | None = None) ->
 
 def _body(lines: list[str], box: range) -> str:
     """What is being asked ABOUT: the dialog's text above the options."""
-    kept = (_MARKER_LEAD.sub("", line).rstrip() for line in lines[box.start : box.stop])
+    kept = (_unmarked(line).rstrip() for line in lines[box.start : box.stop])
     return "\n".join(line for line in kept if line)
 
 
 def _dialog_start(lines: list[str], stop: int) -> int:
     """Index just after the last rule before ``stop`` — where the current box begins."""
     for index in range(stop - 1, -1, -1):
-        if _DIVIDER_RE.match(lines[index]):
+        if _DIVIDER_RE.fullmatch(lines[index]):
             return index + 1
     return 0
 
@@ -1340,7 +1382,7 @@ def _dialog_start(lines: list[str], stop: int) -> int:
 def _is_option_block(paragraph: str) -> bool:
     """True for a paragraph that is nothing but numbered option rows."""
     rows = paragraph.split("\n")
-    return all(OPTION_RE.match(row) for row in rows)
+    return all(OPTION_RE.fullmatch(row) for row in rows)
 
 
 def _askable(lines: list[str], start: int, stop: int) -> list[str]:
@@ -1369,3 +1411,100 @@ def _question(lines: list[str], stop: int) -> str:
         return asked
     fallback = _askable(lines, 0, stop)
     return fallback[-1] if fallback else ""
+
+
+PATTERNS: Final = (
+    Rx(_EDGE_RE, ("│ text", "  ┃x", "▏"), ("text │", "x▏"), "match"),
+    Rx(
+        OPTION_RE,
+        ("1. Yes", "  2) No", "\u276f 1. Yes", "[1] Approve Once", "> 3: Other", "\u2022 4. Four"),
+        ("[1. x", "1] x", "1.Yes", "123. x", "Step 1. Do"),
+        "fullmatch",
+    ),
+    Rx(_DIVIDER_RE, ("────", "  ━━━━━  ", "----", "═══════"), ("───", "── x ──", ""), "fullmatch"),
+    Rx(_FOOTER_KEY, ("Enter to select", "ctrl+g", "↑/↓", "arrow keys"), ("entering", "the tablet")),
+    Rx(
+        _FOOTER_VERB,
+        ("to select", "Esc to cancel", "Tab to navigate"),
+        ("Enter to send", "any key"),
+    ),
+    Rx(
+        _CHECKBOX_RE,
+        ("[x] autumn", "[ ] spring", "[] none", "☑ done", "◻ todo", "[✔] picked"),
+        ("autumn", "[y] maybe", "[x]"),
+        "fullmatch",
+    ),
+    Rx(
+        _MARKER_RE,
+        ("\u276f 1. Yes", "  > 2. No", "▸ x"),
+        ("\u276f1. Yes", "1. \u276f Yes"),
+        "match",
+    ),
+    Rx(
+        _PARKED_RE,
+        ("\u276f Next", "▶  Submit"),
+        ("> quote", " \u276f indented", "\u276f "),
+        "match",
+    ),
+    Rx(_STEP_TOKEN_RE, ("☐ Seasons", "← ☒ Colour  ✔ Submit →"), ("no boxes", "[x] bracketed")),
+    Rx(
+        _STEPPER_RE,
+        ("← ☐ Seasons  ☒ Colour  ✔ Submit →", "←☐→"),
+        ("☐ Seasons →", "← Seasons →", "← ☐ a → b →"),
+        "fullmatch",
+    ),
+    Rx(
+        _HINT_RE,
+        ("Enter to select", "  esc to cancel", "ctrl+g to edit in Vim", "↑/↓ to navigate"),
+        ("Enter", "to select", "Press enter to 1"),
+        "fullmatch",
+    ),
+    Rx(
+        _VERB_HINT_RE,
+        ("enter submit", "⇆ select", "tab next question"),
+        ("enter", "", "1 2"),
+        "fullmatch",
+    ),
+    Rx(_HINT_SPLIT, ("a · b", "a  b", "a | b", "a\uff5cb"), ("a b", "a-b")),
+    Rx(
+        _TRAILING_PAREN_RE, ("Enter to confirm (36s)", "x (y)  "), ("(36s)", "a (b) c", "a (b (c))")
+    ),
+    Rx(_KEY_PIECE, ("ctrl+a / ctrl+b", "enter or space", "a, b", "a/b"), ("enter", "ctrl+a")),
+    Rx(
+        _KEY_TOKEN_RE,
+        ("enter", "Ctrl+Shift+F12", "arrow keys", "↑↓", "⇆", "x", "pgup"),
+        ("enter key", "ctrl+", "f123", "↑↓←", "foo"),
+        "fullmatch",
+    ),
+    Rx(_BUTTON_TOKENS, ("Allow  Deny", "a   b"), ("Allow once",)),
+    Rx(
+        _HEADER_TOKEN,
+        ("Seasons", "Q&A", "Colour / tone"),
+        ("1 question", "a" * 25, "What season is it?"),
+        "fullmatch",
+    ),
+    Rx(
+        _HANDOFF_RE,
+        ("edit in Vim", "open editor", "Shell", "suspend"),
+        ("editing", "shellac", "edit"),
+    ),
+    Rx(
+        _REQUEST_TITLE_RE,
+        ('MCP server "probe" requests your input', "mcp server “x” requests your input"),
+        ("MCP server probe requests your input", 'MCP server "x" requests your input now'),
+        "fullmatch",
+    ),
+    Rx(_DIGITS_RE, ("12", "a1b"), ("abc", "")),
+    Rx(
+        _COUNTER_RE,
+        ("Question 1/3\nWhich?", "Question 2/2 of the set\nx"),
+        ("Question 1/3", "question 1/3\nx", "Q 1/3\nx"),
+        "match",
+    ),
+    Rx(_QUESTION_MARK_RE, ("Proceed?", "(y/n)?", "“ok”?"), ("[!?]", "?", "a ?")),
+    Rx(_SIDE_TOP_RE, ("\u276f 1. Yes   ┌───", "x  ╭━━"), ("x ┌──", "  ┌──", "x  ┌ ")),
+    Rx(_STRIP_GAP, ("a   b", "a\t\t\tb"), ("a  b",)),
+    Rx(_TRAILING_SIDE_RE, ("text  │", "x┃", "a ║  "), ("text", "│ text"), "fullmatch"),
+    Rx(_BOX_BOTTOM_RE, ("╰────╯", "  └┘", "╚══╝"), ("╰──", "──╯", "╰─x─╯"), "fullmatch"),
+    Rx(_BOX_TEE_RE, ("├────┤", " ┝━━┥", "╞══╡"), ("├──", "│──┤"), "fullmatch"),
+)

@@ -4,9 +4,11 @@ import re
 import unicodedata
 from typing import Final
 
+from herdr_pwa import facts
 from herdr_pwa.decisions import AgentRow, ScreenDecision
 from herdr_pwa.engine import CONTEXT_FULL, MenuShape, ends_a_question
 from herdr_pwa.panetext import plain
+from herdr_pwa.patterns import Rx, alternatives
 
 # Spinner and status glyphs a harness prefixes its terminal title with.
 _GLYPH_CATEGORIES: Final = frozenset({"So", "Sk"})
@@ -14,14 +16,14 @@ _GLYPH_CATEGORIES: Final = frozenset({"So", "Sk"})
 _BULLETS: Final = frozenset("·•∙")
 _MAX_GLYPHS: Final = 4
 # A harness's placeholder for a session it has not named yet.
-_UNNAMED: Final = re.compile(r"^new session\s*-\s*\S+$", re.IGNORECASE)
+_UNNAMED: Final = re.compile(r"new session\s*-\s*\S+", re.IGNORECASE)
 # A shell's `user@host:path` prompt title names a place, not the work.
-_LOCATOR: Final = re.compile(r"^[^\s@:]+@[^\s@:]+(?::\S*)?$")
+_LOCATOR: Final = re.compile(r"[^\s@:]+@[^\s@:]+(?::\S*)?")
 # How a terminal prompt opens when it asks without a question mark.
 _PROMPT_OPENING: Final = re.compile(
-    r"^\W*(do you|would you|should i|shall i|allow|approve|proceed|continue|confirm|"
-    r"are you sure|press|enter|type|select|choose)\b",
-    re.IGNORECASE | re.MULTILINE,
+    # The lead stays on its own line, so a run of blank lines is read once, not from each.
+    rf"^ [^\w\n]*+ (?:{alternatives(facts.PROMPT_OPENERS)}) \b  # a line opening on a word that asks",
+    re.IGNORECASE | re.MULTILINE | re.VERBOSE,
 )
 
 
@@ -51,7 +53,7 @@ def page_title(title: str, harness: str, target: str) -> str:
 def card_title(row: AgentRow) -> str:
     """The title a feed card prints, or ``""`` when there is none worth printing."""
     text = display_title(plain(row.title))
-    if not text or _glyphs_only(text) or _UNNAMED.match(text) or _LOCATOR.match(text):
+    if not text or _glyphs_only(text) or _UNNAMED.fullmatch(text) or _LOCATOR.fullmatch(text):
         return ""
     rejects = {row.harness.strip().casefold(), row.workspace.strip().casefold()} - {""}
     return "" if text.casefold() in rejects else text
@@ -80,3 +82,19 @@ def card_question(row: AgentRow) -> str:
 def card_text(text: str) -> str:
     """Terminal text a card prints, with its escape sequences and control bytes dropped."""
     return plain(text)
+
+
+PATTERNS: Final = (
+    Rx(
+        _UNNAMED,
+        ("new session - abc", "New Session-2026"),
+        ("new session", "new session - a b"),
+        "fullmatch",
+    ),
+    Rx(_LOCATOR, ("user@host:/srv/app", "u@h"), ("user@host: x", "a@b@c", "@host"), "fullmatch"),
+    Rx(
+        _PROMPT_OPENING,
+        ("Do you want to proceed", "  * Allow this?", "line\nPress enter"),
+        ("I do you", "Proceeding now", "Tell me"),
+    ),
+)

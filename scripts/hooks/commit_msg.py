@@ -12,7 +12,10 @@ from typing import Final
 MAX_SUBJECT: Final = 72
 MAX_SENTENCES: Final = 5
 # git writes these subjects itself, so they are never held to the rules.
-MERGE: Final = re.compile(r"Merge (branch|remote-tracking branch|tag|commit|pull request) ")
+MERGE: Final = re.compile(
+    r"Merge\ (?:branch|remote-tracking\ branch|tag|commit|pull\ request)\   # what git names it after",
+    re.VERBOSE,
+)
 UNFINISHED: Final = re.compile(r"(wip\b|fixup!|squash!|amend!)", re.IGNORECASE)
 # A trailer line as git interpret-trailers reads one: `Token: value`.
 TRAILER: Final = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]*: ")
