@@ -40,6 +40,8 @@ class ClaudeAdapter(TranscriptAdapter):
         byte_frontier=True,
         # Claude Code writes tokens and no money, so a cost here would be invented.
         prices_itself=False,
+        # Measured: a tool_use record is in the log while its call still runs, before any result.
+        records_calls=True,
     )
 
     @override

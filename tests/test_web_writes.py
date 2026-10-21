@@ -1,7 +1,7 @@
 """Every write route over a fake herd: what it sends, what it refuses, and at which status."""
 
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -21,6 +21,7 @@ from herdr_pwa.panetext import as_text_read
 from herdr_pwa.settings import Settings
 from herdr_pwa.web.app import create_app
 from herdr_pwa.web.seams import Seams
+from herdr_pwa.writes.guard import HERDR_ALONE, SCREEN_ALONE
 from herdr_pwa.writes.keys import control_token
 from herdr_pwa.writes.lifecycle import on_path
 from herdr_pwa.writes.outcome import Pacing
@@ -53,8 +54,8 @@ def web(
     tmp_path: Path,
     herd: FakeHerd,
     *,
-    opencode_models: tuple[str, ...] = (),
     which: Callable[[str], str | None] = on_path,
+    overrides: Mapping[str, object] | None = None,
 ) -> Web:
     clock = FakeClock()
     settings = Settings.model_validate(
@@ -63,8 +64,8 @@ def web(
             "state_dir": tmp_path / "state",
             "tailscaled_socket": tmp_path / "no-tailscaled.sock",
             "snapshot_cache_ttl": 0.001,
-            "opencode_models": opencode_models,
             "public_host": "testserver",
+            **(overrides or {}),
         }
     )
 
@@ -126,6 +127,39 @@ def test_a_prompt_at_a_question_is_409_and_keeps_the_text(tmp_path: Path) -> Non
     assert "keep me" in response.text
     assert response.headers["hp-fragment"] == "1"
     assert w.herd.writes("agent.prompt") == []
+
+
+def test_a_refusal_herdr_alone_makes_says_so(tmp_path: Path) -> None:
+    herd = FakeHerd()
+    herd.put(P3, S1, status="blocked")
+    herd.screens[P3] = [SETTLED]
+    w = web(tmp_path, herd)
+    response = w.http.post(f"/agent/{S1}/prompt", data={"text": "go on"}, headers=ORIGIN)
+    assert response.status_code == 409
+    assert HERDR_ALONE in response.text
+
+
+# One Bash call and its result: a Claude Code log with nothing left waiting.
+ANSWERED = (
+    '{"type":"assistant","uuid":"u1","message":{"role":"assistant","content":'
+    '[{"type":"tool_use","id":"t1","name":"Bash","input":{}}]}}\n'
+    '{"type":"user","uuid":"u2","message":{"role":"user","content":'
+    '[{"type":"tool_result","tool_use_id":"t1","content":"ok"}]}}\n'
+)
+
+
+def test_a_send_the_screen_doubted_says_which_signals_outvoted_it(tmp_path: Path) -> None:
+    folder = tmp_path / "projects" / "-home-user-scratch"
+    folder.mkdir(parents=True)
+    (folder / f"{S1}.jsonl").write_text(ANSWERED)
+    herd = FakeHerd()
+    herd.put(P3, S1)
+    herd.screens[P3] = ["Pick one?\n  1. Red\n  2. Blue\n", echoed("\u276f go on")]
+    w = web(tmp_path, herd, overrides={"transcript_roots": (str(tmp_path / "projects"),)})
+    response = w.http.post(f"/agent/{S1}/prompt", data={"text": "go on"}, headers=ORIGIN)
+    assert response.status_code == 200
+    assert SCREEN_ALONE.format(herdr="idle") in response.text
+    assert w.herd.writes("agent.prompt") == [{"target": "w1:p3", "text": "go on"}]
 
 
 def test_a_shell_command_prompt_is_sent_on_the_first_tap(tmp_path: Path) -> None:
@@ -720,7 +754,7 @@ PICKLE = "opencode/big-pickle"
 def _new_form(tmp_path: Path, *, opencode_models: tuple[str, ...] = ()) -> str:
     herd = FakeHerd()
     herd.add_workspace("w1")
-    return web(tmp_path, herd, opencode_models=opencode_models).http.get("/new").text
+    return web(tmp_path, herd, overrides={"opencode_models": opencode_models}).http.get("/new").text
 
 
 def test_the_new_agent_form_offers_opencode_the_models_the_operator_declared(
@@ -775,7 +809,7 @@ def test_a_model_posted_for_opencode_starts_it_when_declared(
     herd = FakeHerd()
     herd.add_workspace("w1")
     herd.started_session = S1
-    w = web(tmp_path, herd, opencode_models=(PICKLE,))
+    w = web(tmp_path, herd, overrides={"opencode_models": (PICKLE,)})
     data = {"name": "probe", "kind": "opencode", "workspace": "w1", "cwd": str(tmp_path)}
     response = w.http.post(
         "/new", data={**data, "model": PICKLE}, headers=ORIGIN, follow_redirects=False

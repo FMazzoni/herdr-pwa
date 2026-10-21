@@ -26,12 +26,13 @@ slipped through. Captured files are as captured, apart from these changes:
 A few files were built by hand rather than captured. They follow the field names and record
 order that the harness was seen to write, with synthetic ids, times and text. Two are the
 negative cases `capture-idle-claude-prompt` and `capture-working-claude`, screens that must
-not be read as a question; each one's `meta.json` says how it was built. A third,
-`claude/idle-box-table.txt`, keeps the layout of a live screen: a reply's numbered box table
-above the empty input box. Its text, cell by cell at the same widths, and its statusline are
-made up. Some of the logs in
+not be read as a question; each one's `meta.json` says how it was built. Some of the logs in
 `transcript/notices/` were built the same way. Those hold the notices Claude Code writes
 into a transcript, such as a slash command you ran or a compaction.
+
+`claude/idle-box-table.txt` keeps the layout of a live screen: a reply's numbered box table
+above the empty input box. Its text, cell by cell at the same widths, and its statusline are
+made up.
 
 Other captured files keep their real structure, but their prose was replaced with made-up
 text. These are `transcript/opencode/error-rows.json`,

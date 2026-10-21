@@ -1,10 +1,13 @@
 """What may be typed, how a send is known to have landed, and when it never can be."""
 
 import re
+from collections.abc import Callable
+from dataclasses import dataclass
+from enum import Enum
 from typing import Final
 
 from herdr_pwa import glyphs
-from herdr_pwa.engine import BlockedPrompt, MenuShape
+from herdr_pwa.engine import AgentStatus, BlockedPrompt, MenuShape
 from herdr_pwa.panetext import idle_composer, pane_lines, plain_text
 from herdr_pwa.patterns import Rx
 
@@ -67,19 +70,97 @@ def unsendable(text: str) -> bool | None:
     return None
 
 
-def asks_a_question(screen: str) -> bool:
-    """Does this screen show a question that a typed prompt would answer instead?"""
+class Drawn(Enum):
+    """What a screen draws that a typed Return could answer, weakest first."""
+
+    NOTHING = "nothing"
+    # A numbered run and nothing else: a reply's list reads the same.
+    ROWS = "rows"
+    # Keys of its own, or a shape the parser recognised: the harness drew a dialog.
+    DIALOG = "dialog"
+
+
+def drawn_question(screen: str) -> Drawn:
+    """What this screen draws that a typed prompt would answer instead."""
     # A question takes the input box's place, so above an empty box is only what was said.
     if idle_composer(screen.splitlines()):
-        return False
+        return Drawn.NOTHING
     prompt = BlockedPrompt.parse(screen)
+    if prompt.answerable or prompt.is_choice or prompt.shape is not MenuShape.NONE:
+        return Drawn.DIALOG
+    return Drawn.ROWS if prompt.drew_rows else Drawn.NOTHING
+
+
+def asks_a_question(screen: str) -> bool:
+    """Does this screen show a question that a typed prompt would answer instead?"""
     # Either recognition stops a prompt: a hint footer, or any option run, checkbox screens included.
-    return (
-        prompt.answerable
-        or prompt.is_choice
-        or prompt.drew_rows
-        or prompt.shape is not MenuShape.NONE
-    )
+    return drawn_question(screen) is not Drawn.NOTHING
+
+
+HERDR_ALONE: Final = "herdr says this agent is waiting on a question, though the screen shows none."
+UNSETTLED: Final = (
+    "herdr says this agent is {herdr}, but the screen shows a question, and nothing the agent "
+    "recorded can settle which is right."
+)
+OVERRULED: Final = (
+    "herdr says this agent is {herdr}, but the screen and the agent's own record both show a "
+    "question waiting."
+)
+KEYED: Final = (
+    "herdr says this agent is {herdr} and its own record shows nothing waiting, but the screen "
+    "draws a dialog with keys of its own."
+)
+SCREEN_ALONE: Final = (
+    "The screen looked like a question, but herdr says this agent is {herdr} and its own record "
+    "shows nothing waiting, so this was sent."
+)
+
+
+@dataclass(frozen=True, slots=True)
+class QuestionCall:
+    """Whether a typed prompt is refused for a question, and every signal the call was made on."""
+
+    refuse: bool
+    herdr: AgentStatus
+    screen: Drawn
+    # The harness's own record: a call still unanswered, none, or ``None`` when nothing says.
+    record: bool | None = None
+    # Which signal disagreed with the call, in words for the person; empty when none did.
+    doubt: str = ""
+
+
+def question_call(
+    screen: str, herdr: AgentStatus, record: Callable[[], bool | None]
+) -> QuestionCall:
+    """Refuse a prompt where the signals there are agree a question waits; name any that did not."""
+    drawn = drawn_question(screen)
+    on_screen = drawn is not Drawn.NOTHING
+    if herdr is AgentStatus.UNKNOWN:
+        # A shell, or a harness herdr has no word for: the screen is all there is.
+        return QuestionCall(refuse=on_screen, herdr=herdr, screen=drawn)
+    if herdr is AgentStatus.BLOCKED:
+        # A Return typed into a dialog the parse missed would answer it, so herdr's wait holds.
+        doubt = "" if on_screen else HERDR_ALONE
+        return QuestionCall(refuse=True, herdr=herdr, screen=drawn, doubt=doubt)
+    if not on_screen:
+        return QuestionCall(refuse=False, herdr=herdr, screen=drawn)
+    # Read only here: the one call the harness's record decides.
+    return _recorded(drawn, herdr, record())
+
+
+def _recorded(drawn: Drawn, herdr: AgentStatus, pending: bool | None) -> QuestionCall:
+    if pending is None:
+        # herdr's stop is measured to miss a dialog (hermes's long approval), so the screen holds.
+        wording, refuse = UNSETTLED, True
+    elif pending:
+        wording, refuse = OVERRULED, True
+    elif drawn is Drawn.DIALOG:
+        # A picker or trust prompt the harness draws itself is no tool call, so the record misses it.
+        wording, refuse = KEYED, True
+    else:
+        wording, refuse = SCREEN_ALONE, False
+    doubt = wording.format(herdr=herdr)
+    return QuestionCall(refuse=refuse, herdr=herdr, screen=drawn, record=pending, doubt=doubt)
 
 
 PATTERNS: Final = (
