@@ -24,6 +24,7 @@ OC_QUESTION = "capture-blocked-opencode-question"
 ELICITATION_FORM = "capture-blocked-mcp-elicitation-form"
 
 
+# Mutable and unslotted like the FakeHerd it extends; a slotted copy would break its bare super().
 @dataclass
 class _Coloured(FakeHerd):
     """A runner that answers a colour read with the capture's own colour read."""
@@ -38,7 +39,7 @@ class _Coloured(FakeHerd):
         return answer
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class _Screen:
     text: str
     ansi: str = ""

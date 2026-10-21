@@ -4,22 +4,24 @@ Run on every catalogue state at every size by the geometry gate, after the state
 since what it does to the page is the last thing done there.
 """
 
+from typing import Final
+
 from firefox import Marionette
 
 # A grabber is the class that draws one: the short bar a sheet wears on its top edge.
-GRABBER = '[class*="grabber"]'
+GRABBER: Final = '[class*="grabber"]'
 # A chevron is app.css's --chevron glyph, drawn as a pseudo-element or as its own span.
-CHEVRON_GLYPH = "\N{SINGLE RIGHT-POINTING ANGLE QUOTATION MARK}"
+CHEVRON_GLYPH: Final = "\N{SINGLE RIGHT-POINTING ANGLE QUOTATION MARK}"
 # How long a swiped sheet may take to close: its settle runs well inside this.
-CLOSE_MS = 1500
+CLOSE_MS: Final = 1500
 # A swipe as a thumb makes one: down this far, in this many moves, one frame apart.
-SWIPE_PX = 240
-SWIPE_STEPS = 8
-FRAME_MS = 16
+SWIPE_PX: Final = 240
+SWIPE_STEPS: Final = 8
+FRAME_MS: Final = 16
 
 # The pointer events a touch makes, sent where the finger is: a touch's moves go to the
 # element it began on (Pointer Events 3, implicit capture), so every event is sent there.
-PROBE = r"""
+PROBE: Final = r"""
 const [grabberSel, glyph, closeMs, swipePx, steps, frameMs] = arguments;
 const done = arguments[arguments.length - 1];
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));

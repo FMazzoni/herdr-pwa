@@ -6,7 +6,8 @@ import logging
 import time
 from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, replace
-from typing import Protocol, Self
+from types import MappingProxyType
+from typing import Final, Protocol, Self
 
 from herdr_pwa.clock import Clock
 from herdr_pwa.decisions import NO_OVERLAY, Overlay, read_status
@@ -19,22 +20,23 @@ from herdr_pwa.push import (
     MAX_BODY_CHARS,
     DeliveryLog,
     Notice,
+    PushEvent,
     sanitise,
 )
 from herdr_pwa.settings import Settings
 
 log = logging.getLogger(__name__)
 
-IDLE = "idle"
-WORKING = "working"
-STATUSES = frozenset({IDLE, WORKING, EVENT_BLOCKED, EVENT_DONE})
-NOTIFYING = frozenset({EVENT_BLOCKED, EVENT_DONE})
+IDLE: Final = "idle"
+WORKING: Final = "working"
+STATUSES: Final = frozenset({IDLE, WORKING, EVENT_BLOCKED, EVENT_DONE})
+NOTIFYING: Final[frozenset[PushEvent]] = frozenset({EVENT_BLOCKED, EVENT_DONE})
 # Keeps the address key space from ever meeting the session one.
-PANE_KEY = "pane:"
-MAX_NAME_CHARS = 40
-_ABSENT = "\x00absent"
+PANE_KEY: Final = "pane:"
+MAX_NAME_CHARS: Final = 40
+_ABSENT: Final = "\x00absent"
 # The verb goes first so a long agent title cannot truncate it away.
-_VERB = {EVENT_BLOCKED: "needs you", EVENT_DONE: "finished"}
+_VERB: Final = MappingProxyType({EVENT_BLOCKED: "needs you", EVENT_DONE: "finished"})
 
 
 class AgentView(Protocol):
@@ -67,7 +69,7 @@ class Change:
     """One agent, one decision; ``replaces`` is the key it moved off without changing state."""
 
     session: str
-    event: str
+    event: PushEvent
     agent: AgentView | None = None
     replaces: str = ""
 
@@ -124,15 +126,15 @@ def statuses_of(agents: Sequence[AgentView]) -> dict[str, str]:
     return out
 
 
-def _event_for(was: str, status: str, *, unread: bool) -> str:
+def _event_for(was: str, status: str, *, unread: bool) -> PushEvent | None:
     if status in NOTIFYING:
         return status
     if status == IDLE and was == WORKING:
         # herdr's done means the desk has not looked; a pane on screen settles to idle instead.
-        return EVENT_DONE if unread else ""
+        return EVENT_DONE if unread else None
     if was in NOTIFYING or (status == WORKING and was == IDLE):
         return EVENT_CLEAR
-    return ""
+    return None
 
 
 def _inherited(before: Mapping[str, str], agent: AgentView, key: str) -> tuple[str, str]:
@@ -156,7 +158,7 @@ def _decide(
     if (not succeeds and was == status) or (was == _ABSENT and status not in NOTIFYING):
         return keys, None
     event = _event_for("" if was == _ABSENT else was, status, unread=key in unread)
-    if not event:
+    if event is None:
         return keys, None
     return keys, Change(session=key, event=event, agent=agent, replaces=succeeds)
 
@@ -180,7 +182,9 @@ def transitions(
     return changes
 
 
-def notification_text(agent: AgentView, event: str, question: str = "") -> tuple[str, str, str]:
+def notification_text(
+    agent: AgentView, event: PushEvent, question: str = ""
+) -> tuple[str, str, str]:
     """Title, body and fallback body for one agent; sanitising happens in the payload."""
     title = f"{_VERB.get(event, event)}: {agent.title or agent.project or 'agent'}"
     where = " · ".join(part for part in (agent.workspace, agent.project) if part)
@@ -195,7 +199,7 @@ class Alert:
     """One agent outstanding right now."""
 
     session: str
-    event: str
+    event: PushEvent
     agent: AgentView | None = None
 
 
@@ -203,7 +207,7 @@ class Alert:
 class Summary:
     """Everything outstanding, reduced to what the one notification must claim."""
 
-    event: str
+    event: PushEvent
     session: str
     names: tuple[str, ...]
     blocked: int

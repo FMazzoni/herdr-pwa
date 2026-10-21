@@ -7,6 +7,7 @@ is the browser's, and that is what is driven here, in a top-level window.
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Final
 from urllib.parse import quote
 
 from firefox import Bench, BrowserError, Marionette
@@ -21,17 +22,17 @@ from tests._fake_herd import P3, P5, S1, S2, FakeHerd
 from tests.filefakes import make_repo
 from tests.waiting import eventually
 
-WAIT_SECONDS = 15.0
+WAIT_SECONDS: Final = 15.0
 # A fresh profile's first install, on a swapping box, has outrun 15s; this waits on the box.
-SETTLE_SECONDS = 60.0
+SETTLE_SECONDS: Final = 60.0
 # Spelled as the templates' urlencode spells it, which is also what location.pathname reports.
-DOOR = f"/starting/{quote(P5)}"
-LOGIN = "backnav@example.com"
+DOOR: Final = f"/starting/{quote(P5)}"
+LOGIN: Final = "backnav@example.com"
 # Chat | Pane | Files lives in the top bar, which never scrolls away; a tap is made where it is.
-TABS = "header.topbar nav.tabs"
-FILES_ON = f"{TABS} .tab--on[href$='/files']"
+TABS: Final = "header.topbar nav.tabs"
+FILES_ON: Final = f"{TABS} .tab--on[href$='/files']"
 
-LOCATION = r"""
+LOCATION: Final = r"""
 const ready = arguments[0];
 return {
   path: location.pathname,
@@ -44,19 +45,20 @@ return {
 """
 
 # Detached, so the navigation the click starts cannot unload the script that made it.
-CLICK = (
+CLICK: Final = (
     "const el = document.querySelector(arguments[0]); setTimeout(() => el.click(), 0); return !!el;"
 )
-CONTROLLED = "return !!(navigator.serviceWorker && navigator.serviceWorker.controller);"
-RESTORATION = "return history.scrollRestoration;"
+CONTROLLED: Final = "return !!(navigator.serviceWorker && navigator.serviceWorker.controller);"
+RESTORATION: Final = "return history.scrollRestoration;"
 # Set on the page that is about to be left; only a back-forward cache restore keeps the window.
-MARK_PERSISTED = """
+MARK_PERSISTED: Final = """
 window.__hpPersisted = false;
 window.addEventListener("pageshow", (e) => { window.__hpPersisted = e.persisted; });
 """
 
 
-@dataclass
+# Mutable: the walk keeps where it started, set once the page is up.
+@dataclass(slots=True)
 class Walk:
     """One driven journey and whatever it found wrong."""
 
@@ -264,7 +266,7 @@ def explorer(walk: Walk, fake: FakeHerd, home: Path) -> None:
     walk.back_to_feed("a repository opened from the explorer")
 
 
-WALKS: tuple[tuple[str, Callable[[Walk, FakeHerd, Path], None]], ...] = (
+WALKS: Final[tuple[tuple[str, Callable[[Walk, FakeHerd, Path], None]], ...]] = (
     ("tabs", lambda walk, _fake, _home: tabs_and_end(walk)),
     ("files", files_tab),
     ("explorer", explorer),

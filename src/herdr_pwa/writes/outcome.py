@@ -81,6 +81,7 @@ def audit_result(outcome: Outcome, evidence: Evidence) -> str:
     return f"{outcome.value}:{evidence.value}"
 
 
+# Mutable: one watch's running tally, updated on every poll.
 @dataclass(slots=True)
 class _Run:
     saw: Evidence = Evidence.UNREAD

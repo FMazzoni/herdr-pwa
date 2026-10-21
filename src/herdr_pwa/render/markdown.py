@@ -4,6 +4,7 @@ import re
 from collections.abc import Callable, Iterable
 from dataclasses import replace
 from functools import lru_cache
+from types import MappingProxyType
 from typing import Final
 from urllib.parse import urlencode
 
@@ -66,7 +67,9 @@ SHORT_CELL: Final = 24
 # (hyphen, en or em), which a sha range, a path or a ticket ref is full of.
 _BREAKS: Final = r"/\\\-\u2010\u2013\u2014"
 _BREAKABLE_RUN: Final = re.compile(rf"[^\s{_BREAKS}]*[{_BREAKS}]\S*")
-_ALIGN: Final = {"text-align:center": "align-center", "text-align:right": "align-right"}
+_ALIGN: Final = MappingProxyType(
+    {"text-align:center": "align-center", "text-align:right": "align-right"}
+)
 # The tasklists plugin's checkbox: with raw HTML off, no other inline HTML reaches the tree.
 _TASK_BOX: Final = "task-list-item-checkbox"
 # path:line, as agents and compilers write it: a file with an extension, then a line number,
@@ -148,16 +151,18 @@ def _block_math(node: SyntaxTreeNode) -> MdNode:
     return math_node(node.content, block=True)
 
 
-_LEAVES: Final[dict[str, Callable[[SyntaxTreeNode], MdNode]]] = {
-    "code_inline": _inline_code,
-    "fence": _code_block,
-    "code_block": _code_block,
-    "html_inline": _task_box,
-    "math_inline": _inline_math,
-    "math_inline_double": _inline_math,
-    "math_block": _block_math,
-    "math_block_eqno": _block_math,
-}
+_LEAVES: Final[MappingProxyType[str, Callable[[SyntaxTreeNode], MdNode]]] = MappingProxyType(
+    {
+        "code_inline": _inline_code,
+        "fence": _code_block,
+        "code_block": _code_block,
+        "html_inline": _task_box,
+        "math_inline": _inline_math,
+        "math_inline_double": _inline_math,
+        "math_block": _block_math,
+        "math_block_eqno": _block_math,
+    }
+)
 
 
 def _text_leaf(node: SyntaxTreeNode) -> list[MdNode]:

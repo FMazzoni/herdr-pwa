@@ -5,6 +5,7 @@ newest line arrives with the HTML instead of one fetch after the scripts have ru
 """
 
 from dataclasses import dataclass, replace
+from types import MappingProxyType
 from typing import Annotated, Final
 
 from fastapi import APIRouter, Depends, Query
@@ -43,7 +44,7 @@ from herdr_pwa.writes.resolve import Witness, doubt
 # Files is a tab too, but its pages are the explorer's, reached through /agent/<session>/files.
 TABS: Final = ("chat", "pane")
 # A held chat redraws only its note slot; the turns the reader has, and their place, stand.
-KEEP_DRAWN: Final = {"HX-Retarget": "#chat-note", "HX-Reswap": "outerHTML"}
+KEEP_DRAWN: Final = MappingProxyType({"HX-Retarget": "#chat-note", "HX-Reswap": "outerHTML"})
 
 
 @dataclass(frozen=True, slots=True)

@@ -6,6 +6,7 @@ and once the prompt's outcome shows, both are live again."""
 
 import threading
 from collections.abc import Callable
+from typing import Final
 
 from firefox import Bench, Marionette, phone_window
 from pydantic import JsonValue, TypeAdapter
@@ -26,21 +27,21 @@ from tests.webfakes import (
     read_frame,
 )
 
-WIDTH = 390
-HEIGHT = 844
-WAIT_SECONDS = 15.0
+WIDTH: Final = 390
+HEIGHT: Final = 844
+WAIT_SECONDS: Final = 15.0
 # How long the runner sits on the key: several of app.js's 250ms idle waits, so a redraw held
 # back under the thumb comes due while the key is still out.
-SLOW_SECONDS = 2.0
+SLOW_SECONDS: Final = 2.0
 # How long the outcome must stay once drawn: past app.js's 250ms idle wait, when a redraw held
 # back under the thumb comes due.
-STAYS_SECONDS = 1.0
+STAYS_SECONDS: Final = 1.0
 # How long a tap on Back is watched for a navigation it should not start.
-LEAVE_SECONDS = 1.5
-OPTION = "#answer .button--option"
+LEAVE_SECONDS: Final = 1.5
+OPTION: Final = "#answer .button--option"
 
 # Every change to the body's sending class, and every read that finished, stamped on one clock.
-INSTRUMENT = r"""
+INSTRUMENT: Final = r"""
 window.__hp = { marks: [], reads: 0 };
 const say = () => window.__hp.marks.push(
   [performance.now(), document.body.classList.contains("is-sending")]);
@@ -49,31 +50,33 @@ document.addEventListener("htmx:afterRequest", (e) => {
   if (e.detail.requestConfig && e.detail.requestConfig.verb === "get") window.__hp.reads += 1;
 });
 """
-READY = r"""
+READY: Final = r"""
 // A region still settling has not bound its triggers yet, so an event sent to it is lost.
 const busy = document.querySelector(".htmx-request, .htmx-swapping, .htmx-settling");
 return document.readyState === "complete" && !busy && !!document.querySelector(arguments[0]);
 """
 # A finger on the glass, as iOS reports it; only the listeners in app.js read these.
-TOUCH = r"""
+TOUCH: Final = r"""
 const e = new Event(arguments[0], { bubbles: true });
 Object.defineProperty(e, "touches", { value: arguments[0] === "touchstart" ? [{}] : [] });
 document.dispatchEvent(e);
 """
 # The thumb lifts and taps in one task, so a redraw held back under it is still owed.
-LIFT_AND_TAP = TOUCH + "document.querySelector(arguments[1]).click(); return performance.now();"
-STALE = "htmx.trigger(document.querySelector(arguments[0]), 'hp:stale');"
-READS = "return window.__hp.reads;"
+LIFT_AND_TAP: Final = (
+    TOUCH + "document.querySelector(arguments[1]).click(); return performance.now();"
+)
+STALE: Final = "htmx.trigger(document.querySelector(arguments[0]), 'hp:stale');"
+READS: Final = "return window.__hp.reads;"
 # A control a second tap could land on: any button in the region that is live right now.
-LIVE = r"""
+LIVE: Final = r"""
 const live = [...document.querySelectorAll("#answer button")].filter((b) => !b.disabled);
 const option = live.find((b) => b.matches(".button--option"));
 if (option) option.click();
 return { live: live.length, sending: document.body.classList.contains("is-sending") };
 """
-OUTCOME = "return !!document.querySelector('#answer .banner[data-hp-sent]');"
+OUTCOME: Final = "return !!document.querySelector('#answer .banner[data-hp-sent]');"
 # Each way off the page that is on screen, and whether a finger at its middle would land on it.
-REACH = r"""
+REACH: Final = r"""
 return [...document.querySelectorAll(".leave")].flatMap((a) => {
   const r = a.getBoundingClientRect();
   const x = r.left + r.width / 2, y = r.top + r.height / 2;
@@ -82,23 +85,23 @@ return [...document.querySelectorAll(".leave")].flatMap((a) => {
   return [{ name: a.textContent.trim(), live: !!hit && a.contains(hit) }];
 });
 """
-COMPOSER = "#composer textarea"
-TYPE_AND_SEND = r"""
+COMPOSER: Final = "#composer textarea"
+TYPE_AND_SEND: Final = r"""
 document.querySelector("#composer textarea").value = arguments[0];
 document.querySelector("#composer button[type=submit]").click();
 return performance.now();
 """
 # A tap on Back that pointer-events would not stop: what is left is the script's own guard.
-TAP_BACK = r"""
+TAP_BACK: Final = r"""
 window.__hp.from = location.href;
 document.querySelector(".leave.topbar__back").click();
 """
 # A page left behind takes its marks with it, so a missing mark is a page that left.
-STAYED = "return !!window.__hp && location.href === window.__hp.from;"
-PROMPT_OUTCOME = "return !!document.querySelector('#composer .banner[data-hp-sent]');"
-PROMPT = "agent.prompt"
-_EACH = TypeAdapter(list[dict[str, JsonValue]])
-GAPS = "return window.__hp.marks.filter(([t, on]) => t >= arguments[0] && !on).length;"
+STAYED: Final = "return !!window.__hp && location.href === window.__hp.from;"
+PROMPT_OUTCOME: Final = "return !!document.querySelector('#composer .banner[data-hp-sent]');"
+PROMPT: Final = "agent.prompt"
+_EACH: Final = TypeAdapter(list[dict[str, JsonValue]])
+GAPS: Final = "return window.__hp.marks.filter(([t, on]) => t >= arguments[0] && !on).length;"
 
 
 class Writes:

@@ -3,6 +3,7 @@ that re-sorts the cards leaves the card under the thumb where it was, so a tap o
 the reader was looking at."""
 
 from collections.abc import Callable
+from typing import Final
 
 from firefox import Bench, Marionette, phone_window
 from pydantic import JsonValue
@@ -12,19 +13,19 @@ from tests.catalogue import State, build
 from tests.waiting import eventually
 from tests.webfakes import READ, SNAPSHOT, Rig, agents_of, read_frame, snapshot_frame
 
-WIDTH = 390
-HEIGHT = 844
-WAIT_SECONDS = 15.0
+WIDTH: Final = 390
+HEIGHT: Final = 844
+WAIT_SECONDS: Final = 15.0
 # A card may move by a rounding error, never by a card.
-DRIFT = 3
-AGENTS = 24
+DRIFT: Final = 3
+AGENTS: Final = 24
 # Where the thumb rests: the middle of the screen, sideways and down.
-THUMB_Y = 0.55
+THUMB_Y: Final = 0.55
 # The cache keeps a snapshot this long on the rig's clock; moving past it forces a fresh read.
-STALE_SECONDS = 60.0
+STALE_SECONDS: Final = 60.0
 
 # The card under the thumb and the agents whose cards lie wholly above the screen.
-PROBE = r"""
+PROBE: Final = r"""
 const [y, watched] = arguments;
 const busy = document.querySelector(".htmx-request, .htmx-swapping, .htmx-settling, .boot");
 const cards = document.querySelectorAll("#feed-list .card");
@@ -41,7 +42,7 @@ return {
   watched: [...cards].filter((c) => pane(c) === watched).map((c) => c.getBoundingClientRect().top)[0],
 };
 """
-POKE = "htmx.trigger(document.body, 'hp:poke');"
+POKE: Final = "htmx.trigger(document.body, 'hp:poke');"
 
 
 def crowd(blocked: tuple[str, ...] = ()) -> dict[str, JsonValue]:

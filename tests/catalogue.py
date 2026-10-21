@@ -2,7 +2,7 @@
 
 import copy
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -98,7 +98,7 @@ WIZARD_STEP: Final = (
 )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class State:
     """One screen of the real app, the fake runner behind it, and the element proving it drew.
 
@@ -120,7 +120,7 @@ class State:
     # The offline fallback is replayed by the worker with no script, so none is expected.
     scripted: bool = True
     prime: Prime | None = None
-    settings: dict[str, object] = field(default_factory=dict[str, object])
+    settings: Mapping[str, object] = field(default_factory=dict[str, object])
     # Proved while its tap is still out, so htmx never settles: wait for ``ready`` alone.
     in_flight: bool = False
 
@@ -729,7 +729,7 @@ def _shell(
 OLD_SERVER: Final = ("Serve the site on port 8000", "python -m http.server 8000")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class LeftRunning:
     """What an agent left running: shells and agents its last turn started, servers an older one did."""
 

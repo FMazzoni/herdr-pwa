@@ -5,6 +5,7 @@ from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
+from types import MappingProxyType
 from typing import Final, Self
 
 from pydantic import BaseModel, ConfigDict, field_validator
@@ -12,7 +13,7 @@ from pydantic import BaseModel, ConfigDict, field_validator
 from herdr_pwa.engine.model import PaneId, SessionId, as_pane_id, as_session_id, screen_digest
 from herdr_pwa.panetext import as_text_read, composer_top, plain
 
-_EDGE_RE = re.compile(r"^(\s*)[│┃║▏▍▎▊]")
+_EDGE_RE: Final = re.compile(r"^(\s*)[│┃║▏▍▎▊]")
 """A box-edge bar at line start, with the indent that owns it.
 
 opencode draws its dialogs with a left border only (SplitBorder in its TUI
@@ -21,7 +22,7 @@ must see past it. The spaces after the bar stay, so an option's indented
 description keeps its depth.
 """
 
-OPTION_RE = re.compile(
+OPTION_RE: Final = re.compile(
     r"^\s*[>\u276f▸▶‣*\-•]?\s*(?P<open>\[)?(?P<number>\d{1,2})(?(open)\]|\s*[.):])"
     r"\s+(?P<label>\S.*?)\s*$"
 )
@@ -31,29 +32,29 @@ The bracket must close on the same number it opened on, so ``[1. x`` and ``1] x`
 are not rows: a half-bracketed number is prose, not a menu.
 """
 
-_DIVIDER_RE = re.compile(r"^[\s─━╌╍┄┅┈┉═—=_·•\-]{4,}$")
+_DIVIDER_RE: Final = re.compile(r"^[\s─━╌╍┄┅┈┉═—=_·•\-]{4,}$")
 
-_FOOTER_RE = re.compile(
+_FOOTER_RE: Final = re.compile(
     r"(?i)(?:\benter\b|\besc\b|\btab\b|\bctrl\b|↑|↓|←|→|arrow)"
     r".*(?:select|cancel|navigate|confirm|choose|toggle|continue|submit|expand|manage)"
 )
 
-_MAX_CHROME_PARAGRAPHS = 3
+_MAX_CHROME_PARAGRAPHS: Final = 3
 
-_MIN_MENU_OPTIONS = 2
+_MIN_MENU_OPTIONS: Final = 2
 
-_MIN_CHECKBOX_ROWS = 2
+_MIN_CHECKBOX_ROWS: Final = 2
 
 
-_TICKED_BOX = "xX*✔✓"
+_TICKED_BOX: Final = "xX*✔✓"
 
-_BLANK_BOX = " ·"
+_BLANK_BOX: Final = " ·"
 
-_TICKED_GLYPH = "☑☒◼"
+_TICKED_GLYPH: Final = "☑☒◼"
 
-_BLANK_GLYPH = "☐◻"
+_BLANK_GLYPH: Final = "☐◻"
 
-_CHECKBOX_RE = re.compile(
+_CHECKBOX_RE: Final = re.compile(
     rf"^\s*(?:\[(?P<box>[{_TICKED_BOX}{_BLANK_BOX}]?)\]"
     rf"|(?P<glyph>[{_TICKED_GLYPH}{_BLANK_GLYPH}]))"
     r"\s*(?P<rest>\S.*?)\s*$"
@@ -69,7 +70,7 @@ def _ticked(label: str) -> tuple[bool | None, str]:
     return bool(mark) and mark in _TICKED_BOX + _TICKED_GLYPH, match.group("rest")
 
 
-_SELECT_VERBS = (
+_SELECT_VERBS: Final = (
     "select",
     "choose",
     "pick",
@@ -79,37 +80,37 @@ _SELECT_VERBS = (
     "lock",
 )
 
-_TOGGLE_VERBS = ("toggle", "check", "uncheck", "deselect", "select all")
+_TOGGLE_VERBS: Final = ("toggle", "check", "uncheck", "deselect", "select all")
 
-_MARKER_RE = re.compile(r"^\s*[>\u276f▸▶‣]\s")
+_MARKER_RE: Final = re.compile(r"^\s*[>\u276f▸▶‣]\s")
 
-_PARKED_RE = re.compile(r"^[\u276f▸▶‣]\s+\S")
+_PARKED_RE: Final = re.compile(r"^[\u276f▸▶‣]\s+\S")
 """The cursor parked on a menu's own unnumbered row, such as claude's checklist ``Next``.
 
 Only a glyph in the first column counts: ``>`` there is a markdown quote in a
 recap, and an indented glyph is body text under a row.
 """
 
-_STEP_TOKEN_RE = re.compile(
+_STEP_TOKEN_RE: Final = re.compile(
     r"(?P<box>[\u2610\u2612\u2611\u2714\u2713])\s*(?P<label>[^\u2610\u2612\u2611\u2714\u2713\u2190\u2192]*)"
 )
 
-_STEP_TICKED = "\u2612\u2611"
+_STEP_TICKED: Final = "\u2612\u2611"
 
-_STEP_SUBMIT = "\u2714\u2713"
+_STEP_SUBMIT: Final = "\u2714\u2713"
 
-_STEPPER_RE = re.compile(
+_STEPPER_RE: Final = re.compile(
     r"^\u2190[^\u2190\u2192]*[\u2610\u2612\u2611\u2714\u2713][^\u2190\u2192]*\u2192$"
 )
 
 
-_HINT_RE = re.compile(
+_HINT_RE: Final = re.compile(
     r"^\s*(?P<keys>[^\s].{0,29}?)\s+to\s+(?P<verb>[A-Za-z][A-Za-z0-9 /+-]{0,28}?)\s*$"
 )
 """One ``<keys> to <verb>`` hint, the form most harnesses print."""
 
 
-_VERB_HINT_RE = re.compile(
+_VERB_HINT_RE: Final = re.compile(
     r"^\s*(?P<keys>[^\s].{0,29}?)\s+(?P<verb>[A-Za-z][A-Za-z0-9 /+-]{0,28}?)\s*$"
 )
 """One verb-first hint: ``<keys> <verb>`` with no "to" at all.
@@ -140,16 +141,16 @@ def _hint_match(text: str) -> "re.Match[str] | None":
     return None
 
 
-_HINT_SPLIT = re.compile(r"\s*[·•|\uff5c]\s*|\s{2,}")
+_HINT_SPLIT: Final = re.compile(r"\s*[·•|\uff5c]\s*|\s{2,}")
 """What a terminal separates footer hints with.
 
 opencode puts two spaces between hint pairs on the same line (measured on its
 permission dialog, where the buttons share that line).
 """
 
-_LIST_OR = re.compile(r"(?i)^\s*or\s+")
+_LIST_OR: Final = re.compile(r"(?i)^\s*or\s+")
 
-_TRAILING_PAREN_RE = re.compile(r"(?<=\S)\s*\([^()]*\)\s*$")
+_TRAILING_PAREN_RE: Final = re.compile(r"(?<=\S)\s*\([^()]*\)\s*$")
 
 
 def _hint_text(segment: str) -> str:
@@ -166,9 +167,9 @@ def _whole_hint(text: str) -> bool:
     return bool(pieces) and all(_KEY_TOKEN_RE.match(piece) for piece in pieces)
 
 
-_KEY_PIECE = re.compile(r"\s*/\s*|\s+or\s+|\s*,\s*")
+_KEY_PIECE: Final = re.compile(r"\s*/\s*|\s+or\s+|\s*,\s*")
 
-_KEY_TOKEN_RE = re.compile(
+_KEY_TOKEN_RE: Final = re.compile(
     r"(?i)^(?:(?:ctrl|shift|alt|opt|option|cmd|meta|super)[+-])*"
     r"(?:f\d{1,2}|enter|return|esc|escape|tab|space|spacebar|backspace|del|delete"
     r"|up|down|left|right|arrows?(?:\s+keys?)?|pgup|pgdn|home|end"
@@ -181,43 +182,45 @@ opencode advertises a horizontal select as ``⇆`` and a vertical one as ``↑�
 one token each (measured on its dialogs).
 """
 
-_KEY_ALIASES: dict[str, tuple[str, ...]] = {
-    "enter": ("enter",),
-    "return": ("enter",),
-    "↵": ("enter",),
-    "⏎": ("enter",),
-    "esc": ("esc",),
-    "escape": ("esc",),
-    "tab": ("tab",),
-    "space": ("space",),
-    "spacebar": ("space",),
-    "up": ("up",),
-    "down": ("down",),
-    "left": ("left",),
-    "right": ("right",),
-    "↑": ("up",),
-    "↓": ("down",),
-    "←": ("left",),
-    "→": ("right",),
-    "↑↓": ("up", "down"),
-    "↓↑": ("up", "down"),
-    # "Arrow keys" means the vertical pair; left/right only count where the screen draws them.
-    "arrow": ("up", "down"),
-    "arrows": ("up", "down"),
-    "arrow keys": ("up", "down"),
-    "arrow key": ("up", "down"),
-}
+_KEY_ALIASES: Final[MappingProxyType[str, tuple[str, ...]]] = MappingProxyType(
+    {
+        "enter": ("enter",),
+        "return": ("enter",),
+        "↵": ("enter",),
+        "⏎": ("enter",),
+        "esc": ("esc",),
+        "escape": ("esc",),
+        "tab": ("tab",),
+        "space": ("space",),
+        "spacebar": ("space",),
+        "up": ("up",),
+        "down": ("down",),
+        "left": ("left",),
+        "right": ("right",),
+        "↑": ("up",),
+        "↓": ("down",),
+        "←": ("left",),
+        "→": ("right",),
+        "↑↓": ("up", "down"),
+        "↓↑": ("up", "down"),
+        # "Arrow keys" means the vertical pair; left/right only count where the screen draws them.
+        "arrow": ("up", "down"),
+        "arrows": ("up", "down"),
+        "arrow keys": ("up", "down"),
+        "arrow key": ("up", "down"),
+    }
+)
 """The key names this app is willing to send, spelled the way herdr's ``send_keys`` spells them.
 
 ``⇆`` is absent on purpose: which keys it names depends on the verb printed
 beside it, and that decision lives in :func:`_keys_in`.
 """
 
-_CTRL_RE = re.compile(r"^ctrl[+-]([a-z])$")
+_CTRL_RE: Final = re.compile(r"^ctrl[+-]([a-z])$")
 
-_MAX_HINTS = 4
+_MAX_HINTS: Final = 4
 
-_MAX_FOOTER_LINES = 3
+_MAX_FOOTER_LINES: Final = 3
 
 
 _NO_PANE: Final = PaneId("")
@@ -225,20 +228,20 @@ _NO_PANE: Final = PaneId("")
 _NO_SESSION: Final = SessionId("")
 
 
-_MAX_BUTTONS = 9
+_MAX_BUTTONS: Final = 9
 
-_MAX_BUTTON_CHARS = 40
+_MAX_BUTTON_CHARS: Final = 40
 
-_MIN_BUTTONS = 2
+_MIN_BUTTONS: Final = 2
 
-_BUTTON_TOKENS = re.compile(r"\s{2,}")
+_BUTTON_TOKENS: Final = re.compile(r"\s{2,}")
 """What separates the tokens of the line a permission dialog draws its buttons on.
 
 Measured on opencode: the labels get three spaces between them (one-space pads
 plus its box gap), the hint pairs two.
 """
 
-_HEADER_TOKEN = re.compile(r"^[A-Za-z][A-Za-z0-9 '/&+.-]{0,23}$")
+_HEADER_TOKEN: Final = re.compile(r"^[A-Za-z][A-Za-z0-9 '/&+.-]{0,23}$")
 """One tab-strip header: a short word or two, nothing that looks like a sentence."""
 
 _MIN_STRIP_TOKENS: Final = 2
@@ -487,7 +490,7 @@ def _stepper(lines: list[str], stop: int) -> Stepper | None:
     return None
 
 
-_REQUEST_TITLE_RE = re.compile(r"(?i)^MCP server [\"“].+[\"”] requests your input$")
+_REQUEST_TITLE_RE: Final = re.compile(r"(?i)^MCP server [\"“].+[\"”] requests your input$")
 """claude's title over an MCP server's request for input: the same line herdr's
 ``mcp_elicitation_prompt`` rule calls blocked on."""
 
@@ -506,11 +509,11 @@ def _titled_message(paragraphs: list[str]) -> str:
 
 
 # A counter or clock in a row label ticks while the question stays put.
-_DIGITS_RE = re.compile(r"\d+")
-_COUNTER_RE = re.compile(r"^Question \d+/\d+\b[^\n]*\n")
+_DIGITS_RE: Final = re.compile(r"\d+")
+_COUNTER_RE: Final = re.compile(r"^Question \d+/\d+\b[^\n]*\n")
 """codex's ``Question N/M`` counter, heading the question it counts, whatever that ends with."""
 
-_QUESTION_MARK_RE = re.compile(r"[\w)\]\"'`\u2019\u201d\u2026]\?")
+_QUESTION_MARK_RE: Final = re.compile(r"[\w)\]\"'`\u2019\u201d\u2026]\?")
 """A '?' ending a word: a git status's ``[!?]`` in a status line asks nothing."""
 
 
@@ -804,13 +807,13 @@ def _prepared(text: str, ansi: str = "") -> _Screen:
     return _Screen(_reframed(lines), barred, text, colour, beside=rows != drawn)
 
 
-_SIDE_TOP_RE = re.compile(r"\S\s{2,}(?P<corner>[┌╭])[─━]")
+_SIDE_TOP_RE: Final = re.compile(r"\S\s{2,}(?P<corner>[┌╭])[─━]")
 """A box opening on an option row, right of its label: the preview beside the rows."""
 
 # A tall preview is drawn folded, a tee row across it saying how many lines it hid.
-_SIDE_EDGE = "│┃├┝"
+_SIDE_EDGE: Final = "│┃├┝"
 
-_SIDE_BOTTOM = "└╰"
+_SIDE_BOTTOM: Final = "└╰"
 
 
 def _side_column(line: str) -> int | None:
@@ -1149,14 +1152,14 @@ def _is_interleave(line: str) -> bool:
     return _is_inert(line) or line[:1].isspace() or bool(_PARKED_RE.match(line))
 
 
-_PANEL_TOP_RE = re.compile(r"^\s*[╭┌╔]")
+_PANEL_TOP_RE: Final = re.compile(r"^\s*[╭┌╔]")
 
-_PANEL_BOTTOM_RE = re.compile(r"^\s*[╰└╚]")
+_PANEL_BOTTOM_RE: Final = re.compile(r"^\s*[╰└╚]")
 
-_PANEL_TAIL = 6
+_PANEL_TAIL: Final = 6
 
 
-_TRAILING_SIDE_RE = re.compile(r"^(.*?)[│┃║]\s*$")
+_TRAILING_SIDE_RE: Final = re.compile(r"^(.*?)[│┃║]\s*$")
 """A row whose opening side the edge-strip already removed, closing side left."""
 
 
@@ -1203,12 +1206,12 @@ def _panel_screen(lines: list[str]) -> list[str] | None:
     return _upto_last_option(inside) + _panel_footer(lines[bottom + 1 :])
 
 
-_BOX_BOTTOM_RE = re.compile(r"^\s*[╰└╚][─━═]*[╯┘╝]$")
+_BOX_BOTTOM_RE: Final = re.compile(r"^\s*[╰└╚][─━═]*[╯┘╝]$")
 
-_BOX_TEE_RE = re.compile(r"^\s*[├┝┠╞╟][─━═]*[┤┥┨╡╢]$")
+_BOX_TEE_RE: Final = re.compile(r"^\s*[├┝┠╞╟][─━═]*[┤┥┨╡╢]$")
 """A rule across a drawn box, which parts its sections as a blank row would."""
 
-_BOX_RULE = "─" * 4
+_BOX_RULE: Final = "─" * 4
 
 
 def _closing_box(lines: list[str]) -> range | None:
@@ -1303,7 +1306,7 @@ def _is_chrome(line: str) -> bool:
     return bool(_DIVIDER_RE.match(line)) or bool(_FOOTER_RE.search(line)) or is_key_hint(line)
 
 
-_MARKER_LEAD = re.compile(r"^[\s\u25cf\u25cb\u2022\u00b7]+")
+_MARKER_LEAD: Final = re.compile(r"^[\s\u25cf\u25cb\u2022\u00b7]+")
 
 
 def _box_start(lines: list[str], stop: int, barred: list[bool] | None = None) -> int:

@@ -228,7 +228,7 @@ def test_a_worker_that_dies_has_its_task_run_once_more_and_the_retry_is_reported
     assert tally.problems == []
     assert tally.taps == 3
     assert spawned == 2
-    assert tally.__dict__.get("retries") == [f"walk {geometry.HISTORY}"]
+    assert tally.retries == [f"walk {geometry.HISTORY}"]
 
 
 def test_a_task_whose_worker_dies_twice_fails(monkeypatch: pytest.MonkeyPatch) -> None:

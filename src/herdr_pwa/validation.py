@@ -45,7 +45,7 @@ class _OrNone:
 
 
 # Use as ``Annotated[Model | None, OR_NONE] = None``: a value of the wrong shape reads as absent.
-OR_NONE = _OrNone()
+OR_NONE: Final = _OrNone()
 
 # A field of a format we do not own: its value when it has the shape we read, else None.
 type Text = Annotated[StrictStr | None, OR_NONE]

@@ -11,17 +11,18 @@ import sys
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Final
 
-ZERO = "0" * 40
-DEFAULT_PATTERNS = Path("~/.config/git/push-deny-patterns")
+ZERO: Final = "0" * 40
+DEFAULT_PATTERNS: Final = Path("~/.config/git/push-deny-patterns")
 # Branches and v-tags only: refs/stash and ad hoc tags hold history that was never meant to leave.
-ALLOWED_REF = re.compile(r"refs/heads/.+|refs/tags/v.*")
+ALLOWED_REF: Final = re.compile(r"refs/heads/.+|refs/tags/v.*")
 # Each commit's header (identities and message) sits between these separators, its diff after.
 COMMIT_START, HEADER_END = "\x1e", "\x1f"
-LOG_FORMAT = "%x1e%H%nauthor %an <%ae>%ncommitter %cn <%ce>%n%B%x1f"
+LOG_FORMAT: Final = "%x1e%H%nauthor %an <%ae>%ncommitter %cn <%ce>%n%B%x1f"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Update:
     """One ref the push moves: what is sent, where it lands and what the remote had there."""
 

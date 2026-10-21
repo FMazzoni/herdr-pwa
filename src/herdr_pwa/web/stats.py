@@ -8,6 +8,7 @@ window is in ``WINDOWS``.
 import re
 from dataclasses import dataclass, replace
 from datetime import datetime
+from types import MappingProxyType
 from typing import Final
 
 from herdr_pwa.clock import ago, brief, duration, duration_said
@@ -425,10 +426,12 @@ def _sentence(found: _Found) -> str:
     return ", ".join(said)
 
 
-_QUIET: Final = {
-    HistoryState.unsupported: "No usage from this harness",
-    HistoryState.unreadable: "Usage could not be read",
-}
+_QUIET: Final = MappingProxyType(
+    {
+        HistoryState.unsupported: "No usage from this harness",
+        HistoryState.unreadable: "Usage could not be read",
+    }
+)
 
 
 def stats_for(reading: Reading) -> Stats:

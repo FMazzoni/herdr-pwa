@@ -23,7 +23,7 @@ from tests.catalogue import build
 __all__ = ["pytest_collection_modifyitems", "pytest_runtest_makereport"]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Served:
     """The session's app server: its front door, pointed at each test's app, and its address."""
 

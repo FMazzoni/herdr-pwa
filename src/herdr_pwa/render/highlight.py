@@ -2,6 +2,7 @@
 
 from collections.abc import Sequence
 from functools import lru_cache
+from types import MappingProxyType
 from typing import Final
 
 from pygments.lexer import Lexer
@@ -23,32 +24,34 @@ from pygments.util import ClassNotFound
 from herdr_pwa.render.mdnode import MdNode
 
 # The most specific entry wins; a type with no entry up its chain stays plain text.
-_CLASSES: Final[dict[_TokenType, str]] = {
-    Keyword: "tok-keyword",
-    Keyword.Constant: "tok-constant",
-    Keyword.Type: "tok-type",
-    Operator.Word: "tok-keyword",
-    Name.Builtin: "tok-builtin",
-    Name.Builtin.Pseudo: "tok-constant",
-    Name.Function: "tok-function",
-    Name.Decorator: "tok-function",
-    Name.Class: "tok-type",
-    Name.Exception: "tok-type",
-    Name.Tag: "tok-keyword",
-    Name.Attribute: "tok-builtin",
-    Name.Variable: "tok-variable",
-    String: "tok-string",
-    String.Interpol: "tok-variable",
-    Literal.Number: "tok-number",
-    Number: "tok-number",
-    Comment: "tok-comment",
-    Generic.Prompt: "tok-comment",
-    Generic.Output: "tok-comment",
-    Generic.Heading: "tok-keyword",
-    Generic.Subheading: "tok-keyword",
-    Generic.Inserted: "tok-inserted",
-    Generic.Deleted: "tok-deleted",
-}
+_CLASSES: Final[MappingProxyType[_TokenType, str]] = MappingProxyType(
+    {
+        Keyword: "tok-keyword",
+        Keyword.Constant: "tok-constant",
+        Keyword.Type: "tok-type",
+        Operator.Word: "tok-keyword",
+        Name.Builtin: "tok-builtin",
+        Name.Builtin.Pseudo: "tok-constant",
+        Name.Function: "tok-function",
+        Name.Decorator: "tok-function",
+        Name.Class: "tok-type",
+        Name.Exception: "tok-type",
+        Name.Tag: "tok-keyword",
+        Name.Attribute: "tok-builtin",
+        Name.Variable: "tok-variable",
+        String: "tok-string",
+        String.Interpol: "tok-variable",
+        Literal.Number: "tok-number",
+        Number: "tok-number",
+        Comment: "tok-comment",
+        Generic.Prompt: "tok-comment",
+        Generic.Output: "tok-comment",
+        Generic.Heading: "tok-keyword",
+        Generic.Subheading: "tok-keyword",
+        Generic.Inserted: "tok-inserted",
+        Generic.Deleted: "tok-deleted",
+    }
+)
 TOKEN_CLASSES: Final = frozenset(_CLASSES.values())
 # Past this a block is shown plain: lexing runs on the server for every poll that misses the cache.
 HIGHLIGHT_LIMIT: Final = 20_000

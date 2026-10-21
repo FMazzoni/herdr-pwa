@@ -22,6 +22,7 @@ MAX_FILES: Final = 6
 _SEAL_BYTES: Final = 64
 
 
+# Mutable: the cache moves its seal on in place as the log grows.
 @dataclass(slots=True)
 class _Held:
     ident: tuple[int, int]

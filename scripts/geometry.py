@@ -14,12 +14,14 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from queue import Empty, Queue
+from types import MappingProxyType
+from typing import Final
 
 import uvicorn
 from pydantic import JsonValue, TypeAdapter
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT: Final = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 import affordance  # noqa: E402
@@ -45,99 +47,103 @@ from tests.waiting import eventually  # noqa: E402
 from tests.webfakes import Hold  # noqa: E402
 
 # The --only name for the back-navigation walks.
-HISTORY = "history"
+HISTORY: Final = "history"
 # The --only name for the Chat tab's scroll walk.
-CHAT_END = "chat-end"
+CHAT_END: Final = "chat-end"
 # The --only name for the feed's hold-under-the-thumb walk.
-FEED_HOLD = "feed-hold"
+FEED_HOLD: Final = "feed-hold"
 # The --only name for the walk that taps an answer while the runner is slow.
-SEND_HOLD = "send-hold"
+SEND_HOLD: Final = "send-hold"
 # The --only name for the walks that listen as VoiceOver would.
-VOICEOVER = "voiceover"
+VOICEOVER: Final = "voiceover"
 # 390 is the phone this app is designed on; 430 is the largest (a Pro Max size, run as a Home
 # Screen app); 320 is the narrowest one still sold (iPhone SE 1st gen).
-WIDTHS = (390, 430, 320)
-HEIGHT = 844
+WIDTHS: Final = (390, 430, 320)
+HEIGHT: Final = 844
 # iPhone Text Size, as a multiple of the default root: 130% is a common setting, 200% is the
 # largest the plain slider reaches. The two widths that bracket the phones are run again at each.
-TEXT_SIZES = (1.3, 2.0)
-TEXT_WIDTHS = (430, 320)
+TEXT_SIZES: Final = (1.3, 2.0)
+TEXT_WIDTHS: Final = (430, 320)
 # Apple's HIG minimum and WCAG 2.5.5: 44 CSS px in both directions.
-TAP_FLOOR = 44
+TAP_FLOOR: Final = 44
 # Anything that stops a turn stays this far from Send, so a thumb aimed at Send stops nothing.
-STOP_REACH = 120
+STOP_REACH: Final = 120
 # iOS Safari zooms the page into a focused field whose text is under 16px, and does not zoom back.
-FIELD_FONT_FLOOR = 16
-FIELDS = "input:not([type=hidden]), textarea, select"
+FIELD_FONT_FLOOR: Final = 16
+FIELDS: Final = "input:not([type=hidden]), textarea, select"
 # The page gutter. iOS starts its back swipe at the left edge; how wide that strip is can only
 # be measured on the device, so a sideways scroller must at least start inside the gutter.
-EDGE_INSET = 16
-READY_SECONDS = 15.0
+EDGE_INSET: Final = 16
+READY_SECONDS: Final = 15.0
 # How long a uvicorn thread on loopback may take to bind.
-SERVE_SECONDS = 10.0
+SERVE_SECONDS: Final = 10.0
 
-SCROLL_ALLOWED: dict[str, str] = {
-    ".prose pre": (
-        "a code block in agent prose: indentation and columns are the meaning, so the block "
-        "scrolls inside its own box instead of wrapping a line of code into a different shape"
-    ),
-    ".is-columns .pane": (
-        "the terminal mirror with Keep the columns on: the toggle asks for the terminal's own "
-        "line breaks, so the pane scrolls inside its box, which starts inside the gutter"
-    ),
-    ".is-columns .src": (
-        "a file with Keep the columns on: the toggle asks for each line at its own "
-        "indentation, unwrapped, so the file scrolls inside its box, which starts inside the "
-        "gutter, with its line numbers held at the left edge"
-    ),
-    ".prose .table-scroll": (
-        "a table in agent prose wider than the turn: its cells wrap only between words, so a "
-        "table of many columns scrolls inside its own box, which starts inside the turn"
-    ),
-    ".prose .math-block": (
-        "a display formula wider than the turn: a formula cannot wrap, so it scrolls inside "
-        "its own box like a code block"
-    ),
-    ".tool__result": (
-        "a tool's output, which is terminal text with the same column meaning as code; it "
-        "scrolls in its own box and the page around it does not move"
-    ),
-    ".chips": (
-        "the feed's workspace filter: one row of pills that pans sideways so a long list of "
-        "workspaces costs one line, not several; it starts inside the 16px back-swipe gutter "
-        "and a fade at its right edge says more pills are there"
-    ),
-}
+SCROLL_ALLOWED: Final[MappingProxyType[str, str]] = MappingProxyType(
+    {
+        ".prose pre": (
+            "a code block in agent prose: indentation and columns are the meaning, so the block "
+            "scrolls inside its own box instead of wrapping a line of code into a different shape"
+        ),
+        ".is-columns .pane": (
+            "the terminal mirror with Keep the columns on: the toggle asks for the terminal's own "
+            "line breaks, so the pane scrolls inside its box, which starts inside the gutter"
+        ),
+        ".is-columns .src": (
+            "a file with Keep the columns on: the toggle asks for each line at its own "
+            "indentation, unwrapped, so the file scrolls inside its box, which starts inside the "
+            "gutter, with its line numbers held at the left edge"
+        ),
+        ".prose .table-scroll": (
+            "a table in agent prose wider than the turn: its cells wrap only between words, so a "
+            "table of many columns scrolls inside its own box, which starts inside the turn"
+        ),
+        ".prose .math-block": (
+            "a display formula wider than the turn: a formula cannot wrap, so it scrolls inside "
+            "its own box like a code block"
+        ),
+        ".tool__result": (
+            "a tool's output, which is terminal text with the same column meaning as code; it "
+            "scrolls in its own box and the page around it does not move"
+        ),
+        ".chips": (
+            "the feed's workspace filter: one row of pills that pans sideways so a long list of "
+            "workspaces costs one line, not several; it starts inside the 16px back-swipe gutter "
+            "and a fade at its right edge says more pills are there"
+        ),
+    }
+)
 
-TAP_ALLOWED: dict[str, str] = {
-    ".crumbs a": (
-        "a folder in the path above a file: a short name like src is narrower than 44px, so "
-        "its 44px hit area is drawn by its own ::after, centred on the word; padding the box "
-        "to 44px instead spaced the slashes unevenly"
-    ),
-    "label input[type=checkbox]": (
-        "a checkbox inside its own label: tapping anywhere on the label toggles it, and the "
-        "label row is held to 44px, so the drawn box can stay the size iOS draws one"
-    ),
-    ".prose a": (
-        "a link inside a sentence the agent wrote; padding it to 44px would tear the line it "
-        "sits in apart, and WCAG 2.5.5 exempts targets inline in a block of text"
-    ),
-}
+TAP_ALLOWED: Final[MappingProxyType[str, str]] = MappingProxyType(
+    {
+        ".crumbs a": (
+            "a folder in the path above a file: a short name like src is narrower than 44px, so "
+            "its 44px hit area is drawn by its own ::after, centred on the word; padding the box "
+            "to 44px instead spaced the slashes unevenly"
+        ),
+        "label input[type=checkbox]": (
+            "a checkbox inside its own label: tapping anywhere on the label toggles it, and the "
+            "label row is held to 44px, so the drawn box can stay the size iOS draws one"
+        ),
+        ".prose a": (
+            "a link inside a sentence the agent wrote; padding it to 44px would tear the line it "
+            "sits in apart, and WCAG 2.5.5 exempts targets inline in a block of text"
+        ),
+    }
+)
 
-TAPPABLE = "a[href], button, summary, input, select, textarea, [role=button], [role=link]"
+TAPPABLE: Final = "a[href], button, summary, input, select, textarea, [role=button], [role=link]"
 
 # An agent's bar: three 44px segments, on one row with the back link, the strip under them.
-BAR_TABS = ("Chat", "Pane", "Files")
+BAR_TABS: Final = ("Chat", "Pane", "Files")
 # "One quiet line" at the default Text Size: about 28px, with a little room for the font.
-STRIP_MAX = 36
+STRIP_MAX: Final = 36
 # The back link keeps its word only on a bar wide enough for it: 390px and up at default text.
-WORD_WIDTHS = (390, 430)
+WORD_WIDTHS: Final = (390, 430)
 
 # True once htmx has wired every hx element it can see and nothing is in flight or settling.
 # A fragment swapped in by hx-trigger="load" is attached a settle delay before htmx processes
 # it, and a tap in that gap posts the bare form natively and lands on the no-JS fallback.
-HTMX_SETTLED = r"""() => {
+HTMX_SETTLED: Final = r"""() => {
   if (document.readyState !== "complete") return false;
   const busy = ".htmx-request, .htmx-swapping, .htmx-settling, .htmx-added";
   if (document.querySelector(busy)) return false;
@@ -151,7 +157,7 @@ HTMX_SETTLED = r"""() => {
 }"""
 
 # After a native submit the next document has no root until its first byte parses: not loaded.
-PROBE_LOADED = r"""
+PROBE_LOADED: Final = r"""
 const ready = arguments[0];
 const base = arguments[1];
 const root = document.documentElement;
@@ -178,7 +184,7 @@ return {
 # Every htmx request is refused meanwhile, so no poll's redraw can re-measure the dock for it:
 # the dock must follow the text itself. How many frames that took is not judged, only whether
 # it happened before the ceiling, so a loaded machine is slower but never red.
-GROW_TEXT = r"""
+GROW_TEXT: Final = r"""
 const [scale, ceiling] = arguments;
 const done = arguments[arguments.length - 1];
 const refuse = (event) => event.preventDefault();
@@ -204,12 +210,12 @@ const frame = () => {
 requestAnimationFrame(frame);
 """
 # Only how long to wait before calling the dock stuck; a dock that follows does so in frames.
-DOCK_CEILING_MS = 5000
+DOCK_CEILING_MS: Final = 5000
 
 # A tap's outcome lasts only until its region's own poll (twice the answer cadence, 10s), and a
 # loaded page can take longer than that to settle: once the tap is answered and its proof drawn,
 # every further htmx request is refused, so the screen judged is the outcome, not what replaced it.
-HOLD_PROOF = r"""
+HOLD_PROOF: Final = r"""
 const ready = arguments[0];
 let answered = false;
 document.addEventListener("htmx:afterRequest", (event) => {
@@ -223,7 +229,7 @@ document.addEventListener("htmx:beforeRequest", (event) => {
 
 # A tap can grow the dock too (a focused composer is taller), and the app re-measures it on the
 # resize observer's next frame: wait that out, frame by frame, before the room for it is judged.
-DOCK_KEPT = r"""
+DOCK_KEPT: Final = r"""
 const [ceiling] = arguments;
 const done = arguments[arguments.length - 1];
 const root = document.documentElement;
@@ -243,7 +249,7 @@ requestAnimationFrame(frame);
 """
 
 # One synchronous script, so no htmx poll can swap the DOM halfway through a measurement.
-PROBE_GEOMETRY = r"""
+PROBE_GEOMETRY: Final = r"""
 const [scrollAllowed, tapAllowed, tappable, floor, edge, fields, fontFloor] = arguments;
 for (const d of document.querySelectorAll("details")) d.open = true;
 const describe = (el) => {
@@ -452,15 +458,15 @@ return { page: page, scrollers: scrollers, spills: spills, taps: taps, edges: ed
 
 
 # The rig's own paths, answered by the switch and never seen by the app.
-RIG_PREFIX = "/__rig/"
-COLLECTOR_PATH = RIG_PREFIX + "page-errors.js"
-REPORT_PATH = RIG_PREFIX + "page-error"
+RIG_PREFIX: Final = "/__rig/"
+COLLECTOR_PATH: Final = RIG_PREFIX + "page-errors.js"
+REPORT_PATH: Final = RIG_PREFIX + "page-error"
 # The first thing in every whole page's head, so it runs before any script the app sends.
-COLLECTOR_TAG = f'<script src="{COLLECTOR_PATH}"></script>'.encode()
+COLLECTOR_TAG: Final = f'<script src="{COLLECTOR_PATH}"></script>'.encode()
 # A browser reports an uncaught throw and the page carries on, so nothing else would notice it.
 # Posted synchronously: once the handler returns the rig has it, so a throw just before a
 # read-back or a navigation is never lost in flight, and the read-back needs no wait.
-COLLECTOR = r"""(function () {
+COLLECTOR: Final = r"""(function () {
   "use strict";
   function report(kind, message, source) {
     try {
@@ -482,7 +488,7 @@ COLLECTOR = r"""(function () {
   });
 })();
 """.replace("REPORT_PATH", REPORT_PATH)
-_REPORT = TypeAdapter(dict[str, str])
+_REPORT: Final = TypeAdapter(dict[str, str])
 
 
 def _header(message: Message, name: bytes) -> str:
@@ -724,7 +730,7 @@ def _load_problems(seen: dict[str, object], ready: str, *, scripted: bool) -> li
     return problems
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Size:
     """A phone width and an iPhone Text Size, as a multiple of the default."""
 
@@ -737,7 +743,8 @@ class Size:
         return f"{self.width}px {name}{text}"
 
 
-@dataclass
+# Mutable: every check adds its taps and problems as it runs.
+@dataclass(slots=True)
 class Tally:
     """Every problem found, and how often each argued exception was needed."""
 
@@ -752,7 +759,7 @@ class Tally:
         self.used[selector] = self.used.get(selector, 0) + 1
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Spot:
     """One state measured at one size: its name in the report, the size, and the tally it adds to."""
 
@@ -999,19 +1006,21 @@ def report(tally: Tally, *, whole: bool, runs: int) -> int:
 Task = dict[str, object]
 
 # One task or one answer on the worker pipe, a JSON object per line.
-_LINE = TypeAdapter(dict[str, JsonValue])
-WALKS = {
-    HISTORY: backnav,
-    CHAT_END: chatend,
-    FEED_HOLD: feedhold,
-    SEND_HOLD: sendhold,
-    VOICEOVER: voiceover,
-}
+_LINE: Final = TypeAdapter(dict[str, JsonValue])
+WALKS: Final = MappingProxyType(
+    {
+        HISTORY: backnav,
+        CHAT_END: chatend,
+        FEED_HOLD: feedhold,
+        SEND_HOLD: sendhold,
+        VOICEOVER: voiceover,
+    }
+)
 # States per task: small enough that the browsers finish together, large enough to amortise
 # opening a window.
-CHUNK = 14
+CHUNK: Final = 14
 # Each worker drives its own Firefox; past four they mostly wait on each other for the CPU.
-JOBS = max(1, min(4, (os.cpu_count() or 2) // 2))
+JOBS: Final = max(1, min(4, (os.cpu_count() or 2) // 2))
 
 
 def _label(task: Task) -> str:

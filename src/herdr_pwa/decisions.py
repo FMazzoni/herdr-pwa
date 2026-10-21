@@ -50,7 +50,7 @@ SECTIONS: Final[tuple[tuple[AgentStatus, str], ...]] = (
 )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class OptionRow:
     """One numbered option, and the digit that answers it if it earned one."""
 
@@ -60,7 +60,7 @@ class OptionRow:
     digit: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class StepCount:
     """How far through a multi-step question the screen is."""
 
@@ -68,7 +68,7 @@ class StepCount:
     total: int
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ScreenDecision:
     """Everything the answer surface decides about one blocked screen."""
 
@@ -100,7 +100,7 @@ class Condition(StrEnum):
     OFFLINE = "offline"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Freshness:
     """How old the herd on screen is, and what the feed should say about it."""
 
@@ -129,7 +129,7 @@ class Pending:
 NOTHING_PENDING: Final = Pending()
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class AgentRow:
     """One feed row: who the agent is, where it sits, and how to answer it."""
 
@@ -149,7 +149,7 @@ class AgentRow:
     pending: Pending = NOTHING_PENDING
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Section:
     """A run of feed rows sharing one effective status."""
 
@@ -163,7 +163,7 @@ class Section:
         return len(self.rows)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class HerdDecision:
     """The whole feed over one snapshot: order, sections, tallies, polling, freshness."""
 
@@ -288,7 +288,7 @@ class Overlay:
 NO_OVERLAY: Final = Overlay()
 # herdr's word for a turn that has ended, and for the moment a retry runs before it is refused.
 _STOPS: Final = frozenset({AgentStatus.IDLE, AgentStatus.DONE})
-_STALLABLE: Final = _STOPS | {AgentStatus.WORKING}
+_STALLABLE: Final = _STOPS | frozenset({AgentStatus.WORKING})
 
 
 def context_stalled(turns: Sequence[TranscriptTurn]) -> bool:

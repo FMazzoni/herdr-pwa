@@ -5,6 +5,7 @@ from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
+from types import MappingProxyType
 from typing import Annotated, Final
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict
@@ -39,13 +40,15 @@ CACHE_ENTRIES: Final = 24
 _SCAN: Final = 1024 * 1024
 _MARKDOWN: Final = frozenset({".md", ".markdown", ".mdown"})
 # Magic numbers, so an image is only served as the type its bytes say it is.
-IMAGES: Final = {
-    ".png": (b"\x89PNG\r\n\x1a\n", "image/png"),
-    ".jpg": (b"\xff\xd8\xff", "image/jpeg"),
-    ".jpeg": (b"\xff\xd8\xff", "image/jpeg"),
-    ".gif": (b"GIF8", "image/gif"),
-    ".webp": (b"RIFF", "image/webp"),
-}
+IMAGES: Final = MappingProxyType(
+    {
+        ".png": (b"\x89PNG\r\n\x1a\n", "image/png"),
+        ".jpg": (b"\xff\xd8\xff", "image/jpeg"),
+        ".jpeg": (b"\xff\xd8\xff", "image/jpeg"),
+        ".gif": (b"GIF8", "image/gif"),
+        ".webp": (b"RIFF", "image/webp"),
+    }
+)
 BUSY_NOTE: Final = "Highlighting is busy with another file, so this one is shown plain."
 LONG_PROSE_NOTE: Final = "This file is too long to render as prose, so it is shown as source."
 PAGE_CUT_NOTE: Final = "This page is cut at 1 MB; the rest of its lines are not shown."
@@ -113,7 +116,7 @@ def _lines_of(text: str) -> list[str]:
     return lines[:-1] if lines and not lines[-1] else lines
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class _Lru[K, V]:
     size: int
     items: OrderedDict[K, V] = field(default_factory=OrderedDict[K, V])
@@ -179,7 +182,7 @@ class Look(BaseModel):
 FIRST_LOOK: Final = Look()
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class Viewer:
     """Builds file views, holding the highlight cache and the limit on highlights in flight."""
 

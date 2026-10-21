@@ -31,7 +31,7 @@ class TickingClock:
         return self.now
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class Call:
     method: str
     params: dict[str, JsonValue]
@@ -39,7 +39,8 @@ class Call:
     idempotent: bool
 
 
-@dataclass
+# Mutable: a fake that records being closed.
+@dataclass(slots=True)
 class FakeTransport:
     """The wire seam, recording every request and answering canned frames."""
 

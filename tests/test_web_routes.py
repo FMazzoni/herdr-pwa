@@ -179,7 +179,7 @@ def test_a_failed_refresh_over_a_good_snapshot_is_degraded_not_empty(tmp_path: P
     assert WORKING_SESSION in response.text
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class _Row:
     """One row of the failure table: the status, headline and polling an engine failure gets."""
 

@@ -73,6 +73,7 @@ def writer_for(web: WebState, request: Request, identity: auth.Identity) -> Writ
         web.settings.transcript_roots,
         declared_models(web.settings),
         web.proc,
+        web.memory,
     )
 
 

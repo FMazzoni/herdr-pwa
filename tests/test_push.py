@@ -7,6 +7,7 @@ import threading
 import time
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
+from dataclasses import replace
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import cast
@@ -26,11 +27,13 @@ from herdr_pwa.push import (
     LINK_PLACEHOLDER,
     MAX_BODY_CHARS,
     MAX_PAYLOAD_BYTES,
+    PUSH_LIMITS,
     DeliveryError,
     DeliveryLog,
     Notice,
     Outlet,
     PushError,
+    PushLimits,
     SubjectError,
     Subscription,
     SubscriptionError,
@@ -582,19 +585,17 @@ def unchecked(endpoint: str) -> Subscription:
     return Subscription.model_construct(endpoint=endpoint, keys=keys)
 
 
-def a_sender(tmp_path: Path) -> WebPushSender:
-    return arm_sender(load_or_create_vapid_keys(tmp_path), subject=SUBJECT, ttl=60)
+def a_sender(tmp_path: Path, limits: PushLimits = PUSH_LIMITS) -> WebPushSender:
+    return arm_sender(load_or_create_vapid_keys(tmp_path), subject=SUBJECT, ttl=60, limits=limits)
 
 
-def test_a_push_service_that_never_answers_fails_within_the_timeout(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(push, "SEND_TIMEOUT", 0.5)
+def test_a_push_service_that_never_answers_fails_within_the_timeout(tmp_path: Path) -> None:
+    limits = replace(PUSH_LIMITS, send_timeout=0.5)
     with socket.create_server(("127.0.0.1", 0)) as silent:
         port = cast("tuple[str, int]", silent.getsockname())[1]
         started = time.monotonic()
         with pytest.raises(DeliveryError) as refused:
-            a_sender(tmp_path)(unchecked(f"https://127.0.0.1:{port}/push"), "{}")
+            a_sender(tmp_path, limits)(unchecked(f"https://127.0.0.1:{port}/push"), "{}")
     assert time.monotonic() - started < 5
     assert refused.value.status is None
 
@@ -649,10 +650,9 @@ def test_a_refusal_keeps_the_status_and_reason_and_never_the_body(tmp_path: Path
     assert refused.value.status == 500
 
 
-def test_a_fan_out_past_its_budget_skips_the_rest(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_a_fan_out_past_its_budget_skips_the_rest(tmp_path: Path) -> None:
     clock = Clock()
+    elapsed = Clock(0.0)
     store = SubscriptionStore(tmp_path)
     endpoints = [f"https://fcm.googleapis.com/fcm/send/{n}" for n in range(3)]
     reached: list[str] = []
@@ -661,11 +661,12 @@ def test_a_fan_out_past_its_budget_skips_the_rest(
         del data
         reached.append(subscription.endpoint)
         # The first send used the whole budget.
-        monkeypatch.setattr(push, "FAN_OUT_BUDGET", -1.0)
+        elapsed.advance(PUSH_LIMITS.fan_out_budget + 1)
 
     health = DeliveryLog(tmp_path, clock=clock)
     devices = [subscribed(endpoint) for endpoint in endpoints]
-    outcome = fan_out("{}", devices, Outlet(slow, store, health), now=clock())
+    outlet = Outlet(slow, store, health, clock=elapsed)
+    outcome = fan_out("{}", devices, outlet, now=clock())
     assert reached == endpoints[:1]
     assert (outcome.sent, outcome.failed) == (1, 2)
     record = health.load()

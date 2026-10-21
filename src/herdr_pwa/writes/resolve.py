@@ -6,7 +6,7 @@ from collections.abc import Callable, Generator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Final, Protocol
+from typing import Protocol
 
 from herdr_pwa.audit import AuditUnavailableError, Entry, Write
 from herdr_pwa.decisions import identity_doubt
@@ -47,6 +47,60 @@ class Witness:
 
 
 @dataclass(frozen=True, slots=True)
+class InFlight:
+    """Which agents, panes and workspaces have a write in flight, in this process."""
+
+    _guard: threading.Lock = field(default_factory=threading.Lock)
+    _held: set[str] = field(default_factory=set[str])
+
+    @contextmanager
+    def hold(self, key: str) -> Generator[bool]:
+        """Claim ``key`` for one write; yields False, and claims nothing, if it is already held."""
+        with self._guard:
+            mine = key not in self._held
+            self._held.add(key)
+        try:
+            yield mine
+        finally:
+            if mine:
+                with self._guard:
+                    self._held.discard(key)
+
+
+@dataclass(frozen=True, slots=True)
+class Unsure:
+    """The text each session was last sent with an unknown outcome, until something is sent."""
+
+    _guard: threading.Lock = field(default_factory=threading.Lock)
+    _text: dict[SessionId, str] = field(default_factory=dict[SessionId, str])
+
+    def note(self, session: SessionId, text: str) -> None:
+        """Remember that ``text`` may or may not have reached ``session``."""
+        with self._guard:
+            self._text[session] = text.strip()
+
+    def pending(self, session: SessionId, text: str) -> bool:
+        """Is ``text`` the one whose last send to ``session`` may already have landed?"""
+        with self._guard:
+            return bool(session) and self._text.get(session) == text.strip()
+
+    def clear(self, session: SessionId) -> None:
+        """A send to ``session`` was taken, so what came before it is settled by the pane."""
+        with self._guard:
+            _ = self._text.pop(session, None)
+
+
+@dataclass(frozen=True, slots=True)
+class WriteMemory:
+    """What one app's writes remember between requests: the keys in flight, the unsure sends."""
+
+    # Shared across the routes' thread pool, so two tabs are two threads on one set; a restart
+    # forgets both, and the composer still says so.
+    in_flight: InFlight = field(default_factory=InFlight)
+    unsure: Unsure = field(default_factory=Unsure)
+
+
+@dataclass(frozen=True, slots=True)
 class Writer:
     """What every write needs: the runner, the audit trail, the clock its waits run on, the
     transcript roots a session's own store is looked up in (empty: each harness's default), the
@@ -59,6 +113,7 @@ class Writer:
     stores: tuple[str, ...] = ()
     declared: Mapping[str, tuple[str, ...]] = field(default_factory=dict[str, tuple[str, ...]])
     proc: Path = PROC
+    memory: WriteMemory = field(default_factory=WriteMemory)
 
     @property
     def witness(self) -> Witness:
@@ -141,39 +196,16 @@ def attempt(audit: AuditTrail, write: Write, *, verb: str) -> Entry | Refused:
         return Refused(Refusal.UNRECORDABLE, verb, detail=str(exc))
 
 
-@dataclass
-class InFlight:
-    """Which agents, panes and workspaces have a write in flight, in this process."""
-
-    _guard: threading.Lock = field(default_factory=threading.Lock)
-    _held: set[str] = field(default_factory=set[str])
-
-    @contextmanager
-    def hold(self, key: str) -> Generator[bool]:
-        """Claim ``key`` for one write; yields False, and claims nothing, if it is already held."""
-        with self._guard:
-            mine = key not in self._held
-            self._held.add(key)
-        try:
-            yield mine
-        finally:
-            if mine:
-                with self._guard:
-                    self._held.discard(key)
-
-
-# One per process: uvicorn runs sync routes on a thread pool, so two tabs are two threads here.
-IN_FLIGHT: Final = InFlight()
-
-
 def workspace_key(workspace_id: str) -> str:
     """The lock key of a workspace: its rename, its close, and every start into it take this one."""
     return f"workspace:{workspace_id.strip()}"
 
 
-def one_at_a_time[T](key: str, verb: str, write: Callable[[], T]) -> T | Refused:
+def one_at_a_time[T](
+    memory: WriteMemory, key: str, verb: str, write: Callable[[], T]
+) -> T | Refused:
     """Run ``write`` unless another write to the same ``key`` is still in flight; then refuse."""
     # Refused rather than queued: the second tap was made against what the first one changes, so
     # its sender has to look again either way, and a queue would pin a pool thread for the watch.
-    with IN_FLIGHT.hold(key) as mine:
+    with memory.in_flight.hold(key) as mine:
         return write() if mine else Refused(Refusal.IN_FLIGHT, verb)

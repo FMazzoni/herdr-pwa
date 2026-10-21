@@ -39,25 +39,23 @@ from herdr_pwa.validation import is_not_json, or_default, summary
 
 log = logging.getLogger(__name__)
 
-VAPID_FILENAME = "vapid.json"
-SUBSCRIPTIONS_FILENAME = "subscriptions.json"
-HEALTH_FILENAME = "push-health.json"
-EVENT_BLOCKED = "blocked"
-EVENT_DONE = "done"
-EVENT_CLEAR = "clear"
-HERD_TAG = "herd"
-MAX_TITLE_CHARS = 60
-MAX_BODY_CHARS = 180
-MAX_AGENT_CHARS = 64
+VAPID_FILENAME: Final = "vapid.json"
+SUBSCRIPTIONS_FILENAME: Final = "subscriptions.json"
+HEALTH_FILENAME: Final = "push-health.json"
+# What a push says happened: the two that notify, and the retraction of either.
+type PushEvent = Literal["blocked", "done", "clear"]
+EVENT_BLOCKED: Final = "blocked"
+EVENT_DONE: Final = "done"
+EVENT_CLEAR: Final = "clear"
+HERD_TAG: Final = "herd"
+MAX_TITLE_CHARS: Final = 60
+MAX_BODY_CHARS: Final = 180
+MAX_AGENT_CHARS: Final = 64
 # Push services reject roughly 4 KiB after encryption.
-MAX_PAYLOAD_BYTES = 3072
-MAX_ENDPOINT_CHARS = 2048
+MAX_PAYLOAD_BYTES: Final = 3072
+MAX_ENDPOINT_CHARS: Final = 2048
 # Each tick sends to every device in turn, so the count bounds how long a fan-out can take.
-MAX_DEVICES = 10
-# Seconds one send may wait to connect, and again to read; a stalled service must not hold the loop.
-SEND_TIMEOUT = 10.0
-# A fan-out that has spent this long skips its remaining devices, bounding the notifier's lock.
-FAN_OUT_BUDGET = 30.0
+MAX_DEVICES: Final = 10
 # The browsers' push services; anything else is a host the box would be told to post to.
 PUSH_SERVICES: Final = (
     "push.apple.com",
@@ -66,14 +64,14 @@ PUSH_SERVICES: Final = (
     "push.services.mozilla.com",
     "notify.windows.com",
 )
-LINK_PLACEHOLDER = "[link]"
+LINK_PLACEHOLDER: Final = "[link]"
 # RFC 2606 names never resolve; Apple answers 403 BadJwtToken to a contact under one.
-RESERVED_TLDS = frozenset({"invalid", "example", "test", "localhost", "local"})
+RESERVED_TLDS: Final = frozenset({"invalid", "example", "test", "localhost", "local"})
 
-_PRIVATE_BYTES = 32
-_POINT_BYTES = 65
-_AUTH_BYTES = 16
-_UNCOMPRESSED = 0x04
+_PRIVATE_BYTES: Final = 32
+_POINT_BYTES: Final = 65
+_AUTH_BYTES: Final = 16
+_UNCOMPRESSED: Final = 0x04
 # The order n of P-256 (SEC 2, 2.4.2); a private scalar must lie in [1, n-1].
 _P256_ORDER: Final = 0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551
 
@@ -253,7 +251,7 @@ def load_or_create_vapid_keys(state_dir: Path, *, clock: Clock = time.time) -> V
     return document.keys(path)
 
 
-_ENDPOINT_RE = re.compile(r"https://[^\s/@]+(?:/\S*)?")
+_ENDPOINT_RE: Final = re.compile(r"https://[^\s/@]+(?:/\S*)?")
 
 
 def _is_push_service(host: str) -> bool:
@@ -401,16 +399,16 @@ class SubscriptionStore:
         statedir.write_secret(self.path, document.model_dump_json(indent=2, by_alias=True) + "\n")
 
 
-_ANSI_RE = re.compile(
+_ANSI_RE: Final = re.compile(
     r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)"  # OSC, e.g. a title-setting sequence
     r"|\x1b\[[0-?]*[ -/]*[@-~]"  # CSI, e.g. colour
     r"|\x1b[@-Z\\-_]"  # any other two-character escape
 )
-_LINKY_TLDS = "com|net|org|io|dev|ai|co|me|app|sh|xyz|gg|to|ly"
+_LINKY_TLDS: Final = "com|net|org|io|dev|ai|co|me|app|sh|xyz|gg|to|ly"
 # Schemes with no // that still navigate or execute.
-_BARE_SCHEMES = "data|javascript|vbscript|file|blob|tel|mailto|sms|intent|market"
+_BARE_SCHEMES: Final = "data|javascript|vbscript|file|blob|tel|mailto|sms|intent|market"
 # Each run is entered only at its start, so a scan is linear: one from every letter took 18 s on 20k.
-_URL_RE = re.compile(
+_URL_RE: Final = re.compile(
     rf"""(?ix)
     (?:
         # A scheme, entered where its run starts; digits before the first letter go with it.
@@ -432,8 +430,8 @@ _URL_RE = re.compile(
     """
 )
 # Text past this is never scanned: a lock screen shows a few hundred characters at most.
-_MAX_SCANNED = 4096
-_INVISIBLE = frozenset({"Cc", "Cf", "Cs", "Co"})
+_MAX_SCANNED: Final = 4096
+_INVISIBLE: Final = frozenset({"Cc", "Cf", "Cs", "Co"})
 
 
 def _unlinked(found: re.Match[str]) -> str:
@@ -460,7 +458,7 @@ def sanitise(text: str, *, limit: int) -> str:
 class Notice:
     """What one notification says, before sanitising; the agent is the session to deep-link."""
 
-    event: str
+    event: PushEvent
     title: str
     body: str
     agent: str = ""
@@ -552,12 +550,26 @@ def _refusal(exc: Exception) -> DeliveryError:
 
 
 @dataclass(frozen=True, slots=True)
+class PushLimits:
+    """How long one send, and one whole fan-out, may hold the notifier."""
+
+    # Seconds one send may wait to connect, and again to read; a stalled service must not hold it.
+    send_timeout: float = 10.0
+    # A fan-out that has spent this long skips its remaining devices, bounding the notifier's lock.
+    fan_out_budget: float = 30.0
+
+
+PUSH_LIMITS: Final = PushLimits()
+
+
+@dataclass(frozen=True, slots=True)
 class WebPushSender:
     """The real sender: pywebpush signed with this box's VAPID key."""
 
     keys: VapidKeys
     subject: str
     ttl: int
+    timeout: float
 
     def __call__(self, subscription: Subscription, data: str) -> None:
         """Encrypt and post; a refusal becomes DeliveryError with the push service's status."""
@@ -569,16 +581,20 @@ class WebPushSender:
                     ttl=self.ttl,
                     vapid_private_key=self.keys.private_key,
                     vapid_claims={"sub": self.subject},
-                    timeout=SEND_TIMEOUT,
+                    timeout=self.timeout,
                     requests_session=session,
                 )
             except Exception as exc:
                 raise _refusal(exc) from exc
 
 
-def arm_sender(keys: VapidKeys, *, subject: str, ttl: int) -> WebPushSender:
+def arm_sender(
+    keys: VapidKeys, *, subject: str, ttl: int, limits: PushLimits = PUSH_LIMITS
+) -> WebPushSender:
     """The sender, refused here where push is armed when its contact would be rejected."""
-    return WebPushSender(keys=keys, subject=check_subject(subject), ttl=ttl)
+    return WebPushSender(
+        keys=keys, subject=check_subject(subject), ttl=ttl, timeout=limits.send_timeout
+    )
 
 
 # Counters and stamps read back leniently: one damaged field costs that field, not the record.
@@ -701,6 +717,9 @@ class Outlet:
     deliver: Deliver
     store: SubscriptionStore
     health: DeliveryLog
+    limits: PushLimits = PUSH_LIMITS
+    # What the budget is measured on.
+    clock: Clock = time.monotonic
 
 
 def _one(data: str, subscription: Subscription, outlet: Outlet, *, now: float) -> str:
@@ -729,14 +748,15 @@ def fan_out(
     """Send to every device: prune the gone, record each outcome, never let one stop the rest.
 
     *now* is wall time from the caller's clock, for subscriptions that expire by their own date.
-    Past ``FAN_OUT_BUDGET`` seconds the devices not yet tried are skipped and counted failed.
+    Past the outlet's ``fan_out_budget`` seconds the devices not yet tried are skipped and counted failed.
     """
     outcomes: list[str] = []
-    started = time.monotonic()
+    budget = outlet.limits.fan_out_budget
+    started = outlet.clock()
     for index, subscription in enumerate(subscriptions):
-        if time.monotonic() - started > FAN_OUT_BUDGET:
+        if outlet.clock() - started > budget:
             skipped = len(subscriptions) - index
-            outlet.health.failed(f"fan-out over {FAN_OUT_BUDGET:g}s: skipped {skipped} devices")
+            outlet.health.failed(f"fan-out over {budget:g}s: skipped {skipped} devices")
             outcomes += ["failed"] * skipped
             break
         outcomes.append(_one(data, subscription, outlet, now=now))

@@ -1,6 +1,7 @@
 """Writes to one agent: a prompt, a tapped key, an end; and the by-address door of a starting one."""
 
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Annotated, Final
 from urllib.parse import quote
 
@@ -186,27 +187,31 @@ class Said:
 _LOOK: Final = "Look at the Pane before tapping again; nothing is sent twice."
 
 # What watching the pane established, in words; {key} is the key as the user saw it.
-_SAID: Final[dict[tuple[Outcome, Evidence], Said]] = {
-    (Outcome.CONFIRMED, Evidence.GONE): Said(
-        "sent", "Answered.", "You sent {key} and the question went away."
-    ),
-    (Outcome.CONFIRMED, Evidence.MOVED): Said(
-        "sent", "Sent {key}.", "The screen moved on; what it shows now is below."
-    ),
-    (Outcome.UNCONFIRMED, Evidence.MOVED): Said(
-        "unsure",
-        "Sent {key}, and a different question is up.",
-        "Read it before you answer it.",
-        True,
-    ),
-    (Outcome.UNCONFIRMED, Evidence.UNMOVED): Said(
-        "unsure", "Sent {key}, but the question is still showing.", _LOOK, True
-    ),
-    (Outcome.ACCEPTED, Evidence.UNMOVED): Said("sent", "Sent {key}.", "The question is still up."),
-    (Outcome.ACCEPTED, Evidence.DELIVERED): Said(
-        "sent", "Sent {key}.", "Nothing was waiting to watch."
-    ),
-}
+_SAID: Final[MappingProxyType[tuple[Outcome, Evidence], Said]] = MappingProxyType(
+    {
+        (Outcome.CONFIRMED, Evidence.GONE): Said(
+            "sent", "Answered.", "You sent {key} and the question went away."
+        ),
+        (Outcome.CONFIRMED, Evidence.MOVED): Said(
+            "sent", "Sent {key}.", "The screen moved on; what it shows now is below."
+        ),
+        (Outcome.UNCONFIRMED, Evidence.MOVED): Said(
+            "unsure",
+            "Sent {key}, and a different question is up.",
+            "Read it before you answer it.",
+            True,
+        ),
+        (Outcome.UNCONFIRMED, Evidence.UNMOVED): Said(
+            "unsure", "Sent {key}, but the question is still showing.", _LOOK, True
+        ),
+        (Outcome.ACCEPTED, Evidence.UNMOVED): Said(
+            "sent", "Sent {key}.", "The question is still up."
+        ),
+        (Outcome.ACCEPTED, Evidence.DELIVERED): Said(
+            "sent", "Sent {key}.", "Nothing was waiting to watch."
+        ),
+    }
+)
 _UNCERTAIN: Final = Said("unsure", "Sent {key}, unconfirmed.", _LOOK, True)
 
 

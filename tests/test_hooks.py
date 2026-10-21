@@ -15,7 +15,7 @@ MARKER = "planted-marker"
 SUBJECT_72 = "S" * 72
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Rig:
     """A work repo with a bare remote that already has main, and the env every git call uses."""
 

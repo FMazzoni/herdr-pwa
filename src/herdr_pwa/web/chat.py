@@ -2,6 +2,7 @@
 
 import zlib
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Final
 
 from herdr_pwa.clock import duration, duration_said, elapsed
@@ -20,12 +21,14 @@ from herdr_pwa.engine import (
 from herdr_pwa.render.markdown import MdNode, render_tree
 from herdr_pwa.web.stats import NO_TIMES, SpawnedTime, TurnTimes
 
-_STATE_NOTES = {
-    HistoryState.empty: "Nothing has been said yet.",
-    HistoryState.absent: "No transcript was found for this session yet.",
-    HistoryState.unreadable: "The transcript exists and could not be read.",
-    HistoryState.unsupported: "This harness keeps no transcript this app can read.",
-}
+_STATE_NOTES: Final = MappingProxyType(
+    {
+        HistoryState.empty: "Nothing has been said yet.",
+        HistoryState.absent: "No transcript was found for this session yet.",
+        HistoryState.unreadable: "The transcript exists and could not be read.",
+        HistoryState.unsupported: "This harness keeps no transcript this app can read.",
+    }
+)
 # What it is doing can then be read only on its Pane, so the note offers the way there.
 _READ_ON_PANE: Final = frozenset({HistoryState.unsupported})
 
@@ -354,28 +357,30 @@ class Receipt:
 
 
 # What a tool does, by its name in any harness, case aside; a tool not listed is "Using" itself.
-_DOING: Final = {
-    "bash": "Running",
-    "shell": "Running",
-    "terminal": "Running",
-    "read": "Reading",
-    "read_file": "Reading",
-    "view": "Reading",
-    "edit": "Editing",
-    "multiedit": "Editing",
-    "notebookedit": "Editing",
-    "patch": "Editing",
-    "apply_patch": "Editing",
-    "write": "Writing",
-    "write_file": "Writing",
-    "grep": "Searching",
-    "search_files": "Searching",
-    "glob": "Finding",
-    "webfetch": "Fetching",
-    "websearch": "Searching",
-    "task": "Delegating",
-    "agent": "Delegating",
-}
+_DOING: Final = MappingProxyType(
+    {
+        "bash": "Running",
+        "shell": "Running",
+        "terminal": "Running",
+        "read": "Reading",
+        "read_file": "Reading",
+        "view": "Reading",
+        "edit": "Editing",
+        "multiedit": "Editing",
+        "notebookedit": "Editing",
+        "patch": "Editing",
+        "apply_patch": "Editing",
+        "write": "Writing",
+        "write_file": "Writing",
+        "grep": "Searching",
+        "search_files": "Searching",
+        "glob": "Finding",
+        "webfetch": "Fetching",
+        "websearch": "Searching",
+        "task": "Delegating",
+        "agent": "Delegating",
+    }
+)
 _FILE_TOOLS: Final = frozenset({"Reading", "Editing", "Writing"})
 # What a command line opens with before the program it runs: a change of directory, a setting,
 # or a wrapper that runs the next word; each is skipped so "Running" names the program.

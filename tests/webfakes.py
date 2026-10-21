@@ -85,7 +85,7 @@ def read_frame(text: str, pane: str = WORKING_PANE) -> dict[str, JsonValue]:
     }
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class FakeWire:
     """Answers each socket method with a canned frame or raises the canned failure.
 
@@ -135,7 +135,7 @@ class FakeWire:
 HOLD_SECONDS = 60.0
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Hold:
     """An ``after`` hook that sits on a write until ``release`` is set, then runs ``then``.
 
@@ -158,7 +158,8 @@ class Hold:
             self.then(wire)
 
 
-@dataclass
+# Mutable: a clock the test moves by setting it.
+@dataclass(slots=True)
 class Clock:
     """A clock the test moves by hand."""
 
@@ -175,7 +176,7 @@ class Clock:
         self.now += seconds
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class Rig:
     """One app, its fake wire, its clock and a client that carries an identity."""
 
