@@ -26,7 +26,8 @@ _PEER: Final = re.compile(
     """,
     re.DOTALL | re.VERBOSE,
 )
-_ATTR: Final = re.compile(r'(?P<name>[\w-]+)="(?P<value>[^"]*)"')
+# Entered only where a name starts, so a long word is read once rather than from every letter.
+_ATTR: Final = re.compile(r'(?<![\w-])(?P<name>[\w-]+)="(?P<value>[^"]*)"')
 # Measured: the frame before a subagent's report, then the report with every line indented.
 _HANDBACK_FRAME: Final = "[Subagent hand-back]"
 _HANDBACK_INDENT: Final = "  "

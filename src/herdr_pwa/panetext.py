@@ -117,7 +117,6 @@ _BOX: Final = glyphs.BOX_AND_BLOCK
 _WS: Final = " \t\u00a0"
 
 _LEAD_FRAME: Final = re.compile(f"^[{re.escape(_WS)}]*(?:[{re.escape(_BOX)}][{re.escape(_WS)}]*)+")
-_TAIL_FRAME: Final = re.compile(f"[{re.escape(_WS)}{re.escape(_BOX)}]*$")
 # Twelve, not four: four spaces is code indentation behind a diff gutter.
 _PADDING: Final = re.compile(f"[{re.escape(_WS)}]{{12,}}")
 
@@ -263,8 +262,8 @@ def _strip_frame(runs: list[Run]) -> list[Run]:
     flat = plain_text(out)
     lead = _LEAD_FRAME.match(flat)
     start = lead.end() if lead else 0
-    tail = _TAIL_FRAME.search(flat, start)
-    end = tail.start() if tail else len(flat)
+    # One line's text holds no newline, so the frame's tail is what an rstrip of it takes.
+    end = len(flat.rstrip(_WS + _BOX))
     out = _slice_runs(out, start, max(start, end))
     return [run for run in _collapse_padding(out) if run.text]
 

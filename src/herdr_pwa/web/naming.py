@@ -21,7 +21,8 @@ _UNNAMED: Final = re.compile(r"new session\s*-\s*\S+", re.IGNORECASE)
 _LOCATOR: Final = re.compile(r"[^\s@:]+@[^\s@:]+(?::\S*)?")
 # How a terminal prompt opens when it asks without a question mark.
 _PROMPT_OPENING: Final = re.compile(
-    rf"^ \W* (?:{alternatives(facts.PROMPT_OPENERS)}) \b  # a line opening on a word that asks",
+    # The lead stays on its own line, so a run of blank lines is read once, not from each.
+    rf"^ [^\w\n]*+ (?:{alternatives(facts.PROMPT_OPENERS)}) \b  # a line opening on a word that asks",
     re.IGNORECASE | re.MULTILINE | re.VERBOSE,
 )
 

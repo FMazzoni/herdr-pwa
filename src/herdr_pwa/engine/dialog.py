@@ -26,9 +26,9 @@ description keeps its depth.
 
 OPTION_RE: Final = re.compile(
     rf"""
-    \s* {glyphs.one_of(glyphs.QUOTE_CURSOR, glyphs.CURSOR, "*-•")}?  # a cursor or a bullet
-    \s* (?P<open>\[)? (?P<number>\d{{1,2}}) (?(open)\]|\s*[.):])  # 1. or 2) or [3], closed alike
-    \s+ (?P<label>\S.*?) \s*  # the label, without the row's padding
+    \s*+ {glyphs.one_of(glyphs.QUOTE_CURSOR, glyphs.CURSOR, "*-•")}?  # a cursor or a bullet
+    \s*+ (?P<open>\[)? (?P<number>\d{{1,2}}) (?(open)\]|\s*[.):])  # 1. or 2) or [3], closed alike
+    \s+ (?P<label>\S(?:.*\S)?) \s*  # the label, first to last letter, without the padding
     """,
     re.VERBOSE,
 )
@@ -78,7 +78,7 @@ _CHECKBOX_RE: Final = re.compile(
     (?: \[ (?P<box>{glyphs.one_of(_TICKED_BOX, _BLANK_BOX)}?) \]  # a mark in brackets, [x] or [ ]
       | (?P<glyph>{glyphs.one_of(glyphs.TICKED_BOX, glyphs.BLANK_BOX)})  # or a checkbox glyph
     )
-    \s* (?P<rest>\S.*?) \s*  # the label beside it
+    \s* (?P<rest>\S(?:.*\S)?) \s*  # the label beside it
     """,
     re.VERBOSE,
 )

@@ -41,7 +41,8 @@ _COMPOSER_LEAD: Final = re.compile(rf"^\s*(?:{glyphs.one_of(glyphs.PROMPT)}|[$#%
 # Anchored at end of line with the colon required; a bare "Password:" reads as prose.
 _NO_ECHO: Final[tuple[re.Pattern[str], ...]] = (
     re.compile(r"\[sudo\] password for \S+:\s*$", re.IGNORECASE),
-    re.compile(r"\S+@\S+'s password:\s*$", re.IGNORECASE),
+    # ssh's ``user@host's password:``, entered at a word's start and its first @ after a letter.
+    re.compile(r"(?<!\S)\S[^\s@]*+@\S+'s password:\s*$", re.IGNORECASE),
     re.compile(r"enter (?:the )?passphrase(?: for \S.*)?:\s*$", re.IGNORECASE),
     re.compile(r"(?:verify|confirm|retype|repeat) password:\s*$", re.IGNORECASE),
     re.compile(r"password \(again\):\s*$", re.IGNORECASE),
