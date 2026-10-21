@@ -8,6 +8,8 @@
   "reportAny": "error",
   "reportExplicitAny": "error",
   "reportMissingTypeStubs": false,
+  // A stale ignore hides the next real error on its line.
+  "reportUnnecessaryTypeIgnoreComment": "error",
   "venvPath": ".",
   "venv": ".venv"
 }

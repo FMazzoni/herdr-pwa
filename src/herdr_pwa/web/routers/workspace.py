@@ -10,9 +10,8 @@ def build(web: WebState) -> APIRouter:
     """The workspace routes; creating, renaming and closing are writes and live elsewhere."""
     router = APIRouter(prefix="/workspaces", dependencies=[Depends(viewer_guard(web))])
 
-    # Each reportUnusedFunction ignore marks a route: FastAPI registers it by decorator.
     @router.get("")
-    def workspaces() -> HTMLResponse:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
+    def workspaces() -> HTMLResponse:
         snapshot = web.snapshot().value
         counts = {w.workspace_id: 0 for w in snapshot.workspaces}
         for agent in snapshot.agents:

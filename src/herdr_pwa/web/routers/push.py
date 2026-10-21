@@ -119,9 +119,8 @@ def _status(push: PushState) -> dict[str, object]:
 
 
 def _page_routes(router: APIRouter, web: WebState, push: PushState | None) -> None:
-    # Each reportUnusedFunction ignore marks a route: FastAPI registers it by decorator.
     @router.get("")
-    def alerts_page() -> HTMLResponse:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
+    def alerts_page() -> HTMLResponse:
         if push is None:
             return web.pages.page("push_page.html", {"push": None, "reason": PUSH_OFF})
         policy, now = push.stores.interrupts.current()
@@ -135,7 +134,7 @@ def _page_routes(router: APIRouter, web: WebState, push: PushState | None) -> No
         return web.pages.page("push_page.html", context)
 
     @router.get("/status")
-    def status() -> JSONResponse:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
+    def status() -> JSONResponse:
         return _off() if push is None else _json(_status(push))
 
 
@@ -196,35 +195,35 @@ async def _snooze(push: PushState, request: Request) -> JSONResponse:
 
 def _device_routes(router: APIRouter, push: PushState | None) -> None:
     @router.get("/key")
-    def key() -> JSONResponse:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
+    def key() -> JSONResponse:
         if push is None:
             return _off()
         return _json({"enabled": True, "publicKey": push.stores.keys.public_key})
 
     @router.post("/subscribe")
-    async def subscribe(request: Request) -> JSONResponse:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
+    async def subscribe(request: Request) -> JSONResponse:
         return _off() if push is None else await _subscribe(push, request)
 
     @router.post("/unsubscribe")
-    async def unsubscribe(request: Request) -> JSONResponse:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
+    async def unsubscribe(request: Request) -> JSONResponse:
         return _off() if push is None else await _unsubscribe(push, request)
 
 
 def _preference_routes(router: APIRouter, web: WebState, push: PushState | None) -> None:
     @router.get("/prefs")
-    def prefs() -> JSONResponse:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
+    def prefs() -> JSONResponse:
         return _off() if push is None else _json(_policy(push.stores.interrupts))
 
     @router.post("/prefs")
-    async def set_prefs(request: Request) -> JSONResponse:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
+    async def set_prefs(request: Request) -> JSONResponse:
         return _off() if push is None else await _set_prefs(push, request)
 
     @router.post("/snooze")
-    async def snooze(request: Request) -> JSONResponse:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
+    async def snooze(request: Request) -> JSONResponse:
         return _off() if push is None else await _snooze(push, request)
 
     @router.post("/seen/{session}")
-    def seen(session: str) -> Response:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
+    def seen(session: str) -> Response:
         # The loaded page says it was read; the GET that served it does not.
         if push is not None:
             mark_read(web, identity_of(session))
