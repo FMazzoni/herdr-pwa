@@ -22,7 +22,7 @@ from herdr_pwa.engine import (
     TranscriptPage,
     UsageCache,
 )
-from herdr_pwa.process_start import ProcessStarts
+from herdr_pwa.process_start import PanePids, ProcessStarts
 from herdr_pwa.web.background import pending_of
 from herdr_pwa.web.chat_status import Turning
 from herdr_pwa.web.chat_view import chat_view, status_row
@@ -267,8 +267,8 @@ def test_the_process_start_is_read_from_the_panes_claude(tmp_path: Path) -> None
     (proc / "7" / "stat").write_text(f"7 (claude (x)) {' '.join(fields)} 0 0\n")
 
     class Panes:
-        def pane_pids(self, pane_id: str) -> tuple[int, ...]:
-            return (3, 7) if pane_id == "w1:p1" else ()
+        def pane_processes(self, pane_id: str) -> PanePids:
+            return PanePids(3, (7,)) if pane_id == "w1:p1" else PanePids(None, ())
 
     starts = ProcessStarts(Panes(), proc=proc, clock=lambda: MonoTime(0.0))
     assert starts.started(PaneId("w1:p1")) == 1005.0

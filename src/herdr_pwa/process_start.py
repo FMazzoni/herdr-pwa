@@ -3,7 +3,7 @@
 import logging
 import os
 from pathlib import Path
-from typing import Final, Protocol
+from typing import Final, NamedTuple, Protocol
 
 from herdr_pwa.clock import MonoClock
 from herdr_pwa.ids import PaneId
@@ -16,10 +16,17 @@ _TTL: Final = 15.0
 _STARTTIME: Final = 19
 
 
+class PanePids(NamedTuple):
+    """A pane's processes, with the shell named apart so no reader guesses which it is."""
+
+    shell: int | None
+    others: tuple[int, ...]
+
+
 class PaneProcesses(Protocol):
     """The one thing this module needs from the runner."""
 
-    def pane_pids(self, pane_id: PaneId) -> tuple[int, ...]: ...
+    def pane_processes(self, pane_id: PaneId) -> PanePids: ...
 
 
 def _boot(proc: Path) -> float | None:
@@ -80,11 +87,10 @@ class ProcessStarts:
 
     def _read(self, pane_id: PaneId) -> float | None:
         try:
-            pids = self._panes.pane_pids(pane_id)
+            pids = self._panes.pane_processes(pane_id)
         except Exception:  # noqa: BLE001 - the engine's error type is a layer up; a failure loses the bound, never the page
             log.debug("no process info for %s", pane_id)
             return None
-        # The shell comes first; the agent is the oldest process the pane runs above it.
-        starts = [started_at(pid, proc=self._proc, ticks=self._ticks) for pid in pids[1:]]
+        starts = [started_at(pid, proc=self._proc, ticks=self._ticks) for pid in pids.others]
         known = [start for start in starts if start is not None]
         return min(known) if known else None

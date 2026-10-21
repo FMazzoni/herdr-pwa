@@ -38,6 +38,7 @@ from herdr_pwa.engine.transport import (
     Transport,
     WireReply,
 )
+from herdr_pwa.process_start import PanePids
 from herdr_pwa.protocol import WRITE_METHODS
 
 log = logging.getLogger(__name__)
@@ -634,12 +635,17 @@ class HerdrClient:
 
     def pane_pids(self, pane_id: PaneId, *, timeout: float | None = None) -> tuple[int, ...]:
         """Every process in this pane, shell first. A runner that will not say answers `()`."""
+        found = self.pane_processes(pane_id, timeout=timeout)
+        return found.others if found.shell is None else (found.shell, *found.others)
+
+    def pane_processes(self, pane_id: PaneId, *, timeout: float | None = None) -> PanePids:
+        """This pane's shell, when herdr names one, apart from its other processes."""
         info = self._process_info(pane_id, timeout)
         if info is None:
-            return ()
-        pids = [] if info.shell_pid is None else [info.shell_pid]
-        pids.extend(process.pid for process in info.foreground_processes or [])
-        return tuple(dict.fromkeys(pids))
+            return PanePids(shell=None, others=())
+        running = (process.pid for process in info.foreground_processes or [])
+        others = tuple(dict.fromkeys(pid for pid in running if pid != info.shell_pid))
+        return PanePids(shell=info.shell_pid, others=others)
 
     def foreground_leader(self, pane_id: PaneId, *, timeout: float | None = None) -> int | None:
         """The process leading the pane's terminal, the one its keys reach, or ``None``."""
