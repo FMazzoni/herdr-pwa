@@ -76,8 +76,8 @@ _CSI: Final = re.compile(
     """,
     re.VERBOSE,
 )
-# OSC, DCS, SOS, PM, APC: swallowed whole, so an OSC 8 hyperlink cannot inject a URL.
-_STRING_SEQ: Final = re.compile(r"\x1b[]PX^_](?:[^\x07\x1b]|\x1b(?!\\))*(?:\x07|\x1b\\|\Z)")
+# OSC, DCS, SOS, PM, APC go whole (no OSC 8 link gets in); unclosed, one ends at an ESC or a line.
+_STRING_SEQ: Final = re.compile(r"\x1b[]PX^_][^\x07\x1b\n]*(?:\x07|\x1b\\|(?=[\x1b\n])|\Z)")
 _SHORT_ESC: Final = re.compile(r"\x1b[ -/]*[0-~]?")
 _MAX_SGR_PARAMS: Final = 64
 
@@ -707,7 +707,7 @@ PATTERNS: Final = (
     ),
     Rx(
         _STRING_SEQ,
-        ("\x1b]0;title\x07", "\x1b]8;;http://x\x1b\\", "\x1bPq#0\x1b\\", "\x1b]0;unterminated"),
+        ("\x1b]0;title\x07", "\x1b]8;;http://x\x1b\\", "\x1bPq#0\x1b\\", "\x1b]0;open\nnext"),
         ("\x1b[31m", "\x1b(B"),
         "match",
     ),
