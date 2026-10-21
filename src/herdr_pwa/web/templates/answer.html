@@ -95,7 +95,7 @@
     {% endif %}
     {% if decision and decision.handoffs %}
     {# Not a button: the key gives the pane to a program no key here can work or quit. #}
-    <p class="answer__note answer__note--line">The screen also offers {{ decision.handoffs|map(attribute="label")|join(" and ") }}. That opens another program in the pane, which these keys cannot work or leave, so do it at the terminal.</p>
+    <p class="answer__note answer__note--line">The screen also offers {{ decision.handoffs|map(attribute="label")|join(" and ") }}. {% if decision.handoffs|length > 1 %}Those keys open{% else %}That key opens{% endif %} another program in the pane, which these buttons can't control or close. Do that at the terminal instead.</p>
     {% endif %}
   </div>
   {% endif %}
