@@ -34,7 +34,12 @@ dependencies = [
     "pygit2>=1.20.1",
 ]
 
-# TODO: add [project.urls] (Homepage, Source, Issues) once the repository has its public URL.
+
+
+[project.urls]
+Homepage = "https://github.com/FMazzoni/herdr-pwa"
+Source = "https://github.com/FMazzoni/herdr-pwa"
+Issues = "https://github.com/FMazzoni/herdr-pwa/issues"
 
 [project.scripts]
 herdr-pwa = "herdr_pwa.cli:main"
