@@ -10,20 +10,54 @@ on:
 permissions:
   contents: read
 
+# A newer push to the same ref makes the older run moot.
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   check:
     runs-on: ubuntu-latest
+    # The geometry gate runs cold here (no receipts); a wedged Marionette must not burn the 6-hour default.
+    timeout-minutes: 30
     steps:
       # Actions are pinned by commit, so a moved tag cannot change what runs; the tag is beside it.
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: extractions/setup-just@dd310ad5a97d8e7b41793f8ef055398d51ad4de6 # v2.0.0
-      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4.0.0
+        with:
+          just-version: 1.49.0
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           enable-cache: true
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+      # The geometry gate measures glyph widths: without Noto, the runner's sans-serif is the wider DejaVu.
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends fonts-noto-core fonts-noto-mono
+      # The image's Firefox is Mozilla's deb under /usr/lib/firefox, the layout scripts/firefox.py reads;
+      # apt's `firefox` on Ubuntu is a snap shim, so it is not installed over it.
+      - name: Show the browser and fonts the gate measures with
+        run: |
+          firefox --version
+          fc-match sans-serif
+          fc-match monospace
       # --locked fails on a uv.lock that pyproject.toml no longer matches, instead of rewriting it.
       - run: uv sync --locked --all-extras --dev
       # ci installs exactly package-lock.json; no package runs an install script.
       - run: npm ci --ignore-scripts
       - run: just check
+
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      # Audits exactly what uv.lock installs, hashes included, without resolving anything anew.
+      - run: uv export --locked --all-extras --all-groups --no-emit-project --format requirements-txt -o "$RUNNER_TEMP/requirements.txt"
+      - run: uvx pip-audit@2.10.1 --strict --disable-pip --require-hashes -r "$RUNNER_TEMP/requirements.txt"
