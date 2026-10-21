@@ -285,8 +285,9 @@ class HerdrClient:
                     f"runner's own published schema: {result}"
                 ) from result
             log.warning(
-                "%s answered a frame that does not match the runner's own "
-                "published schema; serving it anyway, writes will fail closed: %s",
+                "%s answered a frame that does not match the runner's own published schema; "
+                "serving it anyway, since a write to an agent first re-reads it with a strict "
+                "agent.get: %s",
                 method,
                 result,
             )

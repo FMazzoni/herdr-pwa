@@ -16,7 +16,13 @@ from herdr_pwa.engine import (
     PaneId,
     SessionId,
 )
-from herdr_pwa.writes.keys import PAD_KEYS, allowed_keys, control_token, key_ends_question
+from herdr_pwa.writes.keys import (
+    PAD_KEYS,
+    allowed_keys,
+    control_token,
+    key_ends_question,
+    normalise_key,
+)
 from herdr_pwa.writes.outcome import (
     UNREADABLE,
     Evidence,
@@ -156,7 +162,7 @@ def _send_key(writer: Writer, ask: KeyAsk) -> KeySent | Refused:
     agent = agent_now(writer, ask.session, expected_target=ask.expected_target, verb=_VERB)
     if isinstance(agent, Refused):
         return agent
-    key = ask.key.strip().lower()
+    key = normalise_key(ask.key)
     prompt = _question_now(writer.client, agent)
     if isinstance(prompt, Refused):
         if key != INTERRUPT_KEY:
@@ -183,7 +189,7 @@ def send_starting_key(writer: Writer, ask: StartingKeyAsk) -> KeySent | Refused:
 
 
 def _send_starting_key(writer: Writer, ask: StartingKeyAsk) -> KeySent | Refused:
-    key = ask.key.strip().lower()
+    key = normalise_key(ask.key)
     if key not in _STARTING_KEYS:
         return Refused(Refusal.KEY_NOT_OFFERED, _VERB)
     snap = snapshot_now(writer.client, verb=_VERB)

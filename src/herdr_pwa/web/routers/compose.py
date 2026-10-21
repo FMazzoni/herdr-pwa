@@ -49,7 +49,14 @@ from herdr_pwa.writes.answer import (
     send_starting_key,
     stops_turn,
 )
-from herdr_pwa.writes.keys import PAD_KEYS, allowed_keys, answer_digits, control_token, pad_keys
+from herdr_pwa.writes.keys import (
+    PAD_KEYS,
+    allowed_keys,
+    answer_digits,
+    control_token,
+    normalise_key,
+    pad_keys,
+)
 from herdr_pwa.writes.lifecycle import EndAsk, end_agent
 from herdr_pwa.writes.outcome import Evidence, Outcome
 from herdr_pwa.writes.prompt import (
@@ -248,7 +255,7 @@ def _key(session: SessionId, post: Posted) -> HTMLResponse:
         raise_if_gone(result)
         agent = _after(web, session, prior)
         shown = shown_status(web, agent)
-        context = {**answer_context(agent, result.prompt, shown), "key": ask.key.strip().lower()}
+        context = {**answer_context(agent, result.prompt, shown), "key": normalise_key(ask.key)}
         return refused(web.pages, Redraw("answer.html", context), result)
     return _answered(web, _after(web, session, prior), result)
 
@@ -406,7 +413,7 @@ def _door_writes(router: APIRouter, writes: WriteRoutes) -> None:
         key = post.values.get("key", "")
         ask = StartingKeyAsk(target, key, confirmed=ticked(post.values, "confirm"))
         result = send_starting_key(post.writer, ask)
-        return _door(web, target, _Knock(result, key=key.strip().lower()))
+        return _door(web, target, _Knock(result, key=normalise_key(key)))
 
 
 def _door_context(

@@ -433,10 +433,10 @@ class _Live:
 
     def info(self) -> SessionInfo:
         """The session row itself, which is where opencode keeps both of these."""
-        found = self._named("title, model")
+        found = self._columns("title, model")
         if found is None:
             # A store older than the column: narrow the read rather than lose the title.
-            found = self._named("title")
+            found = self._columns("title")
         if not found:
             return SessionInfo()
         title, *rest = found
@@ -447,10 +447,10 @@ class _Live:
 
     def origin(self) -> str:
         """The session row's ``directory`` column."""
-        found = self._named("directory")
+        found = self._columns("directory")
         return _text(found[0]) if found else ""
 
-    def _named(self, columns: str) -> tuple[object, ...] | None:
+    def _columns(self, columns: str) -> tuple[object, ...] | None:
         """The session's own row, or ``None`` -- a store without *columns* included."""
         # *columns* is always one of this class's literals, never input; only the id is bound.
         sql = f"select {columns} from session where id = ?"  # noqa: S608
