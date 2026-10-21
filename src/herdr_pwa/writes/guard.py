@@ -5,7 +5,7 @@ from typing import Final
 
 from herdr_pwa import glyphs
 from herdr_pwa.engine import BlockedPrompt, MenuShape
-from herdr_pwa.panetext import pane_lines, plain_text
+from herdr_pwa.panetext import idle_composer, pane_lines, plain_text
 from herdr_pwa.patterns import Rx
 
 MAX_PROMPT_CHARS: Final = 4000
@@ -69,6 +69,9 @@ def unsendable(text: str) -> bool | None:
 
 def asks_a_question(screen: str) -> bool:
     """Does this screen show a question that a typed prompt would answer instead?"""
+    # A question takes the input box's place, so above an empty box is only what was said.
+    if idle_composer(screen.splitlines()):
+        return False
     prompt = BlockedPrompt.parse(screen)
     # Either recognition stops a prompt: a hint footer, or any option run, checkbox screens included.
     return (

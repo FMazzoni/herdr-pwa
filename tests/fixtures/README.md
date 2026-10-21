@@ -26,7 +26,10 @@ slipped through. Captured files are as captured, apart from these changes:
 A few files were built by hand rather than captured. They follow the field names and record
 order that the harness was seen to write, with synthetic ids, times and text. Two are the
 negative cases `capture-idle-claude-prompt` and `capture-working-claude`, screens that must
-not be read as a question; each one's `meta.json` says how it was built. Some of the logs in
+not be read as a question; each one's `meta.json` says how it was built. A third,
+`claude/idle-box-table.txt`, keeps the layout of a live screen: a reply's numbered box table
+above the empty input box. Its text, cell by cell at the same widths, and its statusline are
+made up. Some of the logs in
 `transcript/notices/` were built the same way. Those hold the notices Claude Code writes
 into a transcript, such as a slash command you ran or a compaction.
 
@@ -48,6 +51,7 @@ those sessions' rows written out as opencode 1.1 laid out its files, ids put bac
 | `capture-<state>-<shape>/` | one pane, read every way herdr offers |
 | `ansi/`, `rig/` | screens that once showed a real bug |
 | `hermes/` | Hermes Agent screens as herdr reads them. |
+| `claude/` | Claude Code screens kept on their own, without a full capture's reads |
 | `transcript/` | Chat history from Claude Code, opencode and Hermes stores, plus the notice and error records Claude Code writes. |
 | `foreign/collie/` | Claude Code screens from another project |
 | `ledger.json` | the golden record, described below |

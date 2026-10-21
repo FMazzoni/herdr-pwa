@@ -1,0 +1,40 @@
+● I made a shared notes page about the house, with one tab per topic. Each tab shows real before-and-after notes
+  from your own list, the counts, the choices made for you, and a few questions where you might see it differently.
+
+  ┌───────────────┬───────────────────────────────────────────────────────┬─────────────────────────────────────────────────────────────────────────────────────────────┐
+  │      Tab      │                         Covers                        │                                The question I'd look at first                               │
+  ├───────────────┼───────────────────────────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Overview      │ What's in each tab, plus two corrections              │ —                                                                                           │
+  ├───────────────┼───────────────────────────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ 1. Fruit      │ Apples, pears and plums; which keep and which do not  │ Should the pears stay on the shelf? There are 12 of them left.                              │
+  │               │ for the winter; jars and labels                       │                                                                                             │
+  ├───────────────┼───────────────────────────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ 2. Bread      │ Sourdough, rye and spelt, with the flour each one     │ Plan 4 means the oven runs an hour longer on Sundays, which uses the                        │
+  │               │  needs, and the loaves                                │  gas. Is that a fair trade for the fresher bread on Monday?                                 │
+  ├───────────────┼───────────────────────────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ 3. Garden     │ Splitting the beds only when one holds two crops; the │ Does the north bed (40 plants) look like two crops to you?                                  │
+  │ shape         │ herb bed moved; the rest kept whole                   │                                                                                             │
+  ├───────────────┼───────────────────────────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ 4. Tidying    │ The shed's picks, the broken tools and the spare      │ Do you want the 15 missing labels written now?                                              │
+  │               │ pots, dated jars, safe storage                        │                                                                                             │
+  ├───────────────┼───────────────────────────────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ 5. How we     │ Weekly or monthly, the rota, swapping a turn with     │ Should the rota run every Saturday (about 4 hours)?                                         │
+  │ check         │ a neighbour                                           │                                                                                             │
+  └───────────────┴───────────────────────────────────────────────────────┴─────────────────────────────────────────────────────────────────────────────────────────────┘
+
+  Two corrections, also at the top of the page:
+  - The rota isn't on the fridge either. Earlier I said it was pinned there, and that was wrong: nothing reminds anyone, so a missed turn only shows when someone looks
+    by hand. Tab 5's question 1 is about fixing that. It's separate from the question you parked last week.
+  - The jar count was wrong. The 375 belonged to the cellar, a different shelf, which was skipped. The labels I put off number only 15.
+
+  Reading on a phone: the page puts the tabs in a side list, which phones don't show, so open the Tabs menu in the page's top bar to switch.
+
+  When you're ready to talk any of it through, name the tab or question. I'll pull up the notes with you and close, change or reverse choices as we go.
+
+✻ Brewed for 11m 48s · done 12:02 PM
+                                                                                                                                   ✔ Update installed · Restart to update    
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  herdr-pwa [main] | ctx: 79% | 19h55m | +7768/-15                                                                                                                 Opus 5.5  
+  ⏵⏵ auto mode on (shift+tab to cycle) · ⧉ 4 · ← 1 agent
