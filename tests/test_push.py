@@ -1,6 +1,7 @@
 import base64
 import json
 import os
+import re
 import socket
 import stat
 import threading
@@ -16,6 +17,8 @@ import pytest
 import pywebpush
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+from hypothesis import HealthCheck, given, settings
+from hypothesis import strategies as st
 from pydantic import ValidationError
 from pywebpush import WebPushException
 
@@ -374,11 +377,60 @@ def test_a_link_inside_punctuation_is_still_found(text: str, cleaned: str) -> No
     assert sanitise(text, limit=MAX_BODY_CHARS) == cleaned
 
 
+@pytest.mark.parametrize(
+    ("text", "cleaned"),
+    [
+        ("X.comwww.-", "[link]"),
+        ("a.iowww.b.c", "[link]"),
+        ("see x.devwww.y now", "see [link] now"),
+        ("x.dev.www-", "[link].www-"),
+        ("a.com..www.b", "[link]..[link]"),
+    ],
+)
+def test_a_host_glued_to_a_www_is_taken_with_it(text: str, cleaned: str) -> None:
+    assert sanitise(text, limit=MAX_BODY_CHARS) == cleaned
+
+
+# A host as the link pattern reads one: dotted labels ending in a linky TLD at a word's end.
+_HOST_LIKE = re.compile(
+    rf"[a-z0-9][a-z0-9\-]*(?:\.[a-z0-9\-]+)*\.(?:{push._LINKY_TLDS})\b",  # pyright: ignore[reportPrivateUsage] - one TLD list for the pattern and its property
+    re.IGNORECASE,
+)
+# Words built around a host, with the glue that has hidden one before ("www.", "..", "-").
+_GLUE = st.lists(st.sampled_from(["x", "w", "www.", ".", "..", "-", "_", "/", "é"]), max_size=4)
+_HOSTS = st.tuples(
+    st.lists(st.sampled_from(["x", "a1", "www", "com"]), min_size=1, max_size=3),
+    st.sampled_from(["com", "io", "dev"]),
+).map(lambda parts: ".".join([*parts[0], parts[1]]))
+_WORDS = st.tuples(_GLUE, _HOSTS, _GLUE).map(lambda w: "".join(w[0]) + w[1] + "".join(w[2]))
+
+
+@settings(
+    max_examples=200,
+    deadline=None,
+    derandomize=True,
+    database=None,
+    suppress_health_check=[HealthCheck.too_slow],
+)
+@given(st.lists(_WORDS, min_size=1, max_size=3).map(" ".join))
+def test_no_host_like_token_survives_sanitising(text: str) -> None:
+    assert _HOST_LIKE.search(sanitise(text, limit=MAX_BODY_CHARS)) is None
+
+
 # One unbroken word made the old pattern rescan the rest of it from every letter: 18 s at 20k.
-ADVERSARIAL = ("a" * 100_000, "a." * 50_000, "a-" * 50_000, "1a" * 50_000, "a.." * 33_333)
+ADVERSARIAL = (
+    "a" * 100_000,
+    "a." * 50_000,
+    "a-" * 50_000,
+    "1a" * 50_000,
+    "a.." * 33_333,
+    "ww." * 33_333,
+)
 
 
-@pytest.mark.parametrize("text", ADVERSARIAL, ids=["word", "dots", "dashes", "digits", "breaks"])
+@pytest.mark.parametrize(
+    "text", ADVERSARIAL, ids=["word", "dots", "dashes", "digits", "breaks", "near-www"]
+)
 def test_scanning_for_links_is_linear_in_the_text(text: str) -> None:
     # CPU time, so a loaded gate cannot inflate it; the old pattern took minutes, far past 1 s.
     started = time.process_time()

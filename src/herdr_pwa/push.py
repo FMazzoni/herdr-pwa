@@ -419,11 +419,11 @@ _URL_RE: Final = re.compile(
         # A scheme, entered where its run starts; digits before the first letter go with it.
         (?<![a-z0-9+.\-]) (?P<scheme_lead>[+.\-]*+) (?:[0-9][0-9+.\-]*+)? [a-z][a-z0-9+.\-]*+ ://\S+
       | (?:{_BARE_SCHEMES}):\S*
-      | www\.\S+
         # A host, entered where its run starts or after a "..", which no host crosses.
       | (?: (?<![a-z0-9.\-]) | (?<=\.\.) ) (?P<host_lead>(?: - | \.(?!\.) )*+)
         (?:
-            www\.\S+
+            # A "www." anywhere up to the next ".." takes the whole run, so no host glued to it stays.
+            (?: [a-z0-9\-] | \.(?!\.) )*? www\.\S+
           | (?:{_BARE_SCHEMES}):\S*
           | [a-z0-9][a-z0-9\-]*+
             (?:
