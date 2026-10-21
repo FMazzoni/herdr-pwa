@@ -46,9 +46,18 @@ CALL_SECONDS: Final = START_WAIT_MS / 1000 + 10
 SHELL_SECONDS: Final = 15.0
 # How long a stopped server may take to let go of its socket.
 STOP_SECONDS: Final = 10.0
-# Each look at the socket or the agents is a herdr call, so look less often than at a page.
-LOOK_STEP: Final = 0.25
-SETTLE_STEP: Final = 1.0
+
+
+@dataclass(frozen=True, slots=True)
+class Pace:
+    """How long the rig waits between looks at herdr while something it started settles."""
+
+    # Each look at the socket or the agents is a herdr call, so look less often than at a page.
+    look_step: float = 0.25
+    settle_step: float = 1.0
+
+
+PACE: Final = Pace()
 
 
 def session_dir(session: str) -> Path:
@@ -157,7 +166,7 @@ def up(session: str, timeout: float = 30.0) -> int:
             start_new_session=True,
             env=clean_env(os.environ),
         )
-    if eventually(lambda: listening(path), timeout, step=LOOK_STEP):
+    if eventually(lambda: listening(path), timeout, step=PACE.look_step):
         print(f"session {session!r} listening at {path}")
         return 0
     print(
@@ -174,7 +183,7 @@ def down(session: str) -> int:
         return 0
     # The server may hang up instead of answering a stop, which is the stop working.
     api(session, "server.stop", check=False)
-    if eventually(lambda: not listening(path), STOP_SECONDS, step=LOOK_STEP):
+    if eventually(lambda: not listening(path), STOP_SECONDS, step=PACE.look_step):
         print(f"session {session!r} stopped")
         return 0
     print(f"session {session!r} did not stop", file=sys.stderr)
@@ -249,7 +258,7 @@ def session_uuid(session: str, target: str) -> str | None:
     return None
 
 
-def settle(session: str, target: str, timeout: float = 60.0) -> str | None:
+def settle(session: str, target: str, timeout: float = 60.0, pace: Pace = PACE) -> str | None:
     """Wait for a session UUID, answering the trust prompt once if that is the hold-up."""
     trusted = False
 
@@ -263,12 +272,12 @@ def settle(session: str, target: str, timeout: float = 60.0) -> str | None:
         return uuid
 
     try:
-        return until(registered, timeout, step=SETTLE_STEP)
+        return until(registered, timeout, step=pace.settle_step)
     except GaveUpError:
         return None
 
 
-def start(session: str, launch: Frame) -> dict[str, Any]:
+def start(session: str, launch: Frame, pace: Pace = PACE) -> dict[str, Any]:
     """agent.start, tried again while the new pane's shell is still starting up."""
 
     def attempt() -> dict[str, Any] | None:
@@ -280,7 +289,7 @@ def start(session: str, launch: Frame) -> dict[str, Any]:
                 return None
             raise
 
-    return until(attempt, SHELL_SECONDS, step=SETTLE_STEP)
+    return until(attempt, SHELL_SECONDS, step=pace.settle_step)
 
 
 @dataclass(frozen=True, slots=True)

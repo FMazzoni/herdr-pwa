@@ -14,6 +14,8 @@ from tests.test_transport import FakeHerdr
 
 SESSION = "rig-test"
 UUID = "0b5e1c2d-0000-4000-8000-000000000001"
+# Looks a hundred times as often as the rig does, so a retry costs the test nothing.
+QUICK = live_session.Pace(look_step=0.01, settle_step=0.01)
 
 
 class Runner:
@@ -186,23 +188,17 @@ def test_an_agent_starts_with_its_model_and_settles_on_its_uuid(
     assert f"probe ready on w1:p2, session {UUID}" in capsys.readouterr().out
 
 
-def test_a_start_waits_out_a_shell_that_is_still_starting(
-    runner: Runner, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(live_session, "SETTLE_STEP", 0.01)
+def test_a_start_waits_out_a_shell_that_is_still_starting(runner: Runner) -> None:
     runner.busy = 2
     launch: Frame = {"name": "probe", "kind": "claude", "pane_id": "w1:p2"}
-    assert live_session.start(SESSION, launch)["argv"] == ["claude", "--model", "haiku"]
+    assert live_session.start(SESSION, launch, QUICK)["argv"] == ["claude", "--model", "haiku"]
     assert runner.methods().count("agent.start") == 3
 
 
-def test_the_trust_prompt_gets_its_yes_key_and_never_a_bare_enter(
-    runner: Runner, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(live_session, "SETTLE_STEP", 0.01)
+def test_the_trust_prompt_gets_its_yes_key_and_never_a_bare_enter(runner: Runner) -> None:
     runner.agents = [[], [], [{"pane_id": "w1:p2", "agent_session": {"value": UUID}}]]
     runner.read = TRUST_MENU
-    assert live_session.settle(SESSION, "w1:p2") == UUID
+    assert live_session.settle(SESSION, "w1:p2", pace=QUICK) == UUID
     keys = [params for method, params in runner.seen if method == "agent.send_keys"]
     assert keys == [{"target": "w1:p2", "keys": ["Down", "Enter"]}]
 

@@ -32,20 +32,27 @@ def test_the_checks_run_in_process_and_only_green_leaves_a_receipt(
 ) -> None:
     calls: list[list[str]] = []
     monkeypatch.setitem(sys.modules, "geometry", _geometry(code, calls))
-    monkeypatch.setattr(geometry_gate, "RECEIPTS", tmp_path)
-    assert geometry_gate.run("abc") == code
+    assert geometry_gate.run("abc", geometry_gate.GateConfig(receipts=tmp_path)) == code
     # An explicit empty argv: the gate's own flags (--force) are not the checks' flags.
     assert calls == [[]]
     assert (tmp_path / "abc.json").is_file() is receipted
 
 
-# The plugin as the browser tests' conftest loads it, with the gate's --browser-force flag.
+# The plugin as the browser tests' conftest loads it, with the gate's --browser-force flag and
+# its receipts under RECEIPTS, which the fixture fills in.
 _CONFTEST = """
-from tests.browser.receipts import pytest_collection_modifyitems, pytest_runtest_makereport
+from pathlib import Path
+
+from scripts.geometry_gate import GateConfig
+from tests.browser.receipts import GATE, pytest_collection_modifyitems, pytest_runtest_makereport
 
 
 def pytest_addoption(parser):
     parser.addoption("--browser-force", action="store_true")
+
+
+def pytest_configure(config):
+    config.stash[GATE] = GateConfig(receipts=Path(RECEIPTS))
 """
 # A walk that passes, one that fails, one whose page error fails its teardown, and a plain test.
 _WALKS = """
@@ -81,10 +88,9 @@ def test_not_a_walk():
 @pytest.fixture
 def walks(pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     """The walks above over a tree whose fingerprint is fixed, receipted under ``tmp_path``."""
-    monkeypatch.setattr(geometry_gate, "WALK_RECEIPTS", tmp_path / "walks")
     monkeypatch.setattr(geometry_gate, "fingerprint", lambda: "tree")
     monkeypatch.setattr(receipts, "available", lambda: True)
-    _ = pytester.makeconftest(_CONFTEST)
+    _ = pytester.makeconftest(_CONFTEST.replace("RECEIPTS", repr(str(tmp_path))))
     _ = pytester.makepyfile(test_walks=_WALKS)
     return tmp_path / "walks"
 
