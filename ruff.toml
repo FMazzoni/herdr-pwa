@@ -17,6 +17,8 @@ ignore = [
     "TRY003",
 ]
 # RUF100 (unused noqa) stays on, so a suppression can't outlive its reason.
+# BLE001 is not in a selected family, so it is named: a blind except hides the bug it catches.
+extend-select = ["BLE001"]
 
 [lint.per-file-ignores]
 "tests/**" = [
@@ -25,11 +27,32 @@ ignore = [
     "PLR2004", # magic values are fine in assertions
 ]
 
+# Validation happens where data enters: the wire, the state files, tailscaled and the routes.
+"src/herdr_pwa/{audit,auth,devreport,notify_state,pairing,push,tailscale,validation}.py" = ["TID251"]
+"src/herdr_pwa/engine/{client,hermes,holder,opencode,transcript,transport}.py" = ["TID251"]
+"src/herdr_pwa/web/started.py" = ["TID251"]
+"src/herdr_pwa/web/routers/*.py" = ["TID251"]
+"{tests,scripts,.claude}/**" = ["TID251"]  # tests and tools read JSON freely
+
 # Dev scripts talk to the operator on stdout and shell out to herdr by name.
 "scripts/**" = ["T201", "S603", "S607"]
 
 [lint.flake8-tidy-imports]
 ban-relative-imports = "all"
+
+[lint.flake8-tidy-imports.banned-api]
+"json.loads".msg = "Parse JSON with a pydantic model at the edge, so nothing untyped travels inward."
+"json.load".msg = "Parse JSON with a pydantic model at the edge, so nothing untyped travels inward."
+"pydantic.TypeAdapter".msg = "Validation belongs to the edge modules; inner code takes the typed value."
+"pydantic.ValidationError".msg = "Only an edge module validates, so only an edge module catches a refusal."
+"pydantic.validate_call".msg = "Validate once at the edge, not on every call."
+
+[lint.pylint]
+# Related values travel as one named type; 4 is the most any signature here takes.
+max-args = 4
+max-positional-args = 4
+# Small enough to read in one screen; tests and scripts that run past it say why.
+max-statements = 25
 
 [format]
 # Codegen owns generated/ and writes it at its own width; reformatting makes it stale.

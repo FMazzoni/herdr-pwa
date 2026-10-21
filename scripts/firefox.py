@@ -165,7 +165,7 @@ def _holder() -> str:
 
 
 @contextmanager
-def held() -> Iterator[None]:
+def held() -> Iterator[None]:  # noqa: PLR0915 - take, tell, hand down and restore the lock read as one sequence
     """Hold the per-user browser lock for the block; a second job waits and is told who has it."""
     if inherited():
         yield

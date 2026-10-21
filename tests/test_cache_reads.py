@@ -35,7 +35,7 @@ class Clock:
         return self.now
 
 
-def test_a_follower_blocks_for_the_leaders_read_and_never_reads_itself(
+def test_a_follower_blocks_for_the_leaders_read_and_never_reads_itself(  # noqa: PLR0915 - a threaded scenario whose steps only make sense in order
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The property the old test could not see, because it used two apps."""
@@ -82,7 +82,7 @@ def test_a_follower_blocks_for_the_leaders_read_and_never_reads_itself(
     assert entries["follower"].value is SNAPSHOT
 
 
-def test_a_leader_that_runs_to_the_full_command_budget_takes_its_followers_with_it(
+def test_a_leader_that_runs_to_the_full_command_budget_takes_its_followers_with_it(  # noqa: PLR0915 - a threaded scenario whose steps only make sense in order
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The worst case, stated as a number."""
@@ -106,7 +106,7 @@ def test_a_leader_that_runs_to_the_full_command_budget_takes_its_followers_with_
         started = timer()
         try:
             cache.get(timing_out)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - the test asserts which type each reader got
             with lock:
                 raised.append(type(exc).__name__)
                 waits.append(timer() - started)
@@ -122,7 +122,7 @@ def test_a_leader_that_runs_to_the_full_command_budget_takes_its_followers_with_
     assert max(waits) < budget * 4, "the wait is bounded by the leader's own budget"
 
 
-def test_a_killed_leader_releases_its_followers_with_a_failure_attached(
+def test_a_killed_leader_releases_its_followers_with_a_failure_attached(  # noqa: PLR0915 - a threaded scenario whose steps only make sense in order
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A cancelled leader must neither strand its followers nor hand them a clean stale value."""
@@ -171,7 +171,7 @@ def test_a_killed_leader_releases_its_followers_with_a_failure_attached(
     )
 
 
-def test_a_follower_takes_the_error_of_the_fetch_it_actually_waited_on(
+def test_a_follower_takes_the_error_of_the_fetch_it_actually_waited_on(  # noqa: PLR0915 - a threaded scenario whose steps only make sense in order
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A second leader's failure, stamped while a follower wakes, is not the follower's."""

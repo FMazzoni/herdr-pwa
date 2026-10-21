@@ -1347,7 +1347,7 @@ def twenty(ctx: WalkCtx) -> list[str]:
     return problems
 
 
-def earlier(ctx: WalkCtx) -> list[str]:
+def earlier(ctx: WalkCtx) -> list[str]:  # noqa: PLR0915 - a browser walk reads as one story, step by step
     """Load earlier lands a page above the reader, who stays on the message they were reading,
     even when the page was short enough that the reader was also at the end."""
     driver, tab = ctx.driver, ctx.tab
@@ -1424,7 +1424,7 @@ def _refusing(app: ASGIApp) -> ASGIApp:
     return down
 
 
-def falls_back(
+def falls_back(  # noqa: PLR0915 - a browser walk reads as one story, step by step
     mount: Callable[[ASGIApp], None],
 ) -> Walk:
     """The stream-loss walk, able to take the stream down by remounting the app."""

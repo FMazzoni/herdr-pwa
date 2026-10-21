@@ -8,7 +8,8 @@ Tailscale. `README.md` covers what it does, its security model and how to run it
 
 `just check` is the gate, and CI runs exactly that recipe: ruff format, ruff check,
 basedpyright (strict, `Any` is an error), complexipy (cognitive complexity at most 10),
-pytest, the JS tests, the CSS token check and the geometry gate. Read its output to the
+lint-imports (the layer contracts in `pyproject.toml`), ESLint (after `npm ci
+--ignore-scripts`), pytest, the JS tests, the CSS token check and the geometry gate. Read its output to the
 last line; the first `All checks passed!` is ruff, not the gate. To keep the real exit
 code: `just check > out.txt 2>&1; echo "EXIT=$?" >> out.txt`.
 

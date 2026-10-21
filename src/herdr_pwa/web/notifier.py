@@ -289,8 +289,7 @@ class Notifier:
             prompt = self._reader.blocked_prompt(
                 as_pane_id(agent.target), session=as_session_id(agent.session)
             )
-        # A missing question costs wording, never the buzz.
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - a missing question costs wording, never the buzz
             log.info("no question for %s: %s", agent.session, type(exc).__name__)
             return ""
         return prompt.question

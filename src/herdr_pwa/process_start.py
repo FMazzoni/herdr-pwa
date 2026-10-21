@@ -79,7 +79,7 @@ class ProcessStarts:
     def _read(self, pane_id: str) -> float | None:
         try:
             pids = self._panes.pane_pids(pane_id)
-        except Exception:  # any runner failure only loses the bound, never the page
+        except Exception:  # noqa: BLE001 - the engine's error type is a layer up; a failure loses the bound, never the page
             log.debug("no process info for %s", pane_id)
             return None
         # The shell comes first; the agent is the oldest process the pane runs above it.

@@ -24,4 +24,6 @@ jobs:
           enable-cache: true
       # --locked fails on a uv.lock that pyproject.toml no longer matches, instead of rewriting it.
       - run: uv sync --locked --all-extras --dev
+      # ci installs exactly package-lock.json; no package runs an install script.
+      - run: npm ci --ignore-scripts
       - run: just check

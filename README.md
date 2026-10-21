@@ -55,10 +55,10 @@ name is kept so an existing install keeps its state.
 
 ## Development
 
-Run `pre-commit install` once per clone. `just check` runs every check (ruff,
-basedpyright in strict mode, complexipy, pytest, the JS tests, the CSS token check and
-a headless-Firefox geometry gate, so Node and Firefox are needed too), and CI runs the
-same recipe.
+Run `pre-commit install` and `npm ci --ignore-scripts` once per clone. `just check` runs
+every check (ruff, basedpyright in strict mode, complexipy, import-linter's layer
+contracts, ESLint, pytest, the JS tests, the CSS token check and a headless-Firefox
+geometry gate, so Node and Firefox are needed too), and CI runs the same recipe.
 
 Tests never touch a real herdr session: they run against captured output in
 `tests/fixtures/` (see its README). `just live-session` starts a throwaway herdr session

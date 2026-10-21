@@ -1128,7 +1128,7 @@ def _bury(process: subprocess.Popen[str]) -> None:
     process.wait()
 
 
-def drive(work: list[Task], jobs: int) -> Tally:
+def drive(work: list[Task], jobs: int) -> Tally:  # noqa: PLR0915 - the nested workers share its queue and tally, and count here
     """Hand ``work`` to ``jobs`` workers, each with its own server and browser, and add up.
 
     A task whose worker dies goes back on the queue and runs once more, and the report says so;

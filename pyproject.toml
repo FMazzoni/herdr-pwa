@@ -42,6 +42,7 @@ dev = [
     "playwright>=1.63.0",
     "pytest-xdist>=3.8.0",
     "hypothesis>=6.170.5",
+    "import-linter>=2.15",
 ]
 
 [tool.complexipy]
@@ -53,3 +54,34 @@ testpaths = ["tests"]
 markers = [
     "browser: drives headless Firefox over the real app; skipped while a receipt for this tree exists",
 ]
+
+[tool.importlinter]
+root_package = "herdr_pwa"
+
+# Higher layers import lower ones, never the reverse; exhaustive, so a new module must pick a layer.
+[[tool.importlinter.contracts]]
+name = "The layers point down"
+type = "layers"
+containers = ["herdr_pwa"]
+exhaustive = true
+layers = [
+    "cli",
+    "web",
+    "writes | notify | files",
+    "decisions | render",
+    "engine",
+    "audit : pairing : devreport : notify_state : push : auth : tailscale : settings : statedir : clock : managed : panetext : process_start : protocol : validation",
+]
+
+# The foundations layer is non-independent, so this is what keeps its modules from a cycle.
+[[tool.importlinter.contracts]]
+name = "No import cycles between the top-level modules"
+type = "acyclic_siblings"
+ancestors = ["herdr_pwa"]
+depth = 0
+
+[[tool.importlinter.contracts]]
+name = "Outside the engine, only its facade"
+type = "protected"
+protected_modules = ["herdr_pwa.engine.*"]
+allowed_importers = ["herdr_pwa.engine"]
