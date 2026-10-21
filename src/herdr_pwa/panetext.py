@@ -67,7 +67,14 @@ _UNDERLINE: Final = "ansi-u"
 
 # Escape-sequence grammar, after ECMA-48; the one reading of escapes in this app.
 
-_CSI: Final = re.compile(r"\x1b\[(?P<params>[0-9;:<=>?]*)(?P<between>[ -/]*)(?P<final>[@-~])")
+_CSI: Final = re.compile(
+    r"""
+    \x1b\[ (?P<params>[0-9;:<=>?]*)  # parameter bytes
+    (?P<between>[ -/]*)  # intermediate bytes
+    (?P<final>[@-~])  # the final byte, which names the function
+    """,
+    re.VERBOSE,
+)
 # OSC, DCS, SOS, PM, APC: swallowed whole, so an OSC 8 hyperlink cannot inject a URL.
 _STRING_SEQ: Final = re.compile(r"\x1b[]PX^_](?:[^\x07\x1b]|\x1b(?!\\))*(?:\x07|\x1b\\|\Z)")
 _SHORT_ESC: Final = re.compile(r"\x1b[ -/]*[0-~]?")
@@ -200,8 +207,11 @@ def _split_chrome(
 # (Nerd Font icons and powerline arrows, U+E000-U+F8FF), which a phone draws as a blank box:
 # noise, so the gap between the pieces stands in for it.
 _SEGMENT_BREAK: Final = re.compile(
-    f"(?P<drop>[{re.escape(_WS)}]{{2,}}|[\ue000-\uf8ff]+)"
-    f"|(?:^|(?<=[{re.escape(_WS)}]))[|\u2502\u2022](?:$|(?=[{re.escape(_WS)}]))"
+    rf"""
+    (?P<drop> [{re.escape(_WS)}]{{2,}} | [\ue000-\uf8ff]+ )  # padding or a private-use glyph: gone
+  | (?:^|(?<=[{re.escape(_WS)}])) [|\u2502\u2022] (?:$|(?=[{re.escape(_WS)}]))  # a separator: kept
+    """,
+    re.VERBOSE,
 )
 
 

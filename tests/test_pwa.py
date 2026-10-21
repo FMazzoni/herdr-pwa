@@ -37,11 +37,11 @@ CACHE_NAMES = (
 def precache_paths() -> list[str]:
     source = WORKER.read_text()
     block = source[source.index("const PRECACHE = [") : source.index("];")]
-    offline = re.search(r'const OFFLINE_URL = "([^"]+)"', source)
+    offline = re.search(r'const OFFLINE_URL = "(?P<url>[^"]+)"', source)
     assert offline is not None
     paths = re.findall(r'"(/[^"]*)"', block)
     if "OFFLINE_URL" in block:
-        paths.append(offline.group(1))
+        paths.append(offline["url"])
     return paths
 
 
@@ -57,8 +57,8 @@ def test_every_script_a_page_runs_is_precached_and_linked_in_order(tmp_path: Pat
     for name in SCRIPTS:
         assert f"/static/{name}" in precached, name
     page = build_rig(tmp_path).http.get("/").text
-    pattern = re.compile(r'<script src="/static/([^"?]+)\?v=[0-9a-f]+" defer>')
-    linked = [m.group(1) for m in pattern.finditer(page)]
+    pattern = re.compile(r'<script src="/static/(?P<name>[^"?]+)\?v=[0-9a-f]+" defer>')
+    linked = [m["name"] for m in pattern.finditer(page)]
     assert [name for name in linked if name in SCRIPTS] == list(SCRIPTS)
     assert linked[0] == "htmx.min.js"
 
@@ -77,10 +77,10 @@ def test_the_vendored_htmx_is_the_published_release() -> None:
 
 
 def test_the_cache_name_moves_only_when_precache_does() -> None:
-    named = re.search(r'const CACHE_NAME = CACHE_PREFIX \+ "([^"]+)";', WORKER.read_text())
+    named = re.search(r'const CACHE_NAME = CACHE_PREFIX \+ "(?P<name>[^"]+)";', WORKER.read_text())
     assert named is not None
     listed = hashlib.sha256("\n".join(precache_paths()).encode()).hexdigest()[:12]
-    assert (named.group(1), listed) == CACHE_NAMES[-1]
+    assert (named["name"], listed) == CACHE_NAMES[-1]
     assert (
         len({name for name, _ in CACHE_NAMES})
         == len({d for _, d in CACHE_NAMES})
@@ -361,9 +361,11 @@ def test_the_worker_and_app_post_to_the_same_push_routes() -> None:
 
 def test_the_status_bar_is_the_top_bars_colour() -> None:
     # Standalone, iOS paints the status bar in theme-color right above the sticky top bar.
-    surface = re.search(r"--surface: (#[0-9A-Fa-f]{6});", (STATIC_DIR / "app.css").read_text())
+    surface = re.search(
+        r"--surface: (?P<hex>#[0-9A-Fa-f]{6});", (STATIC_DIR / "app.css").read_text()
+    )
     assert surface is not None
     base = (STATIC_DIR.parent / "templates" / "base.html").read_text()
-    assert f'<meta name="theme-color" content="{surface.group(1)}">' in base
+    assert f'<meta name="theme-color" content="{surface["hex"]}">' in base
     manifest = _DOCUMENT.validate_json(MANIFEST.read_text())
-    assert manifest["theme_color"] == surface.group(1)
+    assert manifest["theme_color"] == surface["hex"]

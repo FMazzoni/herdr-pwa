@@ -8,6 +8,7 @@ from herdr_pwa import facts
 from herdr_pwa.decisions import AgentRow, ScreenDecision
 from herdr_pwa.engine import CONTEXT_FULL, MenuShape, ends_a_question
 from herdr_pwa.panetext import plain
+from herdr_pwa.patterns import alternatives
 
 # Spinner and status glyphs a harness prefixes its terminal title with.
 _GLYPH_CATEGORIES: Final = frozenset({"So", "Sk"})
@@ -15,13 +16,13 @@ _GLYPH_CATEGORIES: Final = frozenset({"So", "Sk"})
 _BULLETS: Final = frozenset("·•∙")
 _MAX_GLYPHS: Final = 4
 # A harness's placeholder for a session it has not named yet.
-_UNNAMED: Final = re.compile(r"^new session\s*-\s*\S+$", re.IGNORECASE)
+_UNNAMED: Final = re.compile(r"new session\s*-\s*\S+", re.IGNORECASE)
 # A shell's `user@host:path` prompt title names a place, not the work.
-_LOCATOR: Final = re.compile(r"^[^\s@:]+@[^\s@:]+(?::\S*)?$")
+_LOCATOR: Final = re.compile(r"[^\s@:]+@[^\s@:]+(?::\S*)?")
 # How a terminal prompt opens when it asks without a question mark.
 _PROMPT_OPENING: Final = re.compile(
-    rf"^\W*(?:{'|'.join(re.escape(opener) for opener in facts.PROMPT_OPENERS)})\b",
-    re.IGNORECASE | re.MULTILINE,
+    rf"^ \W* (?:{alternatives(facts.PROMPT_OPENERS)}) \b  # a line opening on a word that asks",
+    re.IGNORECASE | re.MULTILINE | re.VERBOSE,
 )
 
 
@@ -51,7 +52,7 @@ def page_title(title: str, harness: str, target: str) -> str:
 def card_title(row: AgentRow) -> str:
     """The title a feed card prints, or ``""`` when there is none worth printing."""
     text = display_title(plain(row.title))
-    if not text or _glyphs_only(text) or _UNNAMED.match(text) or _LOCATOR.match(text):
+    if not text or _glyphs_only(text) or _UNNAMED.fullmatch(text) or _LOCATOR.fullmatch(text):
         return ""
     rejects = {row.harness.strip().casefold(), row.workspace.strip().casefold()} - {""}
     return "" if text.casefold() in rejects else text

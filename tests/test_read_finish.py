@@ -52,9 +52,9 @@ def _rig(tmp_path: Path) -> Rig:
 def _card(rig: Rig) -> str:
     """The status class on the agent's feed card."""
     feed = rig.http.get("/feed", headers=FRAGMENT).text
-    found = re.search(r'card card--(\w+)"[^>]*>\s*<a[^>]*href="/agent/' + S, feed)
+    found = re.search(r'card card--(?P<status>\w+)"[^>]*>\s*<a[^>]*href="/agent/' + S, feed)
     assert found is not None, feed
-    return found.group(1)
+    return found["status"]
 
 
 def _read(rig: Rig) -> None:
@@ -70,14 +70,14 @@ def _surfaces(rig: Rig) -> dict[str, str]:
     def one(pattern: str, text: str) -> str:
         found = re.search(pattern, text)
         assert found is not None, pattern
-        return found.group(1)
+        return found["status"]
 
     return {
         "card": _card(rig),
-        "meta": one(r'id="agent-status">(\w+)<', page),
-        "dot": one(r'dot dot--(\w+)" id="agent-dot"', page),
+        "meta": one(r'id="agent-status">(?P<status>\w+)<', page),
+        "dot": one(r'dot dot--(?P<status>\w+)" id="agent-dot"', page),
         # The answer region is what the stream redraws; the page takes its status from it.
-        "answer": one(r'<section id="answer"[^>]*data-hp-status="(\w+)"', answer),
+        "answer": one(r'<section id="answer"[^>]*data-hp-status="(?P<status>\w+)"', answer),
         "unseen": "unseen" if "unseen" in feed else "none",
     }
 

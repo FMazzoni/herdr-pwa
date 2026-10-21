@@ -17,11 +17,16 @@ from herdr_pwa.validation import Flag, Text
 
 # The harness's own wrapper, never shown: it is context for the model, not conversation.
 _REMINDER: Final = re.compile(r"<system-reminder>.*?</system-reminder>", re.DOTALL)
-_TASK: Final = re.compile(r"\A<task-notification>(.*?)</task-notification>", re.DOTALL)
+_TASK: Final = re.compile(r"\A<task-notification>(?P<body>.*?)</task-notification>", re.DOTALL)
 _PEER: Final = re.compile(
-    r"<(agent-message|cross-session-message)\b([^>]*)>\n?(.*?)\n?</\1>", re.DOTALL
+    r"""
+    <(?P<tag>agent-message|cross-session-message)\b (?P<attrs>[^>]*)>  # either tag, with attributes
+    \n? (?P<body>.*?) \n?
+    </(?P=tag)>  # closed by the tag it opened with
+    """,
+    re.DOTALL | re.VERBOSE,
 )
-_ATTR: Final = re.compile(r'([\w-]+)="([^"]*)"')
+_ATTR: Final = re.compile(r'(?P<name>[\w-]+)="(?P<value>[^"]*)"')
 # Measured: the frame before a subagent's report, then the report with every line indented.
 _HANDBACK_FRAME: Final = "[Subagent hand-back]"
 _HANDBACK_INDENT: Final = "  "
@@ -33,15 +38,20 @@ _DONE: Final = "completed"
 # Task "<description>" was stopped by main session, and Agent "<description>" is waiting on its
 # own background work, which is an agent that stopped but is not done: it notifies again.
 _SUMMARY: Final = re.compile(
-    r'\A(Agent|Background command|Task) "(.*?)" '
-    r"((?:was |is )?(finished|completed|failed|killed|stopped|waiting)(?:\W.*)?)\Z",
-    re.DOTALL,
+    r"""
+    (?P<kind>Agent|Background\ command|Task) \ "(?P<detail>.*?)" \   # what stopped, and its name
+    (?P<said>  # how it ended, in the harness's words:
+        (?:was\ |is\ )? (?P<word>finished|completed|failed|killed|stopped|waiting)  # the verb
+        (?:\W.*)?  # and anything it adds, such as an exit code
+    )
+    """,
+    re.DOTALL | re.VERBOSE,
 )
 _WAITING: Final = "waiting"
 _KINDS: Final = MappingProxyType(
     {"Agent": "Agent", "Background command": "Command", "Task": "Task"}
 )
-_EXIT: Final = re.compile(r"exit code (-?\d+)")
+_EXIT: Final = re.compile(r"exit code (?P<code>-?\d+)")
 # What the harness puts in an agent's result in place of the report it delivers as a message.
 _RELAYED: Final = ("This agent's report was delivered", "This agent has not reported yet")
 
@@ -89,44 +99,44 @@ class TaskNotice:
     @property
     def kind(self) -> str:
         """What stopped, as the line names it: ``Agent``, ``Command``, or any other ``Task``."""
-        found = _SUMMARY.match(self.summary)
-        return _KINDS[found.group(1)] if found else "Task"
+        found = _SUMMARY.fullmatch(self.summary)
+        return _KINDS[found["kind"]] if found else "Task"
 
     @property
     def named(self) -> bool:
         """Whether its summary is one of the measured shapes, so ``kind`` was read, not assumed."""
-        return _SUMMARY.match(self.summary) is not None
+        return _SUMMARY.fullmatch(self.summary) is not None
 
     @property
     def detail(self) -> str:
         """The agent's description or the command run, out of the summary; else the summary."""
-        found = _SUMMARY.match(self.summary)
-        return found.group(2) if found else self.summary
+        found = _SUMMARY.fullmatch(self.summary)
+        return found["detail"] if found else self.summary
 
     @property
     def outcome(self) -> str:
         """How it ended, in the harness's words, when that says more than one word."""
-        found = _SUMMARY.match(self.summary)
-        if found is None or found.group(3) == found.group(4):
+        found = _SUMMARY.fullmatch(self.summary)
+        if found is None or found["said"] == found["word"]:
             return ""
-        said = found.group(3).removeprefix("was ").removeprefix("is ")
+        said = found["said"].removeprefix("was ").removeprefix("is ")
         return said[:1].upper() + said[1:]
 
     @property
     def ended(self) -> str:
         """The word or two the line says it ended with: "finished", "exit 0", "failed, exit 1"."""
-        found = _SUMMARY.match(self.summary)
-        word = found.group(4) if found else self.status
-        code = _EXIT.search(found.group(3)) if found else None
+        found = _SUMMARY.fullmatch(self.summary)
+        word = found["word"] if found else self.status
+        code = _EXIT.search(found["said"]) if found else None
         if code is None:
             return word
-        return f"{word}, exit {code.group(1)}" if self.failed else f"exit {code.group(1)}"
+        return f"{word}, exit {code['code']}" if self.failed else f"exit {code['code']}"
 
     @property
     def waiting(self) -> bool:
         """Whether its task stopped with work of its own still running, so it is not over."""
-        found = _SUMMARY.match(self.summary)
-        return found is not None and found.group(4) == _WAITING
+        found = _SUMMARY.fullmatch(self.summary)
+        return found is not None and found["word"] == _WAITING
 
     @property
     def said(self) -> str:
@@ -219,7 +229,10 @@ _TOO_LONG: Final = "Prompt is too long"
 # the model's maximum context length of 202752 tokens. ..."
 _OVERFLOW: Final = re.compile(r"\bmaximum context length\b")
 # Measured: "You've hit your session limit · resets 5am (<the user's time zone>)", and "weekly".
-_LIMIT: Final = re.compile(r"\AYou've hit your (\w+) limit · (resets .+)\Z", re.DOTALL)
+_LIMIT: Final = re.compile(
+    r"You've\ hit\ your\ (?P<window>\w+)\ limit\ ·\ (?P<resets>resets\ .+)  # session or weekly",
+    re.DOTALL | re.VERBOSE,
+)
 # Claude Code's words for why a turn was refused, which an HTTP status is read into.
 _INVALID_REQUEST: Final = "invalid_request"
 _RATE_LIMIT: Final = "rate_limit"
@@ -267,15 +280,21 @@ def api_error(code: str | None, said: str) -> ApiError:
 
 
 def _limit(said: str) -> ApiError:
-    found = _LIMIT.match(said)
+    found = _LIMIT.fullmatch(said)
     if found is None:
         # A provider's own rate limit, which names no reset this reader could trust.
         return ApiError(LIMIT, "Rate limited · wait, then send it again", said)
-    return ApiError(LIMIT, f"{found.group(1).capitalize()} limit · {found.group(2)}", said)
+    return ApiError(LIMIT, f"{found['window'].capitalize()} limit · {found['resets']}", said)
 
 
 # Measured: Claude Code writes a paste inside a prompt between these, a tag the person never typed.
-_PASTE_TAG: Final = re.compile(r'\n?</pasted_content id="[^"]*">|<pasted_content id="[^"]*">\n?')
+_PASTE_TAG: Final = re.compile(
+    r"""
+    \n? </pasted_content\ id="[^"]*">  # the closing tag, with the newline before it
+  | <pasted_content\ id="[^"]*"> \n?  # the opening tag, with the newline after it
+    """,
+    re.VERBOSE,
+)
 
 
 def without_paste_tags(text: str) -> str:
@@ -303,7 +322,7 @@ def _task(text: str) -> TaskNotice | None:
     found = _TASK.match(text)
     if found is None:
         return None
-    body = found.group(1)
+    body = found["body"]
     # Measured: some deliveries escape the quotes round the description, as JSON would.
     summary = _tag(body, "summary").replace('\\"', '"')
     return TaskNotice(
@@ -330,8 +349,8 @@ def _peer_from_tag(text: str) -> PeerMessage | None:
     # The harness leads with one line ("Another Claude session sent a message:"), no more.
     if found is None or "\n" in text[: found.start()].strip():
         return None
-    attrs = {attr.group(1): attr.group(2) for attr in _ATTR.finditer(found.group(2))}
-    body = found.group(3)
+    attrs = {attr["name"]: attr["value"] for attr in _ATTR.finditer(found["attrs"])}
+    body = found["body"]
     return PeerMessage(
         sender=attrs.get("from-name") or attrs.get("from", ""),
         body=_report(body),

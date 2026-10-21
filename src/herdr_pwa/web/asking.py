@@ -21,7 +21,7 @@ _ARROWS: Final = ("up", "down", "left", "right")
 # One order for every pad: the arrows, then Enter, then Esc set apart at the end.
 _PAD_ORDER: Final = (*_ARROWS, "enter", "esc")
 # A TUI's markdown heading, quote or list mark at the start of a line.
-_MARKS: Final = re.compile("^(?:#{1,6}|>|[*\u2022\u00b7\u276f\u203a])(?=\\s)")
+_MARKS: Final = re.compile(r"^(?:#{1,6}|>|[*\u2022\u00b7\u276f\u203a])(?=\s)")
 
 
 @dataclass(frozen=True, slots=True)

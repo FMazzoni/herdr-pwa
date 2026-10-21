@@ -10,13 +10,13 @@ from tests.catalogue import STATES, State, build, pick
 from tests.webfakes import SEND_KEYS, Hold
 
 # The fragments a page pulls in on load, which is where a broken screen usually breaks.
-FRAGMENT = re.compile(r'hx-get="([^"]+)"')
+FRAGMENT = re.compile(r'hx-get="(?P<url>[^"]+)"')
 
 
 def _statuses(state: State, home: Path) -> list[tuple[str, int]]:
     rig = build(state, home)
     page = rig.http.get(state.path, follow_redirects=False)
-    urls: list[str] = list(dict.fromkeys(m.group(1) for m in FRAGMENT.finditer(page.text)))
+    urls: list[str] = list(dict.fromkeys(m["url"] for m in FRAGMENT.finditer(page.text)))
     fragments = [(u, rig.http.get(u.replace("&amp;", "&")).status_code) for u in urls]
     return [(state.path, page.status_code), *fragments]
 

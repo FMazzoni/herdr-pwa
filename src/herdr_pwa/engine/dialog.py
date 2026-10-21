@@ -13,8 +13,9 @@ from pydantic import BaseModel, ConfigDict, field_validator
 from herdr_pwa import facts, glyphs
 from herdr_pwa.engine.model import PaneId, SessionId, as_pane_id, as_session_id, screen_digest
 from herdr_pwa.panetext import as_text_read, composer_top, escape_at, plain
+from herdr_pwa.patterns import alternatives
 
-_EDGE_RE: Final = re.compile(rf"^(\s*){glyphs.one_of(glyphs.SIDE, glyphs.LEFT_BLOCKS)}")
+_EDGE_RE: Final = re.compile(rf"^(?P<indent>\s*){glyphs.one_of(glyphs.SIDE, glyphs.LEFT_BLOCKS)}")
 """A box-edge bar at line start, with the indent that owns it.
 
 opencode draws its dialogs with a left border only (SplitBorder in its TUI
@@ -24,9 +25,12 @@ description keeps its depth.
 """
 
 OPTION_RE: Final = re.compile(
-    rf"^\s*{glyphs.one_of(glyphs.QUOTE_CURSOR, glyphs.CURSOR, '*-•')}?"
-    r"\s*(?P<open>\[)?(?P<number>\d{1,2})(?(open)\]|\s*[.):])"
-    r"\s+(?P<label>\S.*?)\s*$"
+    rf"""
+    \s* {glyphs.one_of(glyphs.QUOTE_CURSOR, glyphs.CURSOR, "*-•")}?  # a cursor or a bullet
+    \s* (?P<open>\[)? (?P<number>\d{{1,2}}) (?(open)\]|\s*[.):])  # 1. or 2) or [3], closed alike
+    \s+ (?P<label>\S.*?) \s*  # the label, without the row's padding
+    """,
+    re.VERBOSE,
 )
 """One numbered row: ``1. Yes``, ``2) No``, or hermes's bracketed ``[1] Approve Once``.
 
@@ -35,7 +39,7 @@ are not rows: a half-bracketed number is prose, not a menu.
 """
 
 _DIVIDER_RE: Final = re.compile(
-    rf"^[\s{re.escape(glyphs.RULE + glyphs.DASHED_RULE + '—=_·•-')}]{{4,}}$"
+    rf"[\s{re.escape(glyphs.RULE + glyphs.DASHED_RULE + '—=_·•-')}]{{4,}}"
 )
 
 _FOOTER_RE: Final = re.compile(
@@ -61,15 +65,20 @@ _TICKED_BOX: Final = "xX*" + glyphs.CHECK
 _BLANK_BOX: Final = " ·"
 
 _CHECKBOX_RE: Final = re.compile(
-    rf"^\s*(?:\[(?P<box>{glyphs.one_of(_TICKED_BOX, _BLANK_BOX)}?)\]"
-    rf"|(?P<glyph>{glyphs.one_of(glyphs.TICKED_BOX, glyphs.BLANK_BOX)}))"
-    r"\s*(?P<rest>\S.*?)\s*$"
+    rf"""
+    \s*
+    (?: \[ (?P<box>{glyphs.one_of(_TICKED_BOX, _BLANK_BOX)}?) \]  # a mark in brackets, [x] or [ ]
+      | (?P<glyph>{glyphs.one_of(glyphs.TICKED_BOX, glyphs.BLANK_BOX)})  # or a checkbox glyph
+    )
+    \s* (?P<rest>\S.*?) \s*  # the label beside it
+    """,
+    re.VERBOSE,
 )
 
 
 def _ticked(label: str) -> tuple[bool | None, str]:
     """Split ``"[✔] autumn"`` into the tick state and the label the terminal drew."""
-    match = _CHECKBOX_RE.match(label)
+    match = _CHECKBOX_RE.fullmatch(label)
     if match is None:
         return None, label
     mark = match.group("box") or match.group("glyph") or ""
@@ -88,24 +97,40 @@ recap, and an indented glyph is body text under a row.
 _STEP_EDGES: Final = glyphs.ARROW_LEFT + glyphs.ARROW_RIGHT
 
 _STEP_TOKEN_RE: Final = re.compile(
-    rf"(?P<box>{glyphs.one_of(glyphs.STEP_BOXES)})"
-    rf"\s*(?P<label>[^{re.escape(glyphs.STEP_BOXES + _STEP_EDGES)}]*)"
+    rf"""
+    (?P<box>{glyphs.one_of(glyphs.STEP_BOXES)})  # a step's box
+    \s* (?P<label>[^{re.escape(glyphs.STEP_BOXES + _STEP_EDGES)}]*)  # its label, up to the next
+    """,
+    re.VERBOSE,
 )
 
 _STEPPER_RE: Final = re.compile(
-    rf"^{glyphs.ARROW_LEFT}[^{_STEP_EDGES}]*{glyphs.one_of(glyphs.STEP_BOXES)}"
-    rf"[^{_STEP_EDGES}]*{glyphs.ARROW_RIGHT}$"
+    rf"""
+    {glyphs.ARROW_LEFT} [^{_STEP_EDGES}]*  # the strip opens on an arrow
+    {glyphs.one_of(glyphs.STEP_BOXES)}  # holds at least one step box
+    [^{_STEP_EDGES}]* {glyphs.ARROW_RIGHT}  # and closes on the other arrow
+    """,
+    re.VERBOSE,
 )
 
 
 _HINT_RE: Final = re.compile(
-    r"^\s*(?P<keys>[^\s].{0,29}?)\s+to\s+(?P<verb>[A-Za-z][A-Za-z0-9 /+-]{0,28}?)\s*$"
+    r"""
+    \s* (?P<keys>[^\s].{0,29}?)  # the keys, a few words at most
+    \s+ to \s+
+    (?P<verb>[A-Za-z][A-Za-z0-9 /+-]{0,28}?) \s*  # what they do
+    """,
+    re.VERBOSE,
 )
 """One ``<keys> to <verb>`` hint, the form most harnesses print."""
 
 
 _VERB_HINT_RE: Final = re.compile(
-    r"^\s*(?P<keys>[^\s].{0,29}?)\s+(?P<verb>[A-Za-z][A-Za-z0-9 /+-]{0,28}?)\s*$"
+    r"""
+    \s* (?P<keys>[^\s].{0,29}?)  # the keys, a few words at most
+    \s+ (?P<verb>[A-Za-z][A-Za-z0-9 /+-]{0,28}?) \s*  # then what they do, with no "to"
+    """,
+    re.VERBOSE,
 )
 """One verb-first hint: ``<keys> <verb>`` with no "to" at all.
 
@@ -122,9 +147,9 @@ def _hint_match(text: str) -> "re.Match[str] | None":
     into keys="tab" and a verb that swallows the rest; the "to" form is the
     more specific one and is tried first.
     """
-    if (m := _HINT_RE.match(text)) is not None:
+    if (m := _HINT_RE.fullmatch(text)) is not None:
         return m
-    if (m := _VERB_HINT_RE.match(text)) is not None and m.group(
+    if (m := _VERB_HINT_RE.fullmatch(text)) is not None and m.group(
         "verb"
     ).lower() in facts.VERB_FIRST_VERBS:
         return m
@@ -153,7 +178,7 @@ def _whole_hint(text: str) -> bool:
     if match is None:
         return False
     pieces = _key_pieces(match.group("keys"))
-    return bool(pieces) and all(_KEY_TOKEN_RE.match(piece) for piece in pieces)
+    return bool(pieces) and all(_KEY_TOKEN_RE.fullmatch(piece) for piece in pieces)
 
 
 _KEY_PIECE: Final = re.compile(r"\s*/\s*|\s+or\s+|\s*,\s*")
@@ -163,11 +188,15 @@ _KEY_NAMES: Final = tuple(
 )
 
 _KEY_TOKEN_RE: Final = re.compile(
-    "(?i)^(?:(?:"
-    + "|".join(re.escape(modifier) for modifier in facts.KEY_MODIFIERS)
-    + r")[+-])*(?:f\d{1,2}|arrows?(?:\s+keys?)?|[a-z0-9]|"
-    + "|".join(re.escape(name) for name in _KEY_NAMES)
-    + ")$"
+    rf"""
+    (?: (?:{alternatives(facts.KEY_MODIFIERS)}) [+-] )*  # ctrl+, shift-, ...
+    (?: f\d{{1,2}}  # a function key
+      | arrows? (?:\s+ keys?)?  # "arrow keys", however it is spaced
+      | [a-z0-9]  # one letter or digit
+      | {alternatives(_KEY_NAMES)}  # a named key, or the glyph a footer draws for it
+    )
+    """,
+    re.IGNORECASE | re.VERBOSE,
 )
 """A token that NAMES a key, including the paired glyphs a footer prints whole.
 
@@ -202,7 +231,7 @@ Measured on opencode: the labels get three spaces between them (one-space pads
 plus its box gap), the hint pairs two.
 """
 
-_HEADER_TOKEN: Final = re.compile(r"^[A-Za-z][A-Za-z0-9 '/&+.-]{0,23}$")
+_HEADER_TOKEN: Final = re.compile(r"[A-Za-z][A-Za-z0-9 '/&+.-]{0,23}")
 """One tab-strip header: a short word or two, nothing that looks like a sentence."""
 
 _MIN_STRIP_TOKENS: Final = 2
@@ -300,7 +329,7 @@ def is_key_hint(line: str) -> bool:
         if match is None:
             continue
         pieces = _key_pieces(match.group("keys"))
-        if pieces and all(_KEY_TOKEN_RE.match(piece) for piece in pieces):
+        if pieces and all(_KEY_TOKEN_RE.fullmatch(piece) for piece in pieces):
             return True
     return False
 
@@ -318,7 +347,7 @@ def _footer_lines(lines: list[str]) -> list[str]:
         end -= 1
     found: list[str] = []
     for line in reversed(lines[:end]):
-        if not line.strip() or _DIVIDER_RE.match(line) or not _is_chrome(line):
+        if not line.strip() or _DIVIDER_RE.fullmatch(line) or not _is_chrome(line):
             break
         found.append(line)
         if len(found) >= _MAX_FOOTER_LINES:
@@ -359,9 +388,7 @@ def _hints(footer: list[str]) -> tuple[KeyHint, ...]:
     return tuple(found[:_MAX_HINTS])
 
 
-_HANDOFF_RE: Final = re.compile(
-    r"\b(?:" + "|".join(re.escape(verb) for verb in facts.HANDOFF_VERBS) + r")\b", re.IGNORECASE
-)
+_HANDOFF_RE: Final = re.compile(rf"\b(?:{alternatives(facts.HANDOFF_VERBS)})\b", re.IGNORECASE)
 
 
 def _line_hints(line: str) -> list[KeyHint]:
@@ -392,9 +419,9 @@ def _is_multi_select(seen: _Seen) -> bool:
     if any(v in hint.verb for hint in seen.hints for v in facts.TOGGLE_VERBS):
         return True
     if run is not None:
-        return any(_CHECKBOX_RE.match(label) for _, _, label in run)
+        return any(_CHECKBOX_RE.fullmatch(label) for _, _, label in run)
     start = _dialog_start(lines, len(lines))
-    return sum(bool(_CHECKBOX_RE.match(line)) for line in lines[start:]) >= _MIN_CHECKBOX_ROWS
+    return sum(bool(_CHECKBOX_RE.fullmatch(line)) for line in lines[start:]) >= _MIN_CHECKBOX_ROWS
 
 
 def _corroborated(seen: _Seen) -> bool:
@@ -446,12 +473,12 @@ def _stepper(lines: list[str], stop: int) -> Stepper | None:
     box, is what keeps transcript text out.
     """
     for index in range(stop - 1, -1, -1):
-        if _STEPPER_RE.match(lines[index].strip()):
+        if _STEPPER_RE.fullmatch(lines[index].strip()):
             return _steps(lines[index].strip())
     return None
 
 
-_REQUEST_TITLE_RE: Final = re.compile(r"(?i)^MCP server [\"“].+[\"”] requests your input$")
+_REQUEST_TITLE_RE: Final = re.compile(r"(?i)MCP server [\"“].+[\"”] requests your input")
 """claude's title over an MCP server's request for input: the same line herdr's
 ``mcp_elicitation_prompt`` rule calls blocked on."""
 
@@ -460,7 +487,7 @@ def _titled_message(paragraphs: list[str]) -> str:
     """The message under a request title, which is what the form asks, or ``""``."""
     for at, paragraph in enumerate(paragraphs):
         title, *rest = paragraph.split("\n")
-        if not _REQUEST_TITLE_RE.match(title):
+        if not _REQUEST_TITLE_RE.fullmatch(title):
             continue
         # Fields below it may carry a "?" of their own; the server's message is the question.
         if rest:
@@ -761,7 +788,7 @@ def _prepared(text: str, ansi: str = "") -> _Screen:
     rows = _beside_rows(drawn)
     barred = [bool(_EDGE_RE.match(line)) for line in rows]
     # Padded to the pane's width or not, a row reads the same: a blank row of spaces is no rule.
-    lines = [_EDGE_RE.sub(r"\1", line).rstrip() for line in rows]
+    lines = [_EDGE_RE.sub(r"\g<indent>", line).rstrip() for line in rows]
     if (panel := _panel_screen(lines)) is not None:
         return _Screen(panel, [False] * len(panel), "\n".join(panel), ("",) * len(panel))
     colour = _dialog_colour(text, ansi, barred)
@@ -781,7 +808,7 @@ _SIDE_BOTTOM: Final = glyphs.PREVIEW_BOTTOM
 
 def _side_column(line: str) -> int | None:
     """The column a preview box beside *line*'s option opens at, or ``None``."""
-    if OPTION_RE.match(line) is None or (m := _SIDE_TOP_RE.search(line)) is None:
+    if OPTION_RE.fullmatch(line) is None or (m := _SIDE_TOP_RE.search(line)) is None:
         return None
     return m.start("corner")
 
@@ -821,7 +848,7 @@ def _cut_side(rows: list[str], box: range, column: int) -> list[str]:
     cut = list(rows)
     below = len(rows)
     for i in range(box.start, len(rows)):
-        if _DIVIDER_RE.match(rows[i]):
+        if _DIVIDER_RE.fullmatch(rows[i]):
             below = i + 1
             break
         if i >= box.stop and rows[i][:column].strip():
@@ -914,9 +941,9 @@ def _hint_shaped(text: str) -> bool:
     fullscreen") must not turn the pair into a button.
     """
     for pattern in (_HINT_RE, _VERB_HINT_RE):
-        if (m := pattern.match(_hint_text(text))) is not None:
+        if (m := pattern.fullmatch(_hint_text(text))) is not None:
             pieces = _key_pieces(m.group("keys"))
-            return bool(pieces) and all(_KEY_TOKEN_RE.match(p) for p in pieces)
+            return bool(pieces) and all(_KEY_TOKEN_RE.fullmatch(p) for p in pieces)
     return False
 
 
@@ -924,7 +951,7 @@ def _button_token(token: str) -> str | None:
     """A button label, or ``None`` when the token ends the run or voids the line."""
     if not token or len(token) > _MAX_BUTTON_CHARS:
         return None
-    if token[:1].isdigit() or _CHECKBOX_RE.match(token):
+    if token[:1].isdigit() or _CHECKBOX_RE.fullmatch(token):
         return None
     return token
 
@@ -962,7 +989,7 @@ def _strip_tokens(line: str) -> tuple[str, ...]:
     tokens = [t.strip() for t in _STRIP_GAP.split(line.strip()) if t.strip()]
     if not _MIN_STRIP_TOKENS <= len(tokens) <= _MAX_STRIP_TOKENS:
         return ()
-    if not all(_HEADER_TOKEN.match(t) for t in tokens):
+    if not all(_HEADER_TOKEN.fullmatch(t) for t in tokens):
         return ()
     if tokens[-1].lower() in facts.CONFIRM_TABS:
         tokens = tokens[:-1]
@@ -1145,7 +1172,7 @@ def _opens_with(line: str, corners: str) -> bool:
 _PANEL_TAIL: Final = 6
 
 
-_TRAILING_SIDE_RE: Final = re.compile(rf"^(.*?){glyphs.one_of(glyphs.SIDE)}\s*$")
+_TRAILING_SIDE_RE: Final = re.compile(rf"(?P<row>.*?){glyphs.one_of(glyphs.SIDE)}\s*")
 """A row whose opening side the edge-strip already removed, closing side left."""
 
 
@@ -1156,16 +1183,16 @@ def _unboxed(line: str) -> str:
     row is a column rule inside the panel, and what follows it is that
     column's body: a plan's numbered steps beside its outline are not options.
     """
-    tail = _TRAILING_SIDE_RE.match(line)
+    tail = _TRAILING_SIDE_RE.fullmatch(line)
     # The pad up to the closing side goes too: a padded blank row would read as a rule.
-    return tail.group(1).rstrip() if tail is not None else line
+    return tail["row"].rstrip() if tail is not None else line
 
 
 def _panel_footer(lines: list[str]) -> list[str]:
     """The key hints drawn BELOW a panel, which is where hermes puts them."""
     found: list[str] = []
     for line in lines[:_PANEL_TAIL]:
-        if _DIVIDER_RE.match(line):
+        if _DIVIDER_RE.fullmatch(line):
             break
         if _is_chrome(line) and line.strip():
             found.append(line)
@@ -1187,17 +1214,17 @@ def _panel_screen(lines: list[str]) -> list[str] | None:
     if bottom is None:
         return None
     inside = [_unboxed(line) for line in lines[top + 1 : bottom]]
-    if not any(OPTION_RE.match(line) for line in inside):
+    if not any(OPTION_RE.fullmatch(line) for line in inside):
         return None
     return _upto_last_option(inside) + _panel_footer(lines[bottom + 1 :])
 
 
 _BOX_BOTTOM_RE: Final = re.compile(
-    rf"^\s*{glyphs.one_of(glyphs.BOTTOM_LEFT)}{glyphs.one_of(glyphs.RULE)}*{glyphs.one_of(glyphs.BOTTOM_RIGHT)}$"
+    rf"\s*{glyphs.one_of(glyphs.BOTTOM_LEFT)}{glyphs.one_of(glyphs.RULE)}*{glyphs.one_of(glyphs.BOTTOM_RIGHT)}"
 )
 
 _BOX_TEE_RE: Final = re.compile(
-    rf"^\s*{glyphs.one_of(glyphs.TEE_LEFT)}{glyphs.one_of(glyphs.RULE)}*{glyphs.one_of(glyphs.TEE_RIGHT)}$"
+    rf"\s*{glyphs.one_of(glyphs.TEE_LEFT)}{glyphs.one_of(glyphs.RULE)}*{glyphs.one_of(glyphs.TEE_RIGHT)}"
 )
 """A rule across a drawn box, which parts its sections as a blank row would."""
 
@@ -1209,14 +1236,14 @@ def _closing_box(lines: list[str]) -> range | None:
     end = len(lines)
     while end and not lines[end - 1].strip():
         end -= 1
-    if not end or not _BOX_BOTTOM_RE.match(lines[end - 1]):
+    if not end or not _BOX_BOTTOM_RE.fullmatch(lines[end - 1]):
         return None
     top = next((i for i in range(end - 2, -1, -1) if _opens_with(lines[i], glyphs.TOP_LEFT)), None)
     if top is None:
         return None
     inside = range(top + 1, end - 1)
     # Only the shape measured: a box with no inner rule is left as the grammar read it before.
-    return inside if any(_BOX_TEE_RE.match(lines[i]) for i in inside) else None
+    return inside if any(_BOX_TEE_RE.fullmatch(lines[i]) for i in inside) else None
 
 
 def _reframed(lines: list[str]) -> list[str]:
@@ -1228,7 +1255,7 @@ def _reframed(lines: list[str]) -> list[str]:
     if (box := _closing_box(lines)) is None:
         return lines
     inside = [
-        "" if _BOX_TEE_RE.match(row) else _unboxed(row) for row in lines[box.start : box.stop]
+        "" if _BOX_TEE_RE.fullmatch(row) else _unboxed(row) for row in lines[box.start : box.stop]
     ]
     # The bottom stays: a footer is the dialog's own only on the screen's last row.
     return [*lines[: box.start - 1], _BOX_RULE, *inside, *lines[box.stop :]]
@@ -1236,7 +1263,7 @@ def _reframed(lines: list[str]) -> list[str]:
 
 def _upto_last_option(inside: list[str]) -> list[str]:
     """A panel's rows, cut after its last option row."""
-    last = max(i for i, line in enumerate(inside) if OPTION_RE.match(line))
+    last = max(i for i, line in enumerate(inside) if OPTION_RE.fullmatch(line))
     kept = inside[: last + 1]
     return kept + [line for line in inside[last + 1 :] if _is_inert(line)]
 
@@ -1246,7 +1273,7 @@ def _trailing_menu(lines: list[str]) -> list[tuple[int, int, str]] | None:
     matches = [
         (i, int(m.group("number")), m.group("label"))
         for i, line in enumerate(lines)
-        if (m := OPTION_RE.match(line))
+        if (m := OPTION_RE.fullmatch(line))
     ]
     # A menu is what the agent waits on now, so only blanks, rules and hints may follow it.
     if not matches or not all(_is_inert(line) for line in lines[matches[-1][0] + 1 :]):
@@ -1293,7 +1320,7 @@ def _paragraphs(lines: list[str], start: int, stop: int) -> list[str]:
 
 def _is_chrome(line: str) -> bool:
     """True for a rule or a key-hint footer: furniture the terminal drew, not text."""
-    return bool(_DIVIDER_RE.match(line)) or bool(_FOOTER_RE.search(line)) or is_key_hint(line)
+    return bool(_DIVIDER_RE.fullmatch(line)) or bool(_FOOTER_RE.search(line)) or is_key_hint(line)
 
 
 _MARKS: Final = "\u25cf\u25cb\u2022\u00b7"
@@ -1330,7 +1357,7 @@ def _body(lines: list[str], box: range) -> str:
 def _dialog_start(lines: list[str], stop: int) -> int:
     """Index just after the last rule before ``stop`` — where the current box begins."""
     for index in range(stop - 1, -1, -1):
-        if _DIVIDER_RE.match(lines[index]):
+        if _DIVIDER_RE.fullmatch(lines[index]):
             return index + 1
     return 0
 
@@ -1338,7 +1365,7 @@ def _dialog_start(lines: list[str], stop: int) -> int:
 def _is_option_block(paragraph: str) -> bool:
     """True for a paragraph that is nothing but numbered option rows."""
     rows = paragraph.split("\n")
-    return all(OPTION_RE.match(row) for row in rows)
+    return all(OPTION_RE.fullmatch(row) for row in rows)
 
 
 def _askable(lines: list[str], start: int, stop: int) -> list[str]:

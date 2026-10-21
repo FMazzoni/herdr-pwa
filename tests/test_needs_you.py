@@ -88,10 +88,10 @@ def _keys(region: str) -> list[tuple[str, str, str]]:
     found: list[tuple[str, str, str]] = []
     for match in _FORM.finditer(region):
         form = match[0]
-        key = re.search(r'name="key" value="([^"]*)"', form)
-        screen = re.search(r'name="screen" value="([^"]*)"', form)
+        key = re.search(r'name="key" value="(?P<value>[^"]*)"', form)
+        screen = re.search(r'name="screen" value="(?P<value>[^"]*)"', form)
         assert key is not None, form
-        found.append((key[1], screen[1] if screen else "", form))
+        found.append((key["value"], screen["value"] if screen else "", form))
     return found
 
 
@@ -137,9 +137,9 @@ def test_a_question_with_no_subject_draws_no_empty_line(tmp_path: Path) -> None:
 
 def test_opencodes_heading_is_said_in_plain_words(tmp_path: Path) -> None:
     region = _region(tmp_path, SCREENS["oc-permission"])
-    heading = re.search(r'<h2 class="answer__question">(.*?)</h2>', region, re.S)
+    heading = re.search(r'<h2 class="answer__question">(?P<text>.*?)</h2>', region, re.DOTALL)
     assert heading is not None
-    assert heading[1] == "Permission required"
+    assert heading["text"] == "Permission required"
     assert "△" not in region, "no TUI glyph"
     assert "# Shell command" not in region, "no markdown mark"
     assert "Shell command" in region, "what kind of permission is still said"

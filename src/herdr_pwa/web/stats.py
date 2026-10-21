@@ -29,7 +29,12 @@ from herdr_pwa.panetext import Run, plain_text, segments
 METER_STEPS: Final = 10
 MAX_MODEL_CHARS: Final = 40
 _CLAUDE: Final = re.compile(
-    r"claude-(?P<family>opus|sonnet|haiku)-(?P<major>\d+)(?:-(?P<minor>\d{1,2}))?(?:-\d{8})?"
+    r"""
+    claude- (?P<family>opus|sonnet|haiku)
+    -(?P<major>\d+) (?:-(?P<minor>\d{1,2}))?  # the version, 4 or 4-5
+    (?:-\d{8})?  # a release date
+    """,
+    re.VERBOSE,
 )
 # A release date ends a model id as ``-YYYYMMDD``.
 _DATE_CHARS: Final = 9

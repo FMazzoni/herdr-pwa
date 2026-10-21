@@ -11,15 +11,31 @@ import pytest
 REPO = Path(__file__).resolve().parents[1]
 FIXTURES = REPO / "tests" / "fixtures"
 
-EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+)")
+EMAIL = re.compile(
+    r"""
+    [A-Za-z0-9._%+-]+ @  # the mailbox
+    (?P<domain>[A-Za-z0-9-]+ (?:\.[A-Za-z0-9-]+)+)  # a dotted domain
+    """,
+    re.VERBOSE,
+)
 # RFC 2606 reserves these for documentation, so no real mailbox sits behind them.
 PLACEHOLDER_DOMAIN = re.compile(
-    r"(?:^|\.)(?:example\.(?:com|net|org)|example|test|invalid|localhost)$"
+    r"""
+    (?:^|\.)  # the whole domain, or its last labels
+    (?:example\.(?:com|net|org)|example|test|invalid|localhost)$  # RFC 2606's reserved names
+    """,
+    re.VERBOSE,
 )
 # collie's vendored screens type this stand-in into a form; they are kept byte for byte.
 PLACEHOLDER_EMAILS = frozenset({"a@b.com"})
 # Home directories, also as Claude Code spells them in a project folder name (-home-<name>-).
-HOME = re.compile(r"(?:/|-)(?:var[/-])?(?:home|Users)[/-]([A-Za-z0-9._]+)")
+HOME = re.compile(
+    r"""
+    (?:/|-) (?:var[/-])? (?:home|Users) [/-]  # /home/, /Users/, or -home- in a folder name
+    (?P<name>[A-Za-z0-9._]+)  # whose home it is
+    """,
+    re.VERBOSE,
+)
 PLACEHOLDER_HOMES = frozenset({"user"})
 # Anthropic's API request ids; a fixture spells them req_SYNTHETIC… instead.
 REQUEST_ID = re.compile(r"req_011C[A-Za-z0-9]+")
@@ -34,9 +50,9 @@ def _texts() -> Iterator[tuple[str, str]]:
 
 
 def _real_email(found: re.Match[str]) -> bool:
-    if found.group(0) in PLACEHOLDER_EMAILS:
+    if found[0] in PLACEHOLDER_EMAILS:
         return False
-    return not PLACEHOLDER_DOMAIN.search(found.group(1).lower())
+    return not PLACEHOLDER_DOMAIN.search(found["domain"].lower())
 
 
 def test_every_email_is_a_placeholder() -> None:
@@ -51,10 +67,10 @@ def test_every_email_is_a_placeholder() -> None:
 
 def test_every_home_directory_is_a_placeholder() -> None:
     found = [
-        (name, hit.group(0))
+        (name, hit[0])
         for name, text in _texts()
         for hit in HOME.finditer(text)
-        if hit.group(1) not in PLACEHOLDER_HOMES
+        if hit["name"] not in PLACEHOLDER_HOMES
     ]
     assert found == []
 
