@@ -949,7 +949,7 @@ def _outage(after: float, *, failing: bool) -> Prime:
 def _untitled() -> dict[str, JsonValue]:
     """Three agents in one repo whose titles are the shell's prompt string."""
     frame = snapshot_frame()
-    shell = "user@host:~/projects"
+    shell = "user@host:/srv/projects"
     for pane, status in zip(PANES[3:], ("working", "idle", "idle"), strict=True):
         _set(frame, pane, title=shell, cwd="/home/user/projects", agent_status=status)
     return frame
