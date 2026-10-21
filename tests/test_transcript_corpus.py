@@ -77,13 +77,9 @@ HEADS = _heads()
 SEEN = _versions_seen(HEADS)
 WHAT_IT_SAW = f"corpus {ROOT}: {len(HEADS)} transcripts, versions {sorted(SEEN)}"
 
-corpus = pytest.mark.skipif(
-    not HEADS,
-    reason=f"no readable transcript corpus at {CORPUS or '(HP_CORPUS unset)'}; this check reads the real box",
-)
+pytestmark = pytest.mark.corpus
 
 
-@corpus
 def test_every_declared_parent_resolves_to_a_file_that_exists() -> None:
     """An edge that names a log nothing can open is an edge we are misreading."""
     dangling: list[str] = []
@@ -99,7 +95,6 @@ def test_every_declared_parent_resolves_to_a_file_that_exists() -> None:
     assert followed or SEEN, WHAT_IT_SAW
 
 
-@corpus
 def test_the_installed_cli_is_one_the_lineage_reader_was_measured_against() -> None:
     """The version ratchet, which is the half that does not depend on any field."""
     newest = max(SEEN, key=_version, default="")
@@ -110,7 +105,6 @@ def test_the_installed_cli_is_one_the_lineage_reader_was_measured_against() -> N
     )
 
 
-@corpus
 def test_the_corpus_says_which_versions_it_actually_held() -> None:
     """A check on machine-private state must never pass by having nothing in it."""
     assert SEEN, (
@@ -142,7 +136,6 @@ def _carried_by(log: Path, stamp: str) -> bool:
         return False
 
 
-@corpus
 def test_a_foreign_stamp_on_a_declared_fork_names_the_parent_or_came_with_the_copy() -> None:
     """The measurement behind trusting ``forkedFrom`` over the stamp, and the stamp without it."""
     # Measured on 2.1.289: a fork copies each record's stamp verbatim, its parent's foreign ones too.
@@ -162,7 +155,6 @@ def test_a_foreign_stamp_on_a_declared_fork_names_the_parent_or_came_with_the_co
     )
 
 
-@corpus
 def test_the_reader_survives_every_real_head_on_this_box() -> None:
     """No crash, no exception, whatever anybody's log actually contains."""
     for path, _ in HEADS:

@@ -77,8 +77,16 @@ exclude = ["src/herdr_pwa/engine/generated/**"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# A marker no entry below registers is an error, so a misspelt resource never runs unguarded.
+addopts = ["--strict-markers"]
 markers = [
-    "browser: drives headless Firefox over the real app; skipped while a receipt for this tree exists",
+    "browser: drives headless Firefox over the real app; reused, not run, while a receipt for this tree exists",
+    # The resources a test may need, the only reasons a test is skipped: tests/conftest.py checks each.
+    "live: needs the throwaway hp-test herdr session; `just live-tests` runs these",
+    "corpus: needs a folder of real harness transcripts in HP_CORPUS",
+    "nonroot: needs a user other than root, whom file permissions do not bind",
+    "node: needs node on PATH",
+    "git: needs a git checkout of this repo and git on PATH",
 ]
 
 [tool.importlinter]

@@ -1,5 +1,5 @@
 """The geometry gate runs the checks in its own interpreter and writes a receipt only on green;
-a browser test leaves its own receipt when it passes, and is skipped while that receipt holds."""
+a browser test leaves its own receipt when it passes, and is reused while that receipt holds."""
 
 import sys
 from pathlib import Path
@@ -44,7 +44,13 @@ _CONFTEST = """
 from pathlib import Path
 
 from scripts.geometry_gate import GateConfig
-from tests.browser.receipts import GATE, pytest_collection_modifyitems, pytest_runtest_makereport
+from tests.browser.receipts import (
+    GATE,
+    pytest_collection_modifyitems,
+    pytest_runtest_makereport,
+    pytest_runtest_protocol,
+)
+from tests.browser.reused import pytest_report_teststatus
 
 
 def pytest_addoption(parser):
@@ -109,12 +115,14 @@ def test_only_a_browser_test_that_passed_every_phase_leaves_a_receipt(
     assert _receipted(walks) == ["test_walks.py::test_green"]
 
 
-def test_a_receipted_browser_test_is_skipped_until_the_tree_changes_or_the_run_is_forced(
+def test_a_receipted_browser_test_is_reused_until_the_tree_changes_or_the_run_is_forced(
     pytester: pytest.Pytester, walks: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _ = pytester.runpytest("-p", "no:cacheprovider")
     again = pytester.runpytest("-p", "no:cacheprovider")
-    again.assert_outcomes(passed=2, skipped=1, failed=1, errors=1)
+    # Reuse is its own word in the summary, never a skip: the green test is not run again.
+    again.assert_outcomes(passed=2, failed=1, errors=1)
+    assert again.parseoutcomes()["reused"] == 1
     forced = pytester.runpytest("-p", "no:cacheprovider", "--browser-force")
     forced.assert_outcomes(passed=3, failed=1, errors=1)
     monkeypatch.setattr(geometry_gate, "fingerprint", lambda: "changed")
@@ -123,10 +131,10 @@ def test_a_receipted_browser_test_is_skipped_until_the_tree_changes_or_the_run_i
 
 
 @pytest.mark.usefixtures("walks")
-def test_without_firefox_no_browser_test_is_skipped_on_a_receipt(
+def test_without_firefox_no_browser_test_is_reused_on_a_receipt(
     pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _ = pytester.runpytest("-p", "no:cacheprovider")
     monkeypatch.setattr(receipts, "available", lambda: False)
-    # The rig's own fixture then fails the test; a gate never skips for want of its tool.
+    # The rig's own fixture then fails the test; a gate never passes for want of its tool.
     pytester.runpytest("-p", "no:cacheprovider").assert_outcomes(passed=3, failed=1, errors=1)

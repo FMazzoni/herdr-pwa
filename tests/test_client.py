@@ -842,8 +842,7 @@ def _pyright(path: Path) -> JsonValue:
         cwd=Path(__file__).resolve().parent.parent,
         check=False,
     )
-    if not done.stdout.strip():
-        pytest.skip(f"pyright did not run: {done.stderr[:400]}")
+    assert done.stdout.strip(), f"pyright did not run: {done.stderr[:400]}"
     return TypeAdapter(JsonValue).validate_json(done.stdout)
 
 

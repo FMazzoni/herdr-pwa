@@ -17,10 +17,11 @@ from scripts.geometry import Switch, serve
 from tests.browser.receipts import (
     pytest_collection_modifyitems,
     pytest_runtest_makereport,
+    pytest_runtest_protocol,
 )
 from tests.catalogue import build
 
-__all__ = ["pytest_collection_modifyitems", "pytest_runtest_makereport"]
+__all__ = ["pytest_collection_modifyitems", "pytest_runtest_makereport", "pytest_runtest_protocol"]
 
 
 @dataclass(frozen=True, slots=True)

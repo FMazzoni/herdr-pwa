@@ -1,6 +1,5 @@
 """Every write, driven end to end against the throwaway hp-test session; opt in with HP_LIVE=1."""
 
-import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -49,9 +48,8 @@ from tests.waiting import until
 
 # Read at import, before the autouse fixture points HOME at a temp dir.
 SOCKET = Path.home() / ".config/herdr/sessions/hp-test/herdr.sock"
-LIVE = os.environ.get("HP_LIVE") == "1"
 
-pytestmark = pytest.mark.skipif(not LIVE, reason="live herdr test; set HP_LIVE=1 to run it")
+pytestmark = pytest.mark.live
 
 
 def say(label: str, text: str = "") -> None:

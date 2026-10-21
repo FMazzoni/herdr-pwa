@@ -1,4 +1,5 @@
 import os
+import shutil
 import sys
 from collections.abc import Generator
 from pathlib import Path
@@ -6,6 +7,14 @@ from typing import cast
 
 import pytest
 
+from tests.browser.reused import pytest_report_teststatus
+
+__all__ = ["pytest_report_teststatus"]
+
+REPO = Path(__file__).resolve().parents[1]
+# Read at import, before the autouse fixture clears every HP_* variable.
+_LIVE = os.environ.get("HP_LIVE") == "1"
+_CORPUS = bool(os.environ.get("HP_CORPUS"))
 FIXTURES = Path(__file__).parent / "fixtures"
 # Fixtures no test here has to open, each with its reason.
 UNOPENED_FIXTURES: dict[str, str] = {
@@ -54,6 +63,21 @@ def pytest_runtest_protocol(item: pytest.Item) -> Generator[None, object, object
         return (yield)
     finally:
         _SWEEPING.discard(item.nodeid)
+
+
+def pytest_runtest_setup(item: pytest.Item) -> None:
+    # The resources a test may need, each a marker in pyproject.toml; `just skips` fails on any other.
+    marked = {mark.name for mark in item.iter_markers()}
+    if "live" in marked and not _LIVE:
+        pytest.skip("needs live: set HP_LIVE=1, as `just live-tests` does")
+    if "corpus" in marked and not _CORPUS:
+        pytest.skip("needs corpus: set HP_CORPUS to a folder of transcripts")
+    if "nonroot" in marked and os.geteuid() == 0:
+        pytest.skip("needs nonroot: running as root, which file permissions do not bind")
+    if "node" in marked and shutil.which("node") is None:
+        pytest.skip("needs node: not on PATH")
+    if "git" in marked and (shutil.which("git") is None or not (REPO / ".git").exists()):
+        pytest.skip("needs git: no git on PATH, or this is no git checkout")
 
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:

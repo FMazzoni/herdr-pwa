@@ -1,6 +1,5 @@
 import ast
 import inspect
-import os
 from pathlib import Path
 
 import pytest
@@ -334,11 +333,10 @@ def test_every_undecidable_answer_refuses_an_assumed_login(tmp_path: Path, canne
     assert caught.value.status_code == 500
 
 
+@pytest.mark.nonroot
 def test_an_unreadable_socket_is_undecidable_not_safe(tmp_path: Path) -> None:
     with tailscaled(tmp_path, serve_config={}) as fake:
         fake.socket_path.chmod(0o000)
-        if os.access(fake.socket_path, os.W_OK):
-            pytest.skip("running as root: socket permissions are not enforced")
         with pytest.raises(AssumedLoginUnsafeError):
             _ = serve_is_active(fake.api)
         fake.socket_path.chmod(0o600)
