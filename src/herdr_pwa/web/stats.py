@@ -1,9 +1,4 @@
-"""The stats strip: what an agent's own harness records about its model, context, turn and spend.
-
-Nothing here is estimated. A field whose harness records no source for it is left out, never shown
-as zero: money only where the harness wrote it down, a context percentage only for a model whose
-window is in ``facts.CONTEXT_WINDOWS``.
-"""
+"""The stats strip: what an agent's own harness records, never estimated; unrecorded is left out."""
 
 import re
 from dataclasses import dataclass, replace
@@ -69,8 +64,7 @@ class StatusRow:
 class Stats:
     """The strip and its sheet, every field already worded; an empty field is not shown."""
 
-    # The harness's own statusline when the pane shows one: its first row is the line, cut at
-    # the phone's width; every row is in the sheet whole, in place of the facts below.
+    # The pane's own statusline: its first row is the strip, every row replaces the sheet's facts.
     status: tuple[StatusRow, ...] = ()
     model: str = ""
     percent: int | None = None
@@ -150,8 +144,13 @@ def _seconds_since(stamp: str, now: float) -> float | None:
 
 @dataclass(frozen=True, slots=True)
 class TurnTimes:
-    """The newest turn's clock, in seconds: how long it has run, how long its log has been still,
-    and how long it took from the prompt to the last record; ``None`` where the tally cannot say."""
+    """The newest turn's clock, in seconds; ``None`` where the tally cannot say.
+
+    Attributes:
+        ran: How long the turn has run.
+        quiet: How long its log has been still.
+        took: How long it took from the prompt to the last record.
+    """
 
     ran: float | None = None
     quiet: float | None = None
@@ -207,8 +206,7 @@ def _before(stamp: str, since: float | None) -> bool:
 
 
 def _this_turn(agent: SpawnedAgent, turn_started: str, since: float | None) -> bool:
-    """Still running, or ended since the newest prompt; a launch never seen is not listed, nor
-    one still running that the agent's process was started after, which died with the last."""
+    """Still running, or ended since the newest prompt, and not left by an earlier process."""
     if not agent.started:
         return False
     if not agent.done:
@@ -219,9 +217,13 @@ def _this_turn(agent: SpawnedAgent, turn_started: str, since: float | None) -> b
 def spawned_times(
     usage: SessionUsage, now: float, *, since: float | None = None
 ) -> tuple[SpawnedTime, ...]:
-    """The tally's background agents and shells still running, the last turn's first, then those
-    that ended this turn, each by when it started; *since* is when the agent's process started,
-    when known."""
+    """The tally's background agents and shells: running first, then those ended this turn.
+
+    Args:
+        usage: The session's tally.
+        now: Wall time now.
+        since: When the agent's process started, when known.
+    """
     turn = usage.turn_started
     shown = [agent for agent in usage.agents if _this_turn(agent, turn, since)]
     # Running first; of those, what the last turn started before what an older one left.

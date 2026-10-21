@@ -229,9 +229,7 @@ def _confirms_subscription(reply: WireReply) -> bool:
     )
 
 
-# --------------------------------------------------------------------------
-# The seam
-# --------------------------------------------------------------------------
+# --- The seam ---
 
 
 class _Call(NamedTuple):
@@ -268,10 +266,7 @@ class Transport(Protocol):
 
 
 class SocketTransport:
-    """Newline-delimited JSON-RPC over AF_UNIX, one fresh connection per call.
-
-    Calls run in parallel: the lock guards only the id counter and the backoff fields.
-    """
+    """Newline-delimited JSON-RPC over AF_UNIX, one fresh connection per call, calls in parallel."""
 
     def __init__(
         self,
@@ -476,9 +471,7 @@ class SocketTransport:
         return remaining
 
 
-# --------------------------------------------------------------------------
-# The stream
-# --------------------------------------------------------------------------
+# --- The stream ---
 
 
 class EventStream:

@@ -48,8 +48,7 @@ def _claude_holds(sessions: Path, session: str, pid: int, proc: Path) -> bool:
     except (OSError, ValidationError) as exc:
         log.debug("no holder record for pid %s: %s", pid, exc)
         return False
-    # A pid reused since the record was written has another start; one in another namespace
-    # is another process that merely shares the number.
+    # A reused pid has another start, and one in another namespace merely shares the number.
     started = ticks_since_boot(pid, proc=proc)
     return (
         record.sessionId == session

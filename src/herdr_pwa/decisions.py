@@ -27,9 +27,7 @@ from herdr_pwa.panetext import printed_whole
 UPDATING: Final = "updating"
 IDLE_CADENCE: Final = 12
 WORKING_CADENCE: Final = 5
-# Seconds a working turn's log may stay still before the Chat says "No activity". Past a long
-# thought or a slow test run, both of which write nothing until they end, and short enough that a
-# glance within two minutes learns the agent may be stuck.
+# Seconds of still log before "No activity": past a long thought or test run, inside two minutes.
 QUIET_AFTER: Final = 90
 # Past this many seconds the herd is offline rather than merely late.
 DISCONNECTED_AFTER: Final = 60
@@ -116,8 +114,7 @@ class Freshness:
 
 @dataclass(frozen=True, slots=True)
 class Pending:
-    """Work an idle agent started that is still to come back: agents that will report, and
-    shells its last turn started."""
+    """Work an idle agent started that is still to come back: agents to report, shells running."""
 
     agents: int = 0
     shells: int = 0
@@ -255,9 +252,9 @@ def _related(one: str, other: str) -> bool:
 def identity_doubt(origin: str, cwds: Iterable[str]) -> str:
     """Why the session a pane reports may not be the agent running there, or ``""`` if no reason.
 
-    *origin* is where the session's own store says it was started; *cwds* are where herdr says
-    the pane runs. A session started somewhere unrelated to the pane was reported by something
-    else that carries the pane's id, a nested harness for one. Nothing known is not a doubt.
+    Args:
+        origin: Where the session's own store says it was started; unknown is no doubt.
+        cwds: Where herdr says the pane runs; a session started elsewhere is a nested harness's.
     """
     started = posixpath.normpath(origin.strip()) if origin.strip() else ""
     here = [posixpath.normpath(cwd.strip()) for cwd in cwds if cwd.strip()]
@@ -439,8 +436,9 @@ def _sections(rows: tuple[AgentRow, ...]) -> tuple[Section, ...]:
 class Fetched:
     """When the herd was read: the injected ``now``, when the snapshot was taken, what failed.
 
-    ``taken_at`` is ``None`` when no snapshot was ever read; ``error`` names the last refresh's
-    failure class while the feed serves an older one.
+    Attributes:
+        taken_at: ``None`` when no snapshot was ever read.
+        error: The last refresh's failure class, while the feed serves an older snapshot.
     """
 
     now: float

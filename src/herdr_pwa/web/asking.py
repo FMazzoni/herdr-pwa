@@ -1,8 +1,4 @@
-"""How a waiting question is said on the phone, and which of the screen's keys sit open or folded.
-
-All of it is wording and layout (invariant 7): which keys exist, and what each sends, is
-``allowed_keys`` read off the screen, and every one of them is drawn here once.
-"""
+"""How a waiting question is worded on the phone; which keys exist is allowed_keys' call."""
 
 import re
 import unicodedata

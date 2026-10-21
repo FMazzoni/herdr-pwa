@@ -27,18 +27,14 @@ class Settings(BaseSettings):
     snapshot_cache_ttl: float = Field(default=2.0, gt=0)
     # Empty means each harness's own default location.
     transcript_roots: tuple[str, ...] = ()
-    # The models the new-agent form offers opencode, comma-separated; empty offers none. Declared,
-    # not read: every catalogue on disk named a dead model, and opencode silently runs its paid
-    # default in place of a dead one.
+    # Declared, not read from disk: opencode runs its paid default in place of a dead model.
     opencode_models: Annotated[tuple[str, ...], NoDecode] = ()
     # A page of chat counts messages (prompts and agent prose); tool calls ride along inside it.
     chat_messages: int = Field(default=20, gt=0)
-    # On start, read and draw the most urgent Claude agents' chats in the background, so the first
-    # open after a restart does not read a whole transcript while the phone waits.
+    # Draw the most urgent Claude chats at start, so a first open never waits on a whole transcript.
     prewarm: bool = True
 
-    # The event stream: how often the herd is diffed, how long a quiet stream waits before a
-    # heartbeat keeps the proxy from buffering or closing it, and how many pages may hold one.
+    # The event stream's diff cadence, its heartbeat against a buffering proxy, and its client cap.
     events_interval: float = Field(default=1.0, gt=0)
     events_heartbeat: float = Field(default=15.0, gt=0)
     events_max_clients: int = Field(default=16, gt=0)

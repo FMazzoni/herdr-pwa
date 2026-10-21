@@ -56,8 +56,7 @@ class Pacing:
 
 # Two not-waiting reads in a row before the question is believed gone.
 GONE_POLLS: Final = 2
-# Two reads of the same other question in a row before the key is believed to have moved it on.
-# One interval, never the whole budget: the point of ending on a move is ending fast.
+# Two reads of the same other question, one interval apart, before the key moved it on.
 MOVED_POLLS: Final = 2
 ANSWER_INTERVAL: Final = 0.35
 ANSWER_BUDGET: Final = 5.0

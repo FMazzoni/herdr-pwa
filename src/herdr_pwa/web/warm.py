@@ -11,19 +11,17 @@ log = logging.getLogger(__name__)
 
 
 def warm(web: WebState) -> int:
-    """Fill the tail and usage caches and the render caches for the most urgent cached agents.
+    """Fill the tail, usage and render caches for the most urgent agents whose logs only append.
 
-    Only an agent whose log grows by appended bytes is held by those caches, so only it is warmed.
-
-    Returns how many agents were warmed. Never raises: a cold cache costs latency, never a page.
+    Returns:
+        How many agents were warmed; never raises, since a cold cache costs latency, not a page.
     """
     try:
         agents = web.snapshot().value.agents
     except EngineError as exc:
         log.info("nothing warmed, the herd could not be read: %s", type(exc).__name__)
         return 0
-    # Most urgent first, as the snapshot ranks them; past the tail cache's room a warm file would
-    # only push out another.
+    # Most urgent first; past the tail cache's room a warmed file would only push out another.
     held = [a for a in agents if a.session and has_byte_frontier(a.agent)]
     warmed = 0
     for agent in held[:MAX_TAIL_FILES]:

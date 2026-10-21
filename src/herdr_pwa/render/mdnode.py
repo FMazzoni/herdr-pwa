@@ -7,8 +7,10 @@ from dataclasses import dataclass
 class MdNode:
     """A text leaf when ``tag`` is empty, otherwise one element of ``markdown.TAGS``.
 
-    ``cls`` is names from ``markdown.CLASSES``, space-separated, ``attrs`` holds MathML attributes named in
-    ``mathml.MATH_ATTRS``, and ``label`` is the language shown over a code block.
+    Attributes:
+        cls: Names from ``markdown.CLASSES``, space-separated.
+        attrs: MathML attributes named in ``mathml.MATH_ATTRS``.
+        label: The language shown over a code block.
     """
 
     tag: str = ""

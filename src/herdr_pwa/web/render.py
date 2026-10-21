@@ -25,11 +25,11 @@ class Pages:
         device_report: bool = False,
         fallback: int = 20,
     ) -> None:
-        # autoescape=True rather than select_autoescape, so no file extension can opt out.
-        # Held in memory, like the static files: a merge onto disk must not reach old Python.
         self.env = Environment(
+            # Held in memory, like the static files: a merge onto disk must not reach old Python.
             loader=DictLoader(dict(templates)),
             auto_reload=False,
+            # True rather than select_autoescape, so no file extension can opt out.
             autoescape=True,
             undefined=StrictUndefined,
             trim_blocks=True,

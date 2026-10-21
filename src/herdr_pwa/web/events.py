@@ -1,9 +1,4 @@
-"""The event stream: one watcher over the herd, fanned out to every open page as "this is stale".
-
-A page names the regions it shows (``feed``, ``agent:<session>``, ``chat:<session>``,
-``pane:<session>``, ``stats:<session>``) and is told only which of them changed. It then fetches each one through its
-own route, so every rule a swap already follows still holds; nothing rendered rides the stream.
-"""
+"""The event stream: one herd watcher telling each page which of its regions went stale."""
 
 import asyncio
 import contextlib
@@ -57,15 +52,15 @@ def herd_marks(snapshot: Snapshot, error: str = "", overlay: Overlay = NO_OVERLA
     rows: list[tuple[object, ...]] = []
     for agent in snapshot.agents:
         blocked = shows_question(agent, overlay)
-        # A blocked screen's question is read from the screen, so its revision is part of it.
-        # The shown status, so a finish being read redraws the feed and the page as idle.
         row = (
             agent.target,
             agent.title,
+            # The shown status, so a finish being read redraws the feed and the page as idle.
             effective_status(agent, overlay).value,
             agent.agent,
             agent.workspace,
             agent.state_change_seq,
+            # A blocked screen's question is read from the screen, so its revision is part of it.
             agent.revision if blocked else 0,
         )
         rows.append((agent.session, *row))
@@ -146,8 +141,7 @@ class Hub:
         self._marks: Marks = {}
         self._watches: dict[str, _Watch] = {}
         self._upstream = _Upstream(web)
-        # Counted for the tests and the measurements: what the stream has said, in all, and how
-        # many times the watcher has looked, so a test can wait for a look instead of a sleep.
+        # Counted so a test can wait for a send or a look instead of a sleep.
         self.sent = 0
         self.looks = 0
 
@@ -325,8 +319,7 @@ class Hub:
         except OSError:
             watch.path = None
             return None
-        # No mtime: a write stamps it before its bytes land, and a look between the two would
-        # tell the page about a change it cannot read yet, then tell it again.
+        # No mtime: a write stamps it before its bytes land, so it would announce a change twice.
         return (str(watch.path), stat.st_ino, stat.st_size)
 
 

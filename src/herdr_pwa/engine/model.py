@@ -104,10 +104,7 @@ def as_pane_id(value: object) -> PaneId:
 
 @dataclass(frozen=True, slots=True)
 class Seat:
-    """A pane to type at, and the session that must still hold it, since panes are recycled.
-
-    ``session=None`` types at whoever holds the pane: only for a pane this same request created.
-    """
+    """A pane to type at, and the session that must still hold it, since panes are recycled."""
 
     target: PaneId
     session: SessionId | None = None

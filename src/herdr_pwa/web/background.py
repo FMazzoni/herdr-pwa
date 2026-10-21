@@ -28,8 +28,7 @@ def background_times(
 
 
 def pending_of(times: tuple[SpawnedTime, ...]) -> Pending:
-    """What of *times* is still to come back: agents that will report, and shells the last turn
-    started; a server an older turn left runs on without anyone waiting on it."""
+    """What of *times* is still to come back: agents that will report, and this turn's shells."""
     running = [time for time in times if time.running]
     shells = sum(1 for time in running if time.kind == SPAWNED_SHELL and time.fresh)
     return Pending(agents=sum(1 for time in running if time.kind != SPAWNED_SHELL), shells=shells)

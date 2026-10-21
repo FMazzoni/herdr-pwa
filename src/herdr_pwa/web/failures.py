@@ -137,8 +137,7 @@ _REGION_ID: Final = re.compile(r"[a-z]+(?:-[a-z]+)*")
 
 
 def _stand_in(request: Request) -> str:
-    # htmx names the element a fragment replaces; the failure keeps that id, so the page still
-    # finds the region (to hold its redraw back under a finger) while it is a failure.
+    # The failure keeps the id htmx names, so the page still finds the region it replaced.
     target = request.headers.get("HX-Target", "")
     return target if _REGION_ID.fullmatch(target) else ""
 

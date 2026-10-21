@@ -1,7 +1,4 @@
-"""Every write the runner is asked to make, recorded before it is made.
-
-Writes only: reads, push subscribe/unsubscribe, and the app's own refusals are not recorded.
-"""
+"""Every write the runner is asked to make, recorded before it is made; reads are not."""
 
 import json
 import logging

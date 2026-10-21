@@ -26,9 +26,7 @@ LAYOUT_TTL: Final = 30.0
 EMPTY_TREE: Final = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 # A .git file, a worktree's gitdir file or a commondir file is one line holding a path.
 GITFILE_BYTES: Final = 4096
-# libgit2 reads in-process and runs no command a repository names: no filter driver, fsmonitor,
-# hook, pager, external diff or textconv. A submodule is never opened, as git's
-# --ignore-submodules=all; nothing is written back, as git's GIT_OPTIONAL_LOCKS=0.
+# libgit2 runs no command a repository names; submodules stay shut and nothing is written back.
 _READ: Final = DiffOption.IGNORE_SUBMODULES
 _STATUS: Final = _READ | DiffOption.INCLUDE_TYPECHANGE
 _UNTRACKED: Final = _STATUS | DiffOption.INCLUDE_UNTRACKED | DiffOption.RECURSE_UNTRACKED_DIRS
@@ -244,8 +242,7 @@ class Git:
         if tree_top != top or common is None:
             return (top,)
         found = self._read("worktree list", common, _listed) or ()
-        # The list is read from files in .git that an agent can write, so each entry
-        # must also claim this repository from its own side before it is believed.
+        # An agent can write the list in .git, so each entry must claim this repository back.
         kept = [t for t in dict.fromkeys(found) if t == top or self._claims(t, common)]
         return tuple(dict.fromkeys([top, *kept]))
 

@@ -64,8 +64,7 @@ _LINK_SCHEMES: Final = ("http://", "https://")
 _LEAF_TEXT: Final = frozenset({"text", "html_block"})
 WIDE_TABLE: Final = 4
 SHORT_CELL: Final = 24
-# A run with no space in it that a browser would still break: after a slash, a backslash or a dash
-# (hyphen, en or em), which a sha range, a path or a ticket ref is full of.
+# Where a browser breaks a run with no space (slash, backslash, dashes), as in a path or sha range.
 _BREAKS: Final = r"/\\\-\u2010\u2013\u2014"
 # Entered only where a word starts, so a long word with no break in it is read once.
 _BREAKABLE_RUN: Final = re.compile(rf"(?<!\S)[^\s{_BREAKS}]*+[{_BREAKS}]\S*")
@@ -74,8 +73,7 @@ _ALIGN: Final = MappingProxyType(
 )
 # The tasklists plugin's checkbox: with raw HTML off, no other inline HTML reaches the tree.
 _TASK_BOX: Final = "task-list-item-checkbox"
-# path:line, as agents and compilers write it: a file with an extension, then a line number,
-# then perhaps a column. Not inside a word or a URL, and not followed by more path.
+# path:line[:column], as agents and compilers write it, never inside a word, a URL or a path.
 FILE_REF: Final = re.compile(
     r"""
     (?<![\w/.~:@-])  # not inside a word, a path or a URL
@@ -208,8 +206,7 @@ def _whole(node: SyntaxTreeNode, children: list[MdNode]) -> bool:
     # A one-word cell (a name, an id, a number) stays whole; WebKit breaks after a hyphen.
     if len(text.split()) == 1:
         return True
-    # A table this wide scrolls on a phone anyway, and a short cell squeezed to one word per
-    # line would make every row several lines tall.
+    # A wide table scrolls anyway, and a short cell at a word a line would make every row tall.
     columns = len(node.parent.children) if node.parent else 0
     return columns >= WIDE_TABLE and len(text) <= SHORT_CELL
 

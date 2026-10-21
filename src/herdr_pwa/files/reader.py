@@ -79,8 +79,7 @@ class LocalReader:
         self.root = root
 
     def _confined(self, fd: int) -> None:
-        # The check before the open saw a path; this sees what was opened, so a component
-        # swapped for a symlink in between is caught. No /proc means no proof: refuse.
+        # What was opened, so a symlink swapped in since the check is caught; no /proc, no proof.
         try:
             opened = Path(f"/proc/self/fd/{fd}").readlink()
         except OSError as exc:

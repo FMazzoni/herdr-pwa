@@ -84,8 +84,7 @@ def _screen_now(web: WebState, agent: Agent) -> str | None:
 
 
 def _claim(agent: Agent, screen: str | None) -> str:
-    # A working agent's screen moves, and a question's is gone once it is answered from the keys
-    # (the composer is not redrawn then), so neither is a screen the composer claims.
+    # A working screen moves and an answered question's is gone, so the composer claims neither.
     if agent.status is AgentStatus.WORKING or screen is None:
         return ""
     return screen_claim(screen)
@@ -149,14 +148,12 @@ def answer_region(web: WebState, agent: Agent) -> dict[str, object]:
     return answer_context(agent, _question(web, agent), shown_status(web, agent))
 
 
-# The sheet's pad: the arrows and Enter first, then Esc set apart, since while the agent works
-# Esc stops its turn.
+# The sheet's pad: arrows and Enter, then Esc set apart, since it stops a working agent's turn.
 _ROW_PAD: Final = ("up", "down", "enter", ESC_KEY)
 
 
 def row_keys(web: WebState, agent: Agent) -> dict[str, object]:
-    """The keys the status row offers: the pad while no question holds the keys, and Stop while
-    the agent works; the same allowed set, and the same confirm, the write checks with."""
+    """The status row's keys: the pad and Stop, from the same allowed set the write checks."""
     prompt = _question(web, agent)
     keyed = _keyed(agent, prompt)
     offered = set(pad_keys(prompt)) & allowed_keys(prompt)

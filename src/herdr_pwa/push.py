@@ -753,8 +753,11 @@ def fan_out(
 ) -> FanOut:
     """Send to every device: prune the gone, record each outcome, never let one stop the rest.
 
-    *now* is wall time from the caller's clock, for subscriptions that expire by their own date.
-    Past the outlet's ``fan_out_budget`` seconds the devices not yet tried are skipped and counted failed.
+    Args:
+        data: The encoded payload.
+        subscriptions: The devices, tried in order until the outlet's ``fan_out_budget`` is spent.
+        outlet: Where it is sent and recorded; devices left at the budget are counted failed.
+        now: Wall time, for subscriptions that expire by their own date.
     """
     outcomes: list[str] = []
     budget = outlet.limits.fan_out_budget

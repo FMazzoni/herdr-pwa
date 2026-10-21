@@ -56,8 +56,7 @@ _NOT_NAME: Final = re.compile(r"[^a-z0-9_-]+")
 SESSION_WAIT: Final = 2.0
 SESSION_POLL: Final = 0.5
 
-# Where a person's own installs land when no package manager puts them on the system PATH. A
-# service started with a narrower PATH than a login shell misses these, and offered nothing.
+# A user's own install dirs, which a service on a narrower PATH than a login shell would miss.
 USER_BIN_DIRS: Final = ("~/.local/bin", "~/bin", "~/.bun/bin", "~/.npm-global/bin")
 # What `serve` records of its own PATH, so `doctor` run from a shell can judge the service's.
 SERVICE_PATH_FILENAME: Final = "service-path"
@@ -87,7 +86,9 @@ def models_env(kind: str) -> str:
 def launch_of(kind: str, declared: Declared | None = None) -> StartRecipe | None:
     """How *kind* is started from the phone, or ``None`` for a kind with no harness here.
 
-    A kind in *declared* offers exactly the models declared for it, and none when that is empty.
+    Args:
+        kind: The agent kind asked for.
+        declared: Models per kind; a kind listed offers exactly those, and none when empty.
     """
     harness = harness_of(kind)
     if harness is None:
@@ -319,8 +320,7 @@ def _launch(writer: Writer, request: StartRequest, name: str) -> _Launched | Ref
     if harness is None:
         return Refused(Refusal.BAD_KIND, "created")
     prompt = request.prompt if harness.takes_prompt and request.prompt.strip() else ""
-    # herdr types the launch into the tab's shell, which would keep the prompt in its history file;
-    # a null HISTFILE saves none (bash(1), HISTFILE). Only this tab's shell, and only then.
+    # herdr types the launch into this tab's shell; a null HISTFILE keeps the prompt out (bash(1)).
     env = {**harness.env, "HISTFILE": ""} if prompt else harness.env
     try:
         pane = writer.client.create_tab(
@@ -379,8 +379,7 @@ def start_agent(
     held = Refused(refusal, "created") if refusal is not None else _prompt_refusal(request)
     if held is not None:
         return held
-    # Keyed on the workspace: the new pane does not exist yet, and a close of this workspace
-    # mid-start would end the agent it is starting.
+    # Keyed on the workspace: the pane does not exist yet, and closing the workspace would end it.
     return one_at_a_time(
         writer.memory,
         workspace_key(request.workspace_id),

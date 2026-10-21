@@ -1,6 +1,4 @@
-"""The notify decision: which status changes buzz the phone, which clear it, and what the one
-herd notification says. Pure apart from the injected ledgers; the polling loop lives elsewhere.
-"""
+"""The notify decision: which changes buzz or clear the phone, and what the herd notice says."""
 
 import logging
 from collections.abc import Callable, Collection, Mapping, Sequence
@@ -501,8 +499,7 @@ class Planner:
         if prior is None:
             return Step(primed=True)
         unread = self._unread()
-        # A finish read on the phone is idle here too, so the alert it raised is taken down.
-        # A stall stays blocked through the retries that wake it, so it buzzes once per stop.
+        # A finish read on the phone counts idle, and a stall stays blocked, so each buzzes once.
         overlay = replace(beside, unread=_read_map(agents, unread))
         agents = [_shown(one, overlay) for one in agents]
         current = statuses_of(agents)

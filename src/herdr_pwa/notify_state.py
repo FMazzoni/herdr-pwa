@@ -1,6 +1,4 @@
-"""What the notifier remembers across ticks and restarts: prior statuses, what the phone has
-seen, and which kinds of alert the user lets through. Every file is 0600 in the state dir.
-"""
+"""What the notifier remembers across restarts: prior statuses, what was seen, what may buzz."""
 
 import logging
 import threading
