@@ -105,7 +105,7 @@ def test_an_agent_with_no_session_is_filed_under_its_pane_and_moves_quietly() ->
     assert events(first) == [("pane:w1:p9", EVENT_BLOCKED)]
     moved = transitions({"pane:w1:p9": "blocked"}, [agent(status="blocked", target="w1:p9")])
     assert [(c.session, c.event, c.replaces) for c in moved] == [(A, EVENT_BLOCKED, "pane:w1:p9")]
-    slot = HerdSlot(clock=Clock())
+    slot = HerdSlot(clock=Clock().mono)
     assert slot.update(first) is not None
     after = slot.update(moved)
     assert after is not None
@@ -121,7 +121,7 @@ def test_the_verb_comes_first_and_the_body_carries_the_question() -> None:
 
 
 def test_three_agents_are_one_notification_counted_then_named() -> None:
-    slot = HerdSlot(clock=Clock())
+    slot = HerdSlot(clock=Clock().mono)
     moved = slot.update(
         [
             Change(A, EVENT_DONE, agent(A, title="alpha")),
@@ -147,7 +147,7 @@ def test_three_agents_are_one_notification_counted_then_named() -> None:
 
 
 def test_one_outstanding_agent_is_named_with_its_question_and_deep_linked() -> None:
-    slot = HerdSlot(clock=Clock())
+    slot = HerdSlot(clock=Clock().mono)
     moved = slot.update([Change(A, EVENT_BLOCKED, agent(A, title="alpha"))])
     assert moved is not None
     notice = notice_for(moved, lambda _agent: "Allow edit?")
@@ -157,7 +157,7 @@ def test_one_outstanding_agent_is_named_with_its_question_and_deep_linked() -> N
 
 
 def test_the_slot_shrinks_silently_and_retracts_on_the_last_one() -> None:
-    slot = HerdSlot(clock=Clock())
+    slot = HerdSlot(clock=Clock().mono)
     _ = slot.update([Change(A, EVENT_BLOCKED, agent(A)), Change(B, EVENT_BLOCKED, agent(B))])
     shrunk = slot.update([Change(A, EVENT_CLEAR)])
     assert shrunk is not None
@@ -171,7 +171,7 @@ def test_the_slot_shrinks_silently_and_retracts_on_the_last_one() -> None:
 
 def test_only_the_focused_pane_inside_the_desk_window_is_held() -> None:
     clock = Clock()
-    slot = HerdSlot(clock=clock, debounce=30, desk_window=60)
+    slot = HerdSlot(clock=clock.mono, debounce=30, desk_window=60)
     slot.note_desk(A)
     held = slot.update([Change(A, EVENT_BLOCKED, agent(A)), Change(B, EVENT_BLOCKED, agent(B))])
     assert held is not None
@@ -186,7 +186,7 @@ def test_only_the_focused_pane_inside_the_desk_window_is_held() -> None:
 
 def test_a_held_alert_resolved_at_the_desk_is_never_sent_and_a_clear_is_never_held() -> None:
     clock = Clock()
-    slot = HerdSlot(clock=clock, debounce=30, desk_window=60)
+    slot = HerdSlot(clock=clock.mono, debounce=30, desk_window=60)
     slot.note_desk(A)
     assert slot.update([Change(A, EVENT_BLOCKED, agent(A))]) is None
     assert slot.update([Change(A, EVENT_CLEAR)]) is None
@@ -196,7 +196,7 @@ def test_a_held_alert_resolved_at_the_desk_is_never_sent_and_a_clear_is_never_he
 
 def test_a_flapping_agent_away_from_the_desk_buzzes_once() -> None:
     clock = Clock()
-    slot = HerdSlot(clock=clock, debounce=30, desk_window=60)
+    slot = HerdSlot(clock=clock.mono, debounce=30, desk_window=60)
     first = slot.update([Change(A, EVENT_BLOCKED, agent(A))])
     assert first is not None
     assert first.buzz
@@ -212,7 +212,7 @@ def planner(
 ) -> Planner:
     ledger = StatusLedger(tmp_path, clock=clock)
     settings = NotifyConfig(debounce=0, desk_window=0, quiet_managed=quiet_managed)
-    return Planner(ledger, settings, clock=clock, hooks=hooks)
+    return Planner(ledger, settings, clock=clock.mono, hooks=hooks)
 
 
 def test_the_first_tick_primes_silently_even_with_everything_blocked(tmp_path: Path) -> None:

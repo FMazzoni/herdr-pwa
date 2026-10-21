@@ -178,7 +178,7 @@ class Notifier:
             policy=stores.interrupts.current,
             health=stores.health,
         )
-        self.planner: Planner = Planner(ledger, config.notify, clock=clock, hooks=hooks)
+        self.planner: Planner = Planner(ledger, config.notify, clock=self._elapsed, hooks=hooks)
         # The loop thread ticks while a request thread may retract; the planner is not reentrant.
         self._lock: threading.Lock = threading.Lock()
         self.state: LoopState = LoopState()
@@ -224,7 +224,7 @@ class Notifier:
         due = self.planner.slot.next_due()
         if due is None:
             return self._config.interval
-        return max(MIN_SLEEP, min(self._config.interval, due - self._clock()))
+        return max(MIN_SLEEP, min(self._config.interval, due - self._elapsed()))
 
     async def run(self, stop: asyncio.Event) -> None:
         """Tick until ``stop`` is set; one bad tick never ends the loop."""

@@ -8,7 +8,7 @@ from dataclasses import dataclass, replace
 from types import MappingProxyType
 from typing import Final, Protocol, Self
 
-from herdr_pwa.clock import WallClock, wall_now
+from herdr_pwa.clock import MonoClock, mono_now
 from herdr_pwa.decisions import NO_OVERLAY, Overlay, read_status
 from herdr_pwa.engine import AgentStatus, PaneId, SessionId
 from herdr_pwa.notify_state import Interrupts, SeenLedger, StatusLedger
@@ -287,9 +287,9 @@ class HerdSlot:
     """Debounce, coalesce and retract the one herd notification, as a function of a clock."""
 
     def __init__(
-        self, *, clock: WallClock, debounce: float = 0.0, desk_window: float = 0.0
+        self, *, clock: MonoClock, debounce: float = 0.0, desk_window: float = 0.0
     ) -> None:
-        self._clock: WallClock = clock
+        self._clock: MonoClock = clock
         self._debounce: float = debounce
         self._desk_window: float = desk_window
         self._outstanding: dict[str, Alert] = {}
@@ -465,7 +465,7 @@ class Planner:
         ledger: StatusLedger,
         config: NotifyConfig,
         *,
-        clock: WallClock = wall_now,
+        clock: MonoClock = mono_now,
         hooks: Hooks | None = None,
     ) -> None:
         self._ledger: StatusLedger = ledger

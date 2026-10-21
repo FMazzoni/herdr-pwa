@@ -238,8 +238,13 @@ def test_a_held_alert_shortens_the_sleep_to_when_it_falls_due(tmp_path: Path) ->
     _ = loop.notifier.tick()
     assert loop.sender.sent == []
     loop.clock.now += 29.0
+    loop.elapsed.now += 29.0
     assert loop.notifier.interval() == 1.0
-    loop.clock.now += 1.0
+    # A wall clock stepped forward releases nothing: the hold is timed on the monotonic one.
+    loop.clock.now += 60.0
+    _ = loop.notifier.tick()
+    assert loop.sender.sent == []
+    loop.elapsed.now += 1.0
     _ = loop.notifier.tick()
     assert [payload["event"] for _, payload in loop.sender.sent] == ["blocked"]
 
