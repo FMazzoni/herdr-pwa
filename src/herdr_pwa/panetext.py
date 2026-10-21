@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Final
 
+from herdr_pwa import glyphs
+
 
 @dataclass(frozen=True, slots=True)
 class Run:
@@ -92,9 +94,9 @@ def cells(text: str) -> int:
 # Decoration.
 
 # Box drawing (U+2500-257F) and block elements (U+2580-259F), plus the spaces around them.
-_FRAME_TRIM: Final = "".join(chr(c) for c in range(0x2500, 0x25A0)) + " \t\u00a0\u2000\u2003"
+_FRAME_TRIM: Final = glyphs.BOX_AND_BLOCK + " \t\u00a0\u2000\u2003"
 # herdr's two-column welcome box draws its rules inside a line.
-_INNER_RULE: Final = re.compile("[─-╿]{3,}")
+_INNER_RULE: Final = re.compile(f"[{glyphs.BOX_DRAWING[0]}-{glyphs.BOX_DRAWING[-1]}]{{3,}}")
 _RULE_LINE_CHARS: Final = frozenset(_FRAME_TRIM + "-_=~·•")
 _RULE_MIN: Final = 4
 
@@ -104,7 +106,7 @@ def _is_rule_line(text: str) -> bool:
     return len(body) >= _RULE_MIN and all(c in _RULE_LINE_CHARS for c in body)
 
 
-_BOX: Final = "".join(chr(c) for c in range(0x2500, 0x25A0))
+_BOX: Final = glyphs.BOX_AND_BLOCK
 _WS: Final = " \t\u00a0"
 
 _LEAD_FRAME: Final = re.compile(f"^[{re.escape(_WS)}]*(?:[{re.escape(_BOX)}][{re.escape(_WS)}]*)+")
@@ -117,7 +119,7 @@ _PADDING: Final = re.compile(f"[{re.escape(_WS)}]{{12,}}")
 
 BORDER_GLYPH: Final = "─"
 BORDER_MIN_CELLS: Final = 20
-_PROMPT_GLYPHS: Final = "\u276f>"
+_PROMPT_GLYPHS: Final = glyphs.PROMPT
 
 
 def is_box_border(text: str) -> bool:
@@ -549,7 +551,9 @@ def _screen_width(rows: list[str]) -> int:
     return max((cells(row.rstrip()) for row in rows), default=0)
 
 
-_BESIDE_BOX_RE: Final = re.compile(r"\s{2,}[┌╭│┃├┝└╰]")
+_BESIDE_BOX_RE: Final = re.compile(
+    rf"\s{{2,}}{glyphs.one_of(glyphs.PREVIEW_TOP, glyphs.PREVIEW_SIDE, glyphs.PREVIEW_BOTTOM)}"
+)
 """The gap and the side of a box drawn right of a row, as a preview beside an option is."""
 
 

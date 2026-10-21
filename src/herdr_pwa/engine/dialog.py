@@ -5,15 +5,15 @@ from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
-from types import MappingProxyType
 from typing import Final, Self
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
+from herdr_pwa import facts, glyphs
 from herdr_pwa.engine.model import PaneId, SessionId, as_pane_id, as_session_id, screen_digest
 from herdr_pwa.panetext import as_text_read, composer_top, plain
 
-_EDGE_RE: Final = re.compile(r"^(\s*)[│┃║▏▍▎▊]")
+_EDGE_RE: Final = re.compile(rf"^(\s*){glyphs.one_of(glyphs.SIDE, glyphs.LEFT_BLOCKS)}")
 """A box-edge bar at line start, with the indent that owns it.
 
 opencode draws its dialogs with a left border only (SplitBorder in its TUI
@@ -23,7 +23,8 @@ description keeps its depth.
 """
 
 OPTION_RE: Final = re.compile(
-    r"^\s*[>\u276f▸▶‣*\-•]?\s*(?P<open>\[)?(?P<number>\d{1,2})(?(open)\]|\s*[.):])"
+    rf"^\s*{glyphs.one_of(glyphs.QUOTE_CURSOR, glyphs.CURSOR, '*-•')}?"
+    r"\s*(?P<open>\[)?(?P<number>\d{1,2})(?(open)\]|\s*[.):])"
     r"\s+(?P<label>\S.*?)\s*$"
 )
 """One numbered row: ``1. Yes``, ``2) No``, or hermes's bracketed ``[1] Approve Once``.
@@ -32,11 +33,19 @@ The bracket must close on the same number it opened on, so ``[1. x`` and ``1] x`
 are not rows: a half-bracketed number is prose, not a menu.
 """
 
-_DIVIDER_RE: Final = re.compile(r"^[\s─━╌╍┄┅┈┉═—=_·•\-]{4,}$")
+_DIVIDER_RE: Final = re.compile(
+    rf"^[\s{re.escape(glyphs.RULE + glyphs.DASHED_RULE + '—=_·•-')}]{{4,}}$"
+)
 
 _FOOTER_RE: Final = re.compile(
-    r"(?i)(?:\benter\b|\besc\b|\btab\b|\bctrl\b|↑|↓|←|→|arrow)"
-    r".*(?:select|cancel|navigate|confirm|choose|toggle|continue|submit|expand|manage)"
+    "(?i)(?:"
+    + "|".join(
+        [rf"\b{re.escape(key)}\b" for key in facts.FOOTER_KEY_WORDS]
+        + [re.escape(mark) for mark in facts.FOOTER_KEY_MARKS]
+    )
+    + ").*(?:"
+    + "|".join(re.escape(verb) for verb in facts.FOOTER_VERBS)
+    + ")"
 )
 
 _MAX_CHROME_PARAGRAPHS: Final = 3
@@ -46,17 +55,13 @@ _MIN_MENU_OPTIONS: Final = 2
 _MIN_CHECKBOX_ROWS: Final = 2
 
 
-_TICKED_BOX: Final = "xX*✔✓"
+_TICKED_BOX: Final = "xX*" + glyphs.CHECK
 
 _BLANK_BOX: Final = " ·"
 
-_TICKED_GLYPH: Final = "☑☒◼"
-
-_BLANK_GLYPH: Final = "☐◻"
-
 _CHECKBOX_RE: Final = re.compile(
-    rf"^\s*(?:\[(?P<box>[{_TICKED_BOX}{_BLANK_BOX}]?)\]"
-    rf"|(?P<glyph>[{_TICKED_GLYPH}{_BLANK_GLYPH}]))"
+    rf"^\s*(?:\[(?P<box>{glyphs.one_of(_TICKED_BOX, _BLANK_BOX)}?)\]"
+    rf"|(?P<glyph>{glyphs.one_of(glyphs.TICKED_BOX, glyphs.BLANK_BOX)}))"
     r"\s*(?P<rest>\S.*?)\s*$"
 )
 
@@ -67,40 +72,28 @@ def _ticked(label: str) -> tuple[bool | None, str]:
     if match is None:
         return None, label
     mark = match.group("box") or match.group("glyph") or ""
-    return bool(mark) and mark in _TICKED_BOX + _TICKED_GLYPH, match.group("rest")
+    return bool(mark) and mark in _TICKED_BOX + glyphs.TICKED_BOX, match.group("rest")
 
 
-_SELECT_VERBS: Final = (
-    "select",
-    "choose",
-    "pick",
-    "confirm",
-    "proceed",
-    "approve",
-    "lock",
-)
+_MARKER_RE: Final = re.compile(rf"^\s*{glyphs.one_of(glyphs.QUOTE_CURSOR, glyphs.CURSOR)}\s")
 
-_TOGGLE_VERBS: Final = ("toggle", "check", "uncheck", "deselect", "select all")
-
-_MARKER_RE: Final = re.compile(r"^\s*[>\u276f▸▶‣]\s")
-
-_PARKED_RE: Final = re.compile(r"^[\u276f▸▶‣]\s+\S")
+_PARKED_RE: Final = re.compile(rf"^{glyphs.one_of(glyphs.CURSOR)}\s+\S")
 """The cursor parked on a menu's own unnumbered row, such as claude's checklist ``Next``.
 
 Only a glyph in the first column counts: ``>`` there is a markdown quote in a
 recap, and an indented glyph is body text under a row.
 """
 
+_STEP_EDGES: Final = glyphs.ARROW_LEFT + glyphs.ARROW_RIGHT
+
 _STEP_TOKEN_RE: Final = re.compile(
-    r"(?P<box>[\u2610\u2612\u2611\u2714\u2713])\s*(?P<label>[^\u2610\u2612\u2611\u2714\u2713\u2190\u2192]*)"
+    rf"(?P<box>{glyphs.one_of(glyphs.STEP_BOXES)})"
+    rf"\s*(?P<label>[^{re.escape(glyphs.STEP_BOXES + _STEP_EDGES)}]*)"
 )
 
-_STEP_TICKED: Final = "\u2612\u2611"
-
-_STEP_SUBMIT: Final = "\u2714\u2713"
-
 _STEPPER_RE: Final = re.compile(
-    r"^\u2190[^\u2190\u2192]*[\u2610\u2612\u2611\u2714\u2713][^\u2190\u2192]*\u2192$"
+    rf"^{glyphs.ARROW_LEFT}[^{_STEP_EDGES}]*{glyphs.one_of(glyphs.STEP_BOXES)}"
+    rf"[^{_STEP_EDGES}]*{glyphs.ARROW_RIGHT}$"
 )
 
 
@@ -121,10 +114,6 @@ what status bars print -- claude's ``← for agents`` is not an offer.
 """
 
 
-_VERB_FIRST_VERBS: Final = frozenset({"select", "submit", "confirm", "toggle", "dismiss", "tab"})
-"""The verbs a verb-first pair must carry to be believed."""
-
-
 def _hint_match(text: str) -> "re.Match[str] | None":
     """One hint out of a footer piece, the "to" form taking precedence.
 
@@ -136,7 +125,7 @@ def _hint_match(text: str) -> "re.Match[str] | None":
         return m
     if (m := _VERB_HINT_RE.match(text)) is not None and m.group(
         "verb"
-    ).lower() in _VERB_FIRST_VERBS:
+    ).lower() in facts.VERB_FIRST_VERBS:
         return m
     return None
 
@@ -169,51 +158,21 @@ def _whole_hint(text: str) -> bool:
 
 _KEY_PIECE: Final = re.compile(r"\s*/\s*|\s+or\s+|\s*,\s*")
 
+_KEY_NAMES: Final = tuple(
+    name for name in (*facts.KEY_ALIASES, *facts.UNSENT_KEYS) if " " not in name
+)
+
 _KEY_TOKEN_RE: Final = re.compile(
-    r"(?i)^(?:(?:ctrl|shift|alt|opt|option|cmd|meta|super)[+-])*"
-    r"(?:f\d{1,2}|enter|return|esc|escape|tab|space|spacebar|backspace|del|delete"
-    r"|up|down|left|right|arrows?(?:\s+keys?)?|pgup|pgdn|home|end"
-    r"|[a-z0-9]|[\u2191\u2193\u2190\u2192\u21b5\u23ce]"
-    r"|[\u2191][\u2193]|[\u2193][\u2191]|\u21c6)$"
+    "(?i)^(?:(?:"
+    + "|".join(re.escape(modifier) for modifier in facts.KEY_MODIFIERS)
+    + r")[+-])*(?:f\d{1,2}|arrows?(?:\s+keys?)?|[a-z0-9]|"
+    + "|".join(re.escape(name) for name in _KEY_NAMES)
+    + ")$"
 )
 """A token that NAMES a key, including the paired glyphs a footer prints whole.
 
 opencode advertises a horizontal select as ``⇆`` and a vertical one as ``↑↓``,
 one token each (measured on its dialogs).
-"""
-
-_KEY_ALIASES: Final[MappingProxyType[str, tuple[str, ...]]] = MappingProxyType(
-    {
-        "enter": ("enter",),
-        "return": ("enter",),
-        "↵": ("enter",),
-        "⏎": ("enter",),
-        "esc": ("esc",),
-        "escape": ("esc",),
-        "tab": ("tab",),
-        "space": ("space",),
-        "spacebar": ("space",),
-        "up": ("up",),
-        "down": ("down",),
-        "left": ("left",),
-        "right": ("right",),
-        "↑": ("up",),
-        "↓": ("down",),
-        "←": ("left",),
-        "→": ("right",),
-        "↑↓": ("up", "down"),
-        "↓↑": ("up", "down"),
-        # "Arrow keys" means the vertical pair; left/right only count where the screen draws them.
-        "arrow": ("up", "down"),
-        "arrows": ("up", "down"),
-        "arrow keys": ("up", "down"),
-        "arrow key": ("up", "down"),
-    }
-)
-"""The key names this app is willing to send, spelled the way herdr's ``send_keys`` spells them.
-
-``⇆`` is absent on purpose: which keys it names depends on the verb printed
-beside it, and that decision lives in :func:`_keys_in`.
 """
 
 _CTRL_RE: Final = re.compile(r"^ctrl[+-]([a-z])$")
@@ -246,8 +205,6 @@ _HEADER_TOKEN: Final = re.compile(r"^[A-Za-z][A-Za-z0-9 '/&+.-]{0,23}$")
 
 _MIN_STRIP_TOKENS: Final = 2
 _MAX_STRIP_TOKENS: Final = 6
-
-_CONFIRM_TOKENS: Final = frozenset({"confirm", "submit", "done"})
 
 _FOCUS_DISTINCT: Final = 2
 """A focus exists only when the choices carry exactly two backgrounds."""
@@ -290,7 +247,7 @@ class KeyHint(BaseModel):
 
     @property
     def hands_off(self) -> bool:
-        """True when the key gives the terminal to another program: see ``HANDOFF_VERBS``."""
+        """True when the key gives the terminal to another program: see ``facts.HANDOFF_VERBS``."""
         return _HANDOFF_RE.search(self.verb) is not None
 
 
@@ -323,7 +280,7 @@ def _keys_in(token: str, verb: str = "") -> tuple[str, ...]:
             # "⇆ tab" (the tab key). The verb it printed is the only honest reading.
             found.extend(("tab",) if verb == "tab" else ("left", "right"))
             continue
-        found.extend(_KEY_ALIASES.get(piece, ()))
+        found.extend(facts.KEY_ALIASES.get(piece, ()))
     return tuple(dict.fromkeys(found))
 
 
@@ -385,22 +342,9 @@ def _hints(footer: list[str]) -> tuple[KeyHint, ...]:
     return tuple(found[:_MAX_HINTS])
 
 
-HANDOFF_VERBS: Final = ("edit in", "editor", "shell", "suspend")
-"""Words that, whole in a hint's verb, say its key hands the terminal to another program.
-
-claude prints ``ctrl+g to edit in Vim`` (or nano, or VS Code: whatever $EDITOR names) on its
-plan approval and its question notes; the editor then owns the pane, and no key this app sends
-can work it or quit it. A shell or a suspend leaves the pane the same way. Such a hint is still
-read, because it is still evidence that the screen asks, but it is never offered as a control.
-"""
-
 _HANDOFF_RE: Final = re.compile(
-    r"\b(?:" + "|".join(re.escape(verb) for verb in HANDOFF_VERBS) + r")\b", re.IGNORECASE
+    r"\b(?:" + "|".join(re.escape(verb) for verb in facts.HANDOFF_VERBS) + r")\b", re.IGNORECASE
 )
-
-_OFFER_REFUSED: Final = frozenset({"fullscreen"})
-"""Verbs the screen may print that this app will not offer: a pane-local
-fullscreen toggle redraws the whole screen from the phone for nothing."""
 
 
 def _line_hints(line: str) -> list[KeyHint]:
@@ -410,7 +354,7 @@ def _line_hints(line: str) -> list[KeyHint]:
         if (m := _hint_match(_hint_text(segment))) is None:
             continue
         verb = " ".join(m.group("verb").lower().split())
-        if verb in _OFFER_REFUSED:
+        if verb in facts.OFFER_REFUSED:
             continue
         found.extend(KeyHint(key=key, verb=verb) for key in _keys_in(m.group("keys"), verb))
     return found
@@ -428,7 +372,7 @@ class _Seen:
 def _is_multi_select(seen: _Seen) -> bool:
     """Positive evidence that this screen TOGGLES rather than chooses."""
     lines, run = seen.lines, seen.run
-    if any(v in hint.verb for hint in seen.hints for v in _TOGGLE_VERBS):
+    if any(v in hint.verb for hint in seen.hints for v in facts.TOGGLE_VERBS):
         return True
     if run is not None:
         return any(_CHECKBOX_RE.match(label) for _, _, label in run)
@@ -469,10 +413,10 @@ def _steps(line: str) -> Stepper | None:
     for token in _STEP_TOKEN_RE.finditer(line):
         box = token.group("box")
         # The strip's own Submit tab is not a question, so it is not a step.
-        if box in _STEP_SUBMIT:
+        if box in glyphs.STEP_SUBMIT:
             continue
         steps.append(" ".join(token.group("label").split()))
-        answered += box in _STEP_TICKED
+        answered += box in glyphs.STEP_ANSWERED
     return Stepper(steps=tuple(steps), answered=answered) if steps else None
 
 
@@ -564,7 +508,7 @@ def _rows_are_the_answer(seen: _Seen) -> bool:
     if _asks(seen.lines, seen.run[0][0]):
         return True
     return any(
-        hint.key == "enter" and any(verb in hint.verb for verb in _SELECT_VERBS)
+        hint.key == "enter" and any(verb in hint.verb for verb in facts.SELECT_VERBS)
         for hint in seen.hints
     )
 
@@ -807,13 +751,15 @@ def _prepared(text: str, ansi: str = "") -> _Screen:
     return _Screen(_reframed(lines), barred, text, colour, beside=rows != drawn)
 
 
-_SIDE_TOP_RE: Final = re.compile(r"\S\s{2,}(?P<corner>[┌╭])[─━]")
+_SIDE_TOP_RE: Final = re.compile(
+    rf"\S\s{{2,}}(?P<corner>{glyphs.one_of(glyphs.PREVIEW_TOP)}){glyphs.one_of(glyphs.LINE_RULE)}"
+)
 """A box opening on an option row, right of its label: the preview beside the rows."""
 
 # A tall preview is drawn folded, a tee row across it saying how many lines it hid.
-_SIDE_EDGE: Final = "│┃├┝"
+_SIDE_EDGE: Final = glyphs.PREVIEW_SIDE
 
-_SIDE_BOTTOM: Final = "└╰"
+_SIDE_BOTTOM: Final = glyphs.PREVIEW_BOTTOM
 
 
 def _side_column(line: str) -> int | None:
@@ -982,7 +928,7 @@ def _button_labels(line: str) -> tuple[str, ...]:
 def _advertises(hints: tuple[KeyHint, ...]) -> bool:
     """Does the screen say the arrows take a choice and enter confirms it?"""
     sideways = any(h.key in ("left", "right") for h in hints)
-    enter = any(h.key == "enter" and any(v in h.verb for v in _SELECT_VERBS) for h in hints)
+    enter = any(h.key == "enter" and any(v in h.verb for v in facts.SELECT_VERBS) for h in hints)
     return sideways and enter
 
 
@@ -997,7 +943,7 @@ def _strip_tokens(line: str) -> tuple[str, ...]:
         return ()
     if not all(_HEADER_TOKEN.match(t) for t in tokens):
         return ()
-    if tokens[-1].lower() in _CONFIRM_TOKENS:
+    if tokens[-1].lower() in facts.CONFIRM_TABS:
         tokens = tokens[:-1]
     return tuple(tokens)
 
@@ -1152,14 +1098,14 @@ def _is_interleave(line: str) -> bool:
     return _is_inert(line) or line[:1].isspace() or bool(_PARKED_RE.match(line))
 
 
-_PANEL_TOP_RE: Final = re.compile(r"^\s*[╭┌╔]")
+_PANEL_TOP_RE: Final = re.compile(rf"^\s*{glyphs.one_of(glyphs.TOP_LEFT)}")
 
-_PANEL_BOTTOM_RE: Final = re.compile(r"^\s*[╰└╚]")
+_PANEL_BOTTOM_RE: Final = re.compile(rf"^\s*{glyphs.one_of(glyphs.BOTTOM_LEFT)}")
 
 _PANEL_TAIL: Final = 6
 
 
-_TRAILING_SIDE_RE: Final = re.compile(r"^(.*?)[│┃║]\s*$")
+_TRAILING_SIDE_RE: Final = re.compile(rf"^(.*?){glyphs.one_of(glyphs.SIDE)}\s*$")
 """A row whose opening side the edge-strip already removed, closing side left."""
 
 
@@ -1206,12 +1152,16 @@ def _panel_screen(lines: list[str]) -> list[str] | None:
     return _upto_last_option(inside) + _panel_footer(lines[bottom + 1 :])
 
 
-_BOX_BOTTOM_RE: Final = re.compile(r"^\s*[╰└╚][─━═]*[╯┘╝]$")
+_BOX_BOTTOM_RE: Final = re.compile(
+    rf"^\s*{glyphs.one_of(glyphs.BOTTOM_LEFT)}{glyphs.one_of(glyphs.RULE)}*{glyphs.one_of(glyphs.BOTTOM_RIGHT)}$"
+)
 
-_BOX_TEE_RE: Final = re.compile(r"^\s*[├┝┠╞╟][─━═]*[┤┥┨╡╢]$")
+_BOX_TEE_RE: Final = re.compile(
+    rf"^\s*{glyphs.one_of(glyphs.TEE_LEFT)}{glyphs.one_of(glyphs.RULE)}*{glyphs.one_of(glyphs.TEE_RIGHT)}$"
+)
 """A rule across a drawn box, which parts its sections as a blank row would."""
 
-_BOX_RULE: Final = "─" * 4
+_BOX_RULE: Final = glyphs.LINE_RULE[0] * 4
 
 
 def _closing_box(lines: list[str]) -> range | None:

@@ -3,6 +3,7 @@
 import re
 from typing import Final
 
+from herdr_pwa import glyphs
 from herdr_pwa.engine import BlockedPrompt, MenuShape
 from herdr_pwa.panetext import pane_lines, plain_text
 
@@ -37,7 +38,7 @@ NO_ECHO_MECHANISM: Final = (
     "way for this app to read the text back, now or later."
 )
 
-_COMPOSER_LEAD: Final = re.compile(r"^\s*(?:[\u276f>]|[$#%]\s)")
+_COMPOSER_LEAD: Final = re.compile(rf"^\s*(?:{glyphs.one_of(glyphs.PROMPT)}|[$#%]\s)")
 
 # Anchored at end of line with the colon required; a bare "Password:" reads as prose.
 _NO_ECHO: Final[tuple[re.Pattern[str], ...]] = (

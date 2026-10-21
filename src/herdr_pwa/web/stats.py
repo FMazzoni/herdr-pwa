@@ -2,7 +2,7 @@
 
 Nothing here is estimated. A field whose harness records no source for it is left out, never shown
 as zero: money only where the harness wrote it down, a context percentage only for a model whose
-window is in ``WINDOWS``.
+window is in ``facts.CONTEXT_WINDOWS``.
 """
 
 import re
@@ -22,25 +22,17 @@ from herdr_pwa.engine import (
     SpawnedAgent,
     harness_of,
 )
+from herdr_pwa.facts import CONTEXT_WINDOWS
 from herdr_pwa.panetext import Run, plain_text, segments
 
-# Context windows published for models that have no larger variant, so a percentage of them is
-# true. A model not listed here shows its context in tokens, with no percentage and no bar.
-# Source: Anthropic's models overview. Sonnet 4 and later Opus models are left out on purpose:
-# they also run with a 1M window, and the transcript does not say which one a session has.
-WINDOWS: Final[tuple[tuple[re.Pattern[str], int], ...]] = (
-    (re.compile(r"claude-haiku-4-5(-\d{8})?"), 200_000),
-    (re.compile(r"claude-opus-4-5(-\d{8})?"), 200_000),
-    (re.compile(r"claude-opus-4-1(-\d{8})?"), 200_000),
-    (re.compile(r"claude-opus-4-\d{8}"), 200_000),
-    (re.compile(r"claude-3-7-sonnet(-\d{8})?"), 200_000),
-    (re.compile(r"claude-3-5-(sonnet|haiku)(-\d{8})?"), 200_000),
-)
 # The bar is drawn in tenths: a class per step, since no inline style may set a width.
 METER_STEPS: Final = 10
 MAX_MODEL_CHARS: Final = 40
-_CLAUDE: Final = re.compile(r"claude-(opus|sonnet|haiku)-(\d+)(?:-(\d{1,2}))?(?:-\d{8})?")
-_DATED: Final = re.compile(r"-\d{8}$")
+_CLAUDE: Final = re.compile(
+    r"claude-(?P<family>opus|sonnet|haiku)-(?P<major>\d+)(?:-(?P<minor>\d{1,2}))?(?:-\d{8})?"
+)
+# A release date ends a model id as ``-YYYYMMDD``.
+_DATE_CHARS: Final = 9
 _THOUSAND: Final = 1_000
 _MILLION: Final = 1_000_000
 # Past this a scaled count drops its decimal: 9.9k, then 10k.
@@ -87,11 +79,22 @@ class Stats:
     note: str = ""
 
 
+def _undated(model: str) -> tuple[str, bool]:
+    """*model* without a trailing ``-YYYYMMDD``, and whether it had one."""
+    date = model[-_DATE_CHARS:]
+    if len(date) == _DATE_CHARS and date[0] == "-" and date[1:].isdecimal():
+        return model[:-_DATE_CHARS], True
+    return model, False
+
+
 def window_of(model: str) -> int:
     """The model's context window in tokens, or 0 when it is not known."""
-    for pattern, size in WINDOWS:
-        if pattern.fullmatch(model):
-            return size
+    base, dated = _undated(model)
+    for window in CONTEXT_WINDOWS:
+        if (dated and base == window.model) or (
+            model == window.model and window.dated == "optional"
+        ):
+            return window.tokens
     return 0
 
 
@@ -100,10 +103,10 @@ def model_label(model: str) -> str:
     name = model.strip().rsplit("/", 1)[-1]
     found = _CLAUDE.fullmatch(name)
     if found:
-        family, major, minor = found.groups()
+        major, minor = found["major"], found["minor"]
         version = f"{major}.{minor}" if minor else major
-        return f"{family.capitalize()} {version}"
-    return _DATED.sub("", name)[:MAX_MODEL_CHARS]
+        return f"{found['family'].capitalize()} {version}"
+    return _undated(name)[0][:MAX_MODEL_CHARS]
 
 
 def tokens(count: int) -> str:

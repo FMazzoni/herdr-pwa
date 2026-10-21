@@ -4,6 +4,7 @@ import re
 import unicodedata
 from typing import Final
 
+from herdr_pwa import facts
 from herdr_pwa.decisions import AgentRow, ScreenDecision
 from herdr_pwa.engine import CONTEXT_FULL, MenuShape, ends_a_question
 from herdr_pwa.panetext import plain
@@ -19,8 +20,7 @@ _UNNAMED: Final = re.compile(r"^new session\s*-\s*\S+$", re.IGNORECASE)
 _LOCATOR: Final = re.compile(r"^[^\s@:]+@[^\s@:]+(?::\S*)?$")
 # How a terminal prompt opens when it asks without a question mark.
 _PROMPT_OPENING: Final = re.compile(
-    r"^\W*(do you|would you|should i|shall i|allow|approve|proceed|continue|confirm|"
-    r"are you sure|press|enter|type|select|choose)\b",
+    rf"^\W*(?:{'|'.join(re.escape(opener) for opener in facts.PROMPT_OPENERS)})\b",
     re.IGNORECASE | re.MULTILINE,
 )
 
