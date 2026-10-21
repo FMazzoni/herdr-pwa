@@ -344,15 +344,16 @@ ADVERSARIAL = ("a" * 100_000, "a." * 50_000, "a-" * 50_000, "1a" * 50_000, "a.."
 
 @pytest.mark.parametrize("text", ADVERSARIAL, ids=["word", "dots", "dashes", "digits", "breaks"])
 def test_scanning_for_links_is_linear_in_the_text(text: str) -> None:
-    started = time.perf_counter()
+    # CPU time, so a loaded gate cannot inflate it; the old pattern took minutes, far past 1 s.
+    started = time.process_time()
     _ = push._URL_RE.sub(LINK_PLACEHOLDER, text)  # pyright: ignore[reportPrivateUsage]
-    assert time.perf_counter() - started < 0.1
+    assert time.process_time() - started < 1.0
 
 
 def test_a_long_notice_is_cut_before_it_is_scanned() -> None:
-    started = time.perf_counter()
+    started = time.process_time()
     cleaned = sanitise("a" * 100_000, limit=MAX_BODY_CHARS)
-    assert time.perf_counter() - started < 0.1
+    assert time.process_time() - started < 1.0
     assert cleaned == "a" * (MAX_BODY_CHARS - 1) + "…"
 
 
