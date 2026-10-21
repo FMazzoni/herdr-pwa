@@ -4,6 +4,7 @@ import base64
 import json
 import logging
 import re
+import string
 import threading
 import unicodedata
 from collections.abc import Callable, Sequence
@@ -32,6 +33,7 @@ from pydantic import (
     model_validator,
 )
 from pywebpush import WebPushException
+from urllib3.util import parse_url
 
 from herdr_pwa import statedir
 from herdr_pwa.clock import MonoClock, WallClock, WallTime, ago, mono_now, wall_now
@@ -289,6 +291,7 @@ def read_vapid_keys(state_dir: Path) -> VapidKeys | None:
 
 
 _HTTPS: Final = "https://"
+_HOST_CHARS: Final = frozenset(string.ascii_lowercase + string.digits + ".-")
 
 
 def _is_https_url(endpoint: str) -> bool:
@@ -308,15 +311,28 @@ def _checked_endpoint(endpoint: str) -> str:
         raise ValueError(f"endpoint is over the {MAX_ENDPOINT_CHARS} character cap")
     if not _is_https_url(endpoint):
         raise ValueError("endpoint must be an https:// URL")
-    parts = urlsplit(endpoint)
-    try:
-        port = parts.port
-    except ValueError:
-        port = -1
+    if "\\" in endpoint or "%5c" in endpoint.casefold():
+        raise ValueError("endpoint has a backslash, which URL parsers split differently")
+    host, port = _sent_host(endpoint)
     # An IP literal, localhost or a LAN name fails this too: the post would reach the box's network.
-    if not _is_push_service(parts.hostname or "") or port not in {None, 443}:
+    if not _is_push_service(host) or port not in {None, 443}:
         raise ValueError("endpoint is not on a browser push service")
     return endpoint
+
+
+def _sent_host(endpoint: str) -> tuple[str, int | None]:
+    # requests sends with urllib3's parser, so the host it reads is the one that gets the post.
+    try:
+        sent, split = parse_url(endpoint), urlsplit(endpoint)
+        port = split.port
+    # urllib3's LocationParseError is a ValueError too.
+    except ValueError:
+        return "", -1
+    host = sent.host or ""
+    # Both parsers must agree, and on a plain DNS name, or one of them is being fooled.
+    if host != split.hostname or not set(host) <= _HOST_CHARS or sent.port != port:
+        return "", -1
+    return host, port
 
 
 def _point(raw: bytes) -> bytes:

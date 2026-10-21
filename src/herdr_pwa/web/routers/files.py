@@ -6,10 +6,11 @@ from types import MappingProxyType
 from typing import Annotated, Final
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from pydantic import BaseModel, Field
 
+from herdr_pwa import auth
 from herdr_pwa.engine import Agent, InvalidRequestError, as_session_id
 from herdr_pwa.files import diffs, fuzzy
 from herdr_pwa.files.git import Git, Status
@@ -332,7 +333,9 @@ def _version(root: Root, real: Path) -> str:
 
 def _register_bytes(router: APIRouter, explorer: Explorer) -> None:
     @router.get("/files/{root_id}/raw")
-    def raw(root_id: str, query: Annotated[RawQuery, Query()]) -> Response:
+    def raw(request: Request, root_id: str, query: Annotated[RawQuery, Query()]) -> Response:
+        # An <img> elsewhere learns from onload or onerror whether a file exists.
+        auth.check_same_site(request.headers)
         root = explorer.root(root_id)
         real = resolve(root, query.path, explorer.fence)
         if is_secret(real.name) and not query.reveal:

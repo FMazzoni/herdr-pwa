@@ -324,6 +324,7 @@ def test_the_app_starts_and_stops_the_loop_with_its_lifespan(tmp_path: Path) -> 
         push_subject="mailto:operator@example.net",
         push_interval=0.05,
         public_host="testserver",
+        tailnet_login="op@example.net",
     )
     wire = FakeWire({SNAPSHOT: snapshot_frame()})
 

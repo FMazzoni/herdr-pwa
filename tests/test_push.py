@@ -262,6 +262,25 @@ def test_a_malformed_subscription_is_refused(raw: object) -> None:
         _ = Subscription.model_validate(raw)
 
 
+@pytest.mark.parametrize(
+    "endpoint",
+    [
+        "https://evil.example\\.fcm.googleapis.com/x",
+        "https://169.254.169.254\\.fcm.googleapis.com/latest",
+        "https://evil.example%5c.fcm.googleapis.com/x",
+        "https://evil.example%5C.fcm.googleapis.com/x",
+        "https://fcm.googleapis.com/fcm/send\\x",
+        "https://fcm_x.fcm.googleapis.com/x",
+        "https://evil.example#.fcm.googleapis.com/x",
+        "https://evil.example?.fcm.googleapis.com/x",
+    ],
+)
+def test_a_host_the_sender_would_parse_differently_is_refused(endpoint: str) -> None:
+    # requests splits the host with urllib3, which stops at a backslash where urlsplit does not.
+    with pytest.raises(ValidationError):
+        _ = subscribed(endpoint)
+
+
 def test_one_bad_record_does_not_hide_the_good_ones(store: SubscriptionStore) -> None:
     good = store.add(subscribed())
     entries = [{"endpoint": "nope"}, good.model_dump(mode="json", by_alias=True)]

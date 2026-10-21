@@ -190,3 +190,34 @@ def test_pair_without_write_changes_nothing(tmp_path: Path) -> None:
 def test_no_url_means_no_qr(tmp_path: Path) -> None:
     with pytest.raises(LocalApiError, match="Install Tailscale"):
         _ = pair(LocalApi(tmp_path / "missing.sock"), port=PORT)
+
+
+@pytest.mark.parametrize(
+    ("tcp", "found"),
+    [
+        ({"443": {"TCPForward": "127.0.0.1:8772", "TerminateTLS": NODE}}, ("443",)),
+        ({"8443": {"TCPForward": "tcp://LOCALHOST:8772"}}, ("8443",)),
+        (
+            {"443": {"TCPForward": "[::1]:8772"}, "80": {"TCPForward": "0.0.0.0:8772"}},
+            ("443", "80"),
+        ),
+        ({"443": {"TCPForward": "127.0.0.2:8772"}}, ("443",)),
+        ({"443": {"HTTPS": True}}, ()),
+        ({"443": {"TCPForward": "127.0.0.1:9000"}}, ()),
+        ({"443": {"TCPForward": "192.0.2.7:8772"}}, ()),
+        ({"443": {"TCPForward": 8772}}, ()),
+        ({"443": "127.0.0.1:8772"}, ()),
+        ([], ()),
+    ],
+)
+def test_a_raw_tcp_forward_to_this_port_is_found(
+    tmp_path: Path, tcp: object, found: tuple[str, ...]
+) -> None:
+    with tailscaled(tmp_path, serve_config={"TCP": tcp}) as fake:
+        assert pairing.raw_forwards(fake.api, port=PORT) == found
+
+
+def test_an_unreadable_serve_config_hides_no_forward(tmp_path: Path) -> None:
+    canned = {("GET", SERVE_CONFIG_PATH): Canned(body="{")}
+    with tailscaled(tmp_path, canned=canned) as fake, pytest.raises(PairingError):
+        _ = pairing.raw_forwards(fake.api, port=PORT)

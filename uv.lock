@@ -946,6 +946,7 @@ dependencies = [
     { name = "pywebpush" },
     { name = "requests" },
     { name = "segno" },
+    { name = "urllib3" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -979,6 +980,7 @@ requires-dist = [
     { name = "pywebpush", specifier = ">=2.0" },
     { name = "requests", specifier = ">=2.32" },
     { name = "segno", specifier = ">=1.6" },
+    { name = "urllib3", specifier = ">=2.2" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34" },
 ]
 

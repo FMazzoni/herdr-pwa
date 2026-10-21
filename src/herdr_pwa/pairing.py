@@ -1,6 +1,7 @@
 """Pairing: publish behind ``tailscale serve`` and show the URL as a QR; the tailnet is the gate."""
 
 import io
+import ipaddress
 import json
 from dataclasses import dataclass, field, replace
 from http import HTTPStatus
@@ -26,6 +27,10 @@ _FUNNEL: Final = "funnel"
 # tailscaled's own failures stay tailscale.LocalApiError, worded where tailscaled is asked.
 class PairingError(RuntimeError):
     """A pairing precondition failed; the message says what to do about it."""
+
+
+class RawForwardError(PairingError):
+    """Serve passes raw TCP to the app, so a client's own identity header reaches it unchanged."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,6 +131,24 @@ def pair(
     return Pairing(url, done, served=True, note=note)
 
 
+def raw_forwards(api: tailscale.LocalApi, *, port: int) -> tuple[str, ...]:
+    """The serve ports that forward raw TCP to this app's loopback *port*.
+
+    Raises:
+        LocalApiError: tailscaled could not be asked.
+        PairingError: its serve config was not a JSON object.
+    """
+    config = _parse_config(api.read(tailscale.SERVE_CONFIG_PATH).body)
+    tcp = config.get("TCP")
+    if not isinstance(tcp, dict):
+        return ()
+    return tuple(
+        listen
+        for listen, entry in tcp.items()
+        if isinstance(entry, dict) and _forwards_to(entry.get("TCPForward"), port)
+    )
+
+
 def _parse_config(raw: str) -> ServeConfig:
     try:
         return tailscale.serve_config(raw)
@@ -146,6 +169,27 @@ def _root_proxy(config: ServeConfig, host: str) -> str:
     if isinstance(proxy, str) and proxy.strip():
         return proxy.strip()
     return f"a non-proxy handler ({', '.join(sorted(root)) or 'empty'})"
+
+
+def _forwards_to(target: JsonValue, port: int) -> bool:
+    # tailscaled stores "host:port"; a scheme is tolerated, since the CLI accepts tcp://.
+    if not isinstance(target, str):
+        return False
+    text = target.strip()
+    _, scheme, rest = text.partition("://")
+    host, _, found = (rest if scheme else text).rpartition(":")
+    return found == str(port) and _reaches_loopback(host.removeprefix("[").removesuffix("]"))
+
+
+def _reaches_loopback(name: str) -> bool:
+    # The unspecified address dials this machine too, so it reaches a loopback listener.
+    if name.casefold() == "localhost":
+        return True
+    try:
+        address = ipaddress.ip_address(name)
+    except ValueError:
+        return False
+    return address.is_loopback or address.is_unspecified
 
 
 def _funnel_enabled(value: JsonValue) -> bool:

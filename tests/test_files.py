@@ -375,6 +375,17 @@ def test_an_image_is_drawn_from_its_own_no_store_route(tmp_path: Path, repo: Pat
     assert rig.http.get(f"{_base(fake)}/raw?path=trap.png").status_code == 404
 
 
+@pytest.mark.parametrize(("site", "status"), [("cross-site", 403), ("same-origin", 200), ("", 200)])
+def test_another_site_cannot_probe_for_an_image(
+    tmp_path: Path, repo: Path, site: str, status: int
+) -> None:
+    # An <img> on another site fires onload or onerror, so an answer leaks whether a file exists.
+    rig = _rig(tmp_path, repo)
+    headers = {"Sec-Fetch-Site": site} if site else {}
+    raw = rig.http.get(f"{_base(repo)}/raw?path=assets/logo.png", headers=headers)
+    assert raw.status_code == status
+
+
 def test_code_is_highlighted_and_opens_on_the_line_asked_for(tmp_path: Path, repo: Path) -> None:
     rig = _rig(tmp_path, repo)
     page = rig.http.get(f"{_base(repo)}/file?path=src/app/server.py&line=30").text

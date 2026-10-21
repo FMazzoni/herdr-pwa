@@ -11,13 +11,14 @@ from fastapi.routing import iter_route_contexts
 from fastapi.testclient import TestClient
 from starlette.types import Message, Receive, Scope, Send
 
-from herdr_pwa import cli
+from herdr_pwa import auth, cli
+from herdr_pwa.pairing import RawForwardError
 from herdr_pwa.settings import Settings
 from herdr_pwa.web.gate import MAX_BODY_BYTES
 from herdr_pwa.web.seams import Seams
 from herdr_pwa.web.security import CSP
 from tests.fakes import NODE, status_route, tailscaled
-from tests.webfakes import IDENTITY, WORKING_SESSION, Rig, build_rig
+from tests.webfakes import IDENTITY, LOGIN, WORKING_SESSION, Rig, build_rig
 
 # Every route a caller with no identity may reach. A new entry needs a reason here.
 OPEN_ROUTES = frozenset(
@@ -114,13 +115,16 @@ def test_the_served_magicdns_name_is_accepted_in_any_spelling(tmp_path: Path) ->
     assert rig.http.get("/").status_code == 403
 
 
-def _served_app(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, socket: Path) -> TestClient:
+def _served_app(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, socket: Path, *, login: str = LOGIN
+) -> TestClient:
     monkeypatch.setenv("HP_STATE_DIR", str(tmp_path / "state"))
     monkeypatch.setenv("HP_SOCKET_PATH", str(tmp_path / "no-runner.sock"))
     monkeypatch.setenv("HP_TAILSCALED_SOCKET", str(socket))
     monkeypatch.setenv("HP_PUSH_NOTIFIER", "0")
     monkeypatch.delenv("HP_PUBLIC_HOST", raising=False)
     monkeypatch.delenv("HP_ASSUME_LOGIN", raising=False)
+    monkeypatch.setenv("HP_TAILNET_LOGIN", login)
     served: list[object] = []
 
     def run(app: object, **_: object) -> None:
@@ -149,6 +153,61 @@ def test_serve_with_no_learnable_name_refuses_every_header_identity(
     assert "Refusing every Tailscale identity" in caplog.text
     for host in (NODE, "testserver", "evil.example:8772"):
         assert client.get("/", headers={"Host": host}).status_code == 403, host
+
+
+def _never_served(*_args: object, **_kwargs: object) -> None:
+    pytest.fail("uvicorn was started")
+
+
+def test_serve_refuses_to_start_with_no_login_chosen(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("HP_TAILNET_LOGIN", raising=False)
+    monkeypatch.delenv("HP_ALLOW_ANY_TAILNET_USER", raising=False)
+    monkeypatch.setattr(cli.uvicorn, "run", _never_served)
+    settings = Settings(state_dir=tmp_path, tailscaled_socket=tmp_path / "none.sock")
+    with pytest.raises(auth.NoLoginPinnedError, match="HP_TAILNET_LOGIN is not set"):
+        cli.serve(settings, 0, Seams())
+
+
+def test_serve_lets_any_tailnet_user_in_only_when_told_to(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setenv("HP_ALLOW_ANY_TAILNET_USER", "1")
+    with tailscaled(tmp_path, canned=status_route()) as fake:
+        client = _served_app(monkeypatch, tmp_path, fake.socket_path, login="")
+    assert "any user your tailnet lets reach this node" in caplog.text
+    other = {"Tailscale-User-Login": "anyone@example.org", "Host": NODE}
+    assert client.get("/", headers=other).status_code == 200
+
+
+@pytest.mark.parametrize("target", ["127.0.0.1:8772", "tcp://localhost:8772", "[::1]:8772"])
+def test_serve_refuses_a_raw_tcp_forward_to_its_port(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, target: str
+) -> None:
+    # Raw TCP passes the client's own identity header through, so any tailnet device is the owner.
+    forward = {"TCP": {"443": {"TCPForward": target, "TerminateTLS": NODE}}}
+    monkeypatch.setattr(cli.uvicorn, "run", _never_served)
+    with tailscaled(tmp_path, canned=status_route(), serve_config=forward) as fake:
+        settings = Settings(
+            state_dir=tmp_path, tailnet_login=LOGIN, port=8772, tailscaled_socket=fake.socket_path
+        )
+        with pytest.raises(RawForwardError, match="forwards raw TCP from port 443"):
+            cli.serve(settings, 0, Seams())
+
+
+def test_serve_starts_when_the_serve_config_cannot_be_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    _ = _served_app(monkeypatch, tmp_path, tmp_path / "no-tailscaled.sock")
+    assert "Could not check 'tailscale serve' for a raw TCP forward" in caplog.text
+
+
+def test_two_identity_headers_are_refused_at_the_gate(tmp_path: Path) -> None:
+    rig = build_rig(tmp_path, headers={})
+    raw = [("Tailscale-User-Login", LOGIN), ("Tailscale-User-Login", LOGIN)]
+    assert rig.http.get("/", headers=raw).status_code == 400
+    assert rig.wire.calls == []
 
 
 def test_an_unrouted_path_is_refused_too(tmp_path: Path) -> None:

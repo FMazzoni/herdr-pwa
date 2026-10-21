@@ -3,24 +3,31 @@ import inspect
 from pathlib import Path
 
 import pytest
+from starlette.datastructures import Headers
 
 from herdr_pwa import auth
 from herdr_pwa.auth import (
     Access,
     AssumedLoginUnsafeError,
     AuthError,
+    CrossSiteError,
+    DuplicateIdentityError,
     Identity,
     LoginNotAllowedError,
     MissingIdentityError,
     MissingOriginError,
+    NoLoginPinnedError,
     NonLoopbackHostError,
     OriginMismatchError,
     ServedHostUnknownError,
     WrongHostError,
     assert_assumed_login_safe,
+    assert_login_chosen,
     authorize,
     check_same_origin,
+    check_same_site,
     identify,
+    login_policy,
     serve_is_active,
     served_host,
     unpinned_warning,
@@ -86,13 +93,60 @@ def test_the_login_comparison_is_constant_time() -> None:
     assert "hmac.compare_digest" in inspect.getsource(auth)
 
 
-def test_an_empty_pin_admits_any_tailnet_user_and_warns() -> None:
-    assert (
-        identify({"Tailscale-User-Login": "anyone@example.org"}, Access()).login
-        == "anyone@example.org"
+def test_an_empty_pin_trusts_no_tailnet_user_and_refuses_to_start() -> None:
+    with pytest.raises(NoLoginPinnedError) as caught:
+        _ = identify({"Tailscale-User-Login": "anyone@example.org"}, Access())
+    assert caught.value.status_code == 403
+    with pytest.raises(NoLoginPinnedError, match="HP_ALLOW_ANY_TAILNET_USER=1"):
+        assert_login_chosen(Access())
+    assert login_policy(Access()) == "nobody: HP_TAILNET_LOGIN is not set"
+    assert unpinned_warning(Access()) is None
+
+
+def test_any_user_mode_admits_any_tailnet_user_only_when_chosen_and_warns() -> None:
+    anyone = Access(any_login=True)
+    assert identify({"Tailscale-User-Login": "anyone@example.org"}, anyone).login == (
+        "anyone@example.org"
     )
-    assert unpinned_warning(Access()) is not None
+    assert_login_chosen(anyone)
+    assert_login_chosen(PINNED)
+    assert unpinned_warning(anyone) is not None
     assert unpinned_warning(PINNED) is None
+    assert "HP_ALLOW_ANY_TAILNET_USER" in login_policy(anyone)
+    assert login_policy(PINNED) == f"only {LOGIN} (HP_TAILNET_LOGIN)"
+
+
+def test_a_pin_still_wins_over_any_user_mode() -> None:
+    with pytest.raises(LoginNotAllowedError):
+        _ = identify(
+            {"Tailscale-User-Login": "mallory@example.com"},
+            Access(tailnet_login=LOGIN, any_login=True),
+        )
+
+
+def test_an_assumed_login_needs_no_pin() -> None:
+    assert identify({}, Access(assume_login=LOGIN)).is_assumed
+
+
+@pytest.mark.parametrize("second", [LOGIN, "mallory@example.com"])
+def test_two_identity_headers_are_refused_rather_than_one_picked(second: str) -> None:
+    # tailscaled deletes every copy before adding its own, so two are always a forgery.
+    headers = Headers(
+        raw=[(b"tailscale-user-login", LOGIN.encode()), (b"Tailscale-User-Login", second.encode())]
+    )
+    with pytest.raises(DuplicateIdentityError):
+        _ = identify(headers, PINNED)
+
+
+@pytest.mark.parametrize("site", ["cross-site", "Cross-Site"])
+def test_a_read_another_site_started_is_refused(site: str) -> None:
+    with pytest.raises(CrossSiteError):
+        check_same_site({"Sec-Fetch-Site": site})
+
+
+@pytest.mark.parametrize("site", ["same-origin", "same-site", "none", ""])
+def test_a_read_the_app_or_the_user_started_passes(site: str) -> None:
+    check_same_site({"Sec-Fetch-Site": site})
 
 
 @pytest.mark.parametrize(
