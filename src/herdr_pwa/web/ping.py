@@ -65,7 +65,7 @@ EXIT_PARTIAL: Final = 5
 EXIT_RATE_LIMITED: Final = 6
 
 
-class _Refused(Exception):  # noqa: N818 - named for the exit it becomes
+class _RefusedError(Exception):
     """A ping that cannot go out; the message is what the caller is told."""
 
     def __init__(self, message: str, code: int) -> None:
@@ -91,7 +91,7 @@ def ping(settings: Settings, seams: Seams, message: Message) -> int:
     """
     try:
         line, code = _send(settings, seams, message)
-    except _Refused as exc:
+    except _RefusedError as exc:
         sys.stderr.write(f"ping: {exc}\n")
         return exc.code
     # The one translation of what push refused (key, contact, store) into words for the caller.
@@ -150,7 +150,7 @@ def _send(settings: Settings, seams: Seams, message: Message) -> tuple[str, int]
 def _body(message: Message) -> str:
     body = sanitise(message.text, limit=MAX_BODY_CHARS)
     if not body.replace(LINK_PLACEHOLDER, "").strip():
-        raise _Refused(
+        raise _RefusedError(
             "nothing left to send: the text is empty once controls and links go", EXIT_USAGE
         )
     return body
@@ -158,10 +158,12 @@ def _body(message: Message) -> str:
 
 def _deliver(settings: Settings, seams: Seams, state_dir: Path) -> Deliver:
     if not settings.push_enabled:
-        raise _Refused("push is switched off on this box (HP_PUSH_ENABLED=0)", EXIT_UNAVAILABLE)
+        raise _RefusedError(
+            "push is switched off on this box (HP_PUSH_ENABLED=0)", EXIT_UNAVAILABLE
+        )
     keys = read_vapid_keys(state_dir)
     if keys is None:
-        raise _Refused(
+        raise _RefusedError(
             f"no VAPID key in {state_dir}: start the service and turn alerts on from the phone",
             EXIT_UNAVAILABLE,
         )
@@ -177,9 +179,9 @@ def _devices(seams: Seams, state_dir: Path) -> tuple[SubscriptionStore, list[Sub
     try:
         devices = store.list_all()
     except OSError as exc:
-        raise _Refused(f"cannot read the paired devices: {exc}", EXIT_UNAVAILABLE) from exc
+        raise _RefusedError(f"cannot read the paired devices: {exc}", EXIT_UNAVAILABLE) from exc
     if not devices:
-        raise _Refused(
+        raise _RefusedError(
             "no paired phone: open the app on the phone and turn alerts on", EXIT_NO_DEVICES
         )
     return store, devices
@@ -190,9 +192,9 @@ def _check_rate(seams: Seams, state_dir: Path) -> None:
         now = seams.wall()
         sent = attempts_between(state_dir, PING, now - PING_WINDOW, now)
     except OSError as exc:
-        raise _Refused(f"cannot read the audit log: {exc}", EXIT_UNAVAILABLE) from exc
+        raise _RefusedError(f"cannot read the audit log: {exc}", EXIT_UNAVAILABLE) from exc
     if sent >= PING_BURST:
-        raise _Refused(
+        raise _RefusedError(
             f"{sent} pings in the last {PING_WINDOW / 60:g} minutes, the most it sends; "
             "try again later",
             EXIT_RATE_LIMITED,
@@ -217,7 +219,7 @@ def _audit(settings: Settings, seams: Seams, state_dir: Path, payload: dict[str,
     try:
         return audit.record(_origin(), write)
     except AuditUnavailableError as exc:
-        raise _Refused(f"{exc}; nothing was sent", EXIT_UNAVAILABLE) from exc
+        raise _RefusedError(f"{exc}; nothing was sent", EXIT_UNAVAILABLE) from exc
 
 
 def _origin() -> Origin:
