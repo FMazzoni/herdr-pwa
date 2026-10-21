@@ -11,8 +11,9 @@ import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from typing import Final
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT: Final = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
@@ -24,11 +25,11 @@ from shots import IPHONE, NARROW, SETTLE_MS, Device, context, drive, missing_bro
 from tests.catalogue import AGENT, State, pick  # noqa: E402
 
 # Where the reader has scrolled to before the page is reloaded or walked away from.
-READ_Y = 100
-FEED_Y = 150
-FILE_Y = 300
+READ_Y: Final = 100
+FEED_Y: Final = 150
+FILE_Y: Final = 300
 
-PROBE = """() => {
+PROBE: Final = """() => {
   const jump = document.getElementById("hp-jump");
   return {
     y: Math.round(scrollY),
@@ -39,14 +40,14 @@ PROBE = """() => {
 }"""
 
 # The furthest the page can scroll: where a page that lands itself stands.
-END = "() => Math.round(document.documentElement.scrollHeight - innerHeight)"
+END: Final = "() => Math.round(document.documentElement.scrollHeight - innerHeight)"
 
-OPENED = """() => location.search === "?tab=pane"
+OPENED: Final = """() => location.search === "?tab=pane"
   && (!window.__hpDoorLeft || location.hash !== "") && document.readyState === "complete"
 """
 
 # A link a person taps, pushed as the feed's own links are; fixed, so the tap scrolls nothing.
-LINK = """(href) => {
+LINK: Final = """(href) => {
   const a = document.createElement("a");
   a.href = href;
   a.id = "reload-walk-link";
@@ -168,14 +169,14 @@ def _door(walk: Walk, state: State, door: str, view: str) -> None:
 
 
 # A file read from the top, not opened at a line, so only the browser can bring the reader back.
-WHOLE_FILE = replace(
+WHOLE_FILE: Final = replace(
     pick(["files-code"])[0], path=f"{AGENT}/files?path=src/app/server.py", ready=".src"
 )
 
 # A question whose rows are not buttons, so its note links to the Pane.
-MULTISELECT = pick(["agent-answer-multiselect"])[0]
+MULTISELECT: Final = pick(["agent-answer-multiselect"])[0]
 
-WALKS: tuple[tuple[str, State, Callable[[Walk, State], None], Device], ...] = (
+WALKS: Final[tuple[tuple[str, State, Callable[[Walk, State], None], Device], ...]] = (
     ("reload pane question", pick(["agent-answer-multiselect"])[0], reloaded, IPHONE),
     ("reload long chat", pick(["chat-long"])[0], reloaded, IPHONE),
     ("forward into an agent", pick(["agent-answer-multiselect"])[0], forward, IPHONE),

@@ -14,41 +14,45 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
+from types import MappingProxyType
+from typing import Final
 
 from pydantic import JsonValue, TypeAdapter
 from starlette.types import ASGIApp
 
 from tests.waiting import eventually
 
-BINARY = "firefox"
+BINARY: Final = "firefox"
 # A popup has no toolbar, so it can be narrower than the 500px a normal window stops at.
-OPENER_WIDTH = 600
-CONNECT_SECONDS = 60.0
+OPENER_WIDTH: Final = 600
+CONNECT_SECONDS: Final = 60.0
 # Each look at the port is a fresh connect, so look less often than at a page.
-CONNECT_STEP = 0.25
-POPUP_SECONDS = 10.0
+CONNECT_STEP: Final = 0.25
+POPUP_SECONDS: Final = 10.0
 # Per user, so every browser job on the machine (gate, geometry, shots, a walk) queues for one
 # browser: several at once under load is where the 'worker died' and NOT LOADED reds came from.
-LOCK = Path.home() / ".cache" / "herdr-pwa" / "geometry.lock"
+LOCK: Final = Path.home() / ".cache" / "herdr-pwa" / "geometry.lock"
 # The holder's descriptor for the lock, which its own workers inherit so they run under it.
-HELD_FD = "HP_BROWSER_LOCK_FD"
+HELD_FD: Final = "HP_BROWSER_LOCK_FD"
 
-PREFS = {
-    "browser.shell.checkDefaultBrowser": "false",
-    "datareporting.policy.dataSubmissionEnabled": "false",
-    # Phones draw overlay scrollbars, so a classic one must not eat the measured width.
-    "ui.useOverlayScrollbars": "1",
-    "dom.disable_open_during_load": "false",
-    # Under 5% or 200MB free, Firefox's watcher sends memory-pressure, which empties the bfcache.
-    "browser.low_commit_space_threshold_percent": "0",
-    "browser.low_commit_space_threshold_mb": "0",
-    # Safari has no scroll anchoring (MDN, overflow-anchor), so Firefox's must not hide a shift.
-    "layout.css.scroll-anchoring.enabled": "false",
-}
+PREFS: Final = MappingProxyType(
+    {
+        "browser.shell.checkDefaultBrowser": "false",
+        "datareporting.policy.dataSubmissionEnabled": "false",
+        # Phones draw overlay scrollbars, so a classic one must not eat the measured width.
+        "ui.useOverlayScrollbars": "1",
+        "dom.disable_open_during_load": "false",
+        # Under 5% or 200MB free, Firefox's watcher sends memory-pressure, which empties the bfcache.
+        "browser.low_commit_space_threshold_percent": "0",
+        "browser.low_commit_space_threshold_mb": "0",
+        # Safari has no scroll anchoring (MDN, overflow-anchor), so Firefox's must not hide a shift.
+        "layout.css.scroll-anchoring.enabled": "false",
+    }
+)
 
 
 # Marionette's frames are its own JSON; nothing here narrows them further than JSON.
-_MESSAGE = TypeAdapter(JsonValue)
+_MESSAGE: Final = TypeAdapter(JsonValue)
 
 
 class BrowserError(RuntimeError):

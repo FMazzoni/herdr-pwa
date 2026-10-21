@@ -6,8 +6,9 @@ import json
 import sys
 import time
 from pathlib import Path
+from typing import Final
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT: Final = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from scripts.firefox import available, held, version  # noqa: E402
@@ -15,13 +16,13 @@ from tests.catalogue import CAPTURES  # noqa: E402
 
 # Per user rather than per worktree: a fresh worktree whose guarded files match a tree already
 # measured reuses that receipt. A cache of a result, never a record anyone reviews.
-CACHE = Path.home() / ".cache" / "herdr-pwa"
-RECEIPTS = CACHE / "geometry"
+CACHE: Final = Path.home() / ".cache" / "herdr-pwa"
+RECEIPTS: Final = CACHE / "geometry"
 # One receipt per browser test that passed, under the tree's fingerprint, so pytest skips it.
-WALK_RECEIPTS = RECEIPTS / "walks"
+WALK_RECEIPTS: Final = RECEIPTS / "walks"
 
 # Everything that decides what the browser lays out, plus the harness itself.
-GUARDED = (
+GUARDED: Final = (
     "src/herdr_pwa/web",
     "src/herdr_pwa/panetext.py",
     "tests/webfakes.py",
@@ -43,7 +44,7 @@ GUARDED = (
     "scripts/geometry_gate.py",
     "tests/browser",
 )
-SKIP = ("__pycache__",)
+SKIP: Final = ("__pycache__",)
 
 
 def guarded_files() -> list[Path]:

@@ -5,16 +5,17 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Final
 
-ROOT = Path(__file__).resolve().parents[1]
-CSS = ROOT / "src" / "herdr_pwa" / "web" / "static" / "app.css"
+ROOT: Final = Path(__file__).resolve().parents[1]
+CSS: Final = ROOT / "src" / "herdr_pwa" / "web" / "static" / "app.css"
 # One exception per line: the declaration exactly as app.css writes it, `  # `, then why.
-ALLOW = ROOT / "scripts" / "css_tokens.allow"
+ALLOW: Final = ROOT / "scripts" / "css_tokens.allow"
 
-COMMENT = re.compile(r"/\*.*?\*/", re.DOTALL)
-ROOT_BLOCK = re.compile(r":root\s*\{[^}]*\}")
-DECLARATION = re.compile(r"([\w-]+)\s*:\s*([^;{}]+)")
-LITERAL = re.compile(
+COMMENT: Final = re.compile(r"/\*.*?\*/", re.DOTALL)
+ROOT_BLOCK: Final = re.compile(r":root\s*\{[^}]*\}")
+DECLARATION: Final = re.compile(r"([\w-]+)\s*:\s*([^;{}]+)")
+LITERAL: Final = re.compile(
     r"#[0-9a-fA-F]{3,8}\b"
     r"|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\("
     r"|(?<![\w.-])\d*\.?\d+px\b"

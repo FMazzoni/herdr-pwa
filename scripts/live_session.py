@@ -16,39 +16,39 @@ import termios
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 # Run as a file, so the repo root (where tests/ lives) is not on the path by itself.
-ROOT = Path(__file__).resolve().parents[1]
+ROOT: Final = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from herdr_pwa.engine import PANE_BUSY_CODE, EngineError, Frame, SocketTransport  # noqa: E402
 from tests.waiting import GaveUpError, eventually, until  # noqa: E402
 
-SESSION = "hp-test"  # anything but this name is a foot-gun
+SESSION: Final = "hp-test"  # anything but this name is a foot-gun
 
 COLS, ROWS = 200, 50  # wide enough that the TUI lays out real panes
 
 # herdr's ids, HERDR_PWA_MANAGED (marks an agent watched), CLAUDE_CODE_CHILD_SESSION (no transcript).
-INHERITED_PREFIXES = ("HERDR_", "CLAUDE_CODE_")
+INHERITED_PREFIXES: Final = ("HERDR_", "CLAUDE_CODE_")
 # "Inside Claude Code" markers, the calling harness's name and the launching session's effort.
-INHERITED_NAMES = frozenset({"CLAUDECODE", "CLAUDE_PID", "CLAUDE_EFFORT", "AI_AGENT"})
+INHERITED_NAMES: Final = frozenset({"CLAUDECODE", "CLAUDE_PID", "CLAUDE_EFFORT", "AI_AGENT"})
 
 # Claude Code's folder-trust menu lists "No, exit" first, under the cursor, so a bare Enter quits.
-TRUST_YES = "Yes, I trust this folder"
-CURSOR = "\u276f"
+TRUST_YES: Final = "Yes, I trust this folder"
+CURSOR: Final = "\u276f"
 
 # How long `agent.start` waits for the agent to be ready: the herdr CLI's own default.
-START_WAIT_MS = 30_000
+START_WAIT_MS: Final = 30_000
 # Long enough for that wait and the reply after it.
-CALL_SECONDS = START_WAIT_MS / 1000 + 10
+CALL_SECONDS: Final = START_WAIT_MS / 1000 + 10
 # How long a freshly split pane's shell may take to finish its startup files.
-SHELL_SECONDS = 15.0
+SHELL_SECONDS: Final = 15.0
 # How long a stopped server may take to let go of its socket.
-STOP_SECONDS = 10.0
+STOP_SECONDS: Final = 10.0
 # Each look at the socket or the agents is a herdr call, so look less often than at a page.
-LOOK_STEP = 0.25
-SETTLE_STEP = 1.0
+LOOK_STEP: Final = 0.25
+SETTLE_STEP: Final = 1.0
 
 
 def session_dir(session: str) -> Path:

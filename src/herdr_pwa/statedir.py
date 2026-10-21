@@ -4,9 +4,10 @@ import os
 import stat
 import tempfile
 from pathlib import Path
+from typing import Final
 
-DIR_MODE = 0o700
-FILE_MODE = 0o600
+DIR_MODE: Final = 0o700
+FILE_MODE: Final = 0o600
 
 
 def ensure_dir(path: Path) -> Path:

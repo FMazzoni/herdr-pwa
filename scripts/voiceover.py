@@ -5,6 +5,7 @@ is heard as one sentence, and its redraw says nothing and leaves its sheet as th
 
 from collections.abc import Callable
 from pathlib import Path
+from typing import Final
 
 from firefox import Bench, Marionette, phone_window
 from settle import settle
@@ -24,14 +25,14 @@ from tests.catalogue import (
 from tests.waiting import eventually
 from tests.webfakes import WORKING_SESSION, assistant_says, write_transcript
 
-WIDTH = 390
-HEIGHT = 844
-WAIT_SECONDS = 15.0
-TURNS = 12
+WIDTH: Final = 390
+HEIGHT: Final = 844
+WAIT_SECONDS: Final = 15.0
+TURNS: Final = 12
 
 # Records, from here on: each region drawn in and whether its host said busy as it landed,
 # every settle, and every sentence put in the live region.
-LISTEN = r"""
+LISTEN: Final = r"""
 window.__hpDrawn = []; window.__hpSaid = []; window.__hpSettled = 0;
 if (window.__hpListening) return true;
 window.__hpListening = true;
@@ -49,7 +50,7 @@ if (live) new MutationObserver(() => {
 document.addEventListener("htmx:afterSettle", () => { window.__hpSettled += 1; });
 return !!live;
 """
-HEARD = r"""
+HEARD: Final = r"""
 const busy = document.querySelector(".htmx-request, .htmx-swapping, .htmx-settling");
 const active = document.activeElement;
 return {
@@ -61,7 +62,7 @@ return {
 };
 """
 # What VoiceOver hears on the strip's one control: its text, minus every aria-hidden subtree.
-STRIP = r"""
+STRIP: Final = r"""
 const line = document.querySelector("#agent-stats summary");
 if (!line) return null;
 const parts = [];
@@ -77,22 +78,24 @@ return {
 """
 # The strip's sentence: the model, then what it says of the context, the turn and the spend.
 # The strip draws four facts for that sentence: model, context, turn, output.
-DRAWN_FACTS = 4
-SENTENCE = "Haiku 4.5, context 62 percent used, turn running 4 minutes, 38 thousand output tokens"
-FOCUS = r"""
+DRAWN_FACTS: Final = 4
+SENTENCE: Final = (
+    "Haiku 4.5, context 62 percent used, turn running 4 minutes, 38 thousand output tokens"
+)
+FOCUS: Final = r"""
 const button = document.querySelector("#answer .button--option");
 if (!button) return null;
 button.focus();
 window.__hpFocused = button;
 return document.activeElement === button ? button.textContent.trim() : null;
 """
-READY = r"""
+READY: Final = r"""
 const busy = document.querySelector(".htmx-request, .htmx-swapping, .htmx-settling, .boot");
 return document.readyState === "complete" && !busy && !!document.querySelector(arguments[0]);
 """
-POKE = "htmx.trigger(document.body, 'hp:poke');"
+POKE: Final = "htmx.trigger(document.body, 'hp:poke');"
 # A write's outcome banner: its words, and the verdict the server stamped on it.
-OUTCOME = r"""
+OUTCOME: Final = r"""
 const banner = document.querySelector(arguments[0]);
 if (!banner) return null;
 return {
@@ -101,7 +104,7 @@ return {
 };
 """
 # The verdict of a tap that landed and was seen to land, as the banner's data-hp-outcome starts.
-CONFIRMED = "confirmed:"
+CONFIRMED: Final = "confirmed:"
 
 
 def _heard(driver: Marionette) -> dict[str, object]:

@@ -7,6 +7,7 @@ import io
 import json
 from dataclasses import dataclass, field, replace
 from http import HTTPStatus
+from typing import Final
 
 import segno
 from pydantic import JsonValue, ValidationError
@@ -15,14 +16,14 @@ from herdr_pwa import tailscale
 from herdr_pwa.tailscale import ServeConfig
 from herdr_pwa.validation import is_not_json
 
-HTTPS_PORT = 443
+HTTPS_PORT: Final = 443
 # Narrower than 'tailscale serve reset', which would take every other handler offline too.
-TEARDOWN_COMMAND = f"tailscale serve --https={HTTPS_PORT} off"
-TAILNET_IS_THE_BOUNDARY = (
+TEARDOWN_COMMAND: Final = f"tailscale serve --https={HTTPS_PORT} off"
+TAILNET_IS_THE_BOUNDARY: Final = (
     "The URL is not a secret; the tailnet is the boundary: only a device signed into your "
     "tailnet can reach it."
 )
-_FUNNEL = "funnel"
+_FUNNEL: Final = "funnel"
 
 
 # tailscaled's own failures stay tailscale.LocalApiError, worded where tailscaled is asked.

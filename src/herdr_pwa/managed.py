@@ -3,16 +3,16 @@
 import logging
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Protocol
+from typing import Final, Protocol
 
 from herdr_pwa.ids import PaneId
 
 log = logging.getLogger(__name__)
 
-MANAGED_ENV = "HERDR_PWA_MANAGED"
-PROC = Path("/proc")
+MANAGED_ENV: Final = "HERDR_PWA_MANAGED"
+PROC: Final = Path("/proc")
 # Anything else, absent included, means unmanaged: the failure that still buzzes.
-_TRUE = frozenset({"1", "true", "yes"})
+_TRUE: Final = frozenset({"1", "true", "yes"})
 
 
 def _one_variable(pid: int, name: str, *, proc: Path) -> str:

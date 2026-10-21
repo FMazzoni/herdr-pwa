@@ -5,17 +5,19 @@ window timed inside the page is ordered with the page's own timers instead, so a
 scheduled before the window opened has run by the time it closes.
 """
 
+from typing import Final
+
 from firefox import Marionette
 
 # Long enough for htmx's settle (20ms), the dock's next frame and a live region's refill (50ms).
-QUIET_MS = 120
+QUIET_MS: Final = 120
 # app.js holds a redraw until the reader's scroll has been still for 250ms; this outlasts it.
-READER_STILL_MS = 300
-CEILING_MS = 15000
+READER_STILL_MS: Final = 300
+CEILING_MS: Final = 15000
 
 # Resolves true once nothing has changed for ``quiet`` ms: no htmx request or swap in flight, no
 # scroll, no node added or removed, and the same scroll position and page size frame to frame.
-SETTLE = r"""
+SETTLE: Final = r"""
 const [quiet, ceiling] = arguments;
 const done = arguments[arguments.length - 1];
 const busy = ".htmx-request, .htmx-swapping, .htmx-settling, .htmx-added";

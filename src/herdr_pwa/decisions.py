@@ -288,7 +288,7 @@ class Overlay:
 NO_OVERLAY: Final = Overlay()
 # herdr's word for a turn that has ended, and for the moment a retry runs before it is refused.
 _STOPS: Final = frozenset({AgentStatus.IDLE, AgentStatus.DONE})
-_STALLABLE: Final = _STOPS | {AgentStatus.WORKING}
+_STALLABLE: Final = _STOPS | frozenset({AgentStatus.WORKING})
 
 
 def context_stalled(turns: Sequence[TranscriptTurn]) -> bool:

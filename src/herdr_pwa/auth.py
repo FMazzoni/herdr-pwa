@@ -11,7 +11,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from http import HTTPStatus
 from http.client import HTTPException
-from typing import ClassVar
+from typing import ClassVar, Final
 from urllib.parse import SplitResult, urlsplit
 
 from pydantic import ValidationError
@@ -19,12 +19,12 @@ from pydantic import ValidationError
 from herdr_pwa import tailscale
 from herdr_pwa.validation import is_not_json
 
-IDENTITY_HEADER = "tailscale-user-login"
-SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
-VIA_TAILSCALE = "tailscale"
-VIA_CONFIG = "config"
+IDENTITY_HEADER: Final = "tailscale-user-login"
+SAFE_METHODS: Final = frozenset({"GET", "HEAD", "OPTIONS"})
+VIA_TAILSCALE: Final = "tailscale"
+VIA_CONFIG: Final = "config"
 # Names, not addresses: what the caller typed is what DNS rebinding cannot forge.
-LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost", "localhost."})
+LOOPBACK_HOSTS: Final = frozenset({"127.0.0.1", "::1", "localhost", "localhost."})
 
 
 class AuthError(Exception):

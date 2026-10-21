@@ -2,7 +2,7 @@
 
 import copy
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -120,7 +120,7 @@ class State:
     # The offline fallback is replayed by the worker with no script, so none is expected.
     scripted: bool = True
     prime: Prime | None = None
-    settings: dict[str, object] = field(default_factory=dict[str, object])
+    settings: Mapping[str, object] = field(default_factory=dict[str, object])
     # Proved while its tap is still out, so htmx never settles: wait for ``ready`` alone.
     in_flight: bool = False
 

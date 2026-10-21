@@ -8,8 +8,9 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Final
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT: Final = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
@@ -28,12 +29,12 @@ from playwright.sync_api import Error as BrowserError  # noqa: E402
 from tests.catalogue import State, pick  # noqa: E402
 
 # Gitignored scratch shared by every worktree; shots are looked at, never committed.
-OUT = ROOT / ".agents" / "shots"
-READY_MS = 15_000
+OUT: Final = ROOT / ".agents" / "shots"
+READY_MS: Final = 15_000
 # Lets the last poll's swap and the fonts settle before the picture is taken.
-SETTLE_MS = 400
+SETTLE_MS: Final = 400
 # WebKit refuses a picture taller than this many device pixels; a long file is cut to fit.
-MAX_SHOT_PX = 32_000
+MAX_SHOT_PX: Final = 32_000
 
 
 @dataclass(frozen=True)
@@ -49,11 +50,11 @@ class Device:
 # The iPhone the app is designed on, at its full standalone height rather than Playwright's
 # in-browser 664px; a Pro Max size run as a Home Screen app; and the
 # narrowest iPhone still in use.
-IPHONE = Device("iphone", 390, 844, 3)
-WIDE = Device("wide", 430, 932, 3)
-NARROW = Device("narrow", 320, 568, 2)
-DEVICES = (IPHONE, WIDE, NARROW)
-DESCRIPTOR = "iPhone 13"
+IPHONE: Final = Device("iphone", 390, 844, 3)
+WIDE: Final = Device("wide", 430, 932, 3)
+NARROW: Final = Device("narrow", 320, 568, 2)
+DEVICES: Final = (IPHONE, WIDE, NARROW)
+DESCRIPTOR: Final = "iPhone 13"
 
 
 def missing_browser() -> str:
@@ -84,7 +85,7 @@ def webkit() -> Iterator[Phone]:
 
 
 # The wireframe overlay: words become bars and colour goes grey, so only the layout reads.
-WIRE_CSS = Path(__file__).with_name("wire.css")
+WIRE_CSS: Final = Path(__file__).with_name("wire.css")
 
 
 @dataclass(frozen=True)
@@ -97,7 +98,7 @@ class Look:
 
 
 # The look every plain shot has: the device's own ratio, app.css as served.
-PLAIN = Look()
+PLAIN: Final = Look()
 
 
 def wire_css() -> str:
@@ -145,7 +146,7 @@ def snap(page: Page, target: Path) -> list[Path]:
     return [first, full]
 
 
-FORGET = "() => { try { localStorage.clear(); sessionStorage.clear(); } catch (e) {} }"
+FORGET: Final = "() => { try { localStorage.clear(); sessionStorage.clear(); } catch (e) {} }"
 
 
 def drive(page: Page, state: State, url: str) -> None:

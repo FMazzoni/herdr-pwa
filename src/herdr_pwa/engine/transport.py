@@ -181,7 +181,7 @@ def _why_unreachable(path: Path, exc: OSError) -> str:
     return f"could not connect to the runner at {path}: {exc}"
 
 
-_FRAME: TypeAdapter[JsonValue] = TypeAdapter(JsonValue)
+_FRAME: Final[TypeAdapter[JsonValue]] = TypeAdapter(JsonValue)
 
 
 def decode_frame(line: bytes) -> WireReply:

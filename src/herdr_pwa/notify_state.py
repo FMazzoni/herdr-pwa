@@ -7,7 +7,7 @@ import threading
 import time
 from collections.abc import Iterable, Mapping
 from pathlib import Path
-from typing import Annotated, Literal, Protocol
+from typing import Annotated, Final, Literal, Protocol
 
 from pydantic import (
     AfterValidator,
@@ -28,13 +28,13 @@ from herdr_pwa.validation import or_default
 
 log = logging.getLogger(__name__)
 
-LEDGER_FILENAME = "notify.json"
-SEEN_FILENAME = "seen.json"
-INTERRUPTS_FILENAME = "interrupts.json"
+LEDGER_FILENAME: Final = "notify.json"
+SEEN_FILENAME: Final = "seen.json"
+INTERRUPTS_FILENAME: Final = "interrupts.json"
 # A fat finger must not mute a whole day.
-MAX_DND_SECONDS = 12 * 3600
-SEEN_FLUSH_INTERVAL = 10.0
-SEEN_MAX_ENTRIES = 512
+MAX_DND_SECONDS: Final = 12 * 3600
+SEEN_FLUSH_INTERVAL: Final = 10.0
+SEEN_MAX_ENTRIES: Final = 512
 
 
 class _StateFile(BaseModel):

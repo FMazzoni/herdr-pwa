@@ -6,7 +6,8 @@ import logging
 import time
 from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, replace
-from typing import Protocol, Self
+from types import MappingProxyType
+from typing import Final, Protocol, Self
 
 from herdr_pwa.clock import Clock
 from herdr_pwa.decisions import NO_OVERLAY, Overlay, read_status
@@ -25,16 +26,16 @@ from herdr_pwa.settings import Settings
 
 log = logging.getLogger(__name__)
 
-IDLE = "idle"
-WORKING = "working"
-STATUSES = frozenset({IDLE, WORKING, EVENT_BLOCKED, EVENT_DONE})
-NOTIFYING = frozenset({EVENT_BLOCKED, EVENT_DONE})
+IDLE: Final = "idle"
+WORKING: Final = "working"
+STATUSES: Final = frozenset({IDLE, WORKING, EVENT_BLOCKED, EVENT_DONE})
+NOTIFYING: Final = frozenset({EVENT_BLOCKED, EVENT_DONE})
 # Keeps the address key space from ever meeting the session one.
-PANE_KEY = "pane:"
-MAX_NAME_CHARS = 40
-_ABSENT = "\x00absent"
+PANE_KEY: Final = "pane:"
+MAX_NAME_CHARS: Final = 40
+_ABSENT: Final = "\x00absent"
 # The verb goes first so a long agent title cannot truncate it away.
-_VERB = {EVENT_BLOCKED: "needs you", EVENT_DONE: "finished"}
+_VERB: Final = MappingProxyType({EVENT_BLOCKED: "needs you", EVENT_DONE: "finished"})
 
 
 class AgentView(Protocol):

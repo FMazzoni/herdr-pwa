@@ -8,6 +8,7 @@ from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from pathlib import Path
+from types import MappingProxyType
 from typing import (
     Annotated,
     BinaryIO,
@@ -675,7 +676,7 @@ def _last_writer(path: Path) -> str:
 
 
 # A head never changes once the file outgrows the window and its finish, so it is read once.
-_HEADS: Final[dict[tuple[str, int, int, int], str]] = {}
+_heads: Final[dict[tuple[str, int, int, int], str]] = {}
 
 _HEADS_MAX: Final = 4096
 
@@ -687,11 +688,11 @@ def _copied_from_cached(path: Path) -> str:
     except OSError:
         return ""
     key = (str(path), stat.st_dev, stat.st_ino, min(stat.st_size, _HEAD_BYTES + _HEAD_FINISH))
-    found = _HEADS.get(key)
+    found = _heads.get(key)
     if found is None:
-        if len(_HEADS) >= _HEADS_MAX:
-            _HEADS.clear()
-        found = _HEADS[key] = _copied_from(path)
+        if len(_heads) >= _HEADS_MAX:
+            _heads.clear()
+        found = _heads[key] = _copied_from(path)
     return found
 
 
@@ -1741,12 +1742,12 @@ class ClaudeAdapter(TranscriptAdapter):
         return None
 
 
-_ADAPTERS: Final[dict[str, TranscriptAdapter]] = {}
+_adapters: Final[dict[str, TranscriptAdapter]] = {}
 
 
 def _registry() -> dict[str, TranscriptAdapter]:
     """The adapters, built on first use."""
-    if not _ADAPTERS:
+    if not _adapters:
         # The adapters import this module, so importing them at the top would be a cycle.
         from herdr_pwa.engine.hermes import HermesAdapter  # noqa: PLC0415
         from herdr_pwa.engine.opencode import OpencodeAdapter  # noqa: PLC0415
@@ -1756,8 +1757,8 @@ def _registry() -> dict[str, TranscriptAdapter]:
             OpencodeAdapter(),
             HermesAdapter(),
         )
-        _ADAPTERS.update({adapter.harness.kind: adapter for adapter in adapters})
-    return _ADAPTERS
+        _adapters.update({adapter.harness.kind: adapter for adapter in adapters})
+    return _adapters
 
 
 def adapter_for(agent_kind: str | None) -> TranscriptAdapter | None:
@@ -1996,10 +1997,12 @@ _SPAWN_MARKS: Final = (
 # A call is answered within a few records; past this many an unanswered one is forgotten.
 _HELD_CALLS: Final = 64
 # What TaskStop says it stopped, as the tally's kinds.
-_STOPPED: Final = {"local_bash": SPAWNED_SHELL, "local_agent": SPAWNED_AGENT}
+_STOPPED: Final = MappingProxyType({"local_bash": SPAWNED_SHELL, "local_agent": SPAWNED_AGENT})
 # What a notice's summary calls each kind that ends here; measured, every "Task ... was stopped
 # by main session" names a shell a subagent left running, and no TaskStop result names it.
-_NOTICE_KINDS: Final = {"Agent": SPAWNED_AGENT, "Command": SPAWNED_SHELL, "Task": SPAWNED_SHELL}
+_NOTICE_KINDS: Final = MappingProxyType(
+    {"Agent": SPAWNED_AGENT, "Command": SPAWNED_SHELL, "Task": SPAWNED_SHELL}
+)
 _BASH: Final = "Bash"
 
 

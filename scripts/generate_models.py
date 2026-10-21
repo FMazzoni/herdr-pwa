@@ -12,7 +12,8 @@ import sys
 import tempfile
 import warnings
 from pathlib import Path
-from typing import Any
+from types import MappingProxyType
+from typing import Any, Final
 
 from datamodel_code_generator import (
     DataModelType,
@@ -22,12 +23,12 @@ from datamodel_code_generator import (
 )
 from datamodel_code_generator import generate as codegen
 
-ROOT = Path(__file__).resolve().parent.parent
-SCHEMA_PATH = ROOT / "tests" / "fixtures" / "herdr-api-schema.json"
-OUT_DIR = ROOT / "src" / "herdr_pwa" / "engine" / "generated"
+ROOT: Final = Path(__file__).resolve().parent.parent
+SCHEMA_PATH: Final = ROOT / "tests" / "fixtures" / "herdr-api-schema.json"
+OUT_DIR: Final = ROOT / "src" / "herdr_pwa" / "engine" / "generated"
 
 # Sub-schemas to generate, in the order they are written.
-SUB_SCHEMAS = (
+SUB_SCHEMAS: Final = (
     "success_response",
     "event",
     "subscription_event",
@@ -36,24 +37,26 @@ SUB_SCHEMAS = (
 )
 
 # Properties that act as a oneOf discriminator, most specific first.
-DISCRIMINATORS = ("type", "method", "event", "kind")
+DISCRIMINATORS: Final = ("type", "method", "event", "kind")
 
 # Passed to datamodel_code_generator.generate() in this interpreter; ruff formats its output.
-CODEGEN_OPTIONS = {
-    "input_file_type": InputFileType.JsonSchema,
-    "output_model_type": DataModelType.PydanticV2BaseModel,
-    "target_python_version": PythonVersion.PY_313,
-    "use_title_as_name": True,
-    "field_constraints": True,
-    "use_annotated": True,
-    "use_standard_collections": True,
-    "use_union_operator": True,
-    "use_schema_description": True,
-    "disable_timestamp": True,
-    # Format only: the CLI this replaced took `--formatters ruff-check --formatters ruff-format`,
-    # where the last flag wins, and the committed models are what that produced.
-    "formatters": [Formatter.RUFF_FORMAT],
-}
+CODEGEN_OPTIONS: Final = MappingProxyType(
+    {
+        "input_file_type": InputFileType.JsonSchema,
+        "output_model_type": DataModelType.PydanticV2BaseModel,
+        "target_python_version": PythonVersion.PY_313,
+        "use_title_as_name": True,
+        "field_constraints": True,
+        "use_annotated": True,
+        "use_standard_collections": True,
+        "use_union_operator": True,
+        "use_schema_description": True,
+        "disable_timestamp": True,
+        # Format only: the CLI this replaced took `--formatters ruff-check --formatters ruff-format`,
+        # where the last flag wins, and the committed models are what that produced.
+        "formatters": [Formatter.RUFF_FORMAT],
+    }
+)
 
 
 def capture_schema() -> None:

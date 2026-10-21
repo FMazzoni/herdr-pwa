@@ -8,8 +8,10 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from types import MappingProxyType
+from typing import Final
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT: Final = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
@@ -17,8 +19,8 @@ from shots import DEVICES, IPHONE, Device, Look, missing_browser, shoot  # noqa:
 
 from tests.catalogue import STATES, pick  # noqa: E402
 
-SHEETS = ROOT / ".agents" / "sheets"
-TITLES = {s.name: s.title for s in STATES}
+SHEETS: Final = ROOT / ".agents" / "sheets"
+TITLES: Final = MappingProxyType({s.name: s.title for s in STATES})
 
 
 @dataclass(frozen=True)
@@ -63,7 +65,7 @@ def _cell(side: Side, key: str, page: Page) -> str:
     )
 
 
-STYLE = """
+STYLE: Final = """
 :root { --ground: #f4f5f7; --ink: #1b2430; --ink-2: #5b6878; --card: #ffffff; --rule: #d9dee5; }
 @media (prefers-color-scheme: dark) {
   :root { --ground: #0c131b; --ink: #dee8f3; --ink-2: #9baec3; --card: #141d28; --rule: #2b3947; }

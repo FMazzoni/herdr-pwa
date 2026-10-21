@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from pathlib import Path
+from types import MappingProxyType
 from typing import Annotated, Final
 from urllib.parse import urlencode
 
@@ -42,7 +43,7 @@ from herdr_pwa.web.routers.agent import read_stats
 # An open file is re-checked on disk at the feed's quiet cadence.
 WATCH_CADENCE: Final = 10
 VIEWS: Final = ("changes", "tree", "find")
-NO_STORE: Final = {"Cache-Control": "no-store"}
+NO_STORE: Final = MappingProxyType({"Cache-Control": "no-store"})
 
 type From = Annotated[str, Query(alias="from")]
 

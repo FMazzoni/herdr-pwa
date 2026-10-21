@@ -7,6 +7,7 @@ import html
 import re
 from dataclasses import dataclass
 from enum import Enum
+from types import MappingProxyType
 from typing import Final
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -37,7 +38,9 @@ _SUMMARY: Final = re.compile(
     re.DOTALL,
 )
 _WAITING: Final = "waiting"
-_KINDS: Final = {"Agent": "Agent", "Background command": "Command", "Task": "Task"}
+_KINDS: Final = MappingProxyType(
+    {"Agent": "Agent", "Background command": "Command", "Task": "Task"}
+)
 _EXIT: Final = re.compile(r"exit code (-?\d+)")
 # What the harness puts in an agent's result in place of the report it delivers as a message.
 _RELAYED: Final = re.compile(r"\AThis agent(?:'s report was delivered| has not reported yet)")
@@ -220,7 +223,7 @@ _LIMIT: Final = re.compile(r"\AYou've hit your (\w+) limit · (resets .+)\Z", re
 # Claude Code's words for why a turn was refused, which an HTTP status is read into.
 _INVALID_REQUEST: Final = "invalid_request"
 _RATE_LIMIT: Final = "rate_limit"
-_BY_STATUS: Final = {400: _INVALID_REQUEST, 429: _RATE_LIMIT}
+_BY_STATUS: Final = MappingProxyType({400: _INVALID_REQUEST, 429: _RATE_LIMIT})
 # Not the API's: the person stopped the turn (opencode's MessageAbortedError).
 INTERRUPTED_CODE: Final = "interrupted"
 # The line's label for each kind; a task notice's are Agent, Command and Task.

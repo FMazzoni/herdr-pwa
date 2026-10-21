@@ -7,17 +7,18 @@
 import re
 import sys
 from pathlib import Path
+from typing import Final
 
-MAX_SUBJECT = 72
-MAX_SENTENCES = 5
+MAX_SUBJECT: Final = 72
+MAX_SENTENCES: Final = 5
 # git writes these subjects itself, so they are never held to the rules.
-MERGE = re.compile(r"Merge (branch|remote-tracking branch|tag|commit|pull request) ")
-UNFINISHED = re.compile(r"(wip\b|fixup!|squash!|amend!)", re.IGNORECASE)
+MERGE: Final = re.compile(r"Merge (branch|remote-tracking branch|tag|commit|pull request) ")
+UNFINISHED: Final = re.compile(r"(wip\b|fixup!|squash!|amend!)", re.IGNORECASE)
 # A trailer line as git interpret-trailers reads one: `Token: value`.
-TRAILER = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]*: ")
+TRAILER: Final = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]*: ")
 # A sentence ends at ., ! or ? (a run counts once, closing quotes or brackets allowed) before a space or the end.
-SENTENCE_END = re.compile(r"[.!?]+[\"')\]]*(?=\s|$)")
-SCISSORS = "# ------------------------ >8 ------------------------"
+SENTENCE_END: Final = re.compile(r"[.!?]+[\"')\]]*(?=\s|$)")
+SCISSORS: Final = "# ------------------------ >8 ------------------------"
 
 
 def _lines(message: str) -> list[str]:

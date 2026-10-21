@@ -9,11 +9,12 @@ import tomllib
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, Self
+from types import MappingProxyType
+from typing import Final, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT: Final = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
@@ -21,10 +22,10 @@ from shots import DEVICES, Look, missing_browser, shoot, wire_css  # noqa: E402
 
 from tests.catalogue import STATES, pick  # noqa: E402
 
-TITLES = {s.name: s.title for s in STATES}
-SCALE = "S: a few hours. M: about a day. L: several runs."
+TITLES: Final = MappingProxyType({s.name: s.title for s in STATES})
+SCALE: Final = "S: a few hours. M: about a day. L: several runs."
 # A claude.ai artifact holds 16MB; past this the page is too heavy to open on a phone anyway.
-HEAVY_BYTES = 12_000_000
+HEAVY_BYTES: Final = 12_000_000
 
 
 class Option(BaseModel):
@@ -209,7 +210,7 @@ def _area(area: Area, shelf: Shelf) -> str:
     )
 
 
-STYLE = """
+STYLE: Final = """
 :root { color-scheme: light dark; --ground: #f4f5f7; --card: #ffffff; --ink: #1b2430;
   --ink-2: #4f5b6a; --rule: #d5dbe3; --accent: #1f5fae; --keeps: #1d7a52; --bends: #8a5a00;
   --breaks: #b3261e; --gap: 16px; --radius: 10px; }

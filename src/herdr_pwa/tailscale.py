@@ -12,12 +12,12 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter, Valid
 from herdr_pwa.validation import OR_NONE, Text, is_not_json
 
 # LocalAPI refuses any request whose Host is not this exact name (its CSRF guard).
-LOCALAPI_HOST = "local-tailscaled.sock"
-STATUS_PATH = "/localapi/v0/status"
-SERVE_CONFIG_PATH = "/localapi/v0/serve-config"
-TIMEOUT = 10.0
-_MAX_BODY = 8 * 1024 * 1024
-REFUSED = frozenset({HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN})
+LOCALAPI_HOST: Final = "local-tailscaled.sock"
+STATUS_PATH: Final = "/localapi/v0/status"
+SERVE_CONFIG_PATH: Final = "/localapi/v0/serve-config"
+TIMEOUT: Final = 10.0
+_MAX_BODY: Final = 8 * 1024 * 1024
+REFUSED: Final = frozenset({HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN})
 
 
 class LocalApiError(RuntimeError):

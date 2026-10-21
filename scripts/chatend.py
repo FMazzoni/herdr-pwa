@@ -25,6 +25,8 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
+from types import MappingProxyType
+from typing import Final
 
 from firefox import Bench, Marionette, phone_window
 from pydantic import JsonValue
@@ -60,18 +62,18 @@ from tests.webfakes import (
     write_transcript,
 )
 
-WIDTH = 390
-HEIGHT = 844
-WAIT_SECONDS = 15.0
+WIDTH: Final = 390
+HEIGHT: Final = 844
+WAIT_SECONDS: Final = 15.0
 # A reader's place may move by a rounding error, never by a line.
-DRIFT = 3
-TURNS = 24
-LINES = 120
+DRIFT: Final = 3
+TURNS: Final = 24
+LINES: Final = 120
 # The newest line of the pane walks' terminal.
-LAST_LINE = f"step {LINES - 1:03d}"
+LAST_LINE: Final = f"step {LINES - 1:03d}"
 
 # Where the newest turn or terminal line, and the question if any, sit against the dock.
-PROBE = r"""
+PROBE: Final = r"""
 const units = document.querySelectorAll(
   "#agent-view .turn, #agent-view > .pane > .pane__line");
 const last = units[units.length - 1];
@@ -99,14 +101,14 @@ return {
   questionBottom: asked ? asked.bottom : null,
 };
 """
-POKE = "htmx.trigger(document.body, 'hp:poke');"
+POKE: Final = "htmx.trigger(document.body, 'hp:poke');"
 # Lines in the tool's result: open, it is taller than the screen.
-RESULT_LINES = 120
+RESULT_LINES: Final = 120
 # How far under the dock's top edge the newest turn may end and still count as the end (app.js).
-END_SLACK = 120
+END_SLACK: Final = 120
 
 # Open the last tool result and bring the middle of its output to the middle of the screen.
-OPEN_RESULT = r"""
+OPEN_RESULT: Final = r"""
 const details = [...document.querySelectorAll("#agent-view details.tool")].pop();
 if (!details) return false;
 details.querySelector("summary").click();
@@ -116,7 +118,7 @@ window.__hpSwaps = 0;
 document.addEventListener("htmx:afterSettle", () => { window.__hpSwaps += 1; });
 return true;
 """
-READ_RESULT = r"""
+READ_RESULT: Final = r"""
 const details = [...document.querySelectorAll("#agent-view details.tool")].pop();
 const busy = document.querySelector(".htmx-request, .htmx-swapping, .htmx-settling");
 return { open: !!(details && details.open), scrollY: window.scrollY,
@@ -125,10 +127,10 @@ return { open: !!(details && details.open), scrollY: window.scrollY,
 
 
 # The burst: calls in a row, the third of them failing, then the agent's reply.
-BURST = 6
-FAILS_AT = 2
+BURST: Final = 6
+FAILS_AT: Final = 2
 # Open the burst's first fold and its first call, and bring the fold to the middle of the screen.
-OPEN_FOLD = r"""
+OPEN_FOLD: Final = r"""
 const fold = document.querySelector("#agent-view details.tools");
 if (!fold) return false;
 fold.querySelector("summary").click();
@@ -139,7 +141,7 @@ window.__hpSwaps = 0;
 document.addEventListener("htmx:afterSettle", () => { window.__hpSwaps += 1; });
 return true;
 """
-READ_FOLD = r"""
+READ_FOLD: Final = r"""
 const folds = [...document.querySelectorAll("#agent-view details.tools")];
 const fold = folds[0];
 const failed = document.querySelector("#agent-view .tool--failed");
@@ -156,20 +158,20 @@ return {
 """
 
 # Close the first fold, leaving the call opened inside it open.
-CLOSE_FOLD = r"""
+CLOSE_FOLD: Final = r"""
 const fold = document.querySelector("#agent-view details.tools");
 if (!fold) return null;
 fold.querySelector("summary").click();
 return { open: fold.open, inner: !!fold.querySelector("details.tool[open]") };
 """
 # Redraw the named regions: the answer region alone, or every region on the page.
-REDRAW = r"""
+REDRAW: Final = r"""
 const ids = arguments[0];
 for (const id of ids) document.getElementById(id).__hpOld = true;
 if (ids.length === 1) htmx.trigger(document.getElementById(ids[0]), "hp:stale");
 else htmx.trigger(document.body, "hp:poke");
 """
-REDRAWN = r"""
+REDRAWN: Final = r"""
 const fold = document.querySelector("#agent-view details.tools");
 const busy = document.querySelector(".htmx-request, .htmx-swapping, .htmx-settling");
 const fresh = arguments[0].every((id) => !document.getElementById(id).__hpOld);
@@ -333,7 +335,7 @@ def follow(ctx: WalkCtx) -> list[str]:
 
 
 # How often the page fetched its own view: a swap would land it by the swap's pin, not the first.
-VIEW_READS = r"""
+VIEW_READS: Final = r"""
 const view = document.getElementById("agent-view");
 if (!view) return -1;
 const own = new URL(view.getAttribute("data-hp-poll"), location.href).href;
@@ -363,11 +365,13 @@ def cold(ctx: WalkCtx) -> list[str]:
 # A slow link, as a phone's often is, lets a frame run between two of the page's scripts. The page
 # is made to measure itself after one script (a resize, as iOS sends while its bars settle), and a
 # later one is held back until that frame has run.
-FRAME_JS = "/walk/frame.js"
-FRAMED = "/walk/framed"
-FRAME = f'dispatchEvent(new Event("resize")); requestAnimationFrame(() => fetch("{FRAMED}"));'
+FRAME_JS: Final = "/walk/frame.js"
+FRAMED: Final = "/walk/framed"
+FRAME: Final = (
+    f'dispatchEvent(new Event("resize")); requestAnimationFrame(() => fetch("{FRAMED}"));'
+)
 # The frame lands the page itself, as the dock's first measure does when it falls in that frame.
-LANDING_FRAME = f'hp.chatend.toEnd(); requestAnimationFrame(() => fetch("{FRAMED}"));'
+LANDING_FRAME: Final = f'hp.chatend.toEnd(); requestAnimationFrame(() => fetch("{FRAMED}"));'
 
 
 @dataclass(frozen=True, slots=True)
@@ -514,12 +518,12 @@ def columns_late(
 # does not, so the walk links the sheet by script for print, holds it past the first frame and
 # applies it on arrival. WebKit moves a page landed unstyled as the sheet applies, and that move
 # reads as the reader's scroll, so the page must not have moved before then.
-STYLE_JS = "/walk/style.js"
-STYLE_GO = "/walk/style-go"
-APP_CSS = re.compile(rb'<link rel="stylesheet" href="/static/app\.css\?v=[0-9a-f]+">')
+STYLE_JS: Final = "/walk/style.js"
+STYLE_GO: Final = "/walk/style-go"
+APP_CSS: Final = re.compile(rb'<link rel="stylesheet" href="/static/app\.css\?v=[0-9a-f]+">')
 # Under a digest the server does not know, app.css is never cached, so every load fetches it.
-LATE_CSS = "/static/app.css?v=0"
-STYLE = (
+LATE_CSS: Final = "/static/app.css?v=0"
+STYLE: Final = (
     'const link = document.createElement("link"); link.rel = "stylesheet"; link.media = "print"; '
     'link.addEventListener("load", () => { window.hpStyledAt = scrollY; link.media = "all"; }); '
     f'link.href = "{LATE_CSS}"; document.head.append(link); '
@@ -607,13 +611,13 @@ def asked(ctx: WalkCtx) -> list[str]:
     return problems
 
 
-GROW_TEXT = r"""
+GROW_TEXT: Final = r"""
 const root = document.documentElement;
 root.style.fontSize = parseFloat(getComputedStyle(root).fontSize) * arguments[0] + "px";
 return true;
 """
 # Where the question's first line sits, and whether the region is taller than the room for it.
-TALL = r"""
+TALL: Final = r"""
 const busy = document.querySelector(".htmx-request, .htmx-swapping, .htmx-settling");
 const question = document.querySelector("#answer .answer__question");
 const region = document.getElementById("answer");
@@ -670,7 +674,7 @@ def _landed_in_view(name: str, found: dict[str, object], *, printed: bool) -> li
     return [f"{name}: the question that arrived sits at {top:.0f}px, not {where}"]
 
 
-STALE = 'htmx.trigger(document.getElementById(arguments[0]), "hp:stale");'
+STALE: Final = 'htmx.trigger(document.getElementById(arguments[0]), "hp:stale");'
 
 
 def _question_landed(ctx: WalkCtx, *, printed: bool, answer_first: bool = False) -> list[str]:
@@ -724,7 +728,7 @@ def question_printed_after(ctx: WalkCtx) -> list[str]:
     return _question_landed(ctx, printed=True, answer_first=True)
 
 
-JUMP = r"""
+JUMP: Final = r"""
 const jump = document.getElementById("hp-jump");
 const busy = document.querySelector(".htmx-request, .htmx-swapping, .htmx-settling");
 const gap = document.documentElement.scrollHeight - innerHeight - scrollY;
@@ -756,14 +760,14 @@ def waiting_pill(ctx: WalkCtx) -> list[str]:
 
 
 # Marks this document, so a new one shows the tap opened a page rather than jumped in this one.
-DOOR_TAP = r"""
+DOOR_TAP: Final = r"""
 window.__hpDoorLeft = true;
 const door = document.querySelector("#answer .answer__go");
 if (door) setTimeout(() => door.click(), 0);
 return { door: !!door, length: history.length };
 """
-DOOR_DRAWN = 'return document.querySelector("#answer .answer__go") !== null;'
-DOOR_LANDED = r"""
+DOOR_DRAWN: Final = 'return document.querySelector("#answer .answer__go") !== null;'
+DOOR_LANDED: Final = r"""
 const jump = document.getElementById("hp-jump");
 const busy = document.querySelector(".htmx-request, .htmx-swapping, .htmx-settling");
 const arrived = location.search === "?tab=pane" && (!window.__hpDoorLeft || location.hash !== "");
@@ -802,7 +806,7 @@ def pane_door(ctx: WalkCtx) -> list[str]:
 
 
 # The answer region once the view's own read has drawn, whatever it drew.
-UNREAD = r"""
+UNREAD: Final = r"""
 const busy = document.querySelector(".htmx-request, .htmx-swapping, .htmx-settling");
 const region = document.getElementById("answer");
 const view = document.getElementById("agent-view");
@@ -1028,7 +1032,7 @@ def _closed_stays(driver: Marionette, tab: Tab) -> list[str]:
 # A finger, and a reader's scroll that has not been heard yet.
 
 # A finger on the glass as iOS reports it, and a count of what the stats strip did since.
-FINGER = r"""
+FINGER: Final = r"""
 const [kind] = arguments;
 if (!window.__hpStrip) {
   window.__hpStrip = { answered: 0, swaps: 0 };
@@ -1045,11 +1049,11 @@ Object.defineProperty(e, "touches", { value: kind === "touchstart" ? [{}] : [] }
 document.dispatchEvent(e);
 return true;
 """
-READ_STRIP = r"""
+READ_STRIP: Final = r"""
 const busy = document.querySelector(".htmx-request, .htmx-swapping, .htmx-settling");
 return { ...window.__hpStrip, busy: !!busy, there: !!document.getElementById("agent-stats") };
 """
-STRIP_STALE = "htmx.trigger(document.getElementById('agent-stats'), 'hp:stale');"
+STRIP_STALE: Final = "htmx.trigger(document.getElementById('agent-stats'), 'hp:stale');"
 
 
 def strip_under_finger(ctx: WalkCtx) -> list[str]:
@@ -1073,7 +1077,7 @@ def strip_under_finger(ctx: WalkCtx) -> list[str]:
 
 
 # Scroll up from the end, and before that scroll is heard, land a swap that does not move the page.
-UNHEARD = r"""
+UNHEARD: Final = r"""
 const [by] = arguments;
 window.__hpHeard = 0;
 window.addEventListener("scroll", () => { window.__hpHeard += 1; }, { passive: true });
@@ -1086,11 +1090,11 @@ document.dispatchEvent(new CustomEvent("htmx:beforeSwap", { detail: detail }));
 document.dispatchEvent(new CustomEvent("htmx:afterSwap", { detail: detail }));
 return window.scrollY;
 """
-HEARD = r"""
+HEARD: Final = r"""
 const busy = document.querySelector(".htmx-request, .htmx-swapping, .htmx-settling");
 return { heard: window.__hpHeard, swaps: window.__hpSwaps, scrollY: window.scrollY, busy: !!busy };
 """
-UNHEARD_PX = 400
+UNHEARD_PX: Final = 400
 
 
 def unheard_scroll(ctx: WalkCtx) -> list[str]:
@@ -1118,7 +1122,7 @@ def unheard_scroll(ctx: WalkCtx) -> list[str]:
 
 # Before the view's own redraw is swapped in, scroll up from the end: the redraw lands between
 # the reader's scroll and its event, as one does when the page's next frame is late.
-UNHEARD_READ = r"""
+UNHEARD_READ: Final = r"""
 const [by] = arguments;
 const gap = () => document.documentElement.scrollHeight - innerHeight - scrollY;
 const seen = { up: null, heard: 0, atEnd: 0, swaps: 0 };
@@ -1143,7 +1147,7 @@ addEventListener("scroll", () => {
 htmx.trigger(document.body, "hp:poke");
 return true;
 """
-READ_UNHEARD = r"""
+READ_UNHEARD: Final = r"""
 const seen = window.__hpUnheard || {};
 const busy = document.querySelector(".htmx-request, .htmx-swapping, .htmx-settling");
 const gap = document.documentElement.scrollHeight - innerHeight - scrollY;
@@ -1184,19 +1188,21 @@ def unheard_read(ctx: WalkCtx) -> list[str]:
 
 # Paging and the event stream.
 
-PAGE_MESSAGES = 20
+PAGE_MESSAGES: Final = 20
 # The rig's stream: a quick watcher, and a fallback poll short enough to see inside a walk.
-LIVE_SETTINGS: dict[str, object] = {"events_interval": 0.2, "events_fallback": 2}
+LIVE_SETTINGS: Final[MappingProxyType[str, object]] = MappingProxyType(
+    {"events_interval": 0.2, "events_fallback": 2}
+)
 # Half as long again as one fallback poll, timed in the page: a page that polls while its
 # stream is up shows here, because the poll's own timer is ordered before the window's end.
-QUIET_MS = 3000
+QUIET_MS: Final = 3000
 # Watcher looks after a change before a second refresh for it would have been published.
-LOOKS_AFTER = 2
+LOOKS_AFTER: Final = 2
 # Two polls with the stream down, so the page is seen polling on its interval, not once.
-MIN_FALLBACK_POLLS = 2
-RECONNECT_SECONDS = 25.0
+MIN_FALLBACK_POLLS: Final = 2
+RECONNECT_SECONDS: Final = 25.0
 
-COUNT_CHAT = r"""
+COUNT_CHAT: Final = r"""
 window.__hpChat = 0;
 if (!window.__hpCounting) {
   window.__hpCounting = true;
@@ -1207,9 +1213,9 @@ if (!window.__hpCounting) {
 }
 return true;
 """
-READ_COUNT = "return window.__hpChat || 0;"
+READ_COUNT: Final = "return window.__hpChat || 0;"
 # How many chat fetches the page made over ``ms`` of its own time from now.
-COUNT_OVER = r"""
+COUNT_OVER: Final = r"""
 const [ms] = arguments;
 const done = arguments[arguments.length - 1];
 window.__hpChat = 0;
@@ -1217,7 +1223,7 @@ setTimeout(() => done(window.__hpChat), ms);
 """
 # Whether the page's event stream is open now, read off its own request: app.js keeps no flag
 # a script can see, so every request to /events made from here on is watched.
-WATCH_STREAM = r"""
+WATCH_STREAM: Final = r"""
 if (window.__hpWatching) return true;
 window.__hpWatching = true;
 window.__hpStream = false;
@@ -1239,10 +1245,10 @@ XMLHttpRequest.prototype.send = function () {
 };
 return true;
 """
-STREAM_OPEN = "return window.__hpStream === true;"
+STREAM_OPEN: Final = "return window.__hpStream === true;"
 # The first message wholly in view under the top bar, how many there are, and whether the
 # reader is at the end as well as at the top.
-EARLIER = r"""
+EARLIER: Final = r"""
 const busy = document.querySelector(".htmx-request, .htmx-swapping, .htmx-settling");
 if (busy || document.readyState !== "complete") return null;
 const under = document.querySelector(".topbar").getBoundingClientRect().bottom;
@@ -1467,9 +1473,9 @@ def falls_back(  # noqa: PLR0915 - a browser walk reads as one story, step by st
 # A reader scrolling up from the end in small steps while the agent works and the region is
 # redrawn under them. Each step is a user scroll; the walk counts every return to the end and
 # measures, across each redraw, the line the reader was reading.
-STEP = 10
-REDRAW_SECONDS = 0.3
-SCROLL_UP = r"""
+STEP: Final = 10
+REDRAW_SECONDS: Final = 0.3
+SCROLL_UP: Final = r"""
 const [step, every, count] = arguments;
 const walk = { steps: 0, swaps: [], atEnd: 0, done: false };
 window.__hpWalk = walk;
@@ -1498,7 +1504,7 @@ const timer = setInterval(() => {
 }, every);
 return true;
 """
-READ_WALK = r"""
+READ_WALK: Final = r"""
 const walk = window.__hpWalk || {};
 const gap = document.documentElement.scrollHeight - innerHeight - scrollY;
 return { done: !!walk.done, steps: walk.steps || 0, swaps: walk.swaps || [],
@@ -1591,9 +1597,9 @@ def scrolling_up(every: float, count: int) -> Walk:
 # composer is fixed to. Here the window is the band, so innerHeight and scrollY are real; only
 # the layout viewport's height and the band's offset in it are told. Not an iPhone: it checks
 # that the dock is measured against the numbers WebKit gives, not how iOS moves anything.
-KEYBOARD_PX = 413
-KEYBOARD_STEPS = 40
-KEYBOARD = r"""
+KEYBOARD_PX: Final = 413
+KEYBOARD_STEPS: Final = 40
+KEYBOARD: Final = r"""
 const [layout] = arguments;
 const root = document.documentElement;
 const view = window.visualViewport;
@@ -1635,10 +1641,10 @@ view.dispatchEvent(new Event("resize"));
 pan();
 return true;
 """
-READ_KEYBOARD = "return window.__hpKb || {};"
+READ_KEYBOARD: Final = "return window.__hpKb || {};"
 # A pan of the band alone, its height and the page's scroll unchanged, as a browser whose scrollY
 # is the layout viewport's reports one: the keyboard did not move, so no script may move the page.
-PAN_PINNED = r"""
+PAN_PINNED: Final = r"""
 const [tops] = arguments;
 const done = arguments[arguments.length - 1];
 const kb = window.__hpKb;
@@ -1664,12 +1670,12 @@ const step = (i) => {
 };
 step(0);
 """
-PAN_TOPS = [400, 300, 200, 100, 0]
+PAN_TOPS: Final = (400, 300, 200, 100, 0)
 # iOS swaps the band's offset between 0 and the keyboard mid-fling (device-report.jsonl), and the
 # composer drawn in that frame carries whatever lift the handler left: it must be right as soon as
 # the event returns, not a frame later. A repeat of the same offset writes nothing, because --kb
 # sits on <html> and every write restyles the whole chat.
-SWAP = r"""
+SWAP: Final = r"""
 const [tops] = arguments;
 const done = arguments[arguments.length - 1];
 const kb = window.__hpKb;
@@ -1702,7 +1708,7 @@ frames(2, () => {
   });
 });
 """
-SWAP_TOPS = [0, 241.7, 413]
+SWAP_TOPS: Final = (0, 241.7, 413)
 # After a downward scroll iOS leaves the band at the layout viewport's bottom (offsetTop 413 in
 # device-report.jsonl), so the keyboard's pill sits below the layout viewport, where a fixed box's
 # overflow is not drawn: the page under it must carry the composer's colour. A fling moves the page
@@ -1711,10 +1717,10 @@ SWAP_TOPS = [0, 241.7, 413]
 # missing under the pill or lie over the chat above the composer, and the page may not grow. Past
 # the page's end iOS paints its under-page colour, which WebKit takes from <html>'s background with
 # <body>'s blended over it, so <body> must not paint an opaque colour of its own there.
-PILL_PX = 44
-FLING_STEPS = 5
-FLING_PX = 80
-FLING = r"""
+PILL_PX: Final = 44
+FLING_STEPS: Final = 5
+FLING_PX: Final = 80
+FLING: Final = r"""
 const [pill, steps, px] = arguments;
 const done = arguments[arguments.length - 1];
 const kb = window.__hpKb;
@@ -1846,7 +1852,7 @@ def _scroll_pane(rig: Rig, _home: Path, n: int) -> str:
 
 # The turn the reader is on (the first whose top is below the bar), and how many are drawn; and,
 # from the moment it is armed, whether the log was ever left with no turns at all.
-PLACE = r"""
+PLACE: Final = r"""
 const under = document.querySelector(".topbar").getBoundingClientRect().bottom;
 const turns = [...document.querySelectorAll("#agent-view .turn")];
 const on = turns.find((t) => t.getBoundingClientRect().top >= under);
@@ -1855,13 +1861,13 @@ const busy = document.querySelector(".htmx-request, .htmx-swapping, .htmx-settli
 return { key: on ? on.getAttribute("data-hp-key") : "", top: on ? on.getBoundingClientRect().top : null,
   turns: turns.length, note: note ? note.textContent : "", blank: !!window.__hpBlank, busy: !!busy };
 """
-ARM_BLANK = r"""
+ARM_BLANK: Final = r"""
 window.__hpBlank = false;
 new MutationObserver(() => {
   if (!document.querySelector("#agent-view .turn")) window.__hpBlank = true;
 }).observe(document.body, { childList: true, subtree: true });
 """
-HELD_NOTE = "could not be read just now"
+HELD_NOTE: Final = "could not be read just now"
 
 
 def _place(driver: Marionette) -> dict[str, object]:
@@ -1923,7 +1929,7 @@ def locked(ctx: WalkCtx) -> list[str]:
 
 
 # The stats sheet in the top bar: open it, and how tall it stands open over its line alone.
-OPEN_SHEET = r"""
+OPEN_SHEET: Final = r"""
 const sheet = document.querySelector("#agent-stats details");
 if (!sheet) return null;
 const line = sheet.querySelector("summary").getBoundingClientRect().height;
@@ -1931,11 +1937,11 @@ if (!sheet.open) sheet.querySelector("summary").click();
 return { open: sheet.open, grew: sheet.getBoundingClientRect().height - line };
 """
 # Mark the strip as drawn before, then have it redraw itself as the stream would.
-STATS_STALE = r"""
+STATS_STALE: Final = r"""
 document.getElementById("agent-stats").__hpOld = true;
 htmx.trigger(document.getElementById("agent-stats"), "hp:stale");
 """
-STATS_REDRAWN = r"""
+STATS_REDRAWN: Final = r"""
 const strip = document.getElementById("agent-stats");
 const sheet = strip && strip.querySelector("details");
 const busy = document.querySelector(".htmx-request, .htmx-swapping, .htmx-settling");

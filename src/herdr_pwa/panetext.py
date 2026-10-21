@@ -4,6 +4,7 @@ import re
 import unicodedata
 from collections.abc import Iterator
 from dataclasses import dataclass, field
+from types import MappingProxyType
 from typing import Final
 
 
@@ -103,15 +104,13 @@ def _is_rule_line(text: str) -> bool:
     return len(body) >= _RULE_MIN and all(c in _RULE_LINE_CHARS for c in body)
 
 
-_BOX: str = "".join(chr(c) for c in range(0x2500, 0x25A0))
-_WS: str = " \t\u00a0"
+_BOX: Final = "".join(chr(c) for c in range(0x2500, 0x25A0))
+_WS: Final = " \t\u00a0"
 
-_LEAD_FRAME: re.Pattern[str] = re.compile(
-    f"^[{re.escape(_WS)}]*(?:[{re.escape(_BOX)}][{re.escape(_WS)}]*)+"
-)
-_TAIL_FRAME: re.Pattern[str] = re.compile(f"[{re.escape(_WS)}{re.escape(_BOX)}]*$")
+_LEAD_FRAME: Final = re.compile(f"^[{re.escape(_WS)}]*(?:[{re.escape(_BOX)}][{re.escape(_WS)}]*)+")
+_TAIL_FRAME: Final = re.compile(f"[{re.escape(_WS)}{re.escape(_BOX)}]*$")
 # Twelve, not four: four spaces is code indentation behind a diff gutter.
-_PADDING: re.Pattern[str] = re.compile(f"[{re.escape(_WS)}]{{12,}}")
+_PADDING: Final = re.compile(f"[{re.escape(_WS)}]{{12,}}")
 
 
 # Two questions that look like one: "is this the input box border" and "does this row wrap".
@@ -128,9 +127,7 @@ def is_box_border(text: str) -> bool:
 
 
 _WIDE_RULE_CHARS: Final = "".join(sorted(c for c in _RULE_LINE_CHARS if not c.isspace()))
-_WIDE_RULE_RUN: re.Pattern[str] = re.compile(
-    f"[{re.escape(_WIDE_RULE_CHARS)}]{{{BORDER_MIN_CELLS},}}"
-)
+_WIDE_RULE_RUN: Final = re.compile(f"[{re.escape(_WIDE_RULE_CHARS)}]{{{BORDER_MIN_CELLS},}}")
 _WIDE_RULE_SHARE: Final = 0.75
 
 
@@ -378,14 +375,16 @@ def _extended_colour(params: list[int], start: int) -> tuple[int | None, int]:
     return None, len(params) - start + 1
 
 
-_ATTRIBUTE_CODES: Final[dict[int, tuple[str, bool]]] = {
-    1: ("bold", True),
-    2: ("dim", True),
-    3: ("italic", True),
-    4: ("underline", True),
-    23: ("italic", False),
-    24: ("underline", False),
-}
+_ATTRIBUTE_CODES: Final[MappingProxyType[int, tuple[str, bool]]] = MappingProxyType(
+    {
+        1: ("bold", True),
+        2: ("dim", True),
+        3: ("italic", True),
+        4: ("underline", True),
+        23: ("italic", False),
+        24: ("underline", False),
+    }
+)
 
 
 def _basic_slot(code: int) -> int | None:
@@ -549,7 +548,7 @@ def _screen_width(rows: list[str]) -> int:
     return max((cells(row.rstrip()) for row in rows), default=0)
 
 
-_BESIDE_BOX_RE = re.compile(r"\s{2,}[┌╭│┃├┝└╰]")
+_BESIDE_BOX_RE: Final = re.compile(r"\s{2,}[┌╭│┃├┝└╰]")
 """The gap and the side of a box drawn right of a row, as a preview beside an option is."""
 
 

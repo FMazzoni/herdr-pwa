@@ -6,6 +6,7 @@ import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
+from types import MappingProxyType
 from typing import Final, cast
 
 import pygit2
@@ -35,15 +36,17 @@ _UNTRACKED: Final = _STATUS | DiffOption.INCLUDE_UNTRACKED | DiffOption.RECURSE_
 # What a read of a repository an agent is rewriting under us can raise; each is a failed read.
 _FAILED: Final = (pygit2.GitError, OSError, KeyError, ValueError)
 # git status's two-letter code for a conflict, by which of base, ours and theirs exist.
-_CONFLICT: Final = {
-    (True, False, False): "DD",
-    (False, True, False): "AU",
-    (True, True, False): "UD",
-    (False, False, True): "UA",
-    (True, False, True): "DU",
-    (False, True, True): "AA",
-    (True, True, True): "UU",
-}
+_CONFLICT: Final = MappingProxyType(
+    {
+        (True, False, False): "DD",
+        (False, True, False): "AU",
+        (True, True, False): "UD",
+        (False, False, True): "UA",
+        (True, False, True): "DU",
+        (False, True, True): "AA",
+        (True, True, True): "UU",
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)

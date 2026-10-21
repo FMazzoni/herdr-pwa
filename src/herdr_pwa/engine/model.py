@@ -6,7 +6,8 @@ from collections import Counter
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Self, cast
+from types import MappingProxyType
+from typing import Final, Self, cast
 
 from pydantic import BaseModel, ConfigDict, computed_field
 
@@ -53,12 +54,12 @@ def screen_digest(screen: str) -> str:
     return hashlib.sha256(screen.encode("utf-8", "replace")).hexdigest()[:16]
 
 
-EXPECTED_PROTOCOL = _EXPECTED_PROTOCOL
+EXPECTED_PROTOCOL: Final = _EXPECTED_PROTOCOL
 
 
-_PANE_SHAPE = re.compile(r"[^\s:]+:[^\s:]+")
+_PANE_SHAPE: Final = re.compile(r"[^\s:]+:[^\s:]+")
 
-_UUID_SHAPE = re.compile(
+_UUID_SHAPE: Final = re.compile(
     r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
 )
 
@@ -116,13 +117,15 @@ class AgentStatus(StrEnum):
             return cls.UNKNOWN
 
 
-_RANKS: dict[AgentStatus, int] = {
-    AgentStatus.BLOCKED: 0,
-    AgentStatus.DONE: 1,
-    AgentStatus.WORKING: 2,
-    AgentStatus.IDLE: 3,
-    AgentStatus.UNKNOWN: 4,
-}
+_RANKS: Final[MappingProxyType[AgentStatus, int]] = MappingProxyType(
+    {
+        AgentStatus.BLOCKED: 0,
+        AgentStatus.DONE: 1,
+        AgentStatus.WORKING: 2,
+        AgentStatus.IDLE: 3,
+        AgentStatus.UNKNOWN: 4,
+    }
+)
 
 
 def rank(status: object) -> int:

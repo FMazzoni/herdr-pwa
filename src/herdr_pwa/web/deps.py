@@ -4,6 +4,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Final
 
 from fastapi import Request
 
@@ -28,7 +29,7 @@ from herdr_pwa.web.stalls import Stalls
 from herdr_pwa.writes.lifecycle import Which
 from herdr_pwa.writes.outcome import Pacing
 
-HIDDEN_HEADER = "HP-Hidden"
+HIDDEN_HEADER: Final = "HP-Hidden"
 
 
 @dataclass(frozen=True, slots=True)

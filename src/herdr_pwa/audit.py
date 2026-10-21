@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from types import TracebackType
-from typing import Annotated, Literal, NotRequired, Self, TypedDict
+from typing import Annotated, Final, Literal, NotRequired, Self, TypedDict
 
 from pydantic import Field, TypeAdapter, ValidationError
 
@@ -26,21 +26,21 @@ from herdr_pwa.statedir import FILE_MODE
 
 log = logging.getLogger(__name__)
 
-AUDIT_FILENAME = "audit.log"
+AUDIT_FILENAME: Final = "audit.log"
 # Two generations bound the disk use with no dated files and so no reaper.
-ROTATED_FILENAME = "audit.log.1"
-PROMPT = "prompt"
-KEYS = "keys"
-START = "start"
+ROTATED_FILENAME: Final = "audit.log.1"
+PROMPT: Final = "prompt"
+KEYS: Final = "keys"
+START: Final = "start"
 # Close is recorded because it is the one write with no undo.
-CLOSE = "close"
-ENDPOINTS = frozenset({PROMPT, KEYS, START, CLOSE})
-ATTEMPT = "attempt"
-OUTCOME = "outcome"
-UNREADABLE = "unreadable"
-OMITTED_NO_ECHO = "no_echo_prompt"
-UNRECORDED = "unrecorded"
-_MARK = "…[truncated: {total} chars sent]"
+CLOSE: Final = "close"
+ENDPOINTS: Final = frozenset({PROMPT, KEYS, START, CLOSE})
+ATTEMPT: Final = "attempt"
+OUTCOME: Final = "outcome"
+UNREADABLE: Final = "unreadable"
+OMITTED_NO_ECHO: Final = "no_echo_prompt"
+UNRECORDED: Final = "unrecorded"
+_MARK: Final = "…[truncated: {total} chars sent]"
 
 
 class Attempt(TypedDict):
@@ -88,7 +88,7 @@ class Unreadable(TypedDict):
 
 # A record is read by key, as a person reading the log would; the phase says which one it is.
 type Record = Attempt | Outcome | Unreadable
-_LINE: TypeAdapter[Attempt | Outcome] = TypeAdapter(
+_LINE: Final[TypeAdapter[Attempt | Outcome]] = TypeAdapter(
     Annotated[Attempt | Outcome, Field(discriminator="phase")]
 )
 

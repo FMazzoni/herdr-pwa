@@ -1,5 +1,6 @@
 """The installable shell at root scope: worker, manifest, home-screen icons, offline page."""
 
+from types import MappingProxyType
 from typing import Final
 
 from fastapi import APIRouter, Depends
@@ -13,12 +14,14 @@ SHELL_CACHE: Final = "no-cache"
 WORKER: Final = "sw.js"
 MANIFEST: Final = "manifest.webmanifest"
 # The root names iOS probes for a home-screen icon, and the file that answers each.
-TOUCH_ICONS: Final = {
-    "/apple-touch-icon.png": "apple-touch-icon.png",
-    "/apple-touch-icon-precomposed.png": "apple-touch-icon.png",
-    "/apple-touch-icon-120x120.png": "apple-touch-icon-120x120.png",
-    "/apple-touch-icon-120x120-precomposed.png": "apple-touch-icon-120x120.png",
-}
+TOUCH_ICONS: Final = MappingProxyType(
+    {
+        "/apple-touch-icon.png": "apple-touch-icon.png",
+        "/apple-touch-icon-precomposed.png": "apple-touch-icon.png",
+        "/apple-touch-icon-120x120.png": "apple-touch-icon-120x120.png",
+        "/apple-touch-icon-120x120-precomposed.png": "apple-touch-icon-120x120.png",
+    }
+)
 
 
 def _root_scoped(assets: Assets, name: str, media_type: str) -> Response:
