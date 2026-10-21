@@ -90,7 +90,7 @@ def doubt(agent: Agent, witness: Witness) -> str:
 def _leader(client: HerdrClient, agent: Agent) -> int | None:
     try:
         return client.foreground_leader(agent.target)
-    except Exception:  # any runner failure only loses the proof, and the doubt stands
+    except EngineError:  # a runner that will not say only loses the proof, and the doubt stands
         log.debug("no process info for %s", agent.target, exc_info=True)
         return None
 

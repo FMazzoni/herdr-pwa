@@ -18,7 +18,7 @@ from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from pydantic import ValidationError
 from pywebpush import WebPushException
 
-from herdr_pwa import push
+from herdr_pwa import push, statedir
 from herdr_pwa.push import (
     EVENT_BLOCKED,
     EVENT_CLEAR,
@@ -245,14 +245,20 @@ def test_a_corrupt_store_is_loud(store: SubscriptionStore, content: str) -> None
         _ = store.list_all()
 
 
-def test_a_failed_write_keeps_the_previous_store(store: SubscriptionStore) -> None:
+def test_a_failed_write_keeps_the_previous_store(
+    store: SubscriptionStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
     _ = store.add(subscribed())
     before = store.path.read_text()
-    # A directory where the temporary file must go makes the write itself fail.
-    store.path.with_name(store.path.name + ".tmp").mkdir()
-    with pytest.raises(IsADirectoryError):
+    # A full disk surfaces at the flush to it, before the rename could replace the store.
+    monkeypatch.setattr(statedir.os, "fsync", _disk_full)
+    with pytest.raises(OSError, match="disk full"):
         _ = store.add(subscribed("https://fcm.googleapis.com/fcm/send/two"))
     assert store.path.read_text() == before
+
+
+def _disk_full(_fd: int) -> None:
+    raise OSError("disk full")
 
 
 def test_ansi_osc_controls_bidi_and_zero_width_are_stripped() -> None:

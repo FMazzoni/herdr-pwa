@@ -2,6 +2,7 @@
 
 import os
 import stat
+import tempfile
 from pathlib import Path
 
 DIR_MODE = 0o700
@@ -30,12 +31,19 @@ def write_secret(path: Path, text: str, *, exclusive: bool = False) -> None:
         FileExistsError: exclusive and the file already exists.
         OSError: the write failed, or the file ended up other than 0600 (``PermissionError``).
     """
-    flags = os.O_WRONLY | os.O_CREAT | (os.O_EXCL if exclusive else os.O_TRUNC)
-    target = path if exclusive else path.with_name(path.name + ".tmp")
-    fd = os.open(target, flags, FILE_MODE)
+    if exclusive:
+        target = path
+        fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, FILE_MODE)
+    else:
+        # mkstemp opens a fresh 0600 name with O_EXCL, so a planted scratch is never reused.
+        fd, name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+        target = Path(name)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             _ = handle.write(text)
+            handle.flush()
+            # rename(2) orders nothing on disk; without the fsync a crash can leave the name empty.
+            os.fsync(handle.fileno())
         target.chmod(FILE_MODE)
         _check_mode(target)
         if not exclusive:
