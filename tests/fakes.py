@@ -183,7 +183,7 @@ class Clock:
 class Agent:
     """One agent in the shape the engine reports, as far as the notifier reads it."""
 
-    session: str = "11111111-1111-4111-8111-111111111111"
+    session: str = "5e550001-0000-0000-0000-000000000000"
     status: str = "working"
     target: str = "w1:p1"
     title: str = "fix the parser"

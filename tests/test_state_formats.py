@@ -19,7 +19,7 @@ from herdr_pwa.notify_state import Interrupts, InterruptStore, SeenLedger, Statu
 from tests.fakes import Clock
 
 NOW = 1_792_000_000.0
-SESSION = "11111111-1111-4111-8111-111111111111"
+SESSION = "5e550001-0000-0000-0000-000000000000"
 OBJECT: TypeAdapter[dict[str, JsonValue]] = TypeAdapter(dict[str, JsonValue])
 
 

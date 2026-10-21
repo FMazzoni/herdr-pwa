@@ -20,8 +20,8 @@ from tests._fake_herd import P3, SETTLED, FakeHerd, Rig, echoed, rig
 OLD = "/home/user/projects/before"
 NEW = "/home/user/projects/after"
 REPO = "/home/user/projects/app"
-SESSION = "00000000-0000-4000-8000-000000000071"
-OTHER = "00000000-0000-4000-8000-000000000007"
+SESSION = "5e550017-0000-0000-0000-000000000000"
+OTHER = "00000090-0000-0000-0000-000000000000"
 LEADER = 5001
 NESTED = 5002
 START = 12345

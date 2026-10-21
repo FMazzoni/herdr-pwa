@@ -111,7 +111,7 @@ def test_opencode_says_where_a_session_started(tmp_path: Path) -> None:
 
 
 def test_claude_says_where_a_session_started(tmp_path: Path) -> None:
-    session = "00000000-0000-4000-8000-000000000015"
+    session = "5e550018-0000-0000-0000-000000000000"
     project = tmp_path / "-home-owner-projects-herdr-pwa"
     project.mkdir()
     records = [

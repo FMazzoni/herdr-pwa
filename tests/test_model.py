@@ -904,7 +904,7 @@ def test_sort_is_stable_across_every_input_permutation(raw_snapshot: dict[str, J
 
 
 # identity vs address, and reconciliation
-SESSION_A = SessionId("11111111-1111-4111-8111-111111111111")
+SESSION_A = SessionId("5e550001-0000-0000-0000-000000000000")
 SESSION_B = SessionId("22222222-2222-4222-8222-222222222222")
 
 

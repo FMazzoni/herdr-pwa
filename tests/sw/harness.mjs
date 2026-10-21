@@ -284,7 +284,7 @@ await dispatch("message", { data: { type: "hp-skip-waiting" }, waits: [] });
 const skipWaitingOnRequest = observations.calledSkipWaiting;
 
 /* --- push: what a notification says, and when it stays quiet ------------- */
-const SESSION = "11111111-1111-4111-8111-111111111111";
+const SESSION = "5e550001-0000-0000-0000-000000000000";
 const pushEvent = (payload) => ({
   data: payload === null ? null : { json: () => { if (typeof payload === "string") throw new SyntaxError("bad"); return payload; } },
   waits: [],
