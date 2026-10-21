@@ -16,7 +16,6 @@ UNOPENED_FIXTURES: dict[str, str] = {
     "foreign/collie/LICENSE": "collie's licence, kept beside its screens",
     "elapsed.json": "shared with the JS tests, which this hook cannot see",
     "transcript/lineage/README.md": "for people",
-    "transcript/claude/00000000-0000-4000-8000-000000000015.jsonl": "no test reads it; kept pending a decision",
 }
 # `just check` sets HP_FIXTURE_USE=1, so only a full run fails on a fixture no test opens.
 _FIXTURE_USE = os.environ.get("HP_FIXTURE_USE") == "1"
