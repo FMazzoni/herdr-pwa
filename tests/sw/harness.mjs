@@ -15,7 +15,7 @@ import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 
 const swPath = process.argv[2];
-const ORIGIN = "https://box.tail.ts.net";
+const ORIGIN = "https://box.tailnet.ts.net";
 
 /* 65 raw bytes, leading 0x04, base64url unpadded -- the only shape a browser
  * accepts as an applicationServerKey. */
@@ -284,7 +284,7 @@ await dispatch("message", { data: { type: "hp-skip-waiting" }, waits: [] });
 const skipWaitingOnRequest = observations.calledSkipWaiting;
 
 /* --- push: what a notification says, and when it stays quiet ------------- */
-const SESSION = "11111111-1111-4111-8111-111111111111";
+const SESSION = "5e550001-0000-0000-0000-000000000000";
 const pushEvent = (payload) => ({
   data: payload === null ? null : { json: () => { if (typeof payload === "string") throw new SyntaxError("bad"); return payload; } },
   waits: [],

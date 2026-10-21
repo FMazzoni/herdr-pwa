@@ -33,7 +33,7 @@ OPENCODE_SCHEMA = (FIXTURES / "opencode" / "schema.sql").read_text()
 HERMES_SCHEMA = (FIXTURES / "hermes" / "schema.sql").read_text()
 
 REPO = "/home/user/projects/herdr-pwa"
-THROWAWAY = "/tmp/opencode/perm-test"  # noqa: S108 - a recorded path, never opened
+THROWAWAY = "/home/user/scratch/perm-test"
 REAL = as_session_id("ses_ebd52da9ffferyXfceutz4VMZx")
 STRAY = as_session_id("ses_ebd4bb9b3ffefe2V3uubh2DqkC")
 
@@ -111,7 +111,7 @@ def test_opencode_says_where_a_session_started(tmp_path: Path) -> None:
 
 
 def test_claude_says_where_a_session_started(tmp_path: Path) -> None:
-    session = "00000000-0000-4000-8000-000000000015"
+    session = "5e550018-0000-0000-0000-000000000000"
     project = tmp_path / "-home-owner-projects-herdr-pwa"
     project.mkdir()
     records = [

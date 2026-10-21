@@ -904,7 +904,7 @@ def test_sort_is_stable_across_every_input_permutation(raw_snapshot: dict[str, J
 
 
 # identity vs address, and reconciliation
-SESSION_A = SessionId("11111111-1111-4111-8111-111111111111")
+SESSION_A = SessionId("5e550001-0000-0000-0000-000000000000")
 SESSION_B = SessionId("22222222-2222-4222-8222-222222222222")
 
 
@@ -1083,7 +1083,7 @@ def test_a_resolution_is_frozen() -> None:
 
 
 def test_the_session_is_usable_as_a_transcript_filename(snap: Snapshot) -> None:
-    """The transcript reader opens ~/.claude/projects/*/<session>.jsonl; keep that possible."""
+    """The transcript reader opens a file named <session>.jsonl; keep that possible."""
     for a in snap.agents:
         assert re.fullmatch(r"[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}", a.session)
         assert f"{a.session}.jsonl".count("/") == 0

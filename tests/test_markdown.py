@@ -281,7 +281,7 @@ def _refs(text: str) -> list[str]:
         ("see src/app/server.py:42 next", ["path=src%2Fapp%2Fserver.py&line=42"]),
         ("in `util.py:7` and README.md:3.", ["path=util.py&line=7", "path=README.md&line=3"]),
         ("at ./tests/test_x.py:10:5, then", ["path=.%2Ftests%2Ftest_x.py&line=10"]),
-        ("at /home/me/p/a.rs:9 now", ["path=%2Fhome%2Fme%2Fp%2Fa.rs&line=9"]),
+        ("at /home/user/p/a.rs:9 now", ["path=%2Fhome%2Fuser%2Fp%2Fa.rs&line=9"]),
         ("lines a.py:10-20 here", ["path=a.py&line=10"]),
         ("example.com:443 and v1.2:3 and 10.0.0.1:80", []),
         ("https://e.x/src/a.py:3 is a URL", []),

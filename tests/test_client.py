@@ -991,7 +991,7 @@ def test_an_unconfigured_snapshot_still_judges_itself_by_the_build() -> None:
 def test_a_recycled_pane_id_refuses_the_keystroke() -> None:
     """The stale-target gap, closed on the round trip that was already happening."""
     eng, wire = build({GET: agent_frame()})
-    someone_else = as_session_id("11111111-1111-4111-8111-111111111111")
+    someone_else = as_session_id("5e550001-0000-0000-0000-000000000000")
     with pytest.raises(TargetNotFound) as exc:
         eng.send_keys(Seat(P3, someone_else), "1")
     assert exc.value.code == SESSION_MOVED_CODE
@@ -1185,7 +1185,7 @@ def test_the_model_argument_reaches_the_runner_after_a_bare_dash_dash() -> None:
 def test_a_close_re_checks_the_pane_is_still_held_by_that_session() -> None:
     """The recycled-pane-id bug at its worst: this is the one write that destroys."""
     eng, wire = build({GET: agent_frame()})
-    someone_else = as_session_id("11111111-1111-4111-8111-111111111111")
+    someone_else = as_session_id("5e550001-0000-0000-0000-000000000000")
     with pytest.raises(TargetNotFound) as caught:
         eng.close_pane(Seat(P3, someone_else))
     assert caught.value.code == SESSION_MOVED_CODE

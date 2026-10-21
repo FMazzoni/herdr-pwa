@@ -12,6 +12,9 @@ Everything is as captured, apart from this scrub:
 - Session titles, project names, agent names and tracker ids are neutral stand-ins.
 - Inside a drawn box or a right-aligned row, a scrub keeps the line's length.
 - Anthropic request ids read `req_SYNTHETIC…`, and thinking-block signatures are placeholders.
+- In transcripts and captures, session ids read `5e55NNNN-0000-…` and other record ids
+  `0000NNNN-0000-…`; agent, tool-use and message ids are synthetic too. One mapping covers
+  every file and test, so a link between records still lines up.
 
 A few files were built by hand, following the field names and record order the harness
 was seen to write, with synthetic ids, times and text: the negatives

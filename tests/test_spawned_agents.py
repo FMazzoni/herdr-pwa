@@ -26,9 +26,9 @@ from tests.webfakes import WORKING_SESSION, build_rig, write_transcript
 # "waiting" and then finished, the other handing back and finishing mid-turn (attachments only),
 # a second prompt, and a third launch still running.
 SPAWNED: Final = FIXTURES / "transcript" / "notices" / "spawned.jsonl"
-FIRST: Final = "a1610e2cacba7147a"
-WAITED: Final = "a58ed79d3e8bfb4f3"
-RUNNING: Final = "afd10ee41107eb4a2"
+FIRST: Final = "a000000000000000a"
+WAITED: Final = "a000000000000000b"
+RUNNING: Final = "a000000000000000c"
 _RECORD: Final = TypeAdapter(dict[str, JsonValue])
 NOW: Final = datetime(2026, 10, 17, 20, 0, tzinfo=UTC).timestamp()
 

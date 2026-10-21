@@ -79,7 +79,11 @@ def test_publish_sends_the_etag_and_a_second_run_writes_nothing(tmp_path: Path) 
 def test_publish_keeps_what_somebody_else_serves_and_does_not_mutate_its_input(
     tmp_path: Path,
 ) -> None:
-    other = {"Web": {"other.ts.net:443": {"Handlers": {"/x": {"Proxy": "http://127.0.0.1:9000"}}}}}
+    other = {
+        "Web": {
+            "other.tailnet.ts.net:443": {"Handlers": {"/x": {"Proxy": "http://127.0.0.1:9000"}}}
+        }
+    }
     with tailscaled(tmp_path, serve_config=other) as fake:
         state = state_of(fake)
         before = json.dumps(state.config, sort_keys=True)
@@ -87,7 +91,7 @@ def test_publish_keeps_what_somebody_else_serves_and_does_not_mutate_its_input(
         assert json.dumps(state.config, sort_keys=True) == before
         sites = tailscale.serve_config(posts(fake)[0])["Web"]
         assert isinstance(sites, dict)
-        assert "other.ts.net:443" in sites
+        assert "other.tailnet.ts.net:443" in sites
         assert f"{NODE}:443" in sites
 
 

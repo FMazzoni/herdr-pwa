@@ -19,7 +19,7 @@ MANIFEST = STATIC_DIR / "manifest.webmanifest"
 # The manifest and the worker harness's report, read whole as JSON documents.
 _DOCUMENT = TypeAdapter(dict[str, JsonValue])
 HARNESS = Path(__file__).parent / "sw" / "harness.mjs"
-SESSION = "11111111-1111-4111-8111-111111111111"
+SESSION = "5e550001-0000-0000-0000-000000000000"
 SHELL_PREFIXES = ("/static/",)
 SHELL_PATHS = ("/manifest.webmanifest", "/offline")
 # Every name the worker's cache has had, with a digest of the PRECACHE it was named for, newest
@@ -181,8 +181,8 @@ def test_a_push_shows_the_servers_text_and_a_tap_opens_that_agent() -> None:
         "event": "blocked",
         "url": f"/agent/{SESSION}",
     }
-    assert seen["openedWithNoWindow"] == [f"https://box.tail.ts.net/agent/{SESSION}"]
-    assert seen["navigatedExisting"] == [f"https://box.tail.ts.net/agent/{SESSION}"]
+    assert seen["openedWithNoWindow"] == [f"https://box.tailnet.ts.net/agent/{SESSION}"]
+    assert seen["navigatedExisting"] == [f"https://box.tailnet.ts.net/agent/{SESSION}"]
     assert seen["openedAsWell"] == []
     assert seen["liveAfterThree"] == 1
     assert (seen["liveBeforeClear"], seen["liveAfterClear"], seen["shownByClear"]) == (1, 0, 0)

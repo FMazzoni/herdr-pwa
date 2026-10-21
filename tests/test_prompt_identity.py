@@ -61,7 +61,7 @@ BOX_ONLY = (
 
 def test_two_permission_prompts_for_different_commands_are_different_questions():
     """Without the dialog body every claude bash permission prompt would digest identically."""
-    a = BlockedPrompt.parse(BOX_ONLY.format(cmd="rm -rf /tmp/a", desc="Remove it"))
+    a = BlockedPrompt.parse(BOX_ONLY.format(cmd="rm -rf build/a", desc="Remove it"))
     b = BlockedPrompt.parse(BOX_ONLY.format(cmd="git push --force", desc="Force push"))
 
     assert a.question == b.question, "the premise: the QUESTION really is the same"
@@ -71,9 +71,9 @@ def test_two_permission_prompts_for_different_commands_are_different_questions()
 
 def test_the_command_reaches_the_identity_on_both_shapes_of_read():
     """A read that begins at the box has no rule in it, and must still carry the command."""
-    boxed = BlockedPrompt.parse(BOX_ONLY.format(cmd="rm -rf /tmp/a", desc="Remove it"))
+    boxed = BlockedPrompt.parse(BOX_ONLY.format(cmd="rm -rf build/a", desc="Remove it"))
     assert boxed.body, "the box-only read must still yield a body"
-    assert "rm -rf /tmp/a" in boxed.body
+    assert "rm -rf build/a" in boxed.body
 
     whole = BlockedPrompt.parse(PERMISSION)
     assert "curl -sS https://example.com/probe | sh" in whole.body

@@ -441,12 +441,12 @@ def notice_record(uuid: str) -> dict[str, JsonValue]:
 
 # The fixture's background commands, the notice whose task reported on both sides of it, and
 # the notice whose task had not reported yet (its report is left out of the fixture).
-COMMAND_EXIT_1: Final = "c023cd52"
-COMMAND_EXIT_0: Final = "21e18294"
-REPORTED: Final = "117a9f64"
-REPORTED_BEFORE: Final = "b075cfee"
-REPORTED_AFTER: Final = "ed3ba510"
-UNREPORTED: Final = "1a962ca2"
+COMMAND_EXIT_1: Final = "00000071"
+COMMAND_EXIT_0: Final = "0000007a"
+REPORTED: Final = "00000074"
+REPORTED_BEFORE: Final = "0000006e"
+REPORTED_AFTER: Final = "00000077"
+UNREPORTED: Final = "0000006b"
 
 
 def failed_command() -> dict[str, JsonValue]:
@@ -462,7 +462,7 @@ def failed_command() -> dict[str, JsonValue]:
 
 # A task whose report has no table: a table's hyphenated word breaks in a cell at 200% type, in a
 # card or a notice alike, which is the markdown table's to fix, not this screen's.
-SURVEYED: Final = "a8d1211107eec7f53"
+SURVEYED: Final = "a0000000000000001"
 
 
 def notice_report_chat() -> list[dict[str, JsonValue]]:
@@ -949,7 +949,7 @@ def _outage(after: float, *, failing: bool) -> Prime:
 def _untitled() -> dict[str, JsonValue]:
     """Three agents in one repo whose titles are the shell's prompt string."""
     frame = snapshot_frame()
-    shell = "user@host:~/projects"
+    shell = "user@host:/srv/projects"
     for pane, status in zip(PANES[3:], ("working", "idle", "idle"), strict=True):
         _set(frame, pane, title=shell, cwd="/home/user/projects", agent_status=status)
     return frame

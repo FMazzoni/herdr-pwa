@@ -32,7 +32,7 @@ from tests.engine_seam import (
 )
 
 FIXTURES = Path(__file__).parent / "fixtures" / "transcript"
-SESSION = "00000000-0000-4000-8000-000000000153"
+SESSION = "5e550005-0000-0000-0000-000000000000"
 TRANSCRIPT = FIXTURES / "claude" / f"{SESSION}.jsonl"
 
 

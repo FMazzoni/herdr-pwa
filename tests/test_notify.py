@@ -24,7 +24,7 @@ from herdr_pwa.notify_state import Interrupts, InterruptStore, SeenLedger, Statu
 from herdr_pwa.push import EVENT_BLOCKED, EVENT_CLEAR, EVENT_DONE, DeliveryLog
 from tests.fakes import Agent, Clock
 
-A = "11111111-1111-4111-8111-111111111111"
+A = "5e550001-0000-0000-0000-000000000000"
 B = "22222222-2222-4222-8222-222222222222"
 C = "33333333-3333-4333-8333-333333333333"
 

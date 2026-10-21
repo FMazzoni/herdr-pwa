@@ -317,7 +317,7 @@ def _peers(turns: tuple[TranscriptTurn, ...]) -> list[TranscriptTurn]:
 
 
 def test_a_hand_back_moves_into_the_notice_of_its_task(tmp_path: Path) -> None:
-    joined_task = "add26fc36644915e1"
+    joined_task = "a0000000000000002"
     notice = next(r for r in notices_of("task-notification") if joined_task in json.dumps(r))
     unjoined = notices_of("peer", report=True)[-1]
     report = _report_of(joined_task)
@@ -331,7 +331,7 @@ def test_a_hand_back_moves_into_the_notice_of_its_task(tmp_path: Path) -> None:
 
 
 def test_without_origin_the_tag_still_joins(tmp_path: Path) -> None:
-    joined_task = "aad73610517032ecf"
+    joined_task = "a0000000000000003"
     notice = next(r for r in notices_of("task-notification") if joined_task in json.dumps(r))
     records = [_without_origin(_report_of(joined_task)), _without_origin(notice)]
     turns = joined(tuple(_turns(records, tmp_path)))
@@ -369,7 +369,7 @@ def test_an_agent_that_has_not_reported_says_so_in_plain_words(tmp_path: Path) -
     assert "has not reported yet" not in chat
     assert "SubagentHandback" not in chat
     assert "Output in" not in chat
-    assert '<span class="notice__text">Writes: no double sends</span>' in chat
+    assert '<span class="notice__text">Writes: send once</span>' in chat
     assert '<span aria-hidden="true">&middot; </span>finished</span>' in chat
     assert '<span aria-hidden="true">&middot; </span>29m</span>' in chat
 
@@ -395,7 +395,7 @@ def test_a_command_opens_on_the_whole_command_its_ending_and_its_output(tmp_path
     result = chat[chat.index('<pre class="tool__result notice__result">') :]
     assert result.split("</pre>")[0].endswith("grep -E &#39;^FAILED&#39; $S/check-writes.txt")
     assert '<p class="notice__meta">Completed (exit code 1: No matches found)</p>' in chat
-    assert "tasks/ba64oymf1.output</span>" in chat
+    assert "out/bshell001.txt</span>" in chat
 
 
 def test_a_failed_command_says_so_in_red_and_in_words(tmp_path: Path) -> None:

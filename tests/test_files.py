@@ -288,7 +288,7 @@ def test_a_secret_is_held_behind_a_tap_everywhere(tmp_path: Path, repo: Path) ->
     assert SECRET_TEXT not in held.text
     assert "reveal=1" in held.text
     assert rig.http.get(f"{base}/raw?path=config/.env").status_code == 403
-    assert "PRIVATE KEY" not in rig.http.get(f"{base}/file?path=config/deploy.pem").text
+    assert "not-a-real-key" not in rig.http.get(f"{base}/file?path=config/deploy.pem").text
     shown = rig.http.get(f"{base}/file?path=config/.env&reveal=1")
     assert SECRET_TEXT in shown.text
 

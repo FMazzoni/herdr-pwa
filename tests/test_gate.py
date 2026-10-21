@@ -228,7 +228,17 @@ def test_a_loopback_bind_is_allowed(host: str) -> None:
     cli.assert_loopback_bind(host)
 
 
-@pytest.mark.parametrize("host", ["0.0.0.0", "::", "100.64.0.7", "10.0.0.5", "box.ts.net", ""])  # noqa: S104 - the bind under test
+@pytest.mark.parametrize(
+    "host",
+    [
+        "0.0.0.0",  # noqa: S104 - the bind under test
+        "::",
+        "100.64.0.7",
+        "10.0.0.5",
+        "box.tailnet.ts.net",
+        "",
+    ],
+)
 def test_serve_refuses_a_bind_other_peers_can_reach(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], host: str
 ) -> None:

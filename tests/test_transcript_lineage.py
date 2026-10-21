@@ -151,8 +151,8 @@ def project(tmp_path: Path) -> Path:
 
 
 def test_the_captured_heads_really_carry_a_parent_pointer() -> None:
-    assert _forked(FORKED_HEAD)["sessionId"] == ("6ae1e031-ddb4-4684-ab07-68073f7fec47")
-    assert _forked(COMPACTED_HEAD)["sessionId"] == ("5b609dba-d756-493a-a3fc-b4e09bf0a183")
+    assert _forked(FORKED_HEAD)["sessionId"] == ("5e550019-0000-0000-0000-000000000000")
+    assert _forked(COMPACTED_HEAD)["sessionId"] == ("5e55001a-0000-0000-0000-000000000000")
 
 
 def test_a_compacted_copy_does_not_share_its_parents_first_uuid() -> None:

@@ -88,7 +88,10 @@ def test_the_login_comparison_is_constant_time() -> None:
 
 
 def test_an_empty_pin_admits_any_tailnet_user_and_warns() -> None:
-    assert identify({"Tailscale-User-Login": "anyone@x.org"}, Access()).login == "anyone@x.org"
+    assert (
+        identify({"Tailscale-User-Login": "anyone@example.org"}, Access()).login
+        == "anyone@example.org"
+    )
     assert unpinned_warning(Access()) is not None
     assert unpinned_warning(PINNED) is None
 
