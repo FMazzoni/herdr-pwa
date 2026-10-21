@@ -31,7 +31,7 @@ PLACEHOLDER_EMAILS = frozenset({"a@b.com"})
 # Home directories, also as Claude Code spells them in a project folder name (-home-<name>-).
 HOME = re.compile(
     r"""
-    (?:/|-) (?:var[/-])? (?:home|Users) [/-]  # /home/, /Users/, or -home- in a folder name
+    (?:/|-) (?:var[/-])? (?:home|Users) [/-]  # a home folder, or one spelt into a folder name
     (?P<name>[A-Za-z0-9._]+)  # whose home it is
     """,
     re.VERBOSE,

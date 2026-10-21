@@ -42,8 +42,7 @@ _DIVIDER_RE: Final = re.compile(
     rf"[\s{re.escape(glyphs.RULE + glyphs.DASHED_RULE + '—=_·•-')}]{{4,}}"
 )
 
-# A footer names a key and then, later on the same line, what it does; read as two scans, since
-# one pattern bridging them with ``.*`` retried every key it passed (5.5 s on a 30k-character line).
+# A key, then later on its line a verb: two scans, as one ``.*`` bridge took 5 s on 30k characters.
 _FOOTER_KEY: Final = re.compile(
     rf"\b(?:{alternatives(facts.FOOTER_KEY_WORDS)})\b|{alternatives(facts.FOOTER_KEY_MARKS)}",
     re.IGNORECASE,

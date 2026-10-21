@@ -468,7 +468,7 @@ PATTERNS: Final = (
     Rx(
         _LIMIT,
         (
-            "You've hit your session limit · resets 5am (America/New_York)",
+            "You've hit your session limit · resets soon",
             "You've hit your weekly limit · resets Mon",
         ),
         ("You've hit your session limit", "You have hit your session limit · resets 5am"),

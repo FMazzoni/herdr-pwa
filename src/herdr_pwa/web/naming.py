@@ -91,7 +91,7 @@ PATTERNS: Final = (
         ("new session", "new session - a b"),
         "fullmatch",
     ),
-    Rx(_LOCATOR, ("user@host:~/src", "u@h"), ("user@host: x", "a@b@c", "@host"), "fullmatch"),
+    Rx(_LOCATOR, ("user@host:/srv/app", "u@h"), ("user@host: x", "a@b@c", "@host"), "fullmatch"),
     Rx(
         _PROMPT_OPENING,
         ("Do you want to proceed", "  * Allow this?", "line\nPress enter"),
