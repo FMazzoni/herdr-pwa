@@ -33,7 +33,7 @@ OPENCODE_SCHEMA = (FIXTURES / "opencode" / "schema.sql").read_text()
 HERMES_SCHEMA = (FIXTURES / "hermes" / "schema.sql").read_text()
 
 REPO = "/home/user/projects/herdr-pwa"
-THROWAWAY = "/tmp/opencode/perm-test"  # noqa: S108 - a recorded path, never opened
+THROWAWAY = "/home/user/scratch/perm-test"
 REAL = as_session_id("ses_ebd52da9ffferyXfceutz4VMZx")
 STRAY = as_session_id("ses_ebd4bb9b3ffefe2V3uubh2DqkC")
 
