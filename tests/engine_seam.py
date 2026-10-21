@@ -49,11 +49,9 @@ from herdr_pwa.engine.transcript import (
     usage,
 )
 from herdr_pwa.engine.transport import (
-    BACKOFF_CAP,
     EVENT_SUBSCRIBE,
-    MAX_FRAME_BYTES,
     MAX_REQUEST_BYTES,
-    MAX_STRAY_FRAMES,
+    WIRE_LIMITS,
     SocketTransport,
     decode_frame,
     raise_for_error_frame,
@@ -65,23 +63,21 @@ HEAD_FINISH = claude_lineage._HEAD_FINISH  # pyright: ignore[reportPrivateUsage]
 dialog_chunks = dialog._chunks  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
 
 __all__ = [
-    "BACKOFF_CAP",
     "EVENT_SUBSCRIBE",
     "HEAD_BYTES",
     "HEAD_FINISH",
     "HERMES_DB",
     "HIDDEN",
-    "MAX_FRAME_BYTES",
     "MAX_NOTE_CHARS",
     "MAX_PROSE_CHARS",
     "MAX_REQUEST_BYTES",
     "MAX_RESULT_CHARS",
-    "MAX_STRAY_FRAMES",
     "OPENCODE_ASK",
     "OPENCODE_DB",
     "OPENCODE_ROOT",
     "OPENCODE_STORAGE_ROOT",
     "OPTION_RE",
+    "WIRE_LIMITS",
     "ClaudeAdapter",
     "ClaudeRecord",
     "EventKind",

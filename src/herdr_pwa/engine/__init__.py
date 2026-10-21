@@ -101,6 +101,7 @@ from herdr_pwa.engine.transport import (
     SocketTransport,
     TargetNotFound,
     Transport,
+    WireLimits,
     WireReply,
 )
 from herdr_pwa.engine.usage import UsageCache
@@ -174,6 +175,7 @@ __all__ = [
     "Transport",
     "UsageCache",
     "Window",
+    "WireLimits",
     "WireReply",
     "Workspace",
     "WorkspaceId",

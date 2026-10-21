@@ -36,6 +36,7 @@ from herdr_pwa.engine import (
     Seat,
     SessionId,
     TargetNotFound,
+    WireLimits,
     WorkspaceId,
     as_pane_id,
     as_session_id,
@@ -1225,6 +1226,17 @@ def test_an_injected_settings_object_is_never_second_guessed(
     assert eng.transport.timeout == handed.command_timeout
 
 
+def test_the_socket_backs_off_by_the_wire_limits_it_was_handed(tmp_path: Path) -> None:
+    """A dead runner is left for as long as the settings' wire limits say, not the default."""
+    wait = WireLimits(backoff_base=5.0, backoff_cap=5.0)
+    handed = EngineSettings(socket_path=tmp_path / "gone.sock", command_timeout=1.0, wire=wait)
+    eng = HerdrClient(handed, clock=TickingClock(), sleep=no_sleep)
+    with pytest.raises(EngineError):
+        _ = eng.snapshot()
+    with pytest.raises(EngineError, match=r"not retrying for another 5\.0s"):
+        _ = eng.snapshot()
+
+
 def test_the_engine_reads_the_apps_settings_into_its_own(tmp_path: Path) -> None:
     """The engine takes the socket and timeout from Settings, defaulting to herdr's own socket."""
     named = engine_settings(Settings(socket_path=tmp_path / "named.sock", command_timeout=1.5))
@@ -1234,7 +1246,7 @@ def test_the_engine_reads_the_apps_settings_into_its_own(tmp_path: Path) -> None
     assert unnamed.command_timeout == Settings().command_timeout
 
 
-def test_the_engine_declares_the_eight_fields_it_reads_and_no_more() -> None:
+def test_the_engine_declares_the_nine_fields_it_reads_and_no_more() -> None:
     """``EngineSettings`` is the engine's whole configuration seam, and the honest dependency."""
     engine_reads = {name for name in dir(EngineSettings) if not name.startswith("_")}
     assert engine_reads == {
@@ -1246,6 +1258,7 @@ def test_the_engine_declares_the_eight_fields_it_reads_and_no_more() -> None:
         "read_source",
         "read_lines",
         "recent_max_lines",
+        "wire",
     }
     assert "bind_host" not in engine_reads
 

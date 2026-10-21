@@ -8,6 +8,7 @@ import os
 import socket
 import threading
 from collections.abc import Callable, Iterator, Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from secrets import token_hex
 from typing import Final, NamedTuple, Protocol, runtime_checkable
@@ -43,15 +44,23 @@ class WireReply(NamedTuple):
 
 log = logging.getLogger(__name__)
 
-MAX_FRAME_BYTES: Final = 4 * 1024 * 1024
-
 MAX_REQUEST_BYTES: Final = 1024 * 1024
 
-MAX_STRAY_FRAMES: Final = 8
 
-BACKOFF_BASE: Final = 0.1
+@dataclass(frozen=True, slots=True)
+class WireLimits:
+    """How a dead runner is backed off, and how much a reply may hold before it is dropped."""
 
-BACKOFF_CAP: Final = 2.0
+    # A reply past this with no newline is a broken peer, not a big answer.
+    max_frame_bytes: int = 4 * 1024 * 1024
+    # The first wait after a failed dial, doubled on each failure after it up to the cap.
+    backoff_base: float = 0.1
+    backoff_cap: float = 2.0
+    # Frames for other ids read before a connection is judged out of step.
+    max_stray_frames: int = 8
+
+
+WIRE_LIMITS: Final = WireLimits()
 
 _CHUNK: Final = 65536
 
@@ -274,11 +283,12 @@ class SocketTransport:
         *,
         timeout: float,
         clock: MonoClock = mono_now,
+        limits: WireLimits = WIRE_LIMITS,
     ) -> None:
         self.path = Path(path)
         self.timeout = timeout
-        self.max_frame_bytes = MAX_FRAME_BYTES
         self._clock = clock
+        self._limits = limits
         self._lock = threading.Lock()
         self._pid = os.getpid()
         self._prefix = self._mint_prefix()
@@ -366,13 +376,15 @@ class SocketTransport:
         """Read frames until the one addressed to ``request_id`` arrives."""
         buffer = bytearray()
         too_long = (
-            f"reply to {call.method} exceeded {self.max_frame_bytes} bytes with no frame terminator"
+            f"reply to {call.method} exceeded {self._limits.max_frame_bytes} bytes "
+            "with no frame terminator"
         )
-        for _ in range(MAX_STRAY_FRAMES):
+        strays = self._limits.max_stray_frames
+        for _ in range(strays):
             line = _next_frame(
                 buffer,
                 lambda: self._recv(sock, call),
-                limit=self.max_frame_bytes,
+                limit=self._limits.max_frame_bytes,
                 too_long=too_long,
             )
             reply = self._decode(line)
@@ -384,7 +396,7 @@ class SocketTransport:
                 request_id,
             )
         raise InvalidResponse(
-            f"no reply to {call.method} after {MAX_STRAY_FRAMES} frames for other "
+            f"no reply to {call.method} after {strays} frames for other "
             "ids; "
             "the connection is out of step and is being dropped"
         )
@@ -453,7 +465,8 @@ class SocketTransport:
 
     def _penalise(self) -> None:
         with self._lock:
-            self._backoff = min(max(self._backoff * 2, BACKOFF_BASE), BACKOFF_CAP)
+            limits = self._limits
+            self._backoff = min(max(self._backoff * 2, limits.backoff_base), limits.backoff_cap)
             self._retry_at = self._clock() + self._backoff
 
     def _arm(self, sock: socket.socket, call: _Call) -> None:
@@ -483,12 +496,12 @@ class EventStream:
         *,
         subscriptions: Sequence[Mapping[str, JsonValue]],
         timeout: float,
-        max_frame_bytes: int = MAX_FRAME_BYTES,
+        limits: WireLimits = WIRE_LIMITS,
     ) -> None:
         self.path = Path(path)
         self.subscriptions = [dict(one) for one in subscriptions]
         self.timeout = timeout
-        self.max_frame_bytes = max_frame_bytes
+        self._limits = limits
         self._lock = threading.Lock()
         self._sock: socket.socket | None = None
         self._buffer = bytearray()
@@ -586,15 +599,14 @@ class EventStream:
 
     def _await_started(self, sock: socket.socket) -> None:
         """Read up to the confirmation, so a refusal is raised here, not later."""
-        for _ in range(MAX_STRAY_FRAMES):
+        strays = self._limits.max_stray_frames
+        for _ in range(strays):
             reply = decode_frame(self._read_frame(sock))
             raise_for_error_frame(reply)
             if _confirms_subscription(reply):
                 return
             log.warning("discarding %r while waiting for the subscription", reply.payload)
-        raise InvalidResponse(
-            f"the runner never confirmed the subscription after {MAX_STRAY_FRAMES} frames"
-        )
+        raise InvalidResponse(f"the runner never confirmed the subscription after {strays} frames")
 
     def _connect(self) -> socket.socket:
         """A connection of this stream's own, registered so `close` can reach it."""
@@ -623,8 +635,10 @@ class EventStream:
         return _next_frame(
             self._buffer,
             lambda: self._recv(sock),
-            limit=self.max_frame_bytes,
-            too_long=f"an event frame exceeded {self.max_frame_bytes} bytes with no terminator",
+            limit=self._limits.max_frame_bytes,
+            too_long=(
+                f"an event frame exceeded {self._limits.max_frame_bytes} bytes with no terminator"
+            ),
         )
 
     def _recv(self, sock: socket.socket) -> bytes:

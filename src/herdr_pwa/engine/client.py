@@ -216,7 +216,10 @@ class HerdrClient:
             transport
             if transport is not None
             else SocketTransport(
-                self.settings.socket_path, timeout=self.settings.command_timeout, clock=clock
+                self.settings.socket_path,
+                timeout=self.settings.command_timeout,
+                clock=clock,
+                limits=self.settings.wire,
             )
         )
         self.last_protocol: int | None = None
@@ -344,6 +347,7 @@ class HerdrClient:
             self.settings.socket_path,
             subscriptions=status_subscriptions(panes) + discovery_subscriptions(),
             timeout=self.settings.command_timeout,
+            limits=self.settings.wire,
         )
 
     def _remember_protocol(self, protocol: int) -> None:
