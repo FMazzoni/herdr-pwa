@@ -1,8 +1,4 @@
-"""The agent drill-in: Chat and Pane tabs and the stats strip, each a fragment the stream refreshes.
-
-The page itself carries the first drawing of the view, the answer region and the composer, so the
-newest line arrives with the HTML instead of one fetch after the scripts have run.
-"""
+"""The agent drill-in: Chat and Pane tabs and the stats strip, first drawn with the page."""
 
 from dataclasses import dataclass, replace
 from types import MappingProxyType
@@ -73,8 +69,7 @@ def read_stats(web: WebState, agent: Agent) -> Stats:
 
 
 def stats_of(web: WebState, reads: Reads) -> Stats:
-    """The strip from this request's *reads*: the statusline the pane shows, else the harness's
-    own record when the pane could not be read."""
+    """The strip from *reads*: the pane's statusline, else the harness's own record."""
     agent = reads.agent
     status = agent_status(web, agent).value
     stats = stats_for(Reading(agent.agent or "", status, reads.usage, now=web.wall()))
@@ -89,8 +84,7 @@ class ChatQuery(BaseModel):
     # Frozen, so the shared _NEWEST default cannot be changed by one reader under another.
     model_config = ConfigDict(frozen=True)
 
-    # `start` keeps what the reader already has, earlier pages included; `before` asks for one
-    # more page above it; neither is the newest page of messages.
+    # Off the newest page: `start` keeps what the reader has, `before` adds one page above it.
     start: int | None = Field(default=None, ge=0)
     before: int | None = Field(default=None, ge=0)
     log: str = Field(default="", max_length=200)
@@ -117,8 +111,7 @@ def _chat_of(web: WebState, reads: Reads, query: ChatQuery) -> ChatView:
 def _turning(web: WebState, agent: Agent, usage: SessionUsage) -> Turning:
     """The turn as the agent's status, its card and its tally tell it, beside the log."""
     status = agent_status(web, agent)
-    # The prompt's stamp names the turn, so answering a question mid-turn keeps its verb; with
-    # no tally, herdr's sequence, which it bumps on every status change, names the stretch.
+    # The prompt's stamp names the turn so a mid-turn answer keeps its verb; else herdr's sequence.
     turn = usage.turn_started or str(agent.state_change_seq)
     now = web.wall()
     return Turning(
@@ -144,8 +137,7 @@ def pane_or_none(web: WebState, agent: Agent) -> panetext.PaneView | None:
 
 
 def _page_reads(web: WebState, agent: Agent) -> Reads:
-    # Read once: the strip's statusline, the Pane tab's mirror and the composer's claim are one
-    # terminal, and the strip's tally and the Chat tab are one log.
+    # Read once: strip, Pane tab and composer share one terminal; strip and Chat share one log.
     reads = _log_reads(web, agent)
     try:
         look = web.client.mirror(agent.target, status=agent.status)
@@ -155,8 +147,7 @@ def _page_reads(web: WebState, agent: Agent) -> Reads:
 
 
 def first_view(web: WebState, tab: str, reads: Reads, chat: ChatView) -> Markup | None:
-    """The view the page opens on, drawn into it from the page's *reads*; ``None`` when the pane
-    could not be read, so the region fetches itself and its own failure is drawn in its place."""
+    """The view the page opens on, from its *reads*; ``None`` lets an unread pane fetch itself."""
     if tab == "chat":
         return web.pages.piece("chat.html", {"agent": reads.agent, "chat": chat})
     if reads.pane is None:
@@ -214,7 +205,7 @@ def _page_context(web: WebState, agent: Agent, tab: str, first: str) -> dict[str
 def _page_route(router: APIRouter, web: WebState) -> None:
     # Each reportUnusedFunction ignore marks a route: FastAPI registers it by decorator.
     @router.get("")
-    def agent_page(  # pyright: ignore[reportUnusedFunction]
+    def agent_page(  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         session: str, tab: str = "chat", first: str = ""
     ) -> Response:
         agent = find_agent(web, session)
@@ -225,7 +216,7 @@ def _page_route(router: APIRouter, web: WebState) -> None:
 
 def _view_routes(router: APIRouter, web: WebState) -> None:
     @router.get("/chat", dependencies=[Depends(hidden_tick)])
-    def chat(  # pyright: ignore[reportUnusedFunction]
+    def chat(  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         session: str, query: Annotated[ChatQuery, Query()]
     ) -> HTMLResponse:
         agent = find_agent(web, session)
@@ -236,17 +227,17 @@ def _view_routes(router: APIRouter, web: WebState) -> None:
         return web.pages.fragment("chat.html", context)
 
     @router.get("/pane", dependencies=[Depends(hidden_tick)])
-    def pane(session: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
+    def pane(session: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         agent = find_agent(web, session)
         return web.pages.fragment("pane.html", {"agent": agent, "view": read_pane(web, agent)})
 
     @router.get("/tray", dependencies=[Depends(hidden_tick)])
-    def tray(session: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
+    def tray(session: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         agent = find_agent(web, session)
         return web.pages.fragment("tray.html", tray_region(web, agent, read_chat(web, agent)))
 
     @router.get("/stats", dependencies=[Depends(hidden_tick)])
-    def stats(session: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
+    def stats(session: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         agent = find_agent(web, session)
         context = {"agent": agent, "stats": read_stats(web, agent)}
         return web.pages.fragment("stats.html", context)

@@ -11,7 +11,7 @@ from typing import Final, NamedTuple, TypeVar, cast, get_args
 from pydantic import BaseModel, ValidationError
 
 from herdr_pwa import panetext
-from herdr_pwa.clock import Clock, Sleep
+from herdr_pwa.clock import MonoClock, Sleep, mono_now
 from herdr_pwa.engine.config import EngineSettings
 from herdr_pwa.engine.dialog import BlockedPrompt
 from herdr_pwa.engine.generated import request as wire_request
@@ -123,10 +123,7 @@ _TEXT_FIELD: Final = "text"
 
 @dataclass(frozen=True, slots=True)
 class ReadOptions:
-    """How one pane read is taken: how many lines, from which buffer, in colour, and how long.
-
-    ``None`` for lines or source is the configured default; for timeout, the command timeout.
-    """
+    """How one pane read is taken: lines, buffer, colour and timeout; ``None`` is the default."""
 
     lines: int | None = None
     source: str | None = None
@@ -143,13 +140,10 @@ SCREEN_READ: Final = ReadOptions(source="visible", colour=True)
 
 
 class Mirror(NamedTuple):
-    """One look at a pane for the drill-in: what its mirror draws, and the visible screen as text.
-
-    ``screen`` is ``None`` when the mirror drew the detection buffer and the screen beside it could
-    not be read.
-    """
+    """One look at a pane for the drill-in: what its mirror draws, and the visible screen."""
 
     shown: str
+    # None when the mirror drew the detection buffer and the screen beside it could not be read.
     screen: str | None
 
 
@@ -212,7 +206,7 @@ class HerdrClient:
         settings: EngineSettings,
         *,
         transport: Transport | None = None,
-        clock: Clock = time.monotonic,
+        clock: MonoClock = mono_now,
         sleep: Sleep = time.sleep,
     ) -> None:
         self.settings = settings
@@ -241,9 +235,7 @@ class HerdrClient:
         """Release whatever the transport holds open; the client stays usable."""
         self.transport.close()
 
-    # ----------------------------------------------------------------------
-    # The one choke point: guard, issue, validate
-    # ----------------------------------------------------------------------
+    # --- The one choke point: guard, issue, validate ---
 
     def _call(
         self,
@@ -263,7 +255,7 @@ class HerdrClient:
         reply: WireReply = self.transport.call(
             method,
             # A json-mode dump is JSON by construction, and the schema pins params to an object.
-            cast(Frame, dumped["params"]),
+            cast("Frame", dumped["params"]),
             timeout=self._resolve_timeout(timeout),
             idempotent=not writes,
         )
@@ -297,7 +289,8 @@ class HerdrClient:
             raise InvalidResponse(
                 f"{method} answered {type(root).__name__} where {arm.__name__} was expected"
             )
-        member = cast(BaseModel, getattr(root, key))
+        # Payload_field names the arm's field that holds its BaseModel payload.
+        member = cast("BaseModel", getattr(root, key))
         return root, member.model_dump(mode="json", exclude_none=True)
 
     def _arm(self, reply: _Reply, arm: type[_Arm]) -> _Arm:
@@ -333,9 +326,7 @@ class HerdrClient:
             raise InvalidResponse(f"{method} answered no {key!r} object")
         return raw
 
-    # ----------------------------------------------------------------------
-    # Reads
-    # ----------------------------------------------------------------------
+    # --- Reads ---
 
     def snapshot(self, *, timeout: float | None = None) -> Snapshot:
         """Fetch the whole session state, agents already ranked most-urgent-first."""
@@ -442,7 +433,10 @@ class HerdrClient:
     ) -> str:
         """The pane read the drill-in mirror renders: detection when blocked and clean, else visible.
 
-        ``options`` gives the lines and the timeout; the mirror chooses the source, in colour.
+        Args:
+            target: The pane to read.
+            status: The agent's reported status, which decides whether detection is tried.
+            options: The lines and the timeout; the mirror chooses the source, in colour.
         """
         target = as_pane_id(target)
         detected = self._detected(target, status, options)
@@ -490,7 +484,10 @@ class HerdrClient:
     ) -> BlockedPrompt:
         """Read what a blocked agent is waiting on, parsed into question + options.
 
-        ``options`` gives the lines and the timeout; the parse chooses the buffers.
+        Args:
+            target: The pane to read.
+            session: The session the parsed prompt names as its holder.
+            options: The lines and the timeout; the parse chooses the buffers.
         """
         target = as_pane_id(target)
         text = self.read(
@@ -503,17 +500,14 @@ class HerdrClient:
     def _colour_read(self, target: PaneId, options: ReadOptions) -> str | None:
         """The visible viewport in colour, or ``None`` when the read fails."""
         try:
-            # The detection buffer answers colour reads stripped (measured on
-            # the rig); the visible viewport is the one that keeps the SGR.
+            # Measured on the rig: detection strips colour, and only the visible viewport keeps SGR.
             return self.read(
                 target, replace(options, source=wire_request.ReadSource.visible, colour=True)
             )
         except EngineError:
             return None
 
-    # ----------------------------------------------------------------------
-    # Writes -- every one of these fails closed on an unexpected protocol
-    # ----------------------------------------------------------------------
+    # --- Writes: every one fails closed on an unexpected protocol ---
 
     def _require_writable(self, timeout: float | None = None) -> None:
         """Refuse to drive an agent when the snapshot shape can no longer be trusted."""
@@ -619,9 +613,7 @@ class HerdrClient:
             timeout=timeout,
         ).payload
 
-    # ----------------------------------------------------------------------
-    # Lifecycle: the two writes that make a herd able to shrink as well as grow
-    # ----------------------------------------------------------------------
+    # --- Lifecycle: the two writes that let a herd shrink as well as grow ---
 
     def shell_pane(self, pane_id: PaneId, *, timeout: float | None = None) -> bool:
         """Is this pane a settled shell, ready for an agent to be started in it?"""
@@ -726,9 +718,7 @@ class HerdrClient:
             guarded=True,
         ).payload
 
-    # ----------------------------------------------------------------------
-    # Workspaces: the container the herd is grouped by
-    # ----------------------------------------------------------------------
+    # --- Workspaces: the container the herd is grouped by ---
 
     def create_workspace(
         self, *, label: str = "", cwd: str = "", timeout: float | None = None

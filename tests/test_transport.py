@@ -18,6 +18,7 @@ from pathlib import Path
 import pytest
 from pydantic import JsonValue, TypeAdapter
 
+from herdr_pwa.clock import MonoClock, MonoTime, mono_now
 from herdr_pwa.engine import (
     EngineError,
     EngineTimeout,
@@ -179,7 +180,7 @@ def transport(
     path: Path,
     *,
     timeout: float = FAST,
-    clock: Callable[[], float] = time.monotonic,
+    clock: MonoClock = mono_now,
 ) -> SocketTransport:
     return SocketTransport(path, timeout=timeout, clock=clock)
 
@@ -583,7 +584,7 @@ def test_every_wait_in_a_call_is_armed_from_its_one_deadline(
         def _new_socket(self) -> socket.socket:
             return Recording(socket.AF_UNIX, socket.SOCK_STREAM)
 
-    wire = Watched(sock_path, timeout=budget, clock=lambda: next(reads) * budget / 20)
+    wire = Watched(sock_path, timeout=budget, clock=lambda: MonoTime(next(reads) * budget / 20))
     wire.call("agent.list", {})  # answered, and hung up on, like every call
     armed.clear()
     with pytest.raises(EngineTimeout) as caught:  # the second one is never answered at all
@@ -609,7 +610,7 @@ def test_a_forked_child_gets_its_own_ids_and_its_own_connection(  # noqa: PLR091
         status = 0
         try:
             wire.call("agent.list", {})
-            os.write(write_fd, f"{wire._prefix}".encode())  # pyright: ignore[reportPrivateUsage]
+            os.write(write_fd, f"{wire._prefix}".encode())  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
         except BaseException:  # noqa: BLE001 - any failure in the child becomes its exit status
             status = 1
         os._exit(status)
@@ -621,7 +622,7 @@ def test_a_forked_child_gets_its_own_ids_and_its_own_connection(  # noqa: PLR091
 
     assert os.waitstatus_to_exitcode(wait_status) == 0, "the child could not call"
     assert child_prefix
-    assert child_prefix != wire._prefix, "the child re-used the parent's id prefix"  # pyright: ignore[reportPrivateUsage]
+    assert child_prefix != wire._prefix, "the child re-used the parent's id prefix"  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
     assert str(os.getpid()) not in child_prefix, "the child kept the parent's pid"
     assert server.connections >= 2, "the child re-used the parent's socket"
 
@@ -719,7 +720,7 @@ def _pad_to(wire: SocketTransport, target: int) -> str:
     """The ``_pad`` value that makes this transport's next line exactly `target`."""
     frame = json.dumps(
         {
-            "id": f"{wire._prefix}:1",  # pyright: ignore[reportPrivateUsage]
+            "id": f"{wire._prefix}:1",  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
             "method": "session.snapshot",
             "params": {"_pad": ""},
         },
@@ -883,8 +884,8 @@ class Clock:
     def __init__(self) -> None:
         self.now = 1000.0
 
-    def __call__(self) -> float:
-        return self.now
+    def __call__(self) -> MonoTime:
+        return MonoTime(self.now)
 
 
 def test_connect_failures_back_off_instead_of_dialling_every_poll(
@@ -916,13 +917,13 @@ def test_the_backoff_is_bounded_and_a_success_clears_it(
         clock.now += 100
         with pytest.raises(EngineUnavailable):
             wire.call("session.snapshot", {})
-    assert wire._backoff == BACKOFF_CAP  # pyright: ignore[reportPrivateUsage]
+    assert wire._backoff == BACKOFF_CAP  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
 
     serve(sock_path, ok, request)
     clock.now += 100
     wire.call("session.snapshot", {})
-    assert wire._backoff == 0.0  # pyright: ignore[reportPrivateUsage]
-    assert wire._retry_at == 0.0  # pyright: ignore[reportPrivateUsage]
+    assert wire._backoff == 0.0  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
+    assert wire._retry_at == 0.0  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
     wire.close()
 
 

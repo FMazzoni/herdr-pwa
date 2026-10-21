@@ -1,7 +1,4 @@
-"""Every write the runner is asked to make, recorded before it is made.
-
-Writes only: reads, push subscribe/unsubscribe, and the app's own refusals are not recorded.
-"""
+"""Every write the runner is asked to make, logged first; reads, subscriptions, refusals are not."""
 
 import json
 import logging
@@ -9,7 +6,6 @@ import os
 import secrets
 import stat
 import threading
-import time
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -21,7 +17,7 @@ from pydantic import Field, TypeAdapter, ValidationError
 
 from herdr_pwa import statedir
 from herdr_pwa.auth import Identity, Via
-from herdr_pwa.clock import Clock
+from herdr_pwa.clock import WallClock, wall_now
 from herdr_pwa.statedir import FILE_MODE
 
 log = logging.getLogger(__name__)
@@ -196,12 +192,12 @@ class AuditLog:
         *,
         max_bytes: int,
         payload_chars: int,
-        clock: Clock = time.time,
+        clock: WallClock = wall_now,
     ) -> None:
         self._state_dir: Path = state_dir
         self._max_bytes: int = max_bytes
         self._payload_chars: int = payload_chars
-        self._clock: Clock = clock
+        self._clock: WallClock = clock
         self._lock: threading.Lock = threading.Lock()
 
     @property

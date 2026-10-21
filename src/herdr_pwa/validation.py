@@ -19,11 +19,7 @@ from herdr_pwa.patterns import Rx
 
 
 def or_default(default: object) -> WrapValidator:
-    """A field validator that answers ``default`` for a value of the wrong shape.
-
-    Use as ``Annotated[float, or_default(0.0)] = 0.0``: the plain default covers a missing
-    key, this covers a present one that does not validate.
-    """
+    """A field validator answering ``default`` for a present value of the wrong shape."""
 
     def validate(value: object, handler: ValidatorFunctionWrapHandler) -> object:
         try:

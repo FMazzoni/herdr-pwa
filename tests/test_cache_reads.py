@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from pydantic import JsonValue, TypeAdapter
 
+from herdr_pwa.clock import MonoTime
 from herdr_pwa.engine import (
     CachedSnapshot,
     EngineTimeout,
@@ -31,8 +32,8 @@ class Clock:
     def __init__(self) -> None:
         self.now = 1_000.0
 
-    def __call__(self) -> float:
-        return self.now
+    def __call__(self) -> MonoTime:
+        return MonoTime(self.now)
 
 
 def test_a_follower_blocks_for_the_leaders_read_and_never_reads_itself(  # noqa: PLR0915 - a threaded scenario whose steps only make sense in order

@@ -1,10 +1,4 @@
-"""The identity gate: who is asking, and whether their write came from this origin.
-
-Any local uid can forge the identity header byte for byte, because ``tailscale serve``
-proxies from loopback; this module trusts every local process and says so. A browser cannot:
-a header identity counts only when the Host is this node's served name, which a DNS-rebinding
-page cannot send.
-"""
+"""Identity gate: any local uid can forge the header and is trusted; a browser needs this Host."""
 
 import hmac
 from collections.abc import Mapping

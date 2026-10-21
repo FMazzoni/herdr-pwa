@@ -1,15 +1,12 @@
-"""The notify decision: which status changes buzz the phone, which clear it, and what the one
-herd notification says. Pure apart from the injected ledgers; the polling loop lives elsewhere.
-"""
+"""The notify decision: which changes buzz or clear the phone, and what the herd notice says."""
 
 import logging
-import time
 from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, replace
 from types import MappingProxyType
 from typing import Final, Protocol, Self
 
-from herdr_pwa.clock import Clock
+from herdr_pwa.clock import MonoClock, MonoTime, WallTime, mono_now
 from herdr_pwa.decisions import NO_OVERLAY, Overlay, read_status
 from herdr_pwa.engine import AgentStatus, PaneId, SessionId
 from herdr_pwa.notify_state import Interrupts, SeenLedger, StatusLedger
@@ -287,12 +284,14 @@ def herd_text(summary: Summary) -> tuple[str, str, str]:
 class HerdSlot:
     """Debounce, coalesce and retract the one herd notification, as a function of a clock."""
 
-    def __init__(self, *, clock: Clock, debounce: float = 0.0, desk_window: float = 0.0) -> None:
-        self._clock: Clock = clock
+    def __init__(
+        self, *, clock: MonoClock, debounce: float = 0.0, desk_window: float = 0.0
+    ) -> None:
+        self._clock: MonoClock = clock
         self._debounce: float = debounce
         self._desk_window: float = desk_window
         self._outstanding: dict[str, Alert] = {}
-        self._held: dict[str, tuple[Alert, float]] = {}
+        self._held: dict[str, tuple[Alert, MonoTime]] = {}
         self._desk: dict[str, float] = {}
         self._buzzed: dict[str, float] = {}
         self._shown: Summary | None = None
@@ -309,7 +308,7 @@ class HerdSlot:
         seen = self._desk.get(session)
         return seen is not None and self._clock() - seen <= self._desk_window
 
-    def next_due(self) -> float | None:
+    def next_due(self) -> MonoTime | None:
         """When the earliest held alert may be shown, so the loop can wake for it."""
         return min((at for _, at in self._held.values()), default=None)
 
@@ -357,7 +356,7 @@ class HerdSlot:
             self._outstanding[change.session] = alert
             return ""
         if self._debounce > 0 and self.at_desk(change.session):
-            self._held[change.session] = (alert, self._clock() + self._debounce)
+            self._held[change.session] = (alert, MonoTime(self._clock() + self._debounce))
             return ""
         self._outstanding[change.session] = alert
         return change.session
@@ -443,7 +442,7 @@ class Hooks:
 
     seen: SeenLedger | None = None
     is_managed: Callable[[PaneId], bool] | None = None
-    policy: Callable[[], tuple[Interrupts, float]] | None = None
+    policy: Callable[[], tuple[Interrupts, WallTime]] | None = None
     health: DeliveryLog | None = None
 
 
@@ -464,7 +463,7 @@ class Planner:
         ledger: StatusLedger,
         config: NotifyConfig,
         *,
-        clock: Clock = time.time,
+        clock: MonoClock = mono_now,
         hooks: Hooks | None = None,
     ) -> None:
         self._ledger: StatusLedger = ledger
@@ -500,8 +499,7 @@ class Planner:
         if prior is None:
             return Step(primed=True)
         unread = self._unread()
-        # A finish read on the phone is idle here too, so the alert it raised is taken down.
-        # A stall stays blocked through the retries that wake it, so it buzzes once per stop.
+        # A finish read on the phone counts idle, and a stall stays blocked, so each buzzes once.
         overlay = replace(beside, unread=_read_map(agents, unread))
         agents = [_shown(one, overlay) for one in agents]
         current = statuses_of(agents)

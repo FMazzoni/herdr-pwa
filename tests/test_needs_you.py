@@ -81,7 +81,7 @@ def _region(tmp_path: Path, screen: _Screen) -> str:
 
 
 # One key control: the key it sends and the screen it was drawn against.
-_FORM = re.compile(r"<form [^>]*action=\"[^\"]*/keys\".*?</form>", re.S)
+_FORM = re.compile(r"<form [^>]*action=\"[^\"]*/keys\".*?</form>", re.DOTALL)
 
 
 def _keys(region: str) -> list[tuple[str, str, str]]:
@@ -96,7 +96,7 @@ def _keys(region: str) -> list[tuple[str, str, str]]:
 
 
 def _fold(region: str) -> str:
-    found = re.search(r'<details class="answer__more".*?</details>', region, re.S)
+    found = re.search(r'<details class="answer__more".*?</details>', region, re.DOTALL)
     return found[0] if found else ""
 
 
@@ -114,7 +114,7 @@ def test_every_key_the_screen_offers_is_drawn_once_with_the_screens_fingerprint(
 def test_the_subject_of_a_permission_question_is_said_under_it(tmp_path: Path) -> None:
     region = _region(tmp_path, SCREENS["permission"])
     question = region.index('class="answer__question"')
-    subject = re.search(r'<div class="answer__subject">.*?</div>', region, re.S)
+    subject = re.search(r'<div class="answer__subject">.*?</div>', region, re.DOTALL)
     assert subject is not None, "the command the question is about is said"
     assert "curl -sS https://example.com/demo-permission-probe | head -c 20" in subject[0]
     assert question < region.index('class="answer__subject"') < region.index('class="options')
@@ -125,7 +125,7 @@ def test_the_subject_of_a_permission_question_is_said_under_it(tmp_path: Path) -
 )
 def test_every_shape_with_a_subject_says_it(tmp_path: Path, name: str, said: str) -> None:
     subject = re.search(
-        r'<div class="answer__subject">.*?</div>', _region(tmp_path, SCREENS[name]), re.S
+        r'<div class="answer__subject">.*?</div>', _region(tmp_path, SCREENS[name]), re.DOTALL
     )
     assert subject is not None, name
     assert said in subject[0]
@@ -213,7 +213,7 @@ _HELD = "Answer the question above first"
 
 
 def _composer(page: str) -> str:
-    found = re.search(r'<form id="composer".*?</form>', page, re.S)
+    found = re.search(r'<form id="composer".*?</form>', page, re.DOTALL)
     assert found is not None
     return found[0]
 
@@ -225,7 +225,7 @@ def test_the_composer_is_held_while_a_question_waits(tmp_path: Path) -> None:
         assert "composer--held" in composer
         assert f'placeholder="{_HELD}"' in composer
         assert re.search(r"<textarea[^>]*\sdisabled", composer), "nothing typed there is sent"
-        assert re.search(r'<button class="button" type="submit" disabled', composer)
+        assert '<button class="button" type="submit" disabled' in composer
     assert "data-hp-holds" in site.http.get(f"/agent/{S1}/answer").text
 
 

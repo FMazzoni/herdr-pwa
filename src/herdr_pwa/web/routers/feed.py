@@ -16,7 +16,7 @@ def build(web: WebState) -> APIRouter:
 
     # Each reportUnusedFunction ignore marks a route: FastAPI registers it by decorator.
     @router.get("/")
-    def feed_page(ws: str = "") -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
+    def feed_page(ws: str = "") -> HTMLResponse:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         # The filter is the address the user tapped, not agent state, so the shell stays rowless.
         page = web.pages.page("feed_page.html", {"ws": ws})
         # The shell holds no row (the fragment does), so it may sit in the back-forward cache.
@@ -24,7 +24,7 @@ def build(web: WebState) -> APIRouter:
         return page
 
     @router.get("/feed", dependencies=[Depends(hidden_tick)])
-    def feed_fragment(ws: str = "") -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
+    def feed_fragment(ws: str = "") -> HTMLResponse:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         herd = load_herd(web)
         view = feed_view(herd.decision, ws)
         context = {

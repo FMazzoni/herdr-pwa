@@ -85,11 +85,11 @@ def _new_routes(router: APIRouter, writes: WriteRoutes) -> None:
 
     # Each reportUnusedFunction ignore marks a route: FastAPI registers it by decorator.
     @router.get("/new")
-    def new_form() -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
+    def new_form() -> HTMLResponse:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         return web.pages.page("new.html", _new_context(web, web.client.snapshot(), {}))
 
     @router.post("/new", response_model=None)
-    def new(post: Annotated[Posted, Depends(writes.post)]) -> Response:  # pyright: ignore[reportUnusedFunction]
+    def new(post: Annotated[Posted, Depends(writes.post)]) -> Response:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         return _new(post)
 
 
@@ -123,11 +123,11 @@ def _no_workspace(web: WebState, name: str, verb: str) -> HTMLResponse:
 def _workspace_routes(router: APIRouter, web: WebState) -> None:
     # Create and rename are reversible and not in the audit log's endpoints, so they carry no trail.
     @router.get("/workspaces/new")
-    def workspace_form() -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
+    def workspace_form() -> HTMLResponse:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         return web.pages.page("workspace_new.html", {"label": ""})
 
     @router.post("/workspaces/new", response_model=None)
-    def workspace_new(request: Request, body: FormBody = b"") -> Response:  # pyright: ignore[reportUnusedFunction]
+    def workspace_new(request: Request, body: FormBody = b"") -> Response:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         label = form(body).get("label", "")
         result = create_workspace(web.client, label, memory=web.memory)
         if isinstance(result, Refused):
@@ -136,14 +136,14 @@ def _workspace_routes(router: APIRouter, web: WebState) -> None:
         return opened(request, _workspace_back(result.workspace_id))
 
     @router.get("/workspaces/{workspace_id}/rename")
-    def rename_form(workspace_id: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
+    def rename_form(workspace_id: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         found = _find(web.client.snapshot(), workspace_id)
         if found is None:
             return _no_workspace(web, "workspace_rename.html", "renamed")
         return web.pages.page("workspace_rename.html", {"workspace": found, "label": found.label})
 
     @router.post("/workspaces/{workspace_id}/rename", response_model=None)
-    def rename(workspace_id: str, request: Request, body: FormBody = b"") -> Response:  # pyright: ignore[reportUnusedFunction]
+    def rename(workspace_id: str, request: Request, body: FormBody = b"") -> Response:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         label = form(body).get("label", "")
         result = rename_workspace(web.client, workspace_id, label, memory=web.memory)
         if isinstance(result, Refused):
@@ -165,14 +165,14 @@ def _close_routes(router: APIRouter, writes: WriteRoutes) -> None:
     web = writes.web
 
     @router.get("/workspaces/{workspace_id}/close")
-    def close_form(workspace_id: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
+    def close_form(workspace_id: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         context = _close_context(web, workspace_id, armed=False)
         if context["cost"] is None:
             return _no_workspace(web, "workspace_close.html", "closed")
         return web.pages.page("workspace_close.html", context)
 
     @router.post("/workspaces/{workspace_id}/close", response_model=None)
-    def close(workspace_id: str, post: Annotated[Posted, Depends(writes.post)]) -> Response:  # pyright: ignore[reportUnusedFunction]
+    def close(workspace_id: str, post: Annotated[Posted, Depends(writes.post)]) -> Response:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         return _close(workspace_id, post)
 
 

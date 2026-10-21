@@ -7,6 +7,7 @@ from typing import Final
 
 from pydantic import JsonValue, TypeAdapter
 
+from herdr_pwa.clock import WallTime
 from herdr_pwa.engine import (
     AgentStatus,
     HistoryState,
@@ -30,7 +31,7 @@ FIRST: Final = "a000000000000000a"
 WAITED: Final = "a000000000000000b"
 RUNNING: Final = "a000000000000000c"
 _RECORD: Final = TypeAdapter(dict[str, JsonValue])
-NOW: Final = datetime(2026, 10, 17, 20, 0, tzinfo=UTC).timestamp()
+NOW: Final = WallTime(datetime(2026, 10, 17, 20, 0, tzinfo=UTC).timestamp())
 
 
 def _records() -> list[dict[str, JsonValue]]:

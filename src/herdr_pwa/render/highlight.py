@@ -17,7 +17,7 @@ from pygments.token import (
     Operator,
     String,
     # pygments exports no public name for a token's type, and the class map is keyed on it.
-    _TokenType,  # pyright: ignore[reportPrivateUsage]
+    _TokenType,  # pyright: ignore[reportPrivateUsage] - pygments has no public name for a token type
 )
 from pygments.util import ClassNotFound
 

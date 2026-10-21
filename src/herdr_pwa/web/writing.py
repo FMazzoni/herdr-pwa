@@ -73,7 +73,7 @@ def writer_for(web: WebState, request: Request, identity: auth.Identity) -> Writ
         web.settings.transcript_roots,
         declared_models(web.settings),
         web.proc,
-        web.memory,
+        memory=web.memory,
     )
 
 
@@ -164,7 +164,9 @@ class FirstNote:
 def first_note(code: str, *, pane_tab: bool = True) -> FirstNote | None:
     """What to say about a carried first prompt; an unknown code says nothing.
 
-    *pane_tab* says the page has a Pane tab to offer; the starting page has none yet.
+    Args:
+        code: The outcome code the redirect carried.
+        pane_tab: The page has a Pane tab to offer; the starting page has none yet.
     """
     if code == FIRST_SENT:
         return FirstNote("sent", "Started, and your first prompt is on the pane.")

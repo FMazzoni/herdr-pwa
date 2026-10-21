@@ -22,14 +22,15 @@ from herdr_pwa.audit import (
     records,
 )
 from herdr_pwa.auth import Identity
+from herdr_pwa.clock import WallTime
 
 ME = Origin(
     actor="you@example.com", via="tailscale", client_ip="127.0.0.1", forwarded_for="198.51.100.7"
 )
 
 
-def fixed_clock() -> float:
-    return datetime(2026, 10, 10, 12, 0, tzinfo=UTC).timestamp()
+def fixed_clock() -> WallTime:
+    return WallTime(datetime(2026, 10, 10, 12, 0, tzinfo=UTC).timestamp())
 
 
 def make_log(

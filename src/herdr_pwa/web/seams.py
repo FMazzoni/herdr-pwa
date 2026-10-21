@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from herdr_pwa.clock import Clock, Sleep
+from herdr_pwa.clock import MonoClock, Sleep, WallClock, mono_now, wall_now
 from herdr_pwa.engine import EngineSettings, HerdrClient
 from herdr_pwa.managed import PROC
 from herdr_pwa.push import PUSH_LIMITS, Deliver, PushLimits
@@ -20,16 +20,12 @@ type ClientFactory = Callable[[EngineSettings], HerdrClient]
 
 @dataclass(frozen=True, slots=True)
 class Seams:
-    """Time, the runner, the push service, tailscaled, the files it reads and the terminal.
-
-    ``cli.main`` builds the real ones; a test builds its own and hands it to the same entry
-    point. Nothing below an entry point reads the clock or opens a connection on its own.
-    """
+    """Time, the runner, push, files and the terminal; nothing below an entry point owns its own."""
 
     # Intervals, deadlines and cache ages.
-    clock: Clock = time.monotonic
+    clock: MonoClock = mono_now
     # Stamps written to disk, and how long ago one was.
-    wall: Clock = time.time
+    wall: WallClock = wall_now
     # The runner client's retry and poll waits.
     sleep: Sleep = time.sleep
     # What a write's read-back waits run on.

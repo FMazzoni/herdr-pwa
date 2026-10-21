@@ -94,17 +94,19 @@ class Unsure:
 class WriteMemory:
     """What one app's writes remember between requests: the keys in flight, the unsure sends."""
 
-    # Shared across the routes' thread pool, so two tabs are two threads on one set; a restart
-    # forgets both, and the composer still says so.
+    # Shared by the routes' thread pool, so two tabs share one set; a restart forgets both.
     in_flight: InFlight = field(default_factory=InFlight)
     unsure: Unsure = field(default_factory=Unsure)
 
 
 @dataclass(frozen=True, slots=True)
 class Writer:
-    """What every write needs: the runner, the audit trail, the clock its waits run on, the
-    transcript roots a session's own store is looked up in (empty: each harness's default), the
-    models the operator declared per kind, and the /proc a pane's process is looked up in.
+    """What every write needs: the runner, the audit trail, its waits' clock and where it looks.
+
+    Attributes:
+        stores: Transcript roots a session's own store is looked up in; empty is each default.
+        declared: The models the operator declared per kind.
+        proc: The /proc a pane's process is looked up in.
     """
 
     client: HerdrClient
@@ -113,7 +115,8 @@ class Writer:
     stores: tuple[str, ...] = ()
     declared: Mapping[str, tuple[str, ...]] = field(default_factory=dict[str, tuple[str, ...]])
     proc: Path = PROC
-    memory: WriteMemory = field(default_factory=WriteMemory)
+    # Required: a fresh default would give a writer a memory no other request shares.
+    memory: WriteMemory = field(kw_only=True)
 
     @property
     def witness(self) -> Witness:
@@ -134,8 +137,7 @@ def doubt(agent: Agent, witness: Witness) -> str:
     """Why *agent*'s reported session may belong to something else in its pane, or ``""``."""
     root = witness.stores or None
     said = identity_doubt(session_origin(agent, root=root), (agent.foreground_cwd, agent.cwd))
-    # A folder renamed under a live agent leaves its store's path behind; the process the
-    # pane's keys reach naming this session as its own outweighs where it started.
+    # A renamed folder leaves the store's path behind; the pane's process holding it outweighs that.
     if said and holds_session(agent, _leader(witness.client, agent), root=root, proc=witness.proc):
         log.info("%s holds %s although it started elsewhere", agent.target, agent.session)
         return ""
@@ -165,8 +167,7 @@ def agent_now(
     resolution = snap.resolve_session(session, expected_target=expected_target)
     if resolution.presence is Presence.GONE or resolution.agent is None:
         return Refused(Refusal.GONE, verb, detail=resolution.message)
-    # The session check on the wire compares herdr's record with herdr's record; a pane whose
-    # record was overwritten by a nested harness passes it, and the keys reach the real agent.
+    # herdr checks a record a nested harness can overwrite; then keys would reach another agent.
     said = doubt(resolution.agent, writer.witness)
     if said:
         log.warning("write refused at %s: %s", resolution.agent.target, said)
@@ -205,7 +206,6 @@ def one_at_a_time[T](
     memory: WriteMemory, key: str, verb: str, write: Callable[[], T]
 ) -> T | Refused:
     """Run ``write`` unless another write to the same ``key`` is still in flight; then refuse."""
-    # Refused rather than queued: the second tap was made against what the first one changes, so
-    # its sender has to look again either way, and a queue would pin a pool thread for the watch.
+    # Refused, not queued: the second tap aimed at what the first changes; a queue pins a thread.
     with memory.in_flight.hold(key) as mine:
         return write() if mine else Refused(Refusal.IN_FLIGHT, verb)

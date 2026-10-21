@@ -16,8 +16,8 @@ def _turn(speaker: str, n: int = 0, *, failed: bool = False) -> ChatTurn:
         (),
         "Bash" if speaker == "tool" else "",
         "",
-        failed,
-        False,
+        failed=failed,
+        truncated=False,
         call=f"tu{n}",
     )
 

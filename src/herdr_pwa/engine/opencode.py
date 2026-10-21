@@ -56,8 +56,7 @@ _QUIET_TYPES: Final = frozenset(
     {"step-start", "step-finish", "snapshot", "patch", "reasoning", "compaction"}
 )
 
-# Measured: the error opencode records when the turn was stopped, worded "Aborted" or, in the
-# frozen layout, "The operation was aborted."
+# Measured: opencode's error for a stopped turn, worded "Aborted" or "The operation was aborted."
 _ABORTED: Final = "MessageAbortedError"
 
 # A message whose answer failed: its error is read where its parts end, as one more entry.
@@ -454,7 +453,7 @@ class _Live:
     def _columns(self, columns: str) -> tuple[object, ...] | None:
         """The session's own row, or ``None`` -- a store without *columns* included."""
         # *columns* is always one of this class's literals, never input; only the id is bound.
-        sql = f"select {columns} from session where id = ?"  # noqa: S608
+        sql = f"select {columns} from session where id = ?"  # noqa: S608 - the interpolated names are fixed in code; every value is bound
         return self._db.first(sql, self._db.session)
 
     def close(self) -> None:
@@ -466,7 +465,7 @@ class _Live:
         if not _ID.fullmatch(key):
             return None, 0
         # *table* is always "part" or "message" from this class; the ids are bound.
-        sql = f"select data from {table} where id = ? and session_id = ?"  # noqa: S608
+        sql = f"select data from {table} where id = ? and session_id = ?"  # noqa: S608 - the interpolated names are fixed in code; every value is bound
         found = self._db.first(sql, key, self._db.session)
         if found is None:
             return None, 0
@@ -721,8 +720,7 @@ def _take(tally: SessionUsage, record: _MessageRecord) -> None:
         return
     cost = _spent(record)
     tokens = record.tokens
-    # A failed answer's zeros are not a reply: counted, they name a model that never answered
-    # and empty the context window the last real answer measured.
+    # A failed answer's zeros would name a model that never answered and empty the context gauge.
     if tokens is None or record.error is not None:
         tally.cost += cost
         return
@@ -759,14 +757,14 @@ class OpencodeAdapter(TranscriptAdapter):
     """opencode's history: either normalised store, paged by POSITION not byte."""
 
     default_roots: ClassVar[tuple[str, ...]] = (OPENCODE_ROOT,)
-    # OPENCODE_CONFIG_CONTENT is merged over the project's config: https://opencode.ai/docs/config/
-    # ``--prompt`` is in ``opencode --help`` (1.18.30), and it opens the session in half the time.
     harness: ClassVar[Harness] = Harness(
         "opencode",
         StartRecipe(
             "opencode",
             models_setting="opencode_models",
+            # Merged over the project's config: https://opencode.ai/docs/config/
             env={"OPENCODE_CONFIG_CONTENT": OPENCODE_ASK},
+            # In ``opencode --help`` (1.18.30); it opens the session in half the time.
             prompt_flag="--prompt",
         ),
     )

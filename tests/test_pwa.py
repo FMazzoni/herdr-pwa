@@ -256,7 +256,7 @@ def test_the_shell_is_gated_like_everything_else(tmp_path: Path, route: str) -> 
 def png_size(body: bytes) -> tuple[int, int]:
     assert body[:8] == b"\x89PNG\r\n\x1a\n"
     width, height = struct.unpack(">II", body[16:24])
-    return int(width), int(height)  # pyright: ignore[reportAny]
+    return int(width), int(height)  # pyright: ignore[reportAny] - struct.unpack is typed as a tuple of Any
 
 
 @pytest.mark.parametrize("route", list(TOUCH_ICONS))

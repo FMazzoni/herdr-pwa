@@ -7,6 +7,7 @@ from pathlib import Path
 from pydantic import JsonValue, TypeAdapter
 
 from herdr_pwa.audit import AuditLog, Origin, Record, Recorder, records
+from herdr_pwa.clock import MonoTime
 from herdr_pwa.engine import (
     EngineSettings,
     HerdrClient,
@@ -17,7 +18,7 @@ from herdr_pwa.engine import (
     as_session_id,
 )
 from herdr_pwa.writes.outcome import Pacing
-from herdr_pwa.writes.resolve import Writer
+from herdr_pwa.writes.resolve import WriteMemory, Writer
 from tests._jsonpath import obj
 from tests._wire_support import as_reply
 
@@ -75,8 +76,8 @@ class FakeClock:
         self.now = 1000.0
         self.slept: list[float] = []
 
-    def __call__(self) -> float:
-        return self.now
+    def __call__(self) -> MonoTime:
+        return MonoTime(self.now)
 
     def sleep(self, seconds: float) -> None:
         self.slept.append(seconds)
@@ -316,7 +317,7 @@ def rig(tmp_path: Path, herd: FakeHerd | None = None) -> Rig:
     recorder = Recorder(log, Origin(actor="tester@example.com", via="config"))
     return Rig(
         herd,
-        Writer(client, recorder, Pacing(sleep=clock.sleep, clock=clock)),
+        Writer(client, recorder, Pacing(sleep=clock.sleep, clock=clock), memory=WriteMemory()),
         clock,
         tmp_path / "state",
     )

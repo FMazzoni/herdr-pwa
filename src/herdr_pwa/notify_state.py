@@ -1,10 +1,7 @@
-"""What the notifier remembers across ticks and restarts: prior statuses, what the phone has
-seen, and which kinds of alert the user lets through. Every file is 0600 in the state dir.
-"""
+"""What the notifier keeps across restarts, each file 0600: statuses, what was seen, what buzzes."""
 
 import logging
 import threading
-import time
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Annotated, Final, Literal, Protocol
@@ -21,7 +18,7 @@ from pydantic import (
 )
 
 from herdr_pwa import statedir
-from herdr_pwa.clock import Clock
+from herdr_pwa.clock import WallClock, WallTime, wall_now
 from herdr_pwa.ids import SessionId
 from herdr_pwa.push import EVENT_BLOCKED, EVENT_DONE, PushEvent
 from herdr_pwa.validation import or_default
@@ -70,11 +67,11 @@ class StatusLedger:
     """The last status each agent was seen in, on disk so a restart is not a buzz storm."""
 
     def __init__(
-        self, state_dir: Path, *, max_age: float = 900.0, clock: Clock = time.time
+        self, state_dir: Path, *, max_age: float = 900.0, clock: WallClock = wall_now
     ) -> None:
         self.path: Path = state_dir / LEDGER_FILENAME
         self._max_age: float = max_age
-        self._clock: Clock = clock
+        self._clock: WallClock = clock
 
     def load(self) -> dict[str, str] | None:
         """The prior to diff against, or None for absent, corrupt or stale: prime instead."""
@@ -129,9 +126,9 @@ class _SeenFile(_StateFile):
 class SeenLedger:
     """Which finished work the phone has not opened yet; herdr's done only covers the desk."""
 
-    def __init__(self, state_dir: Path, *, clock: Clock = time.time) -> None:
+    def __init__(self, state_dir: Path, *, clock: WallClock = wall_now) -> None:
         self.path: Path = state_dir / SEEN_FILENAME
-        self._clock: Clock = clock
+        self._clock: WallClock = clock
         self._lock: threading.Lock = threading.Lock()
         self._records: dict[str, SeenRecord] | None = None
         self._dirty: bool = False
@@ -151,7 +148,7 @@ class SeenLedger:
                 self._observe_one(records, agent, now)
             self._trim(records)
 
-    def _observe_one(self, records: dict[str, SeenRecord], agent: SeenAgent, now: float) -> None:
+    def _observe_one(self, records: dict[str, SeenRecord], agent: SeenAgent, now: WallTime) -> None:
         if not agent.session:
             return
         record = records.get(agent.session)
@@ -232,15 +229,15 @@ class Interrupts(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    blocked: Annotated[StrictBool, or_default(True)] = True
-    done: Annotated[StrictBool, or_default(False)] = False
+    blocked: Annotated[StrictBool, or_default(default=True)] = True
+    done: Annotated[StrictBool, or_default(default=False)] = False
     dnd_until: Annotated[StrictFloat, or_default(0.0), AfterValidator(_not_negative)] = 0.0
 
-    def snoozed(self, now: float) -> bool:
+    def snoozed(self, now: WallTime) -> bool:
         """The do-not-disturb window is still in the future."""
         return self.dnd_until > now
 
-    def allows(self, event: PushEvent, *, now: float) -> bool:
+    def allows(self, event: PushEvent, *, now: WallTime) -> bool:
         """May this event be sent now? Only the standing blocked preference can silence blocked."""
         if event == EVENT_BLOCKED:
             # Do-not-disturb is deliberately not consulted: needs-you is the app's purpose.
@@ -260,9 +257,9 @@ class _InterruptsFile(_StateFile):
 class InterruptStore:
     """The preferences on the box at 0600, because one push fans out to every device."""
 
-    def __init__(self, state_dir: Path, *, clock: Clock = time.time) -> None:
+    def __init__(self, state_dir: Path, *, clock: WallClock = wall_now) -> None:
         self.path: Path = state_dir / INTERRUPTS_FILENAME
-        self._clock: Clock = clock
+        self._clock: WallClock = clock
         # The preference routes rewrite it from worker threads, each from what it read.
         self._lock: threading.Lock = threading.Lock()
 
@@ -296,6 +293,6 @@ class InterruptStore:
         with self._lock:
             return self.save(self.load().model_copy(update={"dnd_until": until}))
 
-    def current(self) -> tuple[Interrupts, float]:
+    def current(self) -> tuple[Interrupts, WallTime]:
         """The policy and the clock reading it is judged against, taken together."""
         return self.load(), self._clock()

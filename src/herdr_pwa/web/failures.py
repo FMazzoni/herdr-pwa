@@ -3,7 +3,7 @@
 import logging
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Final
 
 from fastapi import FastAPI, Request
@@ -49,7 +49,7 @@ class Failure:
     headline: str
     detail: str
     # A failure that may heal keeps polling; one that cannot, stops.
-    retry: bool = False
+    retry: bool = field(default=False, kw_only=True)
 
 
 # First match wins, so a subclass sits above its base.
@@ -77,7 +77,9 @@ FAILURES: Final[tuple[tuple[type[Exception], Failure], ...]] = (
     ),
     (
         TargetNotFound,
-        Failure(404, "agent gone", "The agent's pane vanished while it was being read.", True),
+        Failure(
+            404, "agent gone", "The agent's pane vanished while it was being read.", retry=True
+        ),
     ),
     (
         ProtocolMismatch,
@@ -85,7 +87,7 @@ FAILURES: Final[tuple[tuple[type[Exception], Failure], ...]] = (
             409,
             "runner version drift",
             "The runner is speaking a version this build cannot safely drive.",
-            True,
+            retry=True,
         ),
     ),
     (
@@ -94,15 +96,17 @@ FAILURES: Final[tuple[tuple[type[Exception], Failure], ...]] = (
     ),
     (
         EngineTimeout,
-        Failure(503, "runner too slow", "The runner did not answer in time.", True),
+        Failure(503, "runner too slow", "The runner did not answer in time.", retry=True),
     ),
     (
         EngineUnavailable,
-        Failure(503, "runner unreachable", "This app is up and the runner is not answering.", True),
+        Failure(
+            503, "runner unreachable", "This app is up and the runner is not answering.", retry=True
+        ),
     ),
     (
         InvalidResponse,
-        Failure(502, "runner answered nonsense", "The runner's reply did not parse.", True),
+        Failure(502, "runner answered nonsense", "The runner's reply did not parse.", retry=True),
     ),
     (
         EngineMisconfigured,
@@ -110,7 +114,7 @@ FAILURES: Final[tuple[tuple[type[Exception], Failure], ...]] = (
     ),
     (
         EngineError,
-        Failure(502, "runner error", "The runner refused the read.", True),
+        Failure(502, "runner error", "The runner refused the read.", retry=True),
     ),
 )
 
@@ -133,8 +137,7 @@ _REGION_ID: Final = re.compile(r"[a-z]+(?:-[a-z]+)*")
 
 
 def _stand_in(request: Request) -> str:
-    # htmx names the element a fragment replaces; the failure keeps that id, so the page still
-    # finds the region (to hold its redraw back under a finger) while it is a failure.
+    # The failure keeps the id htmx names, so the page still finds the region it replaced.
     target = request.headers.get("HX-Target", "")
     return target if _REGION_ID.fullmatch(target) else ""
 

@@ -1,6 +1,7 @@
 import base64
 import json
 import os
+import re
 import socket
 import stat
 import threading
@@ -16,10 +17,13 @@ import pytest
 import pywebpush
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+from hypothesis import HealthCheck, given, settings
+from hypothesis import strategies as st
 from pydantic import ValidationError
 from pywebpush import WebPushException
 
 from herdr_pwa import push, statedir
+from herdr_pwa.clock import WallTime
 from herdr_pwa.push import (
     EVENT_BLOCKED,
     EVENT_CLEAR,
@@ -374,15 +378,64 @@ def test_a_link_inside_punctuation_is_still_found(text: str, cleaned: str) -> No
     assert sanitise(text, limit=MAX_BODY_CHARS) == cleaned
 
 
+@pytest.mark.parametrize(
+    ("text", "cleaned"),
+    [
+        ("X.comwww.-", "[link]"),
+        ("a.iowww.b.c", "[link]"),
+        ("see x.devwww.y now", "see [link] now"),
+        ("x.dev.www-", "[link].www-"),
+        ("a.com..www.b", "[link]..[link]"),
+    ],
+)
+def test_a_host_glued_to_a_www_is_taken_with_it(text: str, cleaned: str) -> None:
+    assert sanitise(text, limit=MAX_BODY_CHARS) == cleaned
+
+
+# A host as the link pattern reads one: dotted labels ending in a linky TLD at a word's end.
+_HOST_LIKE = re.compile(
+    rf"[a-z0-9][a-z0-9\-]*(?:\.[a-z0-9\-]+)*\.(?:{push._LINKY_TLDS})\b",  # pyright: ignore[reportPrivateUsage] - one TLD list for the pattern and its property
+    re.IGNORECASE,
+)
+# Words built around a host, with the glue that has hidden one before ("www.", "..", "-").
+_GLUE = st.lists(st.sampled_from(["x", "w", "www.", ".", "..", "-", "_", "/", "é"]), max_size=4)
+_HOSTS = st.tuples(
+    st.lists(st.sampled_from(["x", "a1", "www", "com"]), min_size=1, max_size=3),
+    st.sampled_from(["com", "io", "dev"]),
+).map(lambda parts: ".".join([*parts[0], parts[1]]))
+_WORDS = st.tuples(_GLUE, _HOSTS, _GLUE).map(lambda w: "".join(w[0]) + w[1] + "".join(w[2]))
+
+
+@settings(
+    max_examples=200,
+    deadline=None,
+    derandomize=True,
+    database=None,
+    suppress_health_check=[HealthCheck.too_slow],
+)
+@given(st.lists(_WORDS, min_size=1, max_size=3).map(" ".join))
+def test_no_host_like_token_survives_sanitising(text: str) -> None:
+    assert _HOST_LIKE.search(sanitise(text, limit=MAX_BODY_CHARS)) is None
+
+
 # One unbroken word made the old pattern rescan the rest of it from every letter: 18 s at 20k.
-ADVERSARIAL = ("a" * 100_000, "a." * 50_000, "a-" * 50_000, "1a" * 50_000, "a.." * 33_333)
+ADVERSARIAL = (
+    "a" * 100_000,
+    "a." * 50_000,
+    "a-" * 50_000,
+    "1a" * 50_000,
+    "a.." * 33_333,
+    "ww." * 33_333,
+)
 
 
-@pytest.mark.parametrize("text", ADVERSARIAL, ids=["word", "dots", "dashes", "digits", "breaks"])
+@pytest.mark.parametrize(
+    "text", ADVERSARIAL, ids=["word", "dots", "dashes", "digits", "breaks", "near-www"]
+)
 def test_scanning_for_links_is_linear_in_the_text(text: str) -> None:
     # CPU time, so a loaded gate cannot inflate it; the old pattern took minutes, far past 1 s.
     started = time.process_time()
-    _ = push._URL_RE.sub(LINK_PLACEHOLDER, text)  # pyright: ignore[reportPrivateUsage]
+    _ = push._URL_RE.sub(LINK_PLACEHOLDER, text)  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
     assert time.process_time() - started < 1.0
 
 
@@ -400,7 +453,9 @@ def test_a_link_cut_by_the_scan_cap_is_dropped_and_the_cut_marked(padding: int) 
 
 
 def test_the_title_and_body_are_capped() -> None:
-    payload = build_payload(Notice(event=EVENT_BLOCKED, title="t" * 200, body="b" * 500), now=0)
+    payload = build_payload(
+        Notice(event=EVENT_BLOCKED, title="t" * 200, body="b" * 500), now=WallTime(0)
+    )
     assert len(str(payload["title"])) == 60
     assert len(str(payload["body"])) == 180
     assert str(payload["body"]).endswith("…")
@@ -408,19 +463,19 @@ def test_the_title_and_body_are_capped() -> None:
 
 def test_a_body_that_was_only_a_link_falls_back() -> None:
     notice = Notice(event=EVENT_DONE, title="x", body="https://evil.example", fallback="herdr")
-    assert build_payload(notice, now=0)["body"] == "herdr"
+    assert build_payload(notice, now=WallTime(0))["body"] == "herdr"
 
 
 def test_only_blocked_and_done_are_notifications_and_clear_raises_nothing() -> None:
     with pytest.raises(PushError):
-        _ = build_payload(Notice(event=EVENT_CLEAR, title="", body=""), now=0)
-    clear = build_clear(now=5)
+        _ = build_payload(Notice(event=EVENT_CLEAR, title="", body=""), now=WallTime(0))
+    clear = build_clear(now=WallTime(5))
     assert (clear["event"], clear["tag"], "title" in clear) == (EVENT_CLEAR, "herd", False)
 
 
 def test_the_encoded_payload_is_compact_and_always_fits() -> None:
     notice = Notice(event=EVENT_BLOCKED, title="ü" * 200, body="ü" * 5000, agent="ü" * 200)
-    encoded = encode_payload(build_payload(notice, now=0))
+    encoded = encode_payload(build_payload(notice, now=WallTime(0)))
     assert ", " not in encoded
     assert len(encoded.encode()) <= MAX_PAYLOAD_BYTES
     with pytest.raises(PushError):
@@ -441,7 +496,7 @@ def test_pywebpush_signs_and_encrypts_with_this_key(
     device = {"endpoint": ENDPOINT, "keys": {"p256dh": b64u(point), "auth": b64u(bytes(16))}}
     subscription = Subscription.model_validate(device)
     data = encode_payload(
-        build_payload(Notice(event=EVENT_BLOCKED, title="t", body="secret"), now=0)
+        build_payload(Notice(event=EVENT_BLOCKED, title="t", body="secret"), now=WallTime(0))
     )
     # pywebpush leaves its subscription mapping untyped.
     sign = cast("Callable[..., object]", pywebpush.webpush)
@@ -625,22 +680,33 @@ def a_sender(tmp_path: Path, limits: PushLimits = PUSH_LIMITS) -> WebPushSender:
 def test_a_push_service_that_never_answers_fails_within_the_timeout(tmp_path: Path) -> None:
     limits = replace(PUSH_LIMITS, send_timeout=0.5)
     with socket.create_server(("127.0.0.1", 0)) as silent:
+        # An IPv4 socket's name is (host, port).
         port = cast("tuple[str, int]", silent.getsockname())[1]
         started = time.monotonic()
         with pytest.raises(DeliveryError) as refused:
             a_sender(tmp_path, limits)(unchecked(f"https://127.0.0.1:{port}/push"), "{}")
     assert time.monotonic() - started < 5
     assert refused.value.status is None
+    # The library's text names the endpoint; the record keeps only fixed words.
+    assert str(refused.value) == "push service not reached (ReadTimeout)"
+
+
+def test_a_refusal_before_posting_keeps_none_of_the_librarys_text() -> None:
+    wrapped = push._refusal(WebPushException("https://fcm.googleapis.com/fcm/send/secret"))  # pyright: ignore[reportPrivateUsage] - the refusal's words are the unit under test
+    assert "secret" not in str(wrapped)
+    assert wrapped.status is None
 
 
 @contextmanager
-def answering(status: int, headers: dict[str, str], body: bytes) -> Generator[list[str]]:
+def answering(
+    status: int, headers: dict[str, str], body: bytes, reason: str | None = None
+) -> Generator[list[str]]:
     seen: list[str] = []
 
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self) -> None:
             seen.append(self.path)
-            self.send_response(status)
+            self.send_response(status, reason)
             for name, value in headers.items():
                 self.send_header(name, value)
             self.send_header("Content-Length", str(len(body)))
@@ -683,6 +749,30 @@ def test_a_refusal_keeps_the_status_and_reason_and_never_the_body(tmp_path: Path
     assert refused.value.status == 500
 
 
+PLANTED = "https://planted.example/device-secret"
+
+
+def test_no_text_from_the_service_or_the_library_reaches_the_record_or_the_log(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    store = SubscriptionStore(tmp_path / "state", clock=Clock())
+    health = DeliveryLog(tmp_path / "state", clock=Clock())
+    # The reason phrase and the body are the service's text; pywebpush quotes both in its error.
+    with answering(500, {}, PLANTED.encode(), reason=f"see {PLANTED}") as service:
+        device = unchecked(f"{service[0]}/push")
+        with pytest.raises(DeliveryError) as refused:
+            a_sender(tmp_path)(device, "{}")
+        outlet = Outlet(a_sender(tmp_path), store, health)
+        outcome = fan_out("{}", [device], outlet, now=Clock()())
+    assert outcome.failed == 1
+    assert refused.value.__cause__ is None
+    assert refused.value.__suppress_context__
+    record = health.load()
+    assert record is not None
+    assert record.last_error == "push service answered 500 Internal Server Error"
+    assert "planted" not in caplog.text
+
+
 def test_a_fan_out_past_its_budget_skips_the_rest(tmp_path: Path) -> None:
     clock = Clock()
     elapsed = Clock(0.0)
@@ -698,7 +788,7 @@ def test_a_fan_out_past_its_budget_skips_the_rest(tmp_path: Path) -> None:
 
     health = DeliveryLog(tmp_path, clock=clock)
     devices = [subscribed(endpoint) for endpoint in endpoints]
-    outlet = Outlet(slow, store, health, clock=elapsed)
+    outlet = Outlet(slow, store, health, clock=elapsed.mono)
     outcome = fan_out("{}", devices, outlet, now=clock())
     assert reached == endpoints[:1]
     assert (outcome.sent, outcome.failed) == (1, 2)

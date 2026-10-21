@@ -36,7 +36,7 @@ from herdr_pwa.writes.prompt import (
     send_prompt,
 )
 from herdr_pwa.writes.refusal import Refusal, Refused
-from herdr_pwa.writes.resolve import Writer
+from herdr_pwa.writes.resolve import WriteMemory, Writer
 from herdr_pwa.writes.workspaces import (
     WorkspaceCloseAsk,
     WorkspaceDone,
@@ -78,7 +78,9 @@ def writer(tmp_path: Path) -> Writer:
     assert SOCKET.exists(), "run `just live-session` first"
     client = HerdrClient(EngineSettings(socket_path=SOCKET))
     log = AuditLog(tmp_path / "state", max_bytes=1 << 20, payload_chars=512)
-    return Writer(client, Recorder(log, Origin(actor="live-test", via="config")))
+    return Writer(
+        client, Recorder(log, Origin(actor="live-test", via="config")), memory=WriteMemory()
+    )
 
 
 @dataclass(frozen=True, slots=True)

@@ -24,8 +24,7 @@ CSP: Final = "; ".join(
     )
 )
 NO_STORE: Final = "no-store"
-# Safari keeps a no-store page out of the back-forward cache; a page that renders no agent
-# state may revalidate instead, so a swipe back to it is instant rather than a blank reload.
+# Safari's back-forward cache skips no-store pages, so a page with no agent state revalidates.
 ROWLESS: Final = "private, no-cache"
 BUILD_HEADER: Final = "HP-Build"
 

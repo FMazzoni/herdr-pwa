@@ -1,7 +1,4 @@
-"""Pairing: publish this app behind ``tailscale serve`` and show its https URL as a QR.
-
-There is no token; the URL is safe to screenshot because the tailnet is the boundary.
-"""
+"""Pairing: publish behind ``tailscale serve`` and show the URL as a QR; the tailnet is the gate."""
 
 import io
 import json

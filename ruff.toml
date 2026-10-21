@@ -1,6 +1,9 @@
 line-length = 100
 
 [lint]
+# Preview only for the rules named below: no preview rule or preview behaviour comes in by prefix.
+preview = true
+explicit-preview-rules = true
 # Families picked for what they catch in agent-written code: ANN (annotation
 # coverage), S (security), TRY (exception antipatterns), ARG (parameters left after
 # a refactor), ERA (commented-out code), PL (pylint subset).
@@ -9,6 +12,7 @@ select = [
     "ANN", "S", "B", "A", "C4", "DTZ", "T20",
     "ISC", "ICN", "PIE", "PT", "RET", "SIM", "TID",
     "ARG", "PTH", "ERA", "PL", "TRY", "PERF", "RUF",
+    "ASYNC", "G", "LOG",
 ]
 ignore = [
     "E501",    # the formatter owns line length
@@ -18,7 +22,11 @@ ignore = [
 ]
 # RUF100 (unused noqa) stays on, so a suppression can't outlive its reason.
 # BLE001 is not in a selected family, so it is named: a blind except hides the bug it catches.
-extend-select = ["BLE001"]
+# FBT003: a bare True or False at a call says nothing; FBT001 would flag parametrized tests.
+# TC006: one spelling for cast, quoted, so the type need not exist at runtime.
+# RUF039 (raw regex strings), RUF055 (a plain string needs no regex) and FURB167 (long flag
+# names) are preview rules, named one by one so a ruff upgrade adds no other preview rule.
+extend-select = ["BLE001", "FBT003", "TC006", "RUF039", "RUF055", "FURB167"]
 
 [lint.per-file-ignores]
 "tests/**" = [

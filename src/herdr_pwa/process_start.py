@@ -2,10 +2,10 @@
 
 import logging
 import os
-from collections.abc import Callable
 from pathlib import Path
 from typing import Final, Protocol
 
+from herdr_pwa.clock import MonoClock
 from herdr_pwa.ids import PaneId
 
 log = logging.getLogger(__name__)
@@ -60,11 +60,11 @@ class ProcessStarts:
         panes: PaneProcesses,
         *,
         proc: Path,
-        clock: Callable[[], float],
+        clock: MonoClock,
     ) -> None:
         self._panes: PaneProcesses = panes
         self._proc: Path = proc
-        self._clock: Callable[[], float] = clock
+        self._clock: MonoClock = clock
         self._ticks: int = os.sysconf("SC_CLK_TCK")
         self._held: dict[PaneId, tuple[float, float | None]] = {}
 

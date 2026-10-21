@@ -210,7 +210,7 @@ class _Unrecordable:
 
 def test_a_write_that_cannot_be_recorded_is_not_made(tmp_path: Path) -> None:
     r = idle_rig(tmp_path)
-    writer = Writer(r.writer.client, _Unrecordable(), r.writer.pacing)
+    writer = Writer(r.writer.client, _Unrecordable(), r.writer.pacing, memory=r.writer.memory)
     result = refused(send_prompt(writer, PromptAsk(S1, "hello")))
     assert (result.refusal, result.status) == (Refusal.UNRECORDABLE, 503)
     assert r.herd.writes(PROMPT) == []

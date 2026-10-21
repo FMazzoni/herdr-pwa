@@ -12,7 +12,7 @@ def build(web: WebState) -> APIRouter:
 
     # Each reportUnusedFunction ignore marks a route: FastAPI registers it by decorator.
     @router.get("")
-    def workspaces() -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
+    def workspaces() -> HTMLResponse:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         snapshot = web.snapshot().value
         counts = {w.workspace_id: 0 for w in snapshot.workspaces}
         for agent in snapshot.agents:

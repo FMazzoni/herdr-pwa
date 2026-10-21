@@ -14,9 +14,9 @@ ROOT: Final = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from firefox import held  # noqa: E402
-from geometry import HTMX_SETTLED, Switch, install, serve  # noqa: E402
-from playwright.sync_api import (  # noqa: E402
+from firefox import held  # noqa: E402 - after the sys.path line that makes it importable
+from geometry import HTMX_SETTLED, Switch, install, serve  # noqa: E402 - after the sys.path line that makes it importable
+from playwright.sync_api import (  # noqa: E402 - after the sys.path line that makes it importable
     Browser,
     BrowserContext,
     Page,
@@ -24,9 +24,9 @@ from playwright.sync_api import (  # noqa: E402
     Route,
     sync_playwright,
 )
-from playwright.sync_api import Error as BrowserError  # noqa: E402
+from playwright.sync_api import Error as BrowserError  # noqa: E402 - after the sys.path line that makes it importable
 
-from tests.catalogue import State, pick  # noqa: E402
+from tests.catalogue import State, pick  # noqa: E402 - after the sys.path line that makes it importable
 
 # Gitignored scratch shared by every worktree; shots are looked at, never committed.
 OUT: Final = ROOT / ".agents" / "shots"
@@ -142,7 +142,7 @@ def snap(page: Page, target: Path) -> list[Path]:
         page.screenshot(path=str(full), full_page=True)
     else:
         clip = {"x": 0, "y": 0, "width": width, "height": int(MAX_SHOT_PX / scale)}
-        page.screenshot(path=str(full), full_page=True, clip=clip)  # pyright: ignore[reportArgumentType]
+        page.screenshot(path=str(full), full_page=True, clip=clip)  # pyright: ignore[reportArgumentType] - playwright wants a FloatRect, and this dict is one
     return [first, full]
 
 

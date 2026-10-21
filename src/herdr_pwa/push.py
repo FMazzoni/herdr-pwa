@@ -5,10 +5,10 @@ import json
 import logging
 import re
 import threading
-import time
 import unicodedata
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from http import HTTPStatus
 from pathlib import Path
 from typing import Annotated, Final, Literal, Protocol, Self, TypedDict, Unpack, cast
 from urllib.parse import urlsplit
@@ -34,7 +34,7 @@ from pydantic import (
 from pywebpush import WebPushException
 
 from herdr_pwa import statedir
-from herdr_pwa.clock import Clock, ago
+from herdr_pwa.clock import MonoClock, WallClock, WallTime, ago, mono_now, wall_now
 from herdr_pwa.panetext import without_escapes
 from herdr_pwa.patterns import Rx
 from herdr_pwa.validation import is_not_json, or_default, summary
@@ -213,7 +213,7 @@ def _vapid_problem(path: Path, exc: OSError | ValidationError) -> str:
     return f"{path}: {summary(exc)}"
 
 
-def _minted(path: Path, *, clock: Clock) -> _VapidFile:
+def _minted(path: Path, *, clock: WallClock) -> _VapidFile:
     key = ec.generate_private_key(ec.SECP256R1())
     private_raw = key.private_numbers().private_value.to_bytes(32, "big")
     public_raw = key.public_key().public_bytes(Encoding.X962, PublicFormat.UncompressedPoint)
@@ -234,7 +234,7 @@ def _minted(path: Path, *, clock: Clock) -> _VapidFile:
     return minted
 
 
-def load_or_create_vapid_keys(state_dir: Path, *, clock: Clock = time.time) -> VapidKeys:
+def load_or_create_vapid_keys(state_dir: Path, *, clock: WallClock = wall_now) -> VapidKeys:
     """The keypair, created once with O_EXCL and reused forever after.
 
     Raises:
@@ -317,7 +317,7 @@ class Subscription(BaseModel):
     expiration_time: Annotated[StrictFloat | None, Field(alias="expirationTime")] = None
     added_at: Annotated[StrictInt, or_default(0)] = 0
 
-    def expired(self, now: float) -> bool:
+    def expired(self, now: WallTime) -> bool:
         """Past its ``expirationTime`` (epoch milliseconds), after which the push service drops it."""
         return self.expiration_time is not None and self.expiration_time <= now * 1000
 
@@ -343,9 +343,9 @@ class _StoreDocument(BaseModel):
 class SubscriptionStore:
     """Every subscribed device in one 0600 JSON file, keyed by endpoint."""
 
-    def __init__(self, state_dir: Path, *, clock: Clock = time.time) -> None:
+    def __init__(self, state_dir: Path, *, clock: WallClock = wall_now) -> None:
         self._state_dir: Path = state_dir
-        self._clock: Clock = clock
+        self._clock: WallClock = clock
         # The routes and the notifier's pruning thread both rewrite the file from what they read.
         self._lock: threading.Lock = threading.Lock()
 
@@ -419,11 +419,11 @@ _URL_RE: Final = re.compile(
         # A scheme, entered where its run starts; digits before the first letter go with it.
         (?<![a-z0-9+.\-]) (?P<scheme_lead>[+.\-]*+) (?:[0-9][0-9+.\-]*+)? [a-z][a-z0-9+.\-]*+ ://\S+
       | (?:{_BARE_SCHEMES}):\S*
-      | www\.\S+
         # A host, entered where its run starts or after a "..", which no host crosses.
       | (?: (?<![a-z0-9.\-]) | (?<=\.\.) ) (?P<host_lead>(?: - | \.(?!\.) )*+)
         (?:
-            www\.\S+
+            # A "www." anywhere up to the next ".." takes the whole run, so no host glued to it stays.
+            (?: [a-z0-9\-] | \.(?!\.) )*? www\.\S+
           | (?:{_BARE_SCHEMES}):\S*
           | [a-z0-9][a-z0-9\-]*+
             (?:
@@ -472,7 +472,7 @@ class Notice:
     quiet: bool = False
 
 
-def build_payload(notice: Notice, *, now: float) -> dict[str, object]:
+def build_payload(notice: Notice, *, now: WallTime) -> dict[str, object]:
     """The notification the service worker renders, every text field sanitised and capped."""
     if notice.event not in {EVENT_BLOCKED, EVENT_DONE}:
         raise PushError(f"unknown event {notice.event!r}: only blocked and done notify")
@@ -491,7 +491,7 @@ def build_payload(notice: Notice, *, now: float) -> dict[str, object]:
     }
 
 
-def build_clear(*, now: float, tag: str = HERD_TAG) -> dict[str, object]:
+def build_clear(*, now: WallTime, tag: str = HERD_TAG) -> dict[str, object]:
     """The retraction: take the slot down and raise nothing."""
     return {"v": 1, "event": EVENT_CLEAR, "agent": "", "tag": tag, "ts": int(now)}
 
@@ -542,16 +542,25 @@ class _NoRedirects(requests.Session):
 
 
 def _refusal(exc: Exception) -> DeliveryError:
+    # An HTTP library's text can carry the endpoint URL, a device capability, so only fixed words go on.
     if not isinstance(exc, WebPushException):
-        return DeliveryError(f"{type(exc).__name__}: {exc}")
+        return DeliveryError(f"push service not reached ({type(exc).__name__})")
+    # Pywebpush leaves response untyped, and it posts with requests.
     response = cast("requests.Response | None", exc.response)
     if response is None:
-        return DeliveryError(str(exc), status=exc.status_code)
+        return DeliveryError("push not sent: pywebpush refused it before posting")
     # The body is the service's (or a redirect target's) text, so it never reaches the record.
     return DeliveryError(
-        f"push service answered {response.status_code} {response.reason}",
-        status=response.status_code,
+        f"push service answered {_phrase(response.status_code)}", status=response.status_code
     )
+
+
+def _phrase(status: int) -> str:
+    # The service's own reason text is as untrusted as its body, so the phrase is the stdlib's.
+    try:
+        return f"{status} {HTTPStatus(status).phrase}"
+    except ValueError:
+        return str(status)
 
 
 @dataclass(frozen=True, slots=True)
@@ -589,8 +598,9 @@ class WebPushSender:
                     timeout=self.timeout,
                     requests_session=session,
                 )
-            except Exception as exc:
-                raise _refusal(exc) from exc
+            except Exception as exc:  # noqa: BLE001 - any failure becomes a refusal without its text
+                # from None: the library's exception names the endpoint, and a traceback prints it.
+                raise _refusal(exc) from None
 
 
 def arm_sender(
@@ -635,12 +645,12 @@ class DeliveryRecord(BaseModel):
         return self.sent == 0 and self.failed > 0
 
 
-def _ago(at: float, now: float) -> str:
+def _ago(at: float, now: WallTime) -> str:
     # A zero stamp is the record's word for "this never happened".
     return ago(now - at) if at else "never"
 
 
-def health_line(record: DeliveryRecord | None, *, now: float) -> str:
+def health_line(record: DeliveryRecord | None, *, now: WallTime) -> str:
     """Delivery as doctor prints it: when push last sent, last failed, and last held one back."""
     if record is None:
         return "push: nothing delivered or attempted yet"
@@ -656,9 +666,9 @@ def health_line(record: DeliveryRecord | None, *, now: float) -> str:
 class DeliveryLog:
     """Every delivery outcome, written to disk as it happens so another process can read it."""
 
-    def __init__(self, state_dir: Path, *, clock: Clock = time.time) -> None:
+    def __init__(self, state_dir: Path, *, clock: WallClock = wall_now) -> None:
         self.path: Path = state_dir / HEALTH_FILENAME
-        self._clock: Clock = clock
+        self._clock: WallClock = clock
         self._current: DeliveryRecord | None = None
 
     def load(self) -> DeliveryRecord | None:
@@ -724,10 +734,10 @@ class Outlet:
     health: DeliveryLog
     limits: PushLimits = PUSH_LIMITS
     # What the budget is measured on.
-    clock: Clock = time.monotonic
+    clock: MonoClock = mono_now
 
 
-def _one(data: str, subscription: Subscription, outlet: Outlet, *, now: float) -> str:
+def _one(data: str, subscription: Subscription, outlet: Outlet, *, now: WallTime) -> str:
     if subscription.expired(now):
         # Dead by its own expirationTime, as a 404 or 410 would say after a wasted send.
         _prune(outlet.store, subscription)
@@ -748,12 +758,15 @@ def _one(data: str, subscription: Subscription, outlet: Outlet, *, now: float) -
 
 
 def fan_out(
-    data: str, subscriptions: Sequence[Subscription], outlet: Outlet, *, now: float
+    data: str, subscriptions: Sequence[Subscription], outlet: Outlet, *, now: WallTime
 ) -> FanOut:
     """Send to every device: prune the gone, record each outcome, never let one stop the rest.
 
-    *now* is wall time from the caller's clock, for subscriptions that expire by their own date.
-    Past the outlet's ``fan_out_budget`` seconds the devices not yet tried are skipped and counted failed.
+    Args:
+        data: The encoded payload.
+        subscriptions: The devices, tried in order until the outlet's ``fan_out_budget`` is spent.
+        outlet: Where it is sent and recorded; devices left at the budget are counted failed.
+        now: Wall time, for subscriptions that expire by their own date.
     """
     outcomes: list[str] = []
     budget = outlet.limits.fan_out_budget

@@ -2,6 +2,7 @@
 
 from collections.abc import Iterable
 
+from herdr_pwa.clock import WallTime
 from herdr_pwa.decisions import Overlay, Pending, effective_status
 from herdr_pwa.engine import (
     SPAWNED_SHELL,
@@ -18,7 +19,7 @@ from herdr_pwa.web.stats import SpawnedTime, spawned_times
 
 
 def background_times(
-    web: WebState, pane: PaneId, usage: SessionUsage, now: float
+    web: WebState, pane: PaneId, usage: SessionUsage, now: WallTime
 ) -> tuple[SpawnedTime, ...]:
     """*usage*'s background work as the page lists it, bounded by when *pane*'s process started."""
     # The runner is asked only when something is still open, which is rare.
@@ -28,8 +29,7 @@ def background_times(
 
 
 def pending_of(times: tuple[SpawnedTime, ...]) -> Pending:
-    """What of *times* is still to come back: agents that will report, and shells the last turn
-    started; a server an older turn left runs on without anyone waiting on it."""
+    """What of *times* is still to come back: agents that will report, and this turn's shells."""
     running = [time for time in times if time.running]
     shells = sum(1 for time in running if time.kind == SPAWNED_SHELL and time.fresh)
     return Pending(agents=sum(1 for time in running if time.kind != SPAWNED_SHELL), shells=shells)

@@ -125,7 +125,7 @@ def test_pairing_mints_no_token() -> None:
 def _method_literals(module: object) -> list[tuple[str, str]]:
     # (function, method) for every .call/.exchange whose first argument is a literal.
     found: list[tuple[str, str]] = []
-    tree = ast.parse(inspect.getsource(module))  # pyright: ignore[reportArgumentType]
+    tree = ast.parse(inspect.getsource(module))  # pyright: ignore[reportArgumentType] - getsource takes a module or function, typed here as object
     for func in (n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)):
         for node in ast.walk(func):
             if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)):
@@ -142,5 +142,5 @@ def test_exactly_one_function_writes_and_its_method_and_path_are_literal() -> No
     writers = [call for call in calls if call[1] != "GET"]
     # tailscale.LocalApi.call forwards its own argument; it is the transport, not a writer.
     assert writers == [("call", "<variable>"), ("_write_serve_config", "POST")]
-    source = inspect.getsource(pairing._write_serve_config)  # pyright: ignore[reportPrivateUsage]
+    source = inspect.getsource(pairing._write_serve_config)  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
     assert '"/localapi/v0/serve-config"' in source

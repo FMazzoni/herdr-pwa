@@ -327,7 +327,7 @@ def decoded_frame(text: bytes) -> dict[str, JsonValue]:
     """A reply frame carrying ``text``, round-tripped through the real wire."""
     line = json.dumps(read_frame("\x00PLACEHOLDER\x00")).encode()
     framed = line.replace(b"\\u0000PLACEHOLDER\\u0000", text)
-    reply = SocketTransport._decode(framed)  # pyright: ignore[reportPrivateUsage]
+    reply = SocketTransport._decode(framed)  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
     raise_for_error_frame(reply)  # pane content is data, never an envelope
     return reply.payload
 
@@ -401,7 +401,7 @@ def test_send_keys_requires_a_key() -> None:
     eng, wire = build()
     with pytest.raises(InvalidRequest) as caught:
         eng.send_keys(Seat(P3))
-    assert isinstance(caught.value, EngineError | ValueError)  # pyright: ignore[reportUnnecessaryIsInstance]
+    assert isinstance(caught.value, EngineError | ValueError)  # pyright: ignore[reportUnnecessaryIsInstance] - the check is the point: the error must stay in the taxonomy
     assert caught.value.code == "invalid_request"
     assert wire.calls == []
 
@@ -411,7 +411,7 @@ def test_an_unknown_read_source_is_an_engine_error_not_a_bare_valueerror() -> No
     eng, wire = build()
     with pytest.raises(InvalidRequest) as caught:
         eng.read(P3, ReadOptions(source="visable"))
-    assert isinstance(caught.value, EngineError)  # pyright: ignore[reportUnnecessaryIsInstance]
+    assert isinstance(caught.value, EngineError)  # pyright: ignore[reportUnnecessaryIsInstance] - the check is the point: the error must stay in the taxonomy
     assert caught.value.code == "invalid_request"
     assert wire.calls == []
 
@@ -673,7 +673,7 @@ def test_a_write_through_the_private_caller_still_fails_closed(
     """The guard is a property of issuing a request, not of remembering to ask."""
     eng, wire = build(protocol_number=DRIFTED)
     with pytest.raises(ProtocolMismatch):
-        _ = eng._call(request_type, params)  # pyright: ignore[reportPrivateUsage]
+        _ = eng._call(request_type, params)  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
     assert wire.methods == [SNAPSHOT]  # nothing was driven
 
 
@@ -706,7 +706,7 @@ def _requests_issued_by(verb: ast.FunctionDef) -> set[str]:
         if isinstance(node, ast.Attribute) and node.attr.endswith("Request")
     }
     # The AST names the attribute; the generated module is what it names.
-    return {method_of(cast(type[BaseModel], getattr(wire_request, name))) for name in types}
+    return {method_of(cast("type[BaseModel]", getattr(wire_request, name))) for name in types}
 
 
 def test_every_write_verb_is_registered_as_a_write() -> None:
@@ -917,11 +917,14 @@ def test_a_session_id_cannot_reach_a_write_verb(tmp_path: Path) -> None:
     probe = tmp_path / "probe.py"
     probe.write_text(PROBE)
     report = _pyright(probe)
-    diagnostics = [obj(d) for d in cast(list[JsonValue], at(report, "generalDiagnostics"))]
+    # Pyright's JSON report lists its diagnostics.
+    diagnostics = [obj(d) for d in cast("list[JsonValue]", at(report, "generalDiagnostics"))]
     errors = [d for d in diagnostics if d["severity"] == "error"]
-    assert {cast(int, at(d, "range", "start", "line")) + 1 for d in errors} == PROBE_ERROR_LINES, (
-        f"expected an error on each probe line, got {errors}"
-    )
+    assert {
+        # A diagnostic's line is an int.
+        cast("int", at(d, "range", "start", "line")) + 1
+        for d in errors
+    } == PROBE_ERROR_LINES, f"expected an error on each probe line, got {errors}"
     assert all(d["rule"] == "reportArgumentType" for d in errors)
 
 

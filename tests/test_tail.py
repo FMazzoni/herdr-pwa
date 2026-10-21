@@ -26,7 +26,7 @@ SCREENSHOT = "A" * (1_400_000)
 
 
 def _record(kind: str, uuid: str, content: object) -> dict[str, JsonValue]:
-    message: dict[str, JsonValue] = {"role": kind, "content": content}  # pyright: ignore[reportAssignmentType]
+    message: dict[str, JsonValue] = {"role": kind, "content": content}  # pyright: ignore[reportAssignmentType] - the content is any JSON a test hands in
     record: dict[str, JsonValue] = {
         "type": kind,
         "uuid": uuid,
@@ -193,10 +193,10 @@ def test_the_cache_is_bounded_in_files_and_turns(tmp_path: Path) -> None:
     logs = [write(tmp_path / f"log{n}.jsonl", tool_heavy(10)) for n in range(3)]
     for log in logs:
         tails.window(log, Ask(messages=5))
-    assert len(tails._files) == 2  # pyright: ignore[reportPrivateUsage]
+    assert len(tails._files) == 2  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
     append(logs[2], tool_heavy(30))
     tails.window(logs[2], Ask(messages=5))
-    held = tails._files[str(logs[2])]  # pyright: ignore[reportPrivateUsage]
+    held = tails._files[str(logs[2])]  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
     assert len(held.turns) <= 100
 
 

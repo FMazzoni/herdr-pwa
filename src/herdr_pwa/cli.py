@@ -5,7 +5,7 @@ import ipaddress
 import logging
 import os
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from importlib.metadata import version
 from typing import Final
 
@@ -84,7 +84,7 @@ class HostLine:
     """What doctor says of the served name, and whether one is known."""
 
     line: str
-    known: bool
+    known: bool = field(kw_only=True)
 
 
 def served_host_line(settings: Settings, api: tailscale.LocalApi) -> HostLine:
@@ -94,16 +94,17 @@ def served_host_line(settings: Settings, api: tailscale.LocalApi) -> HostLine:
         host = auth.served_host(settings.public_host, api)
     except tailscale.LocalApiError as exc:
         return HostLine(
-            f"served host: unknown, so every Tailscale identity is refused ({exc})  FAIL", False
+            f"served host: unknown, so every Tailscale identity is refused ({exc})  FAIL",
+            known=False,
         )
-    return HostLine(f"served host: {host} (from {source}); any other Host is refused", True)
+    return HostLine(f"served host: {host} (from {source}); any other Host is refused", known=True)
 
 
 def doctor(settings: Settings, seams: Seams) -> int:
     """Check the runner's protocol against the pin and the service's code against the disk.
 
-    Non-zero on protocol drift, a silent runner, a tree that moved since the service started,
-    or no served name to accept identities on.
+    Returns:
+        Non-zero on protocol drift, a silent runner, a moved tree or no served name.
     """
     engine = engine_settings(settings)
     lines = [f"pinned protocol: {EXPECTED_PROTOCOL}"]

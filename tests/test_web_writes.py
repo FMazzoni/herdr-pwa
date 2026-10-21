@@ -359,7 +359,7 @@ def test_the_starting_door_says_where_an_unverified_first_prompt_can_be_checked(
     herd = FakeHerd()
     herd.put(P5, "", status="idle", launch_pending=True)
     page = web(tmp_path, herd).http.get("/starting/w1:p5?first=unverified").text
-    banner = re.search(r'<p class="banner banner--held">.*?</p>', page, re.S)
+    banner = re.search(r'<p class="banner banner--held">.*?</p>', page, re.DOTALL)
     assert banner is not None, "the carried prompt's banner"
     assert "once it is up" in banner[0], "this page has no Pane tab, so it says where to look"
     assert "banner__go" not in banner[0]
@@ -492,7 +492,7 @@ def test_a_multi_select_names_the_pane_as_the_same_door_every_other_state_uses(
     unread = _blocked_on(tmp_path / "unread", "").http.get(f"/agent/{S1}/answer").text
     nothing_ticked = capture("capture-blocked-multiselect-checklist").replace("[✔]", "[ ]")
     text = _blocked_on(tmp_path / "multi", nothing_ticked).http.get(f"/agent/{S1}/answer").text
-    note = re.search(r'<p class="answer__note answer__note--line">Rows.*?</p>', text, re.S)
+    note = re.search(r'<p class="answer__note answer__note--line">Rows.*?</p>', text, re.DOTALL)
     assert note is not None, "a multi-select says why its rows are not buttons"
     assert "Submit is the last row" in note[0]
     assert f'<a class="answer__go" {door}Pane</a>' in note[0], "a link, not a direction"
@@ -512,7 +512,7 @@ def test_an_unverified_first_prompt_offers_the_pane_door_on_the_agent_page(
     tmp_path: Path,
 ) -> None:
     page = idle(tmp_path).http.get(f"/agent/{S1}?first=unverified").text
-    banner = re.search(r'<p class="banner banner--held">.*?</p>', page, re.S)
+    banner = re.search(r'<p class="banner banner--held">.*?</p>', page, re.DOTALL)
     assert banner is not None, "the carried prompt's banner"
     assert "Your first prompt was sent, but the pane did not show it." in banner[0]
     door = f'href="/agent/{S1}?tab=pane" data-hp-replace>'

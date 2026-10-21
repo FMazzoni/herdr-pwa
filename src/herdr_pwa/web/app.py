@@ -44,10 +44,9 @@ GZIP_MIN_BYTES: Final = 500
 
 
 def _static_route(app: FastAPI, web: WebState, assets: Assets) -> None:
-    # Each reportUnusedFunction ignore marks a route: FastAPI registers it by decorator.
     # App source is gated like any page: only /healthz answers a caller with no identity.
     @app.get("/static/{name}", include_in_schema=False, dependencies=[Depends(viewer_guard(web))])
-    def static(name: str, v: str = "") -> Response:  # pyright: ignore[reportUnusedFunction]
+    def static(name: str, v: str = "") -> Response:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         asset = assets.files.get(name)
         if asset is None:
             return Response("not found", status_code=404, media_type="text/plain")
@@ -155,7 +154,7 @@ def _hub_config(settings: Settings) -> HubConfig:
 
 def _routes(app: FastAPI, web: WebState, assets: Assets, background: _Background) -> None:
     @app.get("/healthz", include_in_schema=False)
-    def healthz() -> dict[str, str]:  # pyright: ignore[reportUnusedFunction]
+    def healthz() -> dict[str, str]:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         return {"status": "ok"}
 
     _static_route(app, web, assets)

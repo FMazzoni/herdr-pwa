@@ -148,12 +148,7 @@ what status bars print -- claude's ``← for agents`` is not an offer.
 
 
 def _hint_match(text: str) -> "re.Match[str] | None":
-    """One hint out of a footer piece, the "to" form taking precedence.
-
-    Trying the plain-space join first mis-splits ``tab or esc to clear notes``
-    into keys="tab" and a verb that swallows the rest; the "to" form is the
-    more specific one and is tried first.
-    """
+    """One hint out of a footer piece, trying the more specific "to" form first."""
     if (m := _HINT_RE.fullmatch(text)) is not None:
         return m
     if (m := _VERB_HINT_RE.fullmatch(text)) is not None and m.group(
@@ -320,9 +315,7 @@ def _keys_in(token: str, verb: str = "") -> tuple[str, ...]:
             found.append(f"ctrl-{letter}")
             continue
         if piece == "\u21c6":
-            # The glyph names whatever moves between the things the screen shows: on a
-            # permission dialog it prints "⇆ select" (the arrows), on a question set
-            # "⇆ tab" (the tab key). The verb it printed is the only honest reading.
+            # "⇆ select" means the arrows and "⇆ tab" the tab key, so the printed verb decides.
             found.extend(("tab",) if verb == "tab" else ("left", "right"))
             continue
         found.extend(facts.KEY_ALIASES.get(piece, ()))
@@ -342,13 +335,7 @@ def is_key_hint(line: str) -> bool:
 
 
 def _footer_lines(lines: list[str]) -> list[str]:
-    """The key-hint footer at the very END of the viewport, and only there.
-
-    Measured on the opencode rig: a blocked pane's read ends inside the dialog,
-    whose footer is the bottom line, so the plain walk reaches it. A shell bar
-    drawn below would be furniture too -- what it advertises is not the
-    dialog's offer, and the corpus is the guard on that line.
-    """
+    """The key-hint footer on the viewport's last lines only: a bar below offers no dialog key."""
     end = len(lines)
     while end and not lines[end - 1].strip():
         end -= 1
@@ -472,13 +459,7 @@ def _steps(line: str) -> Stepper | None:
 
 
 def _stepper(lines: list[str], stop: int) -> Stepper | None:
-    """The nearest stepper strip above ``lines[:stop]``, or ``None``.
-
-    Not bounded by the nearest rule: with no run read, ``stop`` is the screen's
-    end, and the last box there is claude's ``Chat about this`` row, under the
-    box that asks. The strip's own shape, arrows at both ends around a step
-    box, is what keeps transcript text out.
-    """
+    """The nearest stepper above ``lines[:stop]``: arrows round a step box, a shape prose lacks."""
     for index in range(stop - 1, -1, -1):
         if _STEPPER_RE.fullmatch(lines[index].strip()):
             return _steps(lines[index].strip())
@@ -663,11 +644,7 @@ class BlockedPrompt(BaseModel):
 
     @property
     def wants_colour(self) -> bool:
-        """True when a colour read of the same screen could change this parse.
-
-        A refused run the screen's own hints still vouch for may have a cursor
-        drawn only as colour, and a buttons row shows its focus only that way.
-        """
+        """True when a colour read could change this parse: a focus drawn only as colour."""
         return self.shape is MenuShape.BUTTONS or (
             self.drew_rows and bool(self.hints or self.handoffs) and not self.options
         )
@@ -719,9 +696,9 @@ class BlockedPrompt(BaseModel):
     ) -> Self:
         """Split detection output into a question and any numbered options.
 
-        *ansi* is the read *text* was stripped from, when the caller has it:
-        the no-cursor gate may then be satisfied by colour on the dialog's own
-        lines. Colour from any other read is ignored.
+        Args:
+            ansi: The read *text* was stripped from, if any; its colour on the dialog's own
+                lines may stand in for a cursor glyph. Colour from any other read is ignored.
         """
         screen = _prepared(text, ansi)
         lines, barred = screen.lines, screen.barred
@@ -761,7 +738,8 @@ class BlockedPrompt(BaseModel):
     ) -> Self:
         """Parse a text read, and a colour read of the same screen only when colour could change it.
 
-        *colour* takes that colour read, or answers ``None`` when there is none to take.
+        Args:
+            colour: Takes that screen's colour read, or answers ``None`` when there is none.
         """
         prompt = cls.parse(text, target=target, session=session)
         if not prompt.wants_colour or (ansi := colour()) is None:
@@ -793,11 +771,7 @@ class _Screen:
 
 
 def _prepared(text: str, ansi: str = "") -> _Screen:
-    """The screen as the grammar reads it: bars stripped, and where they were.
-
-    A drawn panel is the screen; its rows lost their sides here, so the border
-    no longer marks any of them, and no colour is carried into it.
-    """
+    """The screen as the grammar reads it: bars stripped, and where they were."""
     drawn = text.splitlines()
     rows = _beside_rows(drawn)
     barred = [bool(_EDGE_RE.match(line)) for line in rows]
@@ -839,14 +813,7 @@ def _side_bottom(rows: list[str], top: int, column: int) -> int | None:
 
 
 def _beside_rows(rows: list[str]) -> list[str]:
-    """*rows* with a preview box drawn beside the options, and the column under it, cut away.
-
-    claude draws an option's preview as a box right of the rows when the question
-    carries previews, with a ``Notes:`` line under it and its last choice, an
-    unnumbered ``Chat about this``, below the next rule. While the note box holds
-    the keys, which claude says by adding its editor key to the footer, the rows
-    are not what a key reaches, so that screen is left as read.
-    """
+    """*rows* with claude's preview box beside the options cut, unless its notes hold the keys."""
     at = next((i for i in range(len(rows) - 1, -1, -1) if _side_column(rows[i]) is not None), None)
     if at is None or any(hint.hands_off for hint in _hints(_footer_lines(rows))):
         return rows
@@ -876,13 +843,7 @@ def _cut_side(rows: list[str], box: range, column: int) -> list[str]:
 
 
 def _dialog_colour(text: str, ansi: str, barred: list[bool]) -> tuple[str, ...]:
-    """The ANSI of each line of the bordered dialog at the bottom, ``""`` elsewhere.
-
-    Colour is evidence only when it is the same read as the text (every line
-    strips to the line the grammar parsed) and only inside the dialog: an
-    inline code span in the transcript is drawn on the same background a
-    focused row is.
-    """
+    """Each dialog line's ANSI, from the text's own read only: a code span outside looks focused."""
     lines = text.splitlines()
     nothing = ("",) * len(lines)
     drawn = ansi.splitlines()
@@ -912,8 +873,7 @@ def _trusted(
     found: list[tuple[int, int, str]] | None, screen: _Screen
 ) -> list[tuple[int, int, str]] | None:
     """The run the screen has earned: no cursor glyph or colour cursor, no menu."""
-    # No cursor, no menu, whatever the footer looks like -- unless the cursor
-    # is drawn in colour on the dialog's own rows, in the read the text came from.
+    # No cursor, no menu, whatever the footer says, unless colour on the dialog's own rows draws it.
     if (
         found is not None
         and not _focused(screen.lines, found)
@@ -926,14 +886,7 @@ def _trusted(
 def _buttons(
     lines: list[str], barred: list[bool], hints: tuple[KeyHint, ...]
 ) -> tuple[tuple[str, ...], int]:
-    """The unnumbered button labels of a bordered choose-one row, and where they sit.
-
-    opencode's permission dialog draws its choices as one line of buttons under
-    the same left border as the rest of the dialog, with the hints it advertises
-    on that same line. Both facts are the earning rule: buttons only where the
-    border is, and only when the screen itself says the arrows select and enter
-    confirms.
-    """
+    """opencode's bordered row of buttons, when its hints say arrows select, enter confirms."""
     if not _advertises(hints):
         return (), -1
     for i in range(len(lines) - 1, -1, -1):
@@ -948,12 +901,7 @@ def _buttons(
 
 
 def _hint_shaped(text: str) -> bool:
-    """Does *text* have the shape of a hint pair, whatever its verb?
-
-    A permission line mixes buttons and hint pairs; the buttons end where a
-    pair begins, and the pair's verb being one we refuse to offer ("ctrl+f
-    fullscreen") must not turn the pair into a button.
-    """
+    """Does *text* have a hint pair's shape, whatever its verb, so a refused verb is no button?"""
     for pattern in (_HINT_RE, _VERB_HINT_RE):
         if (m := pattern.fullmatch(_hint_text(text))) is not None:
             pieces = _key_pieces(m.group("keys"))
@@ -1011,14 +959,7 @@ def _strip_tokens(line: str) -> tuple[str, ...]:
 
 
 def _tabs_strip(lines: list[str], stop: int, hints: tuple[KeyHint, ...]) -> Stepper | None:
-    """The line of question tabs above the question, as a stepper, or ``None``.
-
-    opencode draws one tab per question plus its own Confirm affordance, only
-    when a set holds more than one question or a choice is multi. The strip
-    prints the headers as words, and the footer says tab moves between them;
-    both together are the earning rule. Which tab is active is colour, read
-    later off the dialog's own lines.
-    """
+    """opencode's question tabs above the question as a stepper, only when the footer offers tab."""
     if not any(h.key == "tab" for h in hints):
         return None
     for i in range(stop - 1, max(0, stop - _STRIP_WINDOW) - 1, -1):
@@ -1096,13 +1037,7 @@ def _label_bg(line: str, label: str) -> str:
 
 
 def _focused_index(bgs: list[str]) -> int:
-    """Which entry is drawn on the background the others lack, or ``-1``.
-
-    The focus is a background the other choices do not carry (measured on
-    opencode: theme.warning on the selected button, theme.backgroundElement on
-    the active row, the panel background on everything else). Which colour that
-    is belongs to the theme, so the rule is relative, never a literal.
-    """
+    """Which entry has the background the others lack, or ``-1``; the theme picks the colour."""
     counts = Counter(bgs)
     if len(counts) != _FOCUS_DISTINCT:
         return -1
@@ -1172,11 +1107,7 @@ def _is_inert(line: str) -> bool:
 
 
 def _is_interleave(line: str) -> bool:
-    """True for lines that may sit *between* two options of the same menu.
-
-    The cursor's glyph stands where the row's indent was, so parking it on an
-    unnumbered row does not turn that row into an interloper.
-    """
+    """True for lines that may sit *between* two options, a parked cursor's row among them."""
     return _is_inert(line) or line[:1].isspace() or bool(_PARKED_RE.match(line))
 
 
@@ -1194,12 +1125,7 @@ _TRAILING_SIDE_RE: Final = re.compile(rf"(?P<row>.*?){glyphs.one_of(glyphs.SIDE)
 
 
 def _unboxed(line: str) -> str:
-    """One panel row with its closing side removed and its own indentation kept.
-
-    The edge-strip already took the opening side, so a bar still leading the
-    row is a column rule inside the panel, and what follows it is that
-    column's body: a plan's numbered steps beside its outline are not options.
-    """
+    """One panel row without its closing side, a leading bar left as the column rule it is."""
     tail = _TRAILING_SIDE_RE.fullmatch(line)
     # The pad up to the closing side goes too: a padded blank row would read as a rule.
     return tail["row"].rstrip() if tail is not None else line
@@ -1264,11 +1190,7 @@ def _closing_box(lines: list[str]) -> range | None:
 
 
 def _reframed(lines: list[str]) -> list[str]:
-    """*lines*, with a box closing the screen redrawn as the rule and gaps the grammar reads.
-
-    omp draws its Ask dialog as a cornered box parted by inner rules; its top
-    opens the dialog as claude's rule does, and each inner rule parts a section.
-    """
+    """*lines*, with omp's closing Ask box redrawn as the rule and gaps the grammar reads."""
     if (box := _closing_box(lines)) is None:
         return lines
     inside = [
@@ -1352,11 +1274,7 @@ def _unmarked(line: str) -> str:
 
 
 def _box_start(lines: list[str], stop: int, barred: list[bool] | None = None) -> int:
-    """Where the dialog box begins: the bordered block, else the last rule's end.
-
-    opencode draws the whole dialog inside a left border, so the contiguous
-    barred run ending at the options IS the box; a transcript above it is not.
-    """
+    """Where the dialog box begins: opencode's bordered run, else the last rule's end."""
     if barred is not None and stop > 0 and barred[stop - 1]:
         at = stop - 1
         while at > 0 and barred[at - 1]:
@@ -1395,11 +1313,7 @@ def _askable(lines: list[str], start: int, stop: int) -> list[str]:
 
 
 def _heading(lines: list[str], box: range) -> str:
-    """The bordered box's own first paragraph: what the dialog calls itself.
-
-    The first paragraph is the heading by construction: the options and their
-    descriptions sit below the box, and a permission box never opens with one.
-    """
+    """The bordered box's first paragraph, what the dialog calls itself: options sit below it."""
     found = _paragraphs(lines, box.start, box.stop)
     return found[0] if found else ""
 

@@ -49,7 +49,7 @@ def build(web: WebState) -> APIRouter:
 
     # Each reportUnusedFunction ignore marks a route: FastAPI registers it by decorator.
     @router.post("/device-report", include_in_schema=False)
-    async def device_report(request: Request) -> Response:  # pyright: ignore[reportUnusedFunction]
+    async def device_report(request: Request) -> Response:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         try:
             store.append(await _batch(request))
         except _Refusal as exc:

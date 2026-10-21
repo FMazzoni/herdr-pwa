@@ -1,6 +1,6 @@
 """Writes to one agent: a prompt, a tapped key, an end; and the by-address door of a starting one."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Annotated, Final
 from urllib.parse import quote
@@ -84,8 +84,7 @@ def _screen_now(web: WebState, agent: Agent) -> str | None:
 
 
 def _claim(agent: Agent, screen: str | None) -> str:
-    # A working agent's screen moves, and a question's is gone once it is answered from the keys
-    # (the composer is not redrawn then), so neither is a screen the composer claims.
+    # A working screen moves and an answered question's is gone, so the composer claims neither.
     if agent.status is AgentStatus.WORKING or screen is None:
         return ""
     return screen_claim(screen)
@@ -149,14 +148,12 @@ def answer_region(web: WebState, agent: Agent) -> dict[str, object]:
     return answer_context(agent, _question(web, agent), shown_status(web, agent))
 
 
-# The sheet's pad: the arrows and Enter first, then Esc set apart, since while the agent works
-# Esc stops its turn.
+# The sheet's pad: arrows and Enter, then Esc set apart, since it stops a working agent's turn.
 _ROW_PAD: Final = ("up", "down", "enter", ESC_KEY)
 
 
 def row_keys(web: WebState, agent: Agent) -> dict[str, object]:
-    """The keys the status row offers: the pad while no question holds the keys, and Stop while
-    the agent works; the same allowed set, and the same confirm, the write checks with."""
+    """The status row's keys: the pad and Stop, from the same allowed set the write checks."""
     prompt = _question(web, agent)
     keyed = _keyed(agent, prompt)
     offered = set(pad_keys(prompt)) & allowed_keys(prompt)
@@ -181,7 +178,7 @@ class Said:
     kind: str
     what: str
     why: str
-    unsure: bool = False
+    unsure: bool = field(default=False, kw_only=True)
 
 
 _LOOK: Final = "Look at the Pane before tapping again; nothing is sent twice."
@@ -199,10 +196,10 @@ _SAID: Final[MappingProxyType[tuple[Outcome, Evidence], Said]] = MappingProxyTyp
             "unsure",
             "Sent {key}, and a different question is up.",
             "Read it before you answer it.",
-            True,
+            unsure=True,
         ),
         (Outcome.UNCONFIRMED, Evidence.UNMOVED): Said(
-            "unsure", "Sent {key}, but the question is still showing.", _LOOK, True
+            "unsure", "Sent {key}, but the question is still showing.", _LOOK, unsure=True
         ),
         (Outcome.ACCEPTED, Evidence.UNMOVED): Said(
             "sent", "Sent {key}.", "The question is still up."
@@ -212,7 +209,7 @@ _SAID: Final[MappingProxyType[tuple[Outcome, Evidence], Said]] = MappingProxyTyp
         ),
     }
 )
-_UNCERTAIN: Final = Said("unsure", "Sent {key}, unconfirmed.", _LOOK, True)
+_UNCERTAIN: Final = Said("unsure", "Sent {key}, unconfirmed.", _LOOK, unsure=True)
 
 
 def key_name(key: str) -> str:
@@ -226,7 +223,9 @@ def said(sent: KeySent) -> Said:
     """The words for what a sent key is known to have done, never more than was seen."""
     shape = _SAID.get((sent.outcome, sent.evidence), _UNCERTAIN)
     name = key_name(sent.key)
-    return Said(shape.kind, shape.what.format(key=name), shape.why.format(key=name), shape.unsure)
+    return Said(
+        shape.kind, shape.what.format(key=name), shape.why.format(key=name), unsure=shape.unsure
+    )
 
 
 def _lookup(web: WebState, session: SessionId) -> Agent | None:
@@ -350,14 +349,14 @@ def _composer_routes(router: APIRouter, writes: WriteRoutes) -> None:
 
     # Each reportUnusedFunction ignore marks a route: FastAPI registers it by decorator.
     @router.get("/agent/{session}/compose")
-    def composer(session: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
+    def composer(session: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         agent = find_agent(web, identity_of(session))
         screen = _screen_now(web, agent)
         held = _held_over(agent, screen)
         return web.pages.fragment("compose.html", composer_region(agent, screen, held=held))
 
     @router.post("/agent/{session}/prompt")
-    def prompt(session: str, post: Annotated[Posted, Depends(writes.post)]) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
+    def prompt(session: str, post: Annotated[Posted, Depends(writes.post)]) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         return _prompt(identity_of(session), post)
 
 
@@ -365,12 +364,12 @@ def _answer_routes(router: APIRouter, writes: WriteRoutes) -> None:
     web = writes.web
 
     @router.get("/agent/{session}/answer")
-    def answer(session: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
+    def answer(session: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         agent = find_agent(web, identity_of(session))
         return web.pages.fragment("answer.html", answer_region(web, agent))
 
     @router.post("/agent/{session}/keys")
-    def keys(session: str, post: Annotated[Posted, Depends(writes.post)]) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
+    def keys(session: str, post: Annotated[Posted, Depends(writes.post)]) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         return _key(identity_of(session), post)
 
 
@@ -378,18 +377,18 @@ def _close_routes(router: APIRouter, writes: WriteRoutes) -> None:
     web = writes.web
 
     @router.get("/agent/{session}/close")
-    def close_form(session: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
+    def close_form(session: str) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         agent = find_agent(web, identity_of(session))
         return web.pages.page("close.html", {"agent": agent})
 
     @router.post("/agent/{session}/close", response_model=None)
-    def close(session: str, post: Annotated[Posted, Depends(writes.post)]) -> Response:  # pyright: ignore[reportUnusedFunction]
+    def close(session: str, post: Annotated[Posted, Depends(writes.post)]) -> Response:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         return _close(identity_of(session), post)
 
 
 def _door_page(router: APIRouter, web: WebState) -> None:
     @router.get("/starting/{pane}", response_model=None)
-    def starting(pane: str, first: str = "") -> Response:  # pyright: ignore[reportUnusedFunction]
+    def starting(pane: str, first: str = "") -> Response:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         target = address_of(pane)
         agent = web.client.snapshot().by_target(target)
         if agent is not None and agent.session:
@@ -405,7 +404,7 @@ def _door_writes(router: APIRouter, writes: WriteRoutes) -> None:
     web = writes.web
 
     @router.post("/starting/{pane}/prompt")
-    def first_prompt(pane: str, post: Annotated[Posted, Depends(writes.post)]) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
+    def first_prompt(pane: str, post: Annotated[Posted, Depends(writes.post)]) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         values = post.values
         target = address_of(pane)
         text = values.get("text", "")
@@ -413,7 +412,7 @@ def _door_writes(router: APIRouter, writes: WriteRoutes) -> None:
         return _door(web, target, _Knock(result, text=text))
 
     @router.post("/starting/{pane}/keys")
-    def first_key(pane: str, post: Annotated[Posted, Depends(writes.post)]) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction]
+    def first_key(pane: str, post: Annotated[Posted, Depends(writes.post)]) -> HTMLResponse:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         target = address_of(pane)
         key = post.values.get("key", "")
         ask = StartingKeyAsk(target, key, confirmed=ticked(post.values, "confirm"))

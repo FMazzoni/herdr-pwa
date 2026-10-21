@@ -22,8 +22,8 @@ from typing import Any, Final
 ROOT: Final = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from herdr_pwa.engine import PANE_BUSY_CODE, EngineError, Frame, SocketTransport  # noqa: E402
-from tests.waiting import GaveUpError, eventually, until  # noqa: E402
+from herdr_pwa.engine import PANE_BUSY_CODE, EngineError, Frame, SocketTransport  # noqa: E402 - after the sys.path line that makes it importable
+from tests.waiting import GaveUpError, eventually, until  # noqa: E402 - after the sys.path line that makes it importable
 
 SESSION: Final = "hp-test"  # anything but this name is a foot-gun
 

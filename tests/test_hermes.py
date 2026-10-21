@@ -87,7 +87,7 @@ def build(path: Path, rows: tuple[dict[str, object], ...] = ROWS) -> Path:
             columns = ", ".join(f'"{key}"' for key in record)
             marks = ", ".join("?" for _ in record)
             db.execute(
-                f"insert into messages ({columns}) values ({marks})",  # noqa: S608
+                f"insert into messages ({columns}) values ({marks})",  # noqa: S608 - the interpolated names are fixed in code; every value is bound
                 tuple(record.values()),
             )
     return path
@@ -303,7 +303,7 @@ def spend(path: Path, **columns: object) -> None:
         names = ", ".join(f'"{k}"' for k in row)
         marks = ", ".join("?" for _ in row)
         db.execute(
-            f"insert into session_model_usage ({names}) values ({marks})",  # noqa: S608
+            f"insert into session_model_usage ({names}) values ({marks})",  # noqa: S608 - the interpolated names are fixed in code; every value is bound
             tuple(row.values()),
         )
 

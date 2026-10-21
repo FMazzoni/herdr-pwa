@@ -49,7 +49,7 @@ class SessionStore:
             return None
         store = cls(connection, session)
         # The table name is the adapter's own constant, never input.
-        if store.first(f"select 1 from {table} where id = ? limit 1", session) is None:  # noqa: S608
+        if store.first(f"select 1 from {table} where id = ? limit 1", session) is None:  # noqa: S608 - the interpolated names are fixed in code; every value is bound
             store.close()
             return None
         return store
@@ -58,7 +58,8 @@ class SessionStore:
         """Every row *sql* answers, or none when the store cannot answer it."""
         try:
             with closing(self._db.execute(sql, params)) as cursor:
-                return cast(list[Row], cursor.fetchall())
+                # Sqlite3 types fetchall as list[Any]; a row is a tuple.
+                return cast("list[Row]", cursor.fetchall())
         except sqlite3.Error as exc:
             # An older schema reads as no rows; a held store must reach `consult` as held.
             if _locked(exc):

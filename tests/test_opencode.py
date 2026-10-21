@@ -324,7 +324,7 @@ def build(path: Path, rows: dict[str, list[dict[str, JsonValue]]]) -> Path:
                 columns = ", ".join(f'"{name}"' for name in row)
                 marks = ", ".join("?" for _ in row)
                 db.execute(
-                    f"insert into {table} ({columns}) values ({marks})",  # noqa: S608
+                    f"insert into {table} ({columns}) values ({marks})",  # noqa: S608 - the interpolated names are fixed in code; every value is bound
                     tuple(row.values()),
                 )
     return path

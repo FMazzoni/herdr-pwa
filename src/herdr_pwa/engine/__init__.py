@@ -1,10 +1,6 @@
-"""The bridge to whatever runs the agents.
+"""The bridge to whatever runs the agents, and its contract: callers import only from here."""
 
-This module is the engine's contract: every other layer imports from ``herdr_pwa.engine`` and
-never from a submodule, so the engine can move a class between its files without breaking a
-caller. A name belongs here when something outside the engine uses it, or when it appears in the
-signature of a name that does.
-"""
+# A name belongs here when something outside the engine uses it or a public signature names it.
 
 from herdr_pwa.engine.cache import (
     CachedSnapshot,

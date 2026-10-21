@@ -149,7 +149,7 @@ def _press(
         entry.outcome(audit_result(Outcome.ACCEPTED, Evidence.DELIVERED))
         seen = _watched(writer, agent, prompt, ended=ended)
         entry.outcome(audit_result(seen.outcome, seen.evidence))
-    return KeySent(agent.target, key, seen.outcome, seen.evidence, ended, seen.prompt)
+    return KeySent(agent.target, key, seen.outcome, seen.evidence, ended=ended, prompt=seen.prompt)
 
 
 def send_key(writer: Writer, ask: KeyAsk) -> KeySent | Refused:

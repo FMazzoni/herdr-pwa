@@ -87,7 +87,7 @@ def test_an_agent_that_left_is_stale_everywhere_it_was_shown() -> None:
     assert isinstance(result, dict)
     raw = result["snapshot"]
     assert isinstance(raw, dict)
-    raw["agents"] = kept  # pyright: ignore[reportArgumentType]
+    raw["agents"] = kept  # pyright: ignore[reportArgumentType] - a raw wire frame, edited as JSON
     stale = changed(before, herd_marks(Snapshot.from_raw(raw)))
     assert {"feed", f"agent:{IDLE}", f"pane:{IDLE}"} <= stale
 
@@ -111,7 +111,8 @@ def _hub(tmp_path: Path, *, lifetime: float = 600.0, clients: int = 16) -> tuple
     )
     app = rig.http.app
     assert isinstance(app, FastAPI)
-    hub = cast(object, app.state.events)
+    # Starlette's state is Any; object makes the isinstance below narrow it.
+    hub = cast("object", app.state.events)
     assert isinstance(hub, Hub)
     return hub, rig
 
@@ -301,7 +302,7 @@ def test_a_look_that_raises_is_logged_and_a_later_change_still_reaches_the_page(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     hub, rig = _hub(tmp_path)
-    looked = hub._look  # pyright: ignore[reportPrivateUsage]
+    looked = hub._look  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
     calls: list[int] = []
 
     def flaky(viewed: frozenset[str], *, fresh: bool) -> Marks:
@@ -310,7 +311,7 @@ def test_a_look_that_raises_is_logged_and_a_later_change_still_reaches_the_page(
             raise RuntimeError("a store the look reads broke")
         return looked(viewed, fresh=fresh)
 
-    hub._look = flaky  # pyright: ignore[reportPrivateUsage]
+    hub._look = flaky  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
 
     async def scenario() -> list[str]:
         listener = hub.join(frozenset({"feed", f"agent:{IDLE}"}))

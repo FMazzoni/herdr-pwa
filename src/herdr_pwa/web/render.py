@@ -25,11 +25,11 @@ class Pages:
         device_report: bool = False,
         fallback: int = 20,
     ) -> None:
-        # autoescape=True rather than select_autoescape, so no file extension can opt out.
-        # Held in memory, like the static files: a merge onto disk must not reach old Python.
         self.env = Environment(
+            # Held in memory, like the static files: a merge onto disk must not reach old Python.
             loader=DictLoader(dict(templates)),
             auto_reload=False,
+            # True rather than select_autoescape, so no file extension can opt out.
             autoescape=True,
             undefined=StrictUndefined,
             trim_blocks=True,
@@ -50,7 +50,7 @@ class Pages:
     def piece(self, name: str, context: Mapping[str, object]) -> Markup:
         """A fragment drawn into a page, exactly as its own route would send it."""
         # Safe as markup: it is this environment's own output, escaped as it was rendered.
-        return Markup(self.render(name, context))  # noqa: S704
+        return Markup(self.render(name, context))  # noqa: S704 - this environment's own output, escaped as it was rendered
 
     def page(self, name: str, context: Mapping[str, object], *, status: int = 200) -> HTMLResponse:
         """A whole document."""

@@ -277,7 +277,7 @@ def test_one_state_whose_browser_fails_reports_itself_and_the_rest_of_its_chunk_
     task: geometry.Task = {"kind": "states", "width": 390, "scale": 1.0, "names": chunk}
     switch = geometry.Switch()
     bench = geometry.Bench(_Driver(), "http://x", switch.mount, tmp_path)
-    tally = geometry._do(task, bench, switch)  # pyright: ignore[reportPrivateUsage]
+    tally = geometry._do(task, bench, switch)  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
     assert measured == [n for n in chunk if n != bad]
     assert len(tally.problems) == 1
     assert f"390px {bad}" in tally.problems[0]
@@ -380,12 +380,12 @@ def test_a_page_error_fails_the_state_and_the_walk_it_was_thrown_in(
     bench = geometry.Bench(_Driver(), "http://x", switch.mount, tmp_path)
     name = STATES[0].name
     states: geometry.Task = {"kind": "states", "width": 390, "scale": 1.0, "names": [name]}
-    tally = geometry._do(states, bench, switch)  # pyright: ignore[reportPrivateUsage]
+    tally = geometry._do(states, bench, switch)  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
     assert len(tally.problems) == 1
     assert f"390px {name}" in tally.problems[0]
     assert "boom" in tally.problems[0]
     walked: geometry.Task = {"kind": "walk", "module": geometry.HISTORY}
-    tally = geometry._do(walked, bench, switch)  # pyright: ignore[reportPrivateUsage]
+    tally = geometry._do(walked, bench, switch)  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
     assert len(tally.problems) == 1
     assert f"walk {geometry.HISTORY}" in tally.problems[0]
     assert "s.js:1:1" in tally.problems[0]

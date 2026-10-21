@@ -33,10 +33,12 @@ def _records(value: object) -> list[_Raw]:
     if not isinstance(value, Iterable):
         raise TypeError(f"{type(value).__name__!r} object is not iterable")
     found: list[_Raw] = []
-    for item in cast(Iterable[object], value):
+    # An Iterable of unknown parts; each is checked below.
+    for item in cast("Iterable[object]", value):
         if not isinstance(item, Mapping):
             raise TypeError(f"{type(item).__name__!r} object is not a JSON object")
-        found.append(cast(_Raw, item))
+        # A JSON object, so its keys are strings.
+        found.append(cast("_Raw", item))
     return found
 
 
@@ -46,7 +48,8 @@ def _panes(value: object) -> list[_Raw]:
         return []
     if not isinstance(value, Iterable):
         raise TypeError(f"{type(value).__name__!r} object is not iterable")
-    return [cast(_Raw, p) for p in cast(Iterable[object], value) if isinstance(p, dict)]
+    # An Iterable of unknown parts, and a JSON dict has string keys.
+    return [cast("_Raw", p) for p in cast("Iterable[object]", value) if isinstance(p, dict)]
 
 
 def screen_digest(screen: str) -> str:
@@ -101,10 +104,7 @@ def as_pane_id(value: object) -> PaneId:
 
 @dataclass(frozen=True, slots=True)
 class Seat:
-    """A pane to type at, and the session that must still hold it, since panes are recycled.
-
-    ``session=None`` types at whoever holds the pane: only for a pane this same request created.
-    """
+    """A pane to type at and the session that must hold it; None only for a pane just made."""
 
     target: PaneId
     session: SessionId | None = None
@@ -204,7 +204,8 @@ def _coerce_session(raw: object) -> tuple[str, str]:
     if isinstance(raw, str):
         return raw.strip(), ""
     if isinstance(raw, dict):
-        session = cast(_Raw, raw)
+        # A JSON object, so its keys are strings.
+        session = cast("_Raw", raw)
         return str(session.get("value") or "").strip(), str(session.get("agent") or "")
     return "", ""
 

@@ -4,13 +4,13 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from herdr_pwa.clock import ago, brief, duration, duration_said
+from herdr_pwa.clock import WallTime, ago, brief, duration, duration_said
 from herdr_pwa.decisions import freshness
 from herdr_pwa.engine import SessionUsage
 from herdr_pwa.push import DeliveryRecord, health_line
 from herdr_pwa.web.stats import Reading, stats_for
 
-NOW = datetime(2026, 10, 11, 12, 0, tzinfo=UTC).timestamp()
+NOW = WallTime(datetime(2026, 10, 11, 12, 0, tzinfo=UTC).timestamp())
 TWO_DAYS_THREE_HOURS = 2 * 86_400 + 3 * 3_600
 
 

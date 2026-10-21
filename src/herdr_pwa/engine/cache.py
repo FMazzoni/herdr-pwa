@@ -4,19 +4,16 @@ from __future__ import annotations
 
 import logging
 import threading
-import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Final, cast
 
-from herdr_pwa.clock import Clock
+from herdr_pwa.clock import MonoClock, mono_now
 from herdr_pwa.engine.model import Snapshot
 from herdr_pwa.engine.transport import EngineUnavailable
 
 log = logging.getLogger(__name__)
 
-
-_CLOCK: Final = time.monotonic
 
 _SNAPSHOT: Final = "snapshot"
 
@@ -69,7 +66,7 @@ class _Fetch:
 class SnapshotCache:
     """One shared value per fact per app, refreshed lazily, with misses coalesced."""
 
-    def __init__(self, *, ttl: float, clock: Clock = _CLOCK) -> None:
+    def __init__(self, *, ttl: float, clock: MonoClock = mono_now) -> None:
         """Build a cache with its TTL and its clock, both injected."""
         self._ttl = ttl
         self._clock = clock
@@ -96,15 +93,18 @@ class SnapshotCache:
             shelf = self._shelves.setdefault(key, _Shelf())
             hit = self._hit_locked(shelf, max_age)
             if hit is not None:
-                return cast(CachedValue[T], hit)
+                # A key is only ever loaded with one value type, so its shelf holds a T.
+                return cast("CachedValue[T]", hit)
             fetch = shelf.in_flight
             leader = fetch is None
             if fetch is None:
                 fetch = shelf.in_flight = _Fetch()
         if not leader:
-            return cast(CachedValue[T], self._follow(fetch))
+            # The leader's fetch for this key loads a T.
+            return cast("CachedValue[T]", self._follow(fetch))
         try:
-            return cast(CachedValue[T], self._fetch(shelf, load, fetch))
+            # This key's loader returns a T.
+            return cast("CachedValue[T]", self._fetch(shelf, load, fetch))
         finally:
             # A BaseException (shutdown, cancelled worker) must not strand followers; no-op once published.
             self._abandon(shelf, fetch)

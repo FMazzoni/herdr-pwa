@@ -23,8 +23,7 @@ def normalise_key(key: str) -> str:
 def pad_keys(prompt: BlockedPrompt | None) -> tuple[str, ...]:
     """The generic pad this screen earns: the arrows only where the screen uses them."""
     if prompt is not None and prompt.shape is MenuShape.BUTTONS:
-        # opencode's permission dialog moves its focus with left/right only
-        # (its TUI binds no up/down there); offering them would send dead keys.
+        # opencode's permission dialog binds left/right only; up/down there would be dead keys.
         return BUTTON_PAD_KEYS
     return PAD_KEYS
 
@@ -72,7 +71,5 @@ def key_ends_question(prompt: BlockedPrompt | None, key: str) -> bool:
 
 def control_token(prompt: BlockedPrompt) -> str:
     """What a control carries to prove which question it was drawn for."""
-    # The question as posed, not the raw screen: a status line's clock flipped the raw digest
-    # between drawing a control and tapping it, refusing taps on a question that never moved.
-    # Unparsed, the screen stands in, its numbers masked: hermes ticks a countdown every second.
+    # The question as posed, else the screen with digits masked: clocks and countdowns tick there.
     return prompt.identity or screen_digest(digits_masked(prompt.raw))

@@ -46,15 +46,15 @@ def build(web: WebState, assets: Assets) -> APIRouter:
 
     # Each reportUnusedFunction ignore marks a route: FastAPI registers it by decorator.
     @router.get("/sw.js", include_in_schema=False)
-    def worker() -> Response:  # pyright: ignore[reportUnusedFunction]
+    def worker() -> Response:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         return _root_scoped(assets, WORKER, "text/javascript")
 
     @router.get("/manifest.webmanifest", include_in_schema=False)
-    def manifest() -> Response:  # pyright: ignore[reportUnusedFunction]
+    def manifest() -> Response:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         return _root_scoped(assets, MANIFEST, "application/manifest+json")
 
     @router.get("/offline", include_in_schema=False)
-    def offline() -> Response:  # pyright: ignore[reportUnusedFunction]
+    def offline() -> Response:  # pyright: ignore[reportUnusedFunction] - FastAPI registers the route by its decorator
         # Rendered from the build stamp alone: no snapshot is in scope to hand it a row.
         page = web.pages.page("offline.html", {})
         page.headers["Cache-Control"] = SHELL_CACHE

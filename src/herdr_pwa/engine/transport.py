@@ -7,7 +7,6 @@ import logging
 import os
 import socket
 import threading
-import time
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from pathlib import Path
 from secrets import token_hex
@@ -15,7 +14,7 @@ from typing import Final, NamedTuple, Protocol, runtime_checkable
 
 from pydantic import BaseModel, JsonValue, TypeAdapter, ValidationError
 
-from herdr_pwa.clock import Clock
+from herdr_pwa.clock import MonoClock, MonoTime, mono_now
 from herdr_pwa.engine.generated import ErrorBody, SuccessResponse
 from herdr_pwa.engine.generated.success_response import (
     ResponseResult,
@@ -230,9 +229,7 @@ def _confirms_subscription(reply: WireReply) -> bool:
     )
 
 
-# --------------------------------------------------------------------------
-# The seam
-# --------------------------------------------------------------------------
+# --- The seam ---
 
 
 class _Call(NamedTuple):
@@ -244,7 +241,7 @@ class _Call(NamedTuple):
     # A read whose answer is lost did nothing; a write's may have run.
     idempotent: bool = True
 
-    def remaining(self, now: float) -> float:
+    def remaining(self, now: MonoTime) -> float:
         return self.deadline - now
 
 
@@ -269,17 +266,14 @@ class Transport(Protocol):
 
 
 class SocketTransport:
-    """Newline-delimited JSON-RPC over AF_UNIX, one fresh connection per call.
-
-    Calls run in parallel: the lock guards only the id counter and the backoff fields.
-    """
+    """JSON-RPC lines over AF_UNIX, a connection per call; the lock guards only ids and backoff."""
 
     def __init__(
         self,
         path: Path | str,
         *,
         timeout: float,
-        clock: Clock = time.monotonic,
+        clock: MonoClock = mono_now,
     ) -> None:
         self.path = Path(path)
         self.timeout = timeout
@@ -466,7 +460,7 @@ class SocketTransport:
         """Re-arm the socket timeout from what is left of the call's budget."""
         sock.settimeout(self._check_budget(call, self._clock()))
 
-    def _check_budget(self, call: _Call, now: float) -> float:
+    def _check_budget(self, call: _Call, now: MonoTime) -> float:
         """What is left of the call's budget, or :class:`EngineTimeout`."""
         remaining = call.remaining(now)
         if remaining <= 0:
@@ -477,9 +471,7 @@ class SocketTransport:
         return remaining
 
 
-# --------------------------------------------------------------------------
-# The stream
-# --------------------------------------------------------------------------
+# --- The stream ---
 
 
 class EventStream:

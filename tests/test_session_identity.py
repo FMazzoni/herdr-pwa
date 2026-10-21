@@ -83,7 +83,7 @@ def opencode_store(data: Path, sessions: dict[str, tuple[str, int]]) -> Path:
             row = _session_row(session, directory)
             columns = ", ".join(f'"{k}"' for k in row)
             marks = ", ".join("?" for _ in row)
-            db.execute(f"insert into session ({columns}) values ({marks})", tuple(row.values()))  # noqa: S608
+            db.execute(f"insert into session ({columns}) values ({marks})", tuple(row.values()))  # noqa: S608 - the interpolated names are fixed in code; every value is bound
             for n, (message, record, part) in enumerate(_turns(session, count)):
                 db.execute(
                     "insert into message values (?, ?, ?, ?, ?)",

@@ -619,7 +619,12 @@ class _PromptsUnrecordable:
 
 def test_a_launch_prompt_that_cannot_be_recorded_spawns_nothing(tmp_path: Path) -> None:
     r = argv_rig(tmp_path)
-    writer = Writer(r.writer.client, _PromptsUnrecordable(r.writer.audit), r.writer.pacing)
+    writer = Writer(
+        r.writer.client,
+        _PromptsUnrecordable(r.writer.audit),
+        r.writer.pacing,
+        memory=r.writer.memory,
+    )
     result = refused(
         start_agent(writer, ask(tmp_path, "opencode", prompt="fix it"), which=everywhere)
     )

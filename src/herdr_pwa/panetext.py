@@ -32,8 +32,7 @@ class PaneView:
     """One pane read: the viewport, with the agent's input box and statusline split off."""
 
     lines: list[Line]
-    # The rows the harness draws under its input box, in order: a statusline is arbitrary
-    # command output and is routinely more than one row. Empty when no box was found.
+    # The rows under the input box, in order, since a statusline often runs to several; or none.
     status: list[list[Run]] = field(default_factory=list[list[Run]])
 
 
@@ -200,12 +199,7 @@ def _split_chrome(
     return lines[: prompt - 1], lines[bottom + 1 : end], lines[prompt:bottom]
 
 
-# A statusline's segments: text between separators (`|`, `│` or `•` standing between
-# whitespace), or across the padding a script uses to right-align its last field, or at a
-# glyph from a font the phone does not have. The separators stay, as the person printed them.
-# The padding is the terminal's width, not a word, so it goes; so does a private-use glyph
-# (Nerd Font icons and powerline arrows, U+E000-U+F8FF), which a phone draws as a blank box:
-# noise, so the gap between the pieces stands in for it.
+# A statusline breaks at a separator (kept), at padding or at a glyph a phone draws as a box.
 _SEGMENT_BREAK: Final = re.compile(
     rf"""
     (?P<drop> [{re.escape(_WS)}]{{2,}} | [\ue000-\uf8ff]+ )  # padding or a private-use glyph: gone
@@ -679,8 +673,7 @@ def pane_view(text: str, *, strip: bool = True) -> PaneView:
     """Turn one raw pane read into the viewport, without the agent's input box."""
     lines = _tokenise(text)
     split = _split_chrome(lines)
-    # The input box is cut: its text may not be the person's, so it is never drawn as theirs.
-    # The statusline under it leaves the viewport too, and the stats strip draws it instead.
+    # The box's text may not be the person's, and the stats strip draws the statusline instead.
     body = split[0] if split is not None else lines
     body = _strip_decoration(body) if strip else [_rstrip_line(line) for line in body]
     status = [] if split is None else [_rstrip_line(line) for line in split[1]]

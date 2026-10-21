@@ -40,7 +40,7 @@ class Greeting:
 class Handler(BaseHTTPRequestHandler):
     """Routes GET requests to the two endpoints the service has."""
 
-    def do_GET(self) -> None:  # noqa: N802
+    def do_GET(self) -> None:  # noqa: N802 - http.server dispatches on the method's name
         if self.path == "/healthz":
             self._reply(200, {"status": "ok"})
         elif self.path.startswith("/hello/"):
@@ -105,7 +105,7 @@ MINIFIED: Final = (
 def git(repo: Path, *args: str) -> bytes:
     """Run one git command in ``repo`` and return its output, failing the test if it fails."""
     command = ["git", "-C", str(repo), *args]
-    return subprocess.run(command, check=True, capture_output=True).stdout  # noqa: S603
+    return subprocess.run(command, check=True, capture_output=True).stdout  # noqa: S603 - a fixed git or python command line, never shell input
 
 
 def _write(repo: Path, rel: str, body: str | bytes) -> None:

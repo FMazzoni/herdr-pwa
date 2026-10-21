@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from herdr_pwa.clock import MonoTime
 from tests.engine_seam import cache_module
 
 
@@ -50,9 +51,9 @@ class TestClock:
         self._lock = threading.Lock()
         self.now = now
 
-    def __call__(self) -> float:
+    def __call__(self) -> MonoTime:
         with self._lock:
-            return self.now
+            return MonoTime(self.now)
 
     def advance(self, seconds: float) -> None:
         """Move time forward."""

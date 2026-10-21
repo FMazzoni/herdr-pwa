@@ -9,7 +9,9 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
+from typing import Final
 
+from herdr_pwa.clock import MonoTime, WallTime
 from herdr_pwa.ids import PaneId, SessionId
 from herdr_pwa.tailscale import SERVE_CONFIG_PATH, STATUS_PATH, LocalApi, serve_config
 
@@ -172,15 +174,23 @@ def status_route(
     return {("GET", STATUS_PATH): Canned(status=status, body=body)}
 
 
+# Far apart, as the real clocks are, so a swapped reading makes an absurd age.
+MONO_OFFSET: Final = 900_000.0
+
+
 class Clock:
-    """A clock tests move by hand; nothing here sleeps."""
+    """A wall clock tests move by hand; nothing here sleeps."""
 
     def __init__(self, now: float = 1_000_000.0) -> None:
         self.now: float = now
 
-    def __call__(self) -> float:
+    def __call__(self) -> WallTime:
         """The current reading."""
-        return self.now
+        return WallTime(self.now)
+
+    def mono(self) -> MonoTime:
+        """The same hand on the monotonic clock, offset so a reading swapped for wall time shows."""
+        return MonoTime(self.now - MONO_OFFSET)
 
     def advance(self, seconds: float) -> None:
         """Move time forward."""

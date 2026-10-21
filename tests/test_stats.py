@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 from pydantic import JsonValue, TypeAdapter
 
+from herdr_pwa.clock import WallTime
 from herdr_pwa.engine import (
     EngineUnavailable,
     HistoryState,
@@ -39,7 +40,7 @@ from tests.webfakes import (
     write_transcript,
 )
 
-NOW = datetime(2026, 10, 11, 12, 0, tzinfo=UTC).timestamp()
+NOW = WallTime(datetime(2026, 10, 11, 12, 0, tzinfo=UTC).timestamp())
 FOUR_MINUTES_AGO = "2026-10-11T11:56:00.000Z"
 OPENCODE = Path(__file__).parent / "fixtures" / "transcript" / "opencode"
 OPENCODE_SESSION = "ses_ea388ff7fffezqx9eAc8o7s8GI"
@@ -318,8 +319,8 @@ def test_opencode_shows_the_cost_its_messages_record(tmp_path: Path) -> None:
     assert labels(stats)["Cost"] == stats.spend
 
 
-def found_now(stamp: str, seconds: float) -> float:
-    return datetime.fromisoformat(stamp).timestamp() + seconds
+def found_now(stamp: str, seconds: float) -> WallTime:
+    return WallTime(datetime.fromisoformat(stamp).timestamp() + seconds)
 
 
 def test_hermes_maps_its_rollup_and_its_messages(tmp_path: Path) -> None:

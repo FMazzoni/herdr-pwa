@@ -13,8 +13,7 @@ from herdr_pwa.web.render import Pages
 
 # Answered with no identity at all: a liveness probe has none, and says nothing about the herd.
 OPEN_PATHS: Final = frozenset({"/healthz"})
-# A 4000-character prompt urlencodes to at most 48 KiB, and a keepalive device report is at
-# most 64 KiB; push bodies keep their own tighter cap inside the route.
+# A 4000-char prompt urlencodes to 48 KiB and a device report to 64 KiB; push routes cap tighter.
 MAX_BODY_BYTES: Final = 64 * 1024
 TOO_LARGE: Final = f"body is over {MAX_BODY_BYTES} bytes"
 
@@ -38,6 +37,7 @@ def _bounded(receive: Receive) -> Receive:
         nonlocal seen
         message = await receive()
         if message["type"] == "http.request":
+            # An ASGI http.request message carries its body as bytes.
             seen += len(cast("bytes", message.get("body", b"")))
             # Counted as it arrives, so a missing or lying Content-Length buys nothing.
             if seen > MAX_BODY_BYTES:

@@ -1,5 +1,4 @@
-"""What a harness writes that nobody typed or said: task notices, peer messages, API errors,
-and the slash commands the person ran in the harness itself."""
+"""What a harness writes that nobody typed: task notices, peer messages, errors, slash commands."""
 
 from __future__ import annotations
 
@@ -33,12 +32,7 @@ _ATTR: Final = re.compile(r'(?<![\w-])(?P<name>[\w-]+)="(?P<value>[^"]*)"')
 _HANDBACK_FRAME: Final = "[Subagent hand-back]"
 _HANDBACK_INDENT: Final = "  "
 _DONE: Final = "completed"
-# Measured summary shapes, across every local log: Agent "<description>" finished,
-# Agent "<description>" failed: <why>, Agent "<description>" was stopped by Claude,
-# Background command "<command>" completed (exit code 1: No matches found),
-# Background command "<command>" failed with exit code 143, ... was stopped because <why>,
-# Task "<description>" was stopped by main session, and Agent "<description>" is waiting on its
-# own background work, which is an agent that stopped but is not done: it notifies again.
+# Summary shapes measured across every local log (examples in PATTERNS); "waiting" is not done.
 _SUMMARY: Final = re.compile(
     r"""
     (?P<kind>Agent|Background\ command|Task) \ "(?P<detail>.*?)" \   # what stopped, and its name
@@ -157,20 +151,20 @@ class PeerMessage:
     task: str = ""
 
 
-# Measured: a slash command is one record, `<command-name>/compact</command-name>` then its
-# `<command-message>` and `<command-args>`; what it printed is the next record, on its own.
+# Measured: a slash command is one record of its name, message and args; its output is the next.
 _COMMAND: Final = "<command-name>"
 _STDOUT: Final = "local-command-stdout"
 # Not seen in any local log: a failing command's output, assumed to take the stdout shape.
 _STDERR: Final = "local-command-stderr"
 # Measured: what the harness writes for a command that printed nothing (/chrome, /exit).
 _NO_CONTENT: Final = "(no content)"
-# The line's label for a slash command, and for its output when the command is not on the page.
+# The line's label for a slash command.
 SLASH: Final = "Ran"
+
+# The label for a command's output when the command is not on the page.
 OUTPUT: Final = "Output"
 SLASH_KINDS: Final = frozenset({SLASH, OUTPUT})
-# Measured: a `!` command the person ran is `<bash-input>` alone; what it printed is the next
-# record, its `<bash-stdout>` then its `<bash-stderr>`.
+# Measured: a `!` command is `<bash-input>` alone; the next record holds its stdout and stderr.
 _BASH_INPUT: Final = "bash-input"
 _BASH_STDOUT: Final = "bash-stdout"
 _BASH_STDERR: Final = "bash-stderr"
@@ -227,8 +221,7 @@ type Injected = TaskNotice | PeerMessage | SlashCommand | ShellCommand | Command
 
 # Measured: the text Claude Code writes when a turn no longer fits, with `error: invalid_request`.
 _TOO_LONG: Final = "Prompt is too long"
-# Measured through opencode, an OpenAI-compatible provider's 400: "Requested token count exceeds
-# the model's maximum context length of 202752 tokens. ..."
+# Measured through opencode, an OpenAI-compatible provider's 400 names the "maximum context length".
 _OVERFLOW: Final = re.compile(r"\bmaximum context length\b")
 # Measured: "You've hit your session limit · resets 5am (<the user's time zone>)", and "weekly".
 _LIMIT: Final = re.compile(
@@ -413,8 +406,10 @@ def _by_tag(text: str) -> Injected | None:
 def injected(origin: RecordOrigin | None, content: str, *, human: bool) -> Injected | None:
     """What a string user record is if the harness wrote it, or ``None`` to treat it as text.
 
-    Classified by ``origin.kind`` first, then, for a record no person typed, by the leading
-    tag, which is all an older record carries.
+    Args:
+        origin: The record's origin; its kind decides first.
+        content: The record's text, whose leading tag is all an older record carries.
+        human: Whether a person typed it; only a record no person typed is read by its tag.
     """
     kind = origin.kind if origin is not None else None
     text = without_reminders(content)

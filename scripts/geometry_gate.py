@@ -11,8 +11,8 @@ from typing import Final
 ROOT: Final = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from scripts.firefox import available, held, version  # noqa: E402
-from tests.catalogue import CAPTURES  # noqa: E402
+from scripts.firefox import available, held, version  # noqa: E402 - after the sys.path line that makes it importable
+from tests.catalogue import CAPTURES  # noqa: E402 - after the sys.path line that makes it importable
 
 # Per user rather than per worktree: a fresh worktree whose guarded files match a tree already
 # measured reuses that receipt. A cache of a result, never a record anyone reviews.
@@ -90,7 +90,7 @@ def record_walk(current: str, test: str, seconds: float) -> None:
 def run(current: str) -> int:
     """Run the checks in this interpreter and write the receipt only if every one passed."""
     # Imported late so a receipt hit skips loading it; its browsers live in its own workers.
-    import geometry  # noqa: PLC0415
+    import geometry  # noqa: PLC0415 - late, so a receipt hit never loads it
 
     started = time.monotonic()
     code = geometry.main([])

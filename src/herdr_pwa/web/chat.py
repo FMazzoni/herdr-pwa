@@ -49,8 +49,7 @@ WORKING_VERBS: Final = (
     "Polishing",
 )
 
-# The status bubble's looks, by name: a palette is one of app.css's [data-working-palette] blocks,
-# a motion one entry of app.js's MOTIONS table. Changing either default is this one line.
+# The bubble's default looks: an app.css [data-working-palette] block and an app.js MOTIONS entry.
 WORKING_PALETTE: Final = "softer-ember"
 WORKING_MOTION: Final = "crest"
 
@@ -134,12 +133,10 @@ class ChatView:
     start: int = 0
     log: str = ""
     more: bool = False
-    # Under the newest turn: what the agent is doing while the turn is its own, or once the turn
-    # is over, how long it worked.
+    # Under the newest turn: what the agent is doing, or once the turn is over, how long it worked.
     bubble: "Bubble | None" = None
     receipt: "Receipt | None" = None
-    # Under the bubble: the agents it started in the background, running first, as its pane lists,
-    # and the shells it left running.
+    # Under the bubble: its background agents, running first as its pane lists them.
     agents: "tuple[AgentLine, ...]" = ()
     shells: "tuple[AgentLine, ...]" = ()
     # Why the session the pane reports may not be the agent there; shown above everything.
@@ -240,11 +237,7 @@ def _nearest(places: list[int], at: int) -> int:
 
 
 def _hosts(turns: tuple[TranscriptTurn, ...]) -> dict[int, int]:
-    """Each hand-back's place mapped to the place of the agent notice that will carry it.
-
-    A report joins its task's notice nearest before it, else the first after it: a task that
-    stops twice reports after the notice that says it has not yet, and once before the next.
-    """
+    """Each hand-back's place mapped to its task's nearest notice before it, else after it."""
     notices = _notices_by_task(turns)
     return {
         i: _nearest(notices[turn.task], i)
@@ -254,12 +247,7 @@ def _hosts(turns: tuple[TranscriptTurn, ...]) -> dict[int, int]:
 
 
 def joined(turns: tuple[TranscriptTurn, ...]) -> tuple[TranscriptTurn, ...]:
-    """Each hand-back moved into its task's notice, where it opens; its own card is not drawn.
-
-    The harness writes a subagent's report as a message and says only "delivered" in the
-    notice. Joined on the task id, the report is in one place, under the line that says which
-    task it is. A report whose notice is not on the page stays a card, named by its type.
-    """
+    """Each hand-back moved into its task's notice; one with no notice on the page stays a card."""
     hosts = _hosts(turns)
     reports: dict[int, list[TranscriptTurn]] = {}
     for at, host in hosts.items():
@@ -280,8 +268,7 @@ def _carrying(notice: TranscriptTurn, reports: list[TranscriptTurn]) -> Transcri
 
 @dataclass(frozen=True, slots=True)
 class Turning:
-    """What the router knows of the turn beside its log: the agent's status, the turn it is on
-    (which names its verb), what its card says it is asking, and the turn's clock."""
+    """What the router knows of the turn beside its log: status, stretch, question and clock."""
 
     status: AgentStatus = AgentStatus.UNKNOWN
     stretch: str = ""
@@ -323,8 +310,7 @@ class AgentLine:
     time: str = ""
 
 
-# A shell is named by its call's description or its command's first line, cut here; the sheet's
-# ellipsis takes what is left of the row.
+# A shell's name (its description or first command line) is cut here; the sheet ellipsizes the rest.
 _SHELL_CHARS: Final = 120
 
 
@@ -337,8 +323,7 @@ def _agent_line(agent: SpawnedTime) -> AgentLine:
 
 
 def _waiting_on(spawned: tuple[SpawnedTime, ...]) -> bool:
-    """Whether the turn waits on agents it started; the row counts them beside the words. A shell
-    left running is not waited on: the turn goes on, or ends, beside it."""
+    """Whether the turn waits on agents it started; a shell left running is not waited on."""
     return any(agent.running and agent.kind != SPAWNED_SHELL for agent in spawned)
 
 
@@ -382,8 +367,7 @@ _DOING: Final = MappingProxyType(
     }
 )
 _FILE_TOOLS: Final = frozenset({"Reading", "Editing", "Writing"})
-# What a command line opens with before the program it runs: a change of directory, a setting,
-# or a wrapper that runs the next word; each is skipped so "Running" names the program.
+# Prefixes before the program a command runs (cd, settings, wrappers), skipped to name the program.
 _WRAPPERS: Final = frozenset(
     {"sudo", "env", "nice", "time", "timeout", "nohup", "setsid", "exec", "uv", "run", "npx"}
 )
@@ -435,8 +419,7 @@ def _working(items: tuple[ChatTurn | ToolRun, ...], turning: Turning) -> Bubble:
     ran = _whole(times.ran)
     time = elapsed(ran) if ran is not None else ""
     call = _running(items)
-    # A call still open is the agent at work however long it runs (a test run writes nothing
-    # until it ends), so it carries no quiet clock and never reads as gone quiet.
+    # An open call is work however long it is silent (a test run writes nothing till it ends).
     if call is not None:
         text = doing(call)
         return Bubble("working", text, "Working", f"Working: {text}", turning.stretch, ran, time)
@@ -501,22 +484,18 @@ def chat_view(
 ) -> ChatView:
     """The Chat tab's content for one transcript page.
 
-    *turning* is what the agent's status and its harness's tally say about the turn: turns
-    land at message boundaries, so while the agent works whatever it is saying now is not in
-    the log yet, and a status bubble under the newest turn says what it is doing instead of
-    the log looking complete. Once the turn is over the bubble folds into how long it worked.
-
-    *drawn* says the reader already has turns on screen. A store its harness has
-    locked reads as unreadable with no turns, and redrawn that would blank the log
-    for a poll and lose the reader's place, so the view is ``held`` instead.
+    Args:
+        page: The transcript page read.
+        turning: What status and tally say of the turn, for the bubble the log cannot show yet.
+        doubt: Why the page may be incomplete, said above it.
+        drawn: The reader already has turns, so a locked store holds the view, not blanks it.
     """
     turns = tuple(_turn(t) for t in joined(tuple(page.turns)))
     note = "" if turns else _STATE_NOTES.get(page.state, "Nothing has been said yet.")
     held = drawn and not turns and page.state is HistoryState.unreadable
     items = fold_tools(turns)
     bubble, receipt = _status(items, turning)
-    # Beside a live turn, or while something it started still runs; the router leaves out what
-    # a dead process left, which never says it ended.
+    # Beside a live turn, or while something it started runs; the router drops a dead process's.
     listed = bubble is not None or any(agent.running for agent in turning.spawned)
     spawned = turning.spawned if listed else ()
     return ChatView(
@@ -538,8 +517,7 @@ def chat_view(
 
 @dataclass(frozen=True, slots=True)
 class Row:
-    """The status row above the composer: its state, how many started agents and shells still
-    run, how many prompts wait, and the one sentence VoiceOver hears for it."""
+    """The status row above the composer: its state, what still runs, and what waits."""
 
     state: str
     running: int
@@ -554,8 +532,7 @@ def _counted(n: int, one: str, many: str, tail: str) -> str:
 
 
 def status_row(view: ChatView, status: str) -> Row:
-    """The row for *view*: its bubble's words, else the finished turn's, else the status word,
-    which says what it left running once its turn is over."""
+    """The row for *view*: its bubble's words, else the finished turn's, else the status word."""
     running = sum(1 for agent in view.agents if agent.state == "running")
     shells = sum(1 for shell in view.shells if shell.state == "running")
     queued = len(view.queued)

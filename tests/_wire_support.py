@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 
 from pydantic import JsonValue
 
+from herdr_pwa.clock import MonoTime
 from herdr_pwa.engine import WireReply
 from tests.engine_seam import decode_frame
 
@@ -26,9 +27,9 @@ class TickingClock:
     def __init__(self) -> None:
         self.now = 1000.0
 
-    def __call__(self) -> float:
+    def __call__(self) -> MonoTime:
         self.now += 0.001
-        return self.now
+        return MonoTime(self.now)
 
 
 @dataclass(frozen=True, slots=True)

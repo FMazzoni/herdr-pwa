@@ -152,8 +152,7 @@ class TranscriptTurn(BaseModel):
     result_truncated: bool = False
     # The frontier just before this turn: `before=at` leaves it out, `after=at` starts with it.
     at: int = -1
-    # How a task notice says its task ended ("finished", "exit 0") and how long it ran; its
-    # kind ("Agent", "Command", "Task") rides in `tool`, the label a tool's line leads with.
+    # How a task notice's task ended ("exit 0") and how long it ran; its kind rides in `tool`.
     status: str = ""
     elapsed_ms: int = 0
     # A command's ending in the harness's words, and the file its output went to, never read.
@@ -338,8 +337,7 @@ class _ResultParts(RootModel[Annotated[list[_ResultPart], Field(min_length=1)]])
     """A tool result's content when it is text and images only; an empty list is not one."""
 
 
-# Left to right, so only a result of text and images reads as parts; any other is kept
-# whole and shown as the JSON it was.
+# Left to right, so only text and images read as parts; any other result stays whole JSON.
 type _ResultBody = Annotated[
     StrictStr | _ResultParts | JsonValue, Field(union_mode="left_to_right")
 ]
@@ -1299,8 +1297,7 @@ def _local_command(record: ClaudeRecord, uuid: str) -> TranscriptTurn | None:
     return None
 
 
-# Measured: a notice or a peer's message delivered while a turn runs is written only as an
-# attachment of this type (943 notices and 140 messages on this box, 9 also as user records).
+# Measured: a notice or peer message delivered mid-turn is written only as this attachment.
 _QUEUED: Final = "queued_command"
 
 
@@ -1331,9 +1328,7 @@ def _queued_turn(record: ClaudeRecord, uuid: str) -> TranscriptTurn | None:
     return _queued_prompt(record.attachment, uuid) if record.attachment is not None else None
 
 
-# Measured verbs: "enqueue" when a prompt is sent while the agent is busy, "remove" when a turn
-# absorbs it (or the person takes it back), "popAll" when the person pulls the queue back to edit,
-# and "dequeue", which names nothing and is followed by the record that delivers it.
+# Measured queue verbs: sent while busy, absorbed or taken back, pulled back to edit, a bare pop.
 _ENQUEUE: Final = "enqueue"
 _REMOVE: Final = "remove"
 _POP_ALL: Final = "popAll"
@@ -1387,8 +1382,7 @@ def _message_turn(record: ClaudeRecord, uuid: str) -> TranscriptTurn | None:
 
 
 def fold_turns(turns: Iterable[TranscriptTurn]) -> list[TranscriptTurn]:
-    """Fold tool results onto calls, command output and a compaction onto its command, and
-    repeated API errors."""
+    """Fold results onto calls, output and compactions onto commands, and repeated API errors."""
     said = (turn for turn in turns if turn.speaker is not Speaker.queue)
     return _fold_repeats(_fold_compaction(_fold_outputs(_fold_results(said))))
 
@@ -1412,10 +1406,7 @@ def _delivers(turn: TranscriptTurn) -> bool:
 
 
 def waiting(turns: Iterable[TranscriptTurn]) -> list[str]:
-    """The prompts enqueued in *turns* that nothing after them delivered, removed or pulled back.
-
-    Matched on the words: the queue's records carry no id the delivery repeats.
-    """
+    """The prompts queued in *turns* not since delivered, removed or pulled back, by words."""
     held: list[str] = []
     for turn in turns:
         if turn.speaker is Speaker.queue and turn.tool == _ENQUEUE:
@@ -1495,12 +1486,7 @@ def _compaction_step(turn: TranscriptTurn, waiting: _Compaction) -> list[Transcr
 
 
 def _fold_compaction(turns: list[TranscriptTurn]) -> list[TranscriptTurn]:
-    """Each /compact line opening on the summary before it, the line as the person sent it dropped.
-
-    Measured: the line as sent is written at once, then, once the compaction is done, the
-    summary, the command and what it printed; a background copy keeps the agent's last words
-    between the summary and the command, so only a prompt the person typed ends the wait.
-    """
+    """Each /compact line on its summary, the line as sent dropped; a typed prompt ends it."""
     waiting = _Compaction()
     taken: dict[str, TranscriptTurn] = {}
     dropped: set[str] = set()
@@ -1554,13 +1540,10 @@ class StartRecipe:
     model_flag: str = "--model"
     # Empty means this box cannot enumerate them, so no model is ever put on the argv.
     models: tuple[str, ...] = ()
-    # The ``Settings`` field the operator declares the models in, for a harness nothing on this
-    # box can be asked for its own; empty means ``models`` is the whole list.
+    # The ``Settings`` field naming models for a harness that can't list its own; empty: ``models``.
     models_setting: str = ""
     env: Mapping[str, str] = field(default_factory=dict[str, str])
-    # The flag that hands the TUI its first prompt at launch; empty means it is typed once it
-    # listens. Only for a TUI on the alternate screen: the shell's own echo of the command line
-    # would otherwise read back as the prompt having landed.
+    # The flag giving an alternate-screen TUI its first prompt, so no shell echo reads as landed.
     prompt_flag: str = ""
 
     @property
@@ -1583,8 +1566,7 @@ class Harness:
     # herdr's name for it, the key the registry is looked up by.
     kind: str
     launch: StartRecipe
-    # One append-only JSONL per session paged by byte: the tail and usage caches read it in place
-    # and grow it by what was appended, and a stat of the file says whether it moved.
+    # One append-only JSONL per session, paged by byte, so the caches grow by what was appended.
     byte_frontier: bool = False
     # Whether the tally's context figure is the prompt's size, rather than nothing stored.
     stores_context: bool = True
@@ -1597,10 +1579,7 @@ _RETRY_TRIGGERS: Final = (Speaker.notice, Speaker.peer)
 
 
 def _wakes(turn: TranscriptTurn) -> bool:
-    """Whether *turn* only woke the agent to retry; a slash command is the person acting.
-
-    A compact summary is looked past too: it is the harness, neither the person nor the agent.
-    """
+    """Whether *turn* only woke the agent to retry; a slash command is the person acting."""
     return turn.speaker in _RETRY_TRIGGERS and not is_slash_command(turn)
 
 
@@ -1609,12 +1588,7 @@ def _same_error(a: TranscriptTurn, b: TranscriptTurn) -> bool:
 
 
 def _fold_repeats(turns: list[TranscriptTurn]) -> list[TranscriptTurn]:
-    """Each API error folded into the identical one before it, moved to where the newest stands.
-
-    Measured: a full context refuses every notice and peer message that wakes the agent, so its
-    errors arrive between those, not back to back. Anything the person or the agent says, a
-    tool call, or a harness note such as ``/compact`` ends the run; the next error starts anew.
-    """
+    """Each API error folded into the identical one before it, across the wake-ups between them."""
     folded: list[TranscriptTurn] = []
     open_at = -1
     for turn in turns:
@@ -1631,11 +1605,7 @@ def _fold_repeats(turns: list[TranscriptTurn]) -> list[TranscriptTurn]:
 
 
 def ends_refused(turns: Sequence[TranscriptTurn]) -> TranscriptTurn | None:
-    """The API error the conversation ends on, past what only woke it to retry; else ``None``.
-
-    The same run ``_fold_repeats`` folds, by the same ``_wakes``: a notice or a peer message set
-    off a retry, so it does not end a refusal; a slash command, or anything said, does.
-    """
+    """The API error the conversation ends on, past what only woke it to retry; else ``None``."""
     for turn in reversed(turns):
         if is_api_error(turn):
             return turn
@@ -1750,8 +1720,8 @@ def _registry() -> dict[str, TranscriptAdapter]:
     """The adapters, built on first use."""
     if not _adapters:
         # The adapters import this module, so importing them at the top would be a cycle.
-        from herdr_pwa.engine.hermes import HermesAdapter  # noqa: PLC0415
-        from herdr_pwa.engine.opencode import OpencodeAdapter  # noqa: PLC0415
+        from herdr_pwa.engine.hermes import HermesAdapter  # noqa: PLC0415 - the adapters import this module, so a top import is a cycle
+        from herdr_pwa.engine.opencode import OpencodeAdapter  # noqa: PLC0415 - the adapters import this module, so a top import is a cycle
 
         adapters: tuple[TranscriptAdapter, ...] = (
             ClaudeAdapter(),
@@ -1865,8 +1835,7 @@ SPAWNED_SHELL: Final = "shell"
 
 
 class SpawnedAgent(BaseModel):
-    """Work the session started in the background, an agent or a shell, by the task id its
-    records name."""
+    """Work the session started in the background, an agent or a shell, by its task id."""
 
     task: str
     kind: str = SPAWNED_AGENT
@@ -1881,8 +1850,7 @@ class SpawnedAgent(BaseModel):
 
 
 class SessionUsage(Spend):
-    """What one session has spent, summed over every log its thread has lived in, and the agents
-    it started in the background."""
+    """What one session has spent over every log its thread lived in, and its background agents."""
 
     # The newest message's whole prompt: how full the window is now, not a total.
     context_tokens: int = 0
@@ -1982,8 +1950,7 @@ class LiveTally(BaseModel):
     nested: dict[str, int] = Field(default_factory=dict[str, int])
 
 
-# Measured: a background agent's launch result, and its notices however they were delivered;
-# a Bash call and the result that sends it to the background; a resume; a stop.
+# Measured: the bytes of a background launch, notice, backgrounded Bash call, resume or stop.
 _SPAWN_MARKS: Final = (
     b'"async_launched"',
     b"<task-notification>",
@@ -1999,8 +1966,7 @@ _SPAWN_MARKS: Final = (
 _HELD_CALLS: Final = 64
 # What TaskStop says it stopped, as the tally's kinds.
 _STOPPED: Final = MappingProxyType({"local_bash": SPAWNED_SHELL, "local_agent": SPAWNED_AGENT})
-# What a notice's summary calls each kind that ends here; measured, every "Task ... was stopped
-# by main session" names a shell a subagent left running, and no TaskStop result names it.
+# What a notice calls each kind; measured, a stopped "Task" is a shell a subagent left running.
 _NOTICE_KINDS: Final = MappingProxyType(
     {"Agent": SPAWNED_AGENT, "Command": SPAWNED_SHELL, "Task": SPAWNED_SHELL}
 )
@@ -2043,19 +2009,14 @@ def _end(agent: SpawnedAgent, at: str, *, failed: bool) -> None:
 
 
 def _queued_notice(record: ClaudeRecord) -> Injected | None:
-    # Measured: a subagent's shell ends only here in the session's own log; enqueue and remove
-    # carry the same notice, and ending a task twice at once changes nothing.
+    # Measured: a subagent's shell ends only here; enqueue and remove repeat it, which is harmless.
     if record.type != "queue-operation" or record.operation not in (_ENQUEUE, _REMOVE):
         return None
     return injected(None, record.content or "", human=False)
 
 
 def _ending(record: ClaudeRecord) -> TaskNotice | PeerMessage | None:
-    """What *record* says ended a background agent or shell: its notice, or an agent's report.
-
-    Measured: an agent that hands back while its own work runs is told "waiting", and once
-    handed back its run is over, so no "finished" ever follows.
-    """
+    """What *record* says ended a background agent or shell: its notice, or an agent's report."""
     found = _delivered(record) or _queued_notice(record)
     content = record.message.content if record.message is not None else None
     if found is None and record.type == "user" and isinstance(content, str):

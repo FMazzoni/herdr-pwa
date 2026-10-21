@@ -137,7 +137,7 @@ def test_the_sheet_has_a_grabber_a_title_and_one_line_agent_rows(tmp_path: Path)
     sheet = _sheet(_page(tmp_path, crowded_chat(), "working"))
     assert '<button class="button tray__grab" type="button" aria-label="Close"' in sheet
     # The grabber and the header drag the sheet that swipe.js moves; a tap on the grabber closes it.
-    assert re.search(r'<div class="tray__body" data-hp-swipe>', sheet)
+    assert '<div class="tray__body" data-hp-swipe>' in sheet
     assert re.search(r'class="button tray__grab"[^>]*data-hp-close data-hp-grab', sheet)
     assert re.search(r'<div class="tray__head"[^>]*data-hp-grab', sheet)
     assert '<h2 class="sheet__heading tray__title">Activity</h2>' in sheet

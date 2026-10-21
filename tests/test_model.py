@@ -1303,9 +1303,9 @@ def test_an_omitted_expectation_still_means_the_build_it_was_compiled_for() -> N
 def test_a_blocked_prompt_refuses_a_mixed_up_address_and_identity() -> None:
     """The tap-to-answer surface: a keystroke is one step from these two fields."""
     with pytest.raises(ValueError, match="session id"):
-        BlockedPrompt.parse("q?", target=SESSION_A)  # pyright: ignore[reportArgumentType]
+        BlockedPrompt.parse("q?", target=SESSION_A)  # pyright: ignore[reportArgumentType] - the wrong id kind on purpose, to see it refused
     with pytest.raises(ValueError, match="pane id"):
-        BlockedPrompt.parse("q?", session="w1:p1")  # pyright: ignore[reportArgumentType]
+        BlockedPrompt.parse("q?", session="w1:p1")  # pyright: ignore[reportArgumentType] - the wrong id kind on purpose, to see it refused
     p = BlockedPrompt.parse("q?", target=as_pane_id(" w1:p1 "), session=SESSION_A)
     assert (p.target, p.session) == ("w1:p1", SESSION_A)
 

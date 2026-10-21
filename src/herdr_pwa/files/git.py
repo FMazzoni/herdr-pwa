@@ -2,7 +2,6 @@
 
 import logging
 import os
-import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,7 +11,7 @@ from typing import Final, cast
 import pygit2
 from pygit2.enums import DeltaStatus, DiffFind, DiffOption, RepositoryOpenFlag
 
-from herdr_pwa.clock import Clock
+from herdr_pwa.clock import MonoClock, mono_now
 
 log = logging.getLogger(__name__)
 
@@ -27,9 +26,7 @@ LAYOUT_TTL: Final = 30.0
 EMPTY_TREE: Final = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 # A .git file, a worktree's gitdir file or a commondir file is one line holding a path.
 GITFILE_BYTES: Final = 4096
-# libgit2 reads in-process and runs no command a repository names: no filter driver, fsmonitor,
-# hook, pager, external diff or textconv. A submodule is never opened, as git's
-# --ignore-submodules=all; nothing is written back, as git's GIT_OPTIONAL_LOCKS=0.
+# libgit2 runs no repo-named filter, fsmonitor, hook or textconv; submodules shut, no locks taken.
 _READ: Final = DiffOption.IGNORE_SUBMODULES
 _STATUS: Final = _READ | DiffOption.INCLUDE_TYPECHANGE
 _UNTRACKED: Final = _STATUS | DiffOption.INCLUDE_UNTRACKED | DiffOption.RECURSE_UNTRACKED_DIRS
@@ -192,7 +189,7 @@ def _listed(repo: pygit2.Repository) -> tuple[Path, ...]:
 class Git:
     """Reads a repository in-process, caching each answer for a few seconds."""
 
-    def __init__(self, clock: Clock = time.monotonic) -> None:
+    def __init__(self, clock: MonoClock = mono_now) -> None:
         self._clock = clock
         self._memo: dict[tuple[str, ...], tuple[float, object]] = {}
 
@@ -245,8 +242,7 @@ class Git:
         if tree_top != top or common is None:
             return (top,)
         found = self._read("worktree list", common, _listed) or ()
-        # The list is read from files in .git that an agent can write, so each entry
-        # must also claim this repository from its own side before it is believed.
+        # An agent can write the list in .git, so each entry must claim this repository back.
         kept = [t for t in dict.fromkeys(found) if t == top or self._claims(t, common)]
         return tuple(dict.fromkeys([top, *kept]))
 

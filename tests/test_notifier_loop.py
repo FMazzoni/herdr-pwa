@@ -17,7 +17,7 @@ from herdr_pwa.engine import (
 )
 from herdr_pwa.notify import NotifyConfig
 from herdr_pwa.protocol import WRITE_METHODS
-from herdr_pwa.push import DeliveryError, Subscription
+from herdr_pwa.push import PUSH_LIMITS, DeliveryError, Subscription
 from herdr_pwa.settings import Settings
 from herdr_pwa.web.app import create_app
 from herdr_pwa.web.notifier import HerdSource, LoopConfig, Notifier, PushStores, open_push
@@ -52,11 +52,15 @@ class Sender:
         default_factory=list[tuple[str, dict[str, JsonValue]]]
     )
     refuse: int | None = None
+    # How long each send takes on the clock the fan-out budget is measured on.
+    spends: tuple[Clock, float] | None = None
 
     def __call__(self, subscription: Subscription, data: str) -> None:
         if self.refuse is not None:
             raise DeliveryError("refused", status=self.refuse)
         self.sent.append((subscription.endpoint, OBJECT.validate_json(data)))
+        if self.spends is not None:
+            self.spends[0].now += self.spends[1]
 
 
 # Mutable: the test's loop counts its ticks.
@@ -67,6 +71,8 @@ class Loop:
     notifier: Notifier
     wire: FakeWire
     clock: Clock
+    # The notifier's own monotonic clock, apart from the rig's, so the two can disagree.
+    elapsed: Clock
     sender: Sender
     stores: PushStores
     # herdr stamps each status change with a fresh counter; the seen ledger reads it.
@@ -91,8 +97,9 @@ def build_loop(tmp_path: Path, notify: NotifyConfig | None = None) -> Loop:
     wire = FakeWire({SNAPSHOT: snapshot_frame(), READ: read_frame("Proceed with the edit?")})
     engine = EngineSettings(socket_path=tmp_path / "no.sock", command_timeout=1.0)
     client = HerdrClient(engine, transport=wire, clock=clock)
-    stores = PushStores.open(tmp_path / "state", clock=clock)
+    stores = PushStores.open(tmp_path / "state", clock=clock.wall)
     sender = Sender()
+    elapsed = Clock()
     # No desk hold unless a test asks for one: a held alert would hide what the tick decided.
     chosen = notify or NotifyConfig(debounce=0.0, desk_window=0.0)
     config = LoopConfig(interval=2.0, notify=chosen)
@@ -102,9 +109,9 @@ def build_loop(tmp_path: Path, notify: NotifyConfig | None = None) -> Loop:
         ),
         stores=stores,
         config=config,
-        seams=Seams(wall=clock, deliver=sender),
+        seams=Seams(clock=elapsed, wall=clock.wall, deliver=sender),
     )
-    return Loop(notifier, wire, clock, sender, stores)
+    return Loop(notifier, wire, clock, elapsed, sender, stores)
 
 
 def test_with_nobody_subscribed_the_herd_is_not_even_read(tmp_path: Path) -> None:
@@ -231,8 +238,13 @@ def test_a_held_alert_shortens_the_sleep_to_when_it_falls_due(tmp_path: Path) ->
     _ = loop.notifier.tick()
     assert loop.sender.sent == []
     loop.clock.now += 29.0
+    loop.elapsed.now += 29.0
     assert loop.notifier.interval() == 1.0
-    loop.clock.now += 1.0
+    # A wall clock stepped forward releases nothing: the hold is timed on the monotonic one.
+    loop.clock.now += 60.0
+    _ = loop.notifier.tick()
+    assert loop.sender.sent == []
+    loop.elapsed.now += 1.0
     _ = loop.notifier.tick()
     assert [payload["event"] for _, payload in loop.sender.sent] == ["blocked"]
 
@@ -290,3 +302,17 @@ def test_the_app_starts_and_stops_the_loop_with_its_lifespan(tmp_path: Path) -> 
         assert (status["armed"], status["running"]) == (True, True)
     # Nobody subscribed, so the loop never read the herd.
     assert wire.calls == []
+
+
+def test_the_fan_out_budget_runs_on_the_monotonic_clock_not_the_wall(tmp_path: Path) -> None:
+    loop = build_loop(tmp_path)
+    for n in range(2):
+        _ = loop.stores.devices.add(subscribed(f"https://fcm.googleapis.com/fcm/send/{n}"))
+    _ = loop.notifier.tick()
+    loop.set_status("blocked")
+    # The first send outlasts the budget on the monotonic clock while the wall stands still.
+    loop.sender.spends = (loop.elapsed, PUSH_LIMITS.fan_out_budget + 1)
+    tick = loop.notifier.tick()
+    assert tick.sent is not None
+    assert (tick.sent.sent, tick.sent.failed) == (1, 1)
+    assert len(loop.sender.sent) == 1

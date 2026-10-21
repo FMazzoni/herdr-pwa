@@ -1,12 +1,29 @@
-"""Time: the one shape of a clock and of a sleep, and the one wording of a span of it."""
+"""Time: the wall and monotonic clocks, a sleep, and the one wording of a span of it."""
 
+import time
 from collections.abc import Callable
-from typing import Final
+from typing import Final, NewType
 
-# Seconds now: time.monotonic for intervals and deadlines, time.time for stamps.
-type Clock = Callable[[], float]
+# Seconds since the epoch, from time.time: a stamp to write down, or to say how long ago.
+WallTime = NewType("WallTime", float)
+# Seconds on time.monotonic: only the difference of two readings means anything.
+MonoTime = NewType("MonoTime", float)
+# Two clock types, so a wall clock cannot be passed where intervals and deadlines are measured.
+type WallClock = Callable[[], WallTime]
+type MonoClock = Callable[[], MonoTime]
 # Wait this many seconds: time.sleep, or a test's clock moving forward.
 type Sleep = Callable[[float], None]
+
+
+def wall_now() -> WallTime:
+    """The wall clock: seconds since the epoch."""
+    return WallTime(time.time())
+
+
+def mono_now() -> MonoTime:
+    """The monotonic clock: seconds from an arbitrary start, never stepped back."""
+    return MonoTime(time.monotonic())
+
 
 _MINUTE: Final = 60
 _HOUR: Final = 3600
