@@ -1,5 +1,6 @@
 import json
 import stat
+import threading
 from dataclasses import replace
 from pathlib import Path
 from typing import TypedDict
@@ -7,6 +8,7 @@ from typing import TypedDict
 import pytest
 from pydantic import JsonValue, TypeAdapter
 
+from herdr_pwa import statedir
 from herdr_pwa.ids import PaneId, SessionId
 from herdr_pwa.managed import ManagedHerd, carries_mark
 from herdr_pwa.notify import (
@@ -359,6 +361,38 @@ def test_preferences_live_at_0600_snooze_is_clamped_and_garbage_is_defaults(tmp_
     assert stat.S_IMODE(store.path.stat().st_mode) == 0o600
     _ = store.path.write_text("{torn")
     assert store.load() == Interrupts()
+
+
+def test_a_snooze_during_a_preference_change_keeps_both(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clock = Clock()
+    store = InterruptStore(tmp_path, clock=clock)
+    write = statedir.write_secret
+    changing, release, wrote = threading.Event(), threading.Event(), threading.Event()
+
+    def held(path: Path, text: str, *, exclusive: bool = False) -> None:
+        # The change stops inside its write, after reading the store, until the snooze has had its go.
+        if threading.current_thread().name == "kinds":
+            changing.set()
+            _ = release.wait(5)
+        write(path, text, exclusive=exclusive)
+        if threading.current_thread().name == "snooze":
+            wrote.set()
+
+    monkeypatch.setattr(statedir, "write_secret", held)
+    kinds = threading.Thread(target=lambda: store.set_kinds(done=True), name="kinds")
+    snooze = threading.Thread(target=lambda: store.snooze(60), name="snooze")
+    kinds.start()
+    assert changing.wait(5)
+    snooze.start()
+    _ = wrote.wait(0.5)
+    release.set()
+    kinds.join(5)
+    snooze.join(5)
+    kept = store.load()
+    assert kept.done
+    assert kept.dnd_until == clock() + 60
 
 
 def test_the_seen_ledger_persists_at_0600_and_caps_its_size(tmp_path: Path) -> None:

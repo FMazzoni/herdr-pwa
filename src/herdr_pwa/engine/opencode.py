@@ -49,7 +49,7 @@ OPENCODE_DB: Final = "opencode.db"
 
 OPENCODE_STORAGE_ROOT: Final = f"{OPENCODE_ROOT}/storage"
 
-_ID: Final = re.compile(r"^(?:ses|msg|prt)_[A-Za-z0-9]+$")
+_ID: Final = re.compile(r"(?:ses|msg|prt)_[A-Za-z0-9]+")
 
 _QUIET_TYPES: Final = frozenset(
     {"step-start", "step-finish", "snapshot", "patch", "reasoning", "compaction"}
@@ -68,7 +68,7 @@ _FAILED_MESSAGES: Final = (
 
 def _named(path: Path) -> bool:
     """A store entry this reader will open: an id, a ``.json``, nothing else."""
-    return path.suffix == ".json" and bool(_ID.match(path.stem))
+    return path.suffix == ".json" and bool(_ID.fullmatch(path.stem))
 
 
 # What opencode's records hold, as far as this reader looks: each model ignores the rest.
@@ -341,7 +341,7 @@ class _Files:
 
     def info(self) -> SessionInfo:
         """The session's own JSON, which names it but never says what it is pointed at."""
-        if not _ID.match(self._session):
+        if not _ID.fullmatch(self._session):
             return SessionInfo()
         try:
             projects = sorted((self._base / "session").iterdir())
@@ -352,7 +352,7 @@ class _Files:
 
     def origin(self) -> str:
         """The ``directory`` of the session's own JSON."""
-        if not _ID.match(self._session):
+        if not _ID.fullmatch(self._session):
             return ""
         try:
             projects = sorted((self._base / "session").iterdir())
@@ -407,7 +407,7 @@ class _Live:
         found = [
             (m, k)
             for m, k in [*rows, *((m, m) for (m,) in failed)]
-            if isinstance(m, str) and isinstance(k, str) and _ID.match(m) and _ID.match(k)
+            if isinstance(m, str) and isinstance(k, str) and _ID.fullmatch(m) and _ID.fullmatch(k)
         ]
         return sorted(found, key=_after_parts)
 
@@ -429,7 +429,7 @@ class _Live:
         rows = self._db.rows(
             "select id from message where session_id = ? order by id", self._db.session
         )
-        return [key for (key,) in rows if isinstance(key, str) and _ID.match(key)]
+        return [key for (key,) in rows if isinstance(key, str) and _ID.fullmatch(key)]
 
     def info(self) -> SessionInfo:
         """The session row itself, which is where opencode keeps both of these."""
@@ -462,7 +462,7 @@ class _Live:
 
     def _row(self, table: str, key: str) -> tuple[object, int]:
         """One record's stored blob by id, refusing any name that is not the store's shape."""
-        if not _ID.match(key):
+        if not _ID.fullmatch(key):
             return None, 0
         # *table* is always "part" or "message" from this class; the ids are bound.
         sql = f"select data from {table} where id = ? and session_id = ?"  # noqa: S608

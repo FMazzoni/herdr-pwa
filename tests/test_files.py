@@ -326,6 +326,10 @@ def test_a_secret_is_held_behind_a_tap_everywhere(tmp_path: Path, repo: Path) ->
         ("environment.py", False),
         ("keys.py", False),
         ("README.md", False),
+        # A name may hold a newline, which a pattern's ``.`` does not match without DOTALL.
+        ("x\nserver.key", True),
+        (".env\nx", True),
+        ("token\n", True),
     ],
 )
 def test_secret_names(name: str, *, secret: bool) -> None:

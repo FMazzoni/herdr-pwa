@@ -257,6 +257,37 @@ def test_a_failed_write_keeps_the_previous_store(
     assert store.path.read_text() == before
 
 
+def test_a_device_added_while_one_is_pruned_is_kept(
+    store: SubscriptionStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    gone, kept, added = (f"https://fcm.googleapis.com/fcm/send/{n}" for n in ("a", "b", "c"))
+    _ = store.add(subscribed(gone))
+    _ = store.add(subscribed(kept))
+    write = statedir.write_secret
+    pruning, release, wrote = threading.Event(), threading.Event(), threading.Event()
+
+    def held(path: Path, text: str, *, exclusive: bool = False) -> None:
+        # The pruner stops inside its write, after reading the store, until the add has had its go.
+        if threading.current_thread().name == "pruner":
+            pruning.set()
+            _ = release.wait(5)
+        write(path, text, exclusive=exclusive)
+        if threading.current_thread().name == "adder":
+            wrote.set()
+
+    monkeypatch.setattr(statedir, "write_secret", held)
+    pruner = threading.Thread(target=store.remove, args=(gone,), name="pruner")
+    adder = threading.Thread(target=store.add, args=(subscribed(added),), name="adder")
+    pruner.start()
+    assert pruning.wait(5)
+    adder.start()
+    _ = wrote.wait(0.5)
+    release.set()
+    pruner.join(5)
+    adder.join(5)
+    assert [one.endpoint for one in store.list_all()] == [kept, added]
+
+
 def _disk_full(_fd: int) -> None:
     raise OSError("disk full")
 
@@ -292,6 +323,44 @@ def test_urls_never_reach_the_lock_screen(text: str) -> None:
 )
 def test_ordinary_questions_are_not_mangled(text: str) -> None:
     assert sanitise(text, limit=MAX_BODY_CHARS) == text
+
+
+@pytest.mark.parametrize(
+    ("text", "cleaned"),
+    [
+        ("(see https://evil.example/pay)", "(see [link]"),
+        ("run -evil.example.com now", "run -[link] now"),
+        ("a..evil.example.com", "a..[link]"),
+        ("x.com.evil.example/pay", "[link]"),
+    ],
+)
+def test_a_link_inside_punctuation_is_still_found(text: str, cleaned: str) -> None:
+    assert sanitise(text, limit=MAX_BODY_CHARS) == cleaned
+
+
+# One unbroken word made the old pattern rescan the rest of it from every letter: 18 s at 20k.
+ADVERSARIAL = ("a" * 100_000, "a." * 50_000, "a-" * 50_000, "1a" * 50_000, "a.." * 33_333)
+
+
+@pytest.mark.parametrize("text", ADVERSARIAL, ids=["word", "dots", "dashes", "digits", "breaks"])
+def test_scanning_for_links_is_linear_in_the_text(text: str) -> None:
+    # CPU time, so a loaded gate cannot inflate it; the old pattern took minutes, far past 1 s.
+    started = time.process_time()
+    _ = push._URL_RE.sub(LINK_PLACEHOLDER, text)  # pyright: ignore[reportPrivateUsage]
+    assert time.process_time() - started < 1.0
+
+
+def test_a_long_notice_is_cut_before_it_is_scanned() -> None:
+    started = time.process_time()
+    cleaned = sanitise("a" * 100_000, limit=MAX_BODY_CHARS)
+    assert time.process_time() - started < 1.0
+    assert cleaned == "a" * (MAX_BODY_CHARS - 1) + "…"
+
+
+@pytest.mark.parametrize("padding", range(4075, 4095))
+def test_a_link_cut_by_the_scan_cap_is_dropped_and_the_cut_marked(padding: int) -> None:
+    cleaned = sanitise("https://x/" + "a" * padding + " evil.ru/pay", limit=MAX_BODY_CHARS)
+    assert cleaned == f"{LINK_PLACEHOLDER} …"
 
 
 def test_the_title_and_body_are_capped() -> None:
@@ -482,6 +551,12 @@ def test_the_browsers_push_services_are_accepted(endpoint: str) -> None:
 def test_an_endpoint_off_the_push_services_is_refused(endpoint: str) -> None:
     with pytest.raises(ValidationError, match="not on a browser push service"):
         _ = subscribed(endpoint)
+
+
+def test_an_endpoint_ending_in_a_newline_is_refused() -> None:
+    # A pattern's ``$`` also matches before a final newline: https://docs.python.org/3/library/re.html
+    with pytest.raises(ValidationError, match="must be an https:// URL"):
+        _ = subscribed(f"{ENDPOINT}\n")
 
 
 def test_an_eleventh_device_is_refused_but_a_known_one_still_updates(

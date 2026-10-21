@@ -139,14 +139,18 @@ def _page_routes(router: APIRouter, web: WebState, push: PushState | None) -> No
         return _off() if push is None else _json(_status(push))
 
 
+# The stores fsync, so their reads and writes run off the event loop that serves every stream.
+
+
 async def _subscribe(push: PushState, request: Request) -> JSONResponse:
     try:
-        stored = push.stores.devices.add(await _body(request, Subscription))
+        subscription = await _body(request, Subscription)
+        stored = await asyncio.to_thread(push.stores.devices.add, subscription)
     except ValidationError as exc:
         return _bad(summary(exc))
     except (BadBody, SubscriptionError, OSError) as exc:
         return _bad(str(exc))
-    devices = _devices(push.stores.devices)
+    devices = await asyncio.to_thread(_devices, push.stores.devices)
     # The echoed endpoint is the server's confirmation; only then does the page say "on".
     armed = push.notifier is not None
     return _json({"endpoint": stored.endpoint, "devices": devices, "armed": armed})
@@ -155,28 +159,31 @@ async def _subscribe(push: PushState, request: Request) -> JSONResponse:
 async def _unsubscribe(push: PushState, request: Request) -> JSONResponse:
     try:
         endpoint = (await _body(request, _Unsubscribe)).endpoint
-        removed = push.stores.devices.remove(endpoint)
+        removed = await asyncio.to_thread(push.stores.devices.remove, endpoint)
     except ValidationError as exc:
         return _bad(summary(exc))
     except (BadBody, SubscriptionError, OSError) as exc:
         return _bad(str(exc))
-    return _json({"removed": removed, "devices": _devices(push.stores.devices)})
+    devices = await asyncio.to_thread(_devices, push.stores.devices)
+    return _json({"removed": removed, "devices": devices})
 
 
 async def _set_prefs(push: PushState, request: Request) -> JSONResponse:
     try:
         kinds = await _body(request, _Kinds)
-        _ = push.stores.interrupts.set_kinds(blocked=kinds.blocked, done=kinds.done)
+        interrupts = push.stores.interrupts
+        _ = await asyncio.to_thread(interrupts.set_kinds, blocked=kinds.blocked, done=kinds.done)
     except ValidationError as exc:
         return _bad(summary(exc))
     except (BadBody, OSError) as exc:
         return _bad(str(exc))
-    return _json(_policy(push.stores.interrupts))
+    return _json(await asyncio.to_thread(_policy, push.stores.interrupts))
 
 
 async def _snooze(push: PushState, request: Request) -> JSONResponse:
     try:
-        policy = push.stores.interrupts.snooze((await _body(request, _Snooze)).seconds)
+        seconds = (await _body(request, _Snooze)).seconds
+        policy = await asyncio.to_thread(push.stores.interrupts.snooze, seconds)
     except ValidationError as exc:
         return _bad(summary(exc))
     except (BadBody, OSError) as exc:
@@ -184,7 +191,7 @@ async def _snooze(push: PushState, request: Request) -> JSONResponse:
     if policy.dnd_until and push.notifier is not None:
         # The clear goes out over the network, so it runs off the event loop.
         _ = await asyncio.to_thread(push.notifier.retract)
-    return _json(_policy(push.stores.interrupts))
+    return _json(await asyncio.to_thread(_policy, push.stores.interrupts))
 
 
 def _device_routes(router: APIRouter, push: PushState | None) -> None:
