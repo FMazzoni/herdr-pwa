@@ -56,17 +56,17 @@ def screen_digest(screen: str) -> str:
 EXPECTED_PROTOCOL = _EXPECTED_PROTOCOL
 
 
-_PANE_SHAPE = re.compile(r"^[^\s:]+:[^\s:]+$")
+_PANE_SHAPE = re.compile(r"[^\s:]+:[^\s:]+")
 
 _UUID_SHAPE = re.compile(
-    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
 )
 
 
 def as_session_id(value: object) -> SessionId:
     """Tag an untrusted string (a URL path segment, a notification payload) as identity."""
     text = str(value or "").strip()
-    if _PANE_SHAPE.match(text):
+    if _PANE_SHAPE.fullmatch(text):
         raise ValueError(
             f"{text!r} is a pane id (an address), not a session id (an identity); "
             "pane ids are recycled and must never be used to identify an agent"
@@ -77,7 +77,7 @@ def as_session_id(value: object) -> SessionId:
 def as_pane_id(value: object) -> PaneId:
     """Tag an untrusted string as an address to drive *this tick*."""
     text = str(value or "").strip()
-    if _UUID_SHAPE.match(text):
+    if _UUID_SHAPE.fullmatch(text):
         raise ValueError(
             f"{text!r} is a session id (an identity), not a pane id (an address); "
             "resolve it against a fresh snapshot with Snapshot.resolve_session first"

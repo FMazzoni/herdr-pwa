@@ -256,6 +256,15 @@ def test_a_session_with_messages_but_no_parts_is_empty(store: Path) -> None:
     assert got.turns == []
 
 
+def test_a_record_whose_name_ends_in_a_newline_is_not_one_of_the_stores(store: Path) -> None:
+    # A pattern's ``$`` also matches before a final newline: https://docs.python.org/3/library/re.html
+    source = Source.of(SESSION, agent_kind="opencode", root=store)
+    before = usage(source)
+    for message in (store / "message" / SESSION).glob("*.json"):
+        (message.parent / f"{message.stem}\n.json").write_bytes(message.read_bytes())
+    assert usage(source) == before
+
+
 def test_a_store_full_of_rubbish_reads_as_no_conversation(store: Path) -> None:
     for path in (store / "part").rglob("*.json"):
         path.write_text("not json at all")

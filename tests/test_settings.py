@@ -67,3 +67,9 @@ def test_an_opencode_model_that_could_never_be_launched_stops_the_start(
     monkeypatch.setenv("HP_OPENCODE_MODELS", typed)
     with pytest.raises(ValueError, match="opencode_models"):
         _ = Settings()
+
+
+def test_a_model_id_ending_in_a_newline_is_refused() -> None:
+    # A pattern's ``$`` also matches before a final newline: https://docs.python.org/3/library/re.html
+    with pytest.raises(ValueError, match="opencode_models"):
+        _ = Settings(opencode_models=("opencode/big-pickle\n",))

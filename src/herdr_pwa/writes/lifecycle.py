@@ -50,7 +50,7 @@ from herdr_pwa.writes.resolve import (
 log = logging.getLogger(__name__)
 
 MAX_AGENT_NAME: Final = 32
-_AGENT_NAME: Final = re.compile(r"^[a-z][a-z0-9_-]*$")
+_AGENT_NAME: Final = re.compile(r"[a-z][a-z0-9_-]*")
 _NOT_NAME: Final = re.compile(r"[^a-z0-9_-]+")
 SESSION_WAIT: Final = 2.0
 SESSION_POLL: Final = 0.5
@@ -132,7 +132,7 @@ def agent_name(typed: str) -> str:
     """The runner's name for an agent, folded out of what a phone typed, or ``""``."""
     folded = _NOT_NAME.sub("-", typed.strip().lower()).strip("-_")
     folded = folded[:MAX_AGENT_NAME].strip("-_")
-    return folded if _AGENT_NAME.match(folded) else ""
+    return folded if _AGENT_NAME.fullmatch(folded) else ""
 
 
 def found_in(name: str, dirs: Iterable[str]) -> str | None:
@@ -270,7 +270,7 @@ def _form_refusal(
             and (
                 harness is None
                 or request.model not in harness.models
-                or not MODEL_ID.match(request.model)
+                or not MODEL_ID.fullmatch(request.model)
             ),
             Refusal.BAD_MODEL,
         ),

@@ -93,7 +93,7 @@ class Settings(BaseSettings):
     @field_validator("opencode_models")
     @classmethod
     def _launchable(cls, value: tuple[str, ...]) -> tuple[str, ...]:
-        bad = [model for model in value if not MODEL_ID.match(model)]
+        bad = [model for model in value if not MODEL_ID.fullmatch(model)]
         if bad:
             msg = f"not a model id that could go on a command line: {', '.join(bad)}"
             raise ValueError(msg)
