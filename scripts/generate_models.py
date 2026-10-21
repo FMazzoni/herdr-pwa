@@ -215,7 +215,7 @@ from herdr_pwa.engine.generated.success_response import (
 )
 
 #: The protocol the vendored schema was captured at. Compare against
-#: :data:`herdr_pwa.engine.model.EXPECTED_PROTOCOL`.
+#: :data:`herdr_pwa.protocol.EXPECTED_PROTOCOL`.
 SCHEMA_PROTOCOL = {doc["protocol"]}
 SCHEMA_VERSION = {doc["schema_version"]}
 SCHEMA_SHA256 = "{digest}"

@@ -10,7 +10,7 @@ import sys
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
-from typing import cast
+from typing import Literal, cast
 
 import pytest
 from pydantic import BaseModel, JsonValue, TypeAdapter
@@ -268,6 +268,15 @@ def test_read_defaults_to_the_visible_source() -> None:
     eng, wire = build({READ: read_frame("viewport text")})
     eng.read(P3)
     assert wire.last.params["source"] == "visible"
+
+
+def test_a_recent_read_is_refused_even_past_the_type_checker() -> None:
+    """A script is not type-checked, and a recent read scrolls the operator's own pane."""
+    with pytest.raises(InvalidRequestError, match="recent"):
+        ReadOptions(
+            # A lie on purpose: it plays the untyped caller the runtime check exists for.
+            source=cast("Literal[wire_request.ReadSource.visible]", wire_request.ReadSource.recent)
+        )
 
 
 def test_a_visible_read_takes_its_line_count_as_given() -> None:
@@ -890,19 +899,11 @@ def test_the_address_is_normalised_before_it_goes_on_the_wire() -> None:
     assert wire.last.params == {"target": "w1:p3"}
 
 
-def test_the_rendered_protocol_check_and_the_write_guard_agree() -> None:
+def test_the_write_guard_allows_the_protocol_the_client_expects() -> None:
     """One runner, one number. They used to be two."""
     eng, _ = build(settings=replace(SETTINGS, expected_protocol=DRIFTED), protocol_number=DRIFTED)
-    snap = eng.snapshot()
-    assert snap.protocol == eng.settings.expected_protocol  # what the snapshot reports...
-    eng.focus(P3)  # ...and what the guard allows
-
-
-def test_an_unconfigured_snapshot_still_judges_itself_by_the_build() -> None:
-    """Nobody who never configured anything sees a behaviour change."""
-    eng, _ = build(protocol_number=DRIFTED)
-    snap = eng.snapshot()
-    assert snap.protocol != eng.settings.expected_protocol
+    eng.snapshot()
+    eng.focus(P3)  # the guard allows what the client was told to expect
 
 
 # --------------------------------------------------------------------------

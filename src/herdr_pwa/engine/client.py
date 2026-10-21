@@ -131,6 +131,11 @@ class ReadOptions:
     colour: bool = False
     timeout: float | None = None
 
+    def __post_init__(self) -> None:
+        """Refuse a recent read from a caller the type checker never saw, since it scrolls the pane."""
+        if self.source not in get_args(ReadBuffer):
+            raise InvalidRequestError(f"read source {self.source!r} is not visible or detection")
+
 
 # The default read: the visible screen as text, at the command timeout.
 PLAIN_READ: Final = ReadOptions()

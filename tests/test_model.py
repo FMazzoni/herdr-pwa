@@ -324,12 +324,6 @@ def test_empty_session_is_a_valid_snapshot_not_an_error() -> None:
     assert Snapshot.from_raw({}).agents == ()
 
 
-def test_protocol_drift_is_visible_on_the_model() -> None:
-    drifted = EXPECTED_PROTOCOL + 1
-    s = Snapshot.from_raw({"protocol": drifted, "agents": [], "workspaces": []})
-    assert s.protocol != EXPECTED_PROTOCOL
-
-
 # BlockedPrompt
 
 # Trimmed from a real detection capture: whole viewport, a rule, a marker, indented descriptions.

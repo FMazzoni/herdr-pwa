@@ -12,7 +12,6 @@ from typing import Final, Self, cast
 from pydantic import BaseModel, ConfigDict, computed_field
 
 from herdr_pwa.ids import PaneId, SessionId, WorkspaceId
-from herdr_pwa.protocol import EXPECTED_PROTOCOL as _EXPECTED_PROTOCOL
 
 type _Raw = Mapping[str, object]
 
@@ -55,9 +54,6 @@ def _panes(value: object) -> list[_Raw]:
 def screen_digest(screen: str) -> str:
     """A change detector for one rendered terminal screen."""
     return hashlib.sha256(screen.encode("utf-8", "replace")).hexdigest()[:16]
-
-
-EXPECTED_PROTOCOL: Final = _EXPECTED_PROTOCOL
 
 
 # A UUID's hex groups, as its canonical form spells them (RFC 9562, section 4).
