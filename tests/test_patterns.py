@@ -4,7 +4,9 @@ import importlib
 import pkgutil
 import re
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
+from dataclasses import dataclass
+from functools import partial
 from types import ModuleType
 from typing import cast
 
@@ -16,7 +18,8 @@ import herdr_pwa
 from herdr_pwa.panetext import plain, without_escapes
 from herdr_pwa.patterns import Rx
 from herdr_pwa.validation import MODEL_ID
-from tests.engine_seam import dialog_chunks
+from herdr_pwa.writes.guard import no_echo_notice
+from tests.engine_seam import dialog_chunks, injected
 
 # The wire models are generated from herdr's schema and compile nothing of this app's.
 _GENERATED = "herdr_pwa.engine.generated"
@@ -27,8 +30,10 @@ _CPU_SECONDS = 0.5
 # Linear costs ~4x at four times the length and quadratic ~16x; 8x sits between, whatever the machine.
 _SCALE = 4
 _MAX_RATIO = 8.0
-# Best of several runs, since noise only ever adds time.
+# Best of several runs, since noise only ever adds time; two runs within 10% already settle it.
 _REPEATS = 5
+_AGREEING = 2
+_AGREEMENT = 1.1
 # A ratio over the bound is measured again, unless it is already as steep as quadratic's 16x.
 _RETRIES = 2
 _PLAINLY_QUADRATIC = 12.0
@@ -112,12 +117,12 @@ def test_a_validator_refuses_a_trailing_newline(rx: Rx) -> None:
     assert [text for text in rx.matches if rx.found(text + "\n") is not None] == []
 
 
-def _long_inputs(rx: Rx, length: int = _LONG) -> Iterator[str]:
-    """Its own examples and their characters, repeated to a length no screen line reaches."""
-    for example in (*rx.matches, *rx.rejects):
+def _long_inputs(examples: tuple[str, ...], length: int = _LONG) -> Iterator[str]:
+    """The examples and their characters, repeated to a length no screen line reaches."""
+    for example in examples:
         if example:
             yield (example * (length // len(example) + 1))[:length]
-    for char in sorted(set("".join((*rx.matches, *rx.rejects)))):
+    for char in sorted(set("".join(examples))):
         yield char * length
 
 
@@ -131,59 +136,88 @@ def _read(rx: Rx, text: str) -> int:
 @pytest.mark.parametrize("rx", RECORDS, ids=_name)
 def test_no_pattern_backtracks_on_long_input(rx: Rx) -> None:
     started = time.process_time()
-    _ = sum(_read(rx, text) for text in _long_inputs(rx))
+    _ = sum(_read(rx, text) for text in _long_inputs((*rx.matches, *rx.rejects)))
     assert time.process_time() - started < _CPU_SECONDS
 
 
-def _best_times(rx: Rx, length: int) -> tuple[float, float]:
-    """The least CPU time over the repeats to read its inputs at *length* and at the scaled length."""
-    short, long = list(_long_inputs(rx, length)), list(_long_inputs(rx, length * _SCALE))
-    best = [float("inf"), float("inf")]
-    # Interleaved, so a slow spell on the machine lands on both sizes rather than one.
-    for _ in range(_REPEATS):
-        for at, texts in enumerate((short, long)):
-            started = time.process_time()
-            _ = sum(_read(rx, text) for text in texts)
-            best[at] = min(best[at], time.process_time() - started)
-    return best[0], best[1]
+@dataclass(frozen=True, slots=True)
+class _Reader:
+    read: Callable[[str], object]
+    examples: tuple[str, ...]
 
 
-# Measured at 14-16x: each scans to the end from every start a run of its opener offers.
-_SUPERLINEAR = frozenset(
-    {
-        "herdr_pwa.engine.dialog._KEY_PIECE",
-        "herdr_pwa.engine.notices._REMINDER",
-        "herdr_pwa.engine.notices._PEER",
-        "herdr_pwa.writes.guard._NO_ECHO[2]",
-    }
+def _pattern_reader(rx: Rx) -> object:
+    return pytest.param(_Reader(partial(_read, rx), (*rx.matches, *rx.rejects)), id=_name(rx))
+
+
+# Read with str methods rather than a pattern, on the shapes that made their regexes quadratic.
+_TAG_EXAMPLES = (
+    "<system-reminder>x</system-reminder>",
+    "a<system-reminder>\nmany\n</system-reminder>b",
+    "<system-reminder>open",
+    '<agent-message from="a">\nhi\n</agent-message>',
+    '<cross-session-message from="b">x</cross-session-message>',
+    '<agent-message from="a">x</cross-session-message>',
+    "<agent-messages>x</agent-messages>",
+)
+_TAG_READER = pytest.param(
+    _Reader(partial(injected, None, human=False), _TAG_EXAMPLES), id="notices.injected"
+)
+_PASSPHRASE_EXAMPLES = (
+    "Enter passphrase for key '/k':",
+    "Enter passphrase",
+    "enter passphrase for:",
+)
+_PASSPHRASE_READER = pytest.param(
+    _Reader(no_echo_notice, _PASSPHRASE_EXAMPLES), id="guard.no_echo_notice"
 )
 
 
-def _scaling_case(rx: Rx) -> object:
-    reason = "quadratic on a run of its opener; reported to the owner, not yet rewritten"
-    marks = [pytest.mark.xfail(strict=True, reason=reason)] if _name(rx) in _SUPERLINEAR else []
-    return pytest.param(rx, marks=marks, id=_name(rx))
+def _cpu(reader: _Reader, texts: list[str]) -> float:
+    started = time.process_time()
+    _ = [reader.read(text) for text in texts]
+    return time.process_time() - started
 
 
-def _ratio(rx: Rx) -> tuple[float, int] | None:
+def _agree(runs: list[float]) -> bool:
+    return len(runs) >= _AGREEING and max(runs[-_AGREEING:]) <= min(runs) * _AGREEMENT
+
+
+def _best_times(reader: _Reader, length: int) -> tuple[float, float]:
+    """The least CPU time over the repeats to read its inputs at *length* and at the scaled length."""
+    sizes = [list(_long_inputs(reader.examples, size)) for size in (length, length * _SCALE)]
+    runs: tuple[list[float], list[float]] = ([], [])
+    # Interleaved, so a slow spell on the machine lands on both sizes rather than one.
+    while len(runs[0]) < _REPEATS and not all(_agree(each) for each in runs):
+        for texts, each in zip(sizes, runs, strict=True):
+            each.append(_cpu(reader, texts))
+    return min(runs[0]), min(runs[1])
+
+
+def _ratio(reader: _Reader) -> tuple[float, int] | None:
     """How much more reading four times its input costs, and the length that was scaled."""
     length = _LONG
-    short, long = _best_times(rx, length)
-    while short < _FLOOR_SECONDS and length < _MAX_LONG:
+    # One run picks the length; only the length measured is repeated.
+    while (
+        length < _MAX_LONG
+        and _cpu(reader, list(_long_inputs(reader.examples, length))) < _FLOOR_SECONDS
+    ):
         length *= _SCALE
-        short, long = _best_times(rx, length)
+    short, long = _best_times(reader, length)
     # Still under the floor: it bails out before reading the input, so no per-character cost scales.
     return (long / short, length) if short >= _FLOOR_SECONDS else None
 
 
-@pytest.mark.parametrize("rx", [_scaling_case(rx) for rx in RECORDS])
-def test_no_pattern_costs_more_than_linear_time(rx: Rx) -> None:
-    measured = _ratio(rx)
+@pytest.mark.parametrize(
+    "reader", [*map(_pattern_reader, RECORDS), _TAG_READER, _PASSPHRASE_READER]
+)
+def test_no_pattern_costs_more_than_linear_time(reader: _Reader) -> None:
+    measured = _ratio(reader)
     # A loaded machine can slow one size for a whole measurement; it does not do so every time.
     for _ in range(_RETRIES):
         if measured is None or not _MAX_RATIO <= measured[0] < _PLAINLY_QUADRATIC:
             break
-        measured = min(measured, _ratio(rx) or measured)
+        measured = min(measured, _ratio(reader) or measured)
     if measured is not None:
         ratio, length = measured
         assert ratio < _MAX_RATIO, f"{ratio:.1f}x at {length * _SCALE:,} characters"

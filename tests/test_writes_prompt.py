@@ -285,13 +285,30 @@ def test_landing_needs_more_copies_than_before() -> None:
 
 
 @pytest.mark.parametrize(
-    "tail", ["[sudo] password for owner:", "Enter passphrase for /k:", "Retype password:"]
+    "tail",
+    [
+        "[sudo] password for owner:",
+        "Enter passphrase for /k:",
+        "Enter passphrase:",
+        "enter the passphrase:",
+        "Retype password:",
+    ],
 )
 def test_no_echo_prompts_are_recognised(tail: str) -> None:
     assert no_echo_notice("earlier\n" + tail) == NO_ECHO_MECHANISM
 
 
-@pytest.mark.parametrize("screen", ["Password:", "\u276f [sudo] password for owner:", SETTLED, ""])
+@pytest.mark.parametrize(
+    "screen",
+    [
+        "Password:",
+        "\u276f [sudo] password for owner:",
+        "Enter passphrase",
+        "enter passphrase for:",
+        SETTLED,
+        "",
+    ],
+)
 def test_anything_unsure_is_not_called_no_echo(screen: str) -> None:
     assert no_echo_notice(screen) == ""
 
