@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, field_validator
 
 from herdr_pwa import facts, glyphs
 from herdr_pwa.engine.model import PaneId, SessionId, as_pane_id, as_session_id, screen_digest
-from herdr_pwa.panetext import as_text_read, composer_top, plain
+from herdr_pwa.panetext import as_text_read, composer_top, escape_at, plain
 
 _EDGE_RE: Final = re.compile(rf"^(\s*){glyphs.one_of(glyphs.SIDE, glyphs.LEFT_BLOCKS)}")
 """A box-edge bar at line start, with the indent that owns it.
@@ -989,17 +989,34 @@ def _sgr_bg(codes: list[str], bg: str) -> str:
     return bg
 
 
+# Codes are read ";"-separated only, so an SGR with ":" sub-parameters is left as text.
+_SGR_CHARS: Final = frozenset("0123456789;")
+
+
+def _sgr_at(line: str, at: int) -> tuple[int, str] | None:
+    """Where the SGR at ``line[at]`` ends and its codes, or ``None`` for any other sequence."""
+    escape = escape_at(line, at)
+    if escape.sgr is None or not set(escape.sgr) <= _SGR_CHARS:
+        return None
+    return escape.end, escape.sgr
+
+
 def _chunks(line: str) -> list[tuple[str, str]]:
     """One ANSI line as ``(background, text)`` chunks, reset splitting them."""
     found: list[tuple[str, str]] = []
     bg = ""
     pos = 0
-    for m in re.finditer(r"\x1b\[([0-9;]*)m", line):
-        chunk = line[pos : m.start()]
-        if chunk:
-            found.append((bg, chunk))
-        bg = _sgr_bg(m.group(1).split(";") if m.group(1) else ["0"], bg)
-        pos = m.end()
+    at = line.find("\x1b")
+    while at >= 0:
+        if (sgr := _sgr_at(line, at)) is None:
+            # Any other sequence stays in the chunk's text, and an SGR inside it still counts.
+            at = line.find("\x1b", at + 1)
+            continue
+        if line[pos:at]:
+            found.append((bg, line[pos:at]))
+        pos, codes = sgr
+        bg = _sgr_bg(codes.split(";") if codes else ["0"], bg)
+        at = line.find("\x1b", pos)
     if line[pos:]:
         found.append((bg, line[pos:]))
     return found

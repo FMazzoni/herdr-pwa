@@ -65,9 +65,9 @@ _ITALIC: Final = "ansi-i"
 _UNDERLINE: Final = "ansi-u"
 
 
-# Escape-sequence grammar. Everything here is a discard rule except SGR.
+# Escape-sequence grammar, after ECMA-48; the one reading of escapes in this app.
 
-_CSI: Final = re.compile(r"\x1b\[([0-9;:<=>?]*)([ -/]*)([@-~])")
+_CSI: Final = re.compile(r"\x1b\[(?P<params>[0-9;:<=>?]*)(?P<between>[ -/]*)(?P<final>[@-~])")
 # OSC, DCS, SOS, PM, APC: swallowed whole, so an OSC 8 hyperlink cannot inject a URL.
 _STRING_SEQ: Final = re.compile(r"\x1b[]PX^_](?:[^\x07\x1b]|\x1b(?!\\))*(?:\x07|\x1b\\|\Z)")
 _SHORT_ESC: Final = re.compile(r"\x1b[ -/]*[0-~]?")
@@ -446,17 +446,36 @@ def _apply_sgr(style: _Style, raw: str) -> None:
 _DROP: Final = frozenset(chr(c) for c in range(0x20) if c not in (0x09, 0x0A)) | frozenset("\x7f")
 
 
-def _skip_escape(text: str, position: int) -> tuple[int, str | None]:
-    """Consume one escape sequence. Returns (next position, SGR params or None)."""
+@dataclass(frozen=True, slots=True)
+class Escape:
+    """One escape sequence: where it ends, and its parameters when it sets the style (SGR)."""
+
+    end: int
+    sgr: str | None = None
+
+
+def escape_at(text: str, position: int) -> Escape:
+    """The escape sequence that the ESC at ``text[position]`` opens, framed as ECMA-48 frames it."""
     match = _STRING_SEQ.match(text, position)
     if match is not None:
-        return match.end(), None
+        return Escape(match.end())
     match = _CSI.match(text, position)
     if match is not None:
-        is_sgr = match.group(3) == "m" and not match.group(2)
-        return match.end(), match.group(1) if is_sgr else None
+        is_sgr = match["final"] == "m" and not match["between"]
+        return Escape(match.end(), match["params"] if is_sgr else None)
     match = _SHORT_ESC.match(text, position)
-    return (match.end() if match else position + 1), None
+    return Escape(match.end() if match else position + 1)
+
+
+def without_escapes(text: str) -> str:
+    """*text* with every escape sequence taken out and every other character kept."""
+    kept: list[str] = []
+    position = 0
+    while (start := text.find("\x1b", position)) >= 0:
+        kept.append(text[position:start])
+        position = escape_at(text, start).end
+    kept.append(text[position:])
+    return "".join(kept)
 
 
 def _plain_run(text: str, position: int) -> tuple[int, str]:
@@ -473,8 +492,8 @@ def _next_event(text: str, position: int) -> tuple[int, tuple[str, str] | None]:
     if char == "\n":
         return position + 1, ("newline", "")
     if char == "\x1b":
-        position, params = _skip_escape(text, position)
-        return position, None if params is None else ("sgr", params)
+        escape = escape_at(text, position)
+        return escape.end, None if escape.sgr is None else ("sgr", escape.sgr)
     position, chunk = _plain_run(text, position)
     return position, ("text", chunk) if chunk else None
 

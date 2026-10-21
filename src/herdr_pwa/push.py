@@ -35,6 +35,7 @@ from pywebpush import WebPushException
 
 from herdr_pwa import statedir
 from herdr_pwa.clock import Clock, ago
+from herdr_pwa.panetext import without_escapes
 from herdr_pwa.validation import is_not_json, or_default, summary
 
 log = logging.getLogger(__name__)
@@ -399,11 +400,6 @@ class SubscriptionStore:
         statedir.write_secret(self.path, document.model_dump_json(indent=2, by_alias=True) + "\n")
 
 
-_ANSI_RE: Final = re.compile(
-    r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)"  # OSC, e.g. a title-setting sequence
-    r"|\x1b\[[0-?]*[ -/]*[@-~]"  # CSI, e.g. colour
-    r"|\x1b[@-Z\\-_]"  # any other two-character escape
-)
 _LINKY_TLDS: Final = "com|net|org|io|dev|ai|co|me|app|sh|xyz|gg|to|ly"
 # Schemes with no // that still navigate or execute.
 _BARE_SCHEMES: Final = "data|javascript|vbscript|file|blob|tel|mailto|sms|intent|market"
@@ -441,7 +437,7 @@ def _unlinked(found: re.Match[str]) -> str:
 
 def sanitise(text: str, *, limit: int) -> str:
     """Agent output reduced to what is safe on a lock screen: no escapes, controls or links."""
-    cleaned = _ANSI_RE.sub("", text)
+    cleaned = without_escapes(text)
     cleaned = "".join(" " if unicodedata.category(ch) in _INVISIBLE else ch for ch in cleaned)
     cleaned = " ".join(cleaned.split())
     if len(cleaned) > _MAX_SCANNED:
