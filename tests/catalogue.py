@@ -828,8 +828,8 @@ def _crowded_transcript(rig: Rig) -> None:
 
 
 OPENCODE_STORE: Final = FIXTURES / "transcript" / "opencode"
-OPENCODE_SESSION: Final = "ses_3fd62ba5bffemIxWVhRda5wgS7"
-OPENCODE_DIRECTORY: Final = "/home/user/projects/herdr-pwa"
+OPENCODE_SESSION: Final = "ses_ea388ff7fffezqx9eAc8o7s8GI"
+OPENCODE_DIRECTORY: Final = "/home/user/scratch/notes-demo"
 
 
 def _opencode_working() -> dict[str, JsonValue]:
@@ -869,7 +869,7 @@ def _opencode_store(rig: Rig) -> None:
         target.write_text(json.dumps(record))
 
 
-MIXED_SESSION: Final = "ses_0dfb24cf5ffemJcBmqyE29sVBi"
+MIXED_SESSION: Final = "ses_ea397b0caffeA2IKEmeHbtj4hG"
 
 
 def _opencode_mixed() -> dict[str, JsonValue]:
@@ -895,7 +895,7 @@ def _recent(row: dict[str, JsonValue], shift: int) -> dict[str, JsonValue]:
 
 
 def _opencode_mixed_store(rig: Rig) -> None:
-    """Real rows from four models, one of whose provider records nothing, as opencode's SQLite."""
+    """Captured rows from four models, one of which recorded nothing, as opencode's SQLite."""
     messages = MIXED_ROWS["message"]
     newest = max(row["time_created"] for row in messages if isinstance(row["time_created"], int))
     # Moved so the newest answer is a minute old, else the running turn reads as months long.

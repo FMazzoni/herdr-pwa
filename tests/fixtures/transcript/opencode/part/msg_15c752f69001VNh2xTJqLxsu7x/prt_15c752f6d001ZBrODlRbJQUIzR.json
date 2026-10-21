@@ -1,0 +1,7 @@
+{
+  "id": "prt_15c752f6d001ZBrODlRbJQUIzR",
+  "sessionID": "ses_ea38ad09effe9DIMcoOdjGJNLb",
+  "messageID": "msg_15c752f69001VNh2xTJqLxsu7x",
+  "type": "text",
+  "text": "This is a research-only task; do not write any code or files. Use the webfetch tool exactly once for each of the following two URLs (one call each, no retries):\n1. https://www.rfc-editor.org/rfc/rfc20.txt\n2. https://example.com/missing-page\n\nThen report back in your final message, in one line per URL, what each webfetch call returned (e.g., success with a brief content summary, or the error/status message). Keep the report to exactly two lines."
+}

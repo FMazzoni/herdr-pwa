@@ -1,0 +1,30 @@
+{
+  "id": "msg_15c773d8e001lGH7PC0g9yjWSG",
+  "sessionID": "ses_ea388ff7fffezqx9eAc8o7s8GI",
+  "parentID": "msg_15c77009d001wOxbBzU76xFFDm",
+  "role": "assistant",
+  "mode": "build",
+  "agent": "build",
+  "path": {
+    "cwd": "/home/user/scratch/notes-demo",
+    "root": "/home/user/scratch/notes-demo"
+  },
+  "cost": 0,
+  "tokens": {
+    "total": 8396,
+    "input": 304,
+    "output": 28,
+    "reasoning": 0,
+    "cache": {
+      "write": 0,
+      "read": 8064
+    }
+  },
+  "modelID": "glm-5.3-flash-free",
+  "providerID": "opencode",
+  "time": {
+    "created": 1792552680846,
+    "completed": 1792552682853
+  },
+  "finish": "stop"
+}

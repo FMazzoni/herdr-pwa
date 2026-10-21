@@ -42,7 +42,7 @@ from tests.webfakes import (
 NOW = datetime(2026, 10, 11, 12, 0, tzinfo=UTC).timestamp()
 FOUR_MINUTES_AGO = "2026-10-11T11:56:00.000Z"
 OPENCODE = Path(__file__).parent / "fixtures" / "transcript" / "opencode"
-OPENCODE_SESSION = "ses_3fd62ba5bffemIxWVhRda5wgS7"
+OPENCODE_SESSION = "ses_ea388ff7fffezqx9eAc8o7s8GI"
 
 
 def tally(model: str = "claude-haiku-4-5-20251001", **fields: object) -> SessionUsage:
@@ -296,7 +296,7 @@ def test_opencode_maps_its_store_with_no_cost_when_it_recorded_none() -> None:
     assert found.prompts > 0
     assert found.turn_started
     stats = stats_for(Reading("opencode", "working", found, found_now(found.turn_started, 90)))
-    assert stats.model == "Kimi-K2.5"
+    assert stats.model == "glm-5.3-flash-free"
     assert stats.percent is None
     assert stats.context.endswith(" ctx")
     assert stats.turn == "1m"
@@ -400,7 +400,9 @@ def test_opencode_names_the_model_that_answered_last_not_the_last_one_met(
 ) -> None:
     """The captured session's last answer, moved back onto the model it started on."""
     rows = test_opencode.edited(
-        11, '"hy3-free","providerID":"opencode"', '"zai-org/GLM-5.2","providerID":"togetherai"'
+        9,
+        '"deepseek-v4.1-flash-free","providerID":"opencode"',
+        '"zai-org/GLM-5.2","providerID":"togetherai"',
     )
     test_opencode.build(tmp_path / "opencode.db", rows)
     found = usage(Source.of(MIXED, agent_kind="opencode", root=tmp_path))
@@ -484,11 +486,11 @@ def test_the_files_tab_is_a_redirect_into_the_agents_files(tmp_path: Path) -> No
 
 # ---- spend per model ----------------------------------------------------------------------------
 
-MIXED = "ses_0dfb24cf5ffemJcBmqyE29sVBi"
+MIXED = "ses_ea397b0caffeA2IKEmeHbtj4hG"
 
 
 def mixed_store(tmp_path: Path, keep: tuple[str, ...] = ()) -> SessionUsage:
-    """The real mixed-model rows read through the adapter; *keep* narrows them to those models."""
+    """The captured mixed-model rows read through the adapter; *keep* narrows them to those models."""
     rows = test_opencode.MIXED_ROWS
     if keep:
         rows = {
@@ -515,13 +517,13 @@ def test_each_model_shows_its_tokens_cache_apart_and_its_own_money(tmp_path: Pat
         "GLM-5.2 via togetherai",
         "MiniMax-M3 via togetherai",
         "GLM-5.3-Flash via togetherai",
-        "hy3-free via opencode",
+        "deepseek-v4.1-flash-free via opencode",
     ]
     assert rows["GLM-5.2 via togetherai"] == (
-        "4 answers: 14k in, 1.5k out, 2.8k thinking, 40k cache read; $0.05"
+        "2 answers: 12k in, 69 out, 36 thinking, 11k cache read; $0.02"
     )
     assert rows["MiniMax-M3 via togetherai"] == (
-        "2 answers: 150k in, 1.1k out, 151k cache read; $0.06"
+        "2 answers: 10k in, 44 out, 14k cache read; under $0.01"
     )
 
 
@@ -529,15 +531,15 @@ def test_a_model_whose_provider_records_nothing_reads_not_recorded(tmp_path: Pat
     """Zeros from a provider that writes none are neither free nor nothing used."""
     stats = stats_for(Reading("opencode", "idle", mixed_store(tmp_path), NOW))
     flash = models(stats)["GLM-5.3-Flash via togetherai"]
-    assert flash == "2 answers; no tokens or cost recorded"
-    assert "0" not in flash.replace("2 answers", "")
+    assert flash == "1 answer; no tokens or cost recorded"
+    assert "0" not in flash.replace("1 answer", "")
     assert "$" not in flash
 
 
 def test_a_model_with_tokens_and_no_money_says_no_cost_not_zero(tmp_path: Path) -> None:
     stats = stats_for(Reading("opencode", "idle", mixed_store(tmp_path), NOW))
-    assert models(stats)["hy3-free via opencode"] == (
-        "1 answer: 254 in, 3 out, 11 thinking, 8.4k cache read; no cost recorded"
+    assert models(stats)["deepseek-v4.1-flash-free via opencode"] == (
+        "1 answer: 11k in, 2 out, 6 thinking, 1.7k cache read; no cost recorded"
     )
 
 
@@ -545,7 +547,7 @@ def test_the_totals_say_which_models_they_leave_out(tmp_path: Path) -> None:
     stats = stats_for(Reading("opencode", "idle", mixed_store(tmp_path), NOW))
     rows = labels(stats)
     assert rows["Not recorded"] == "GLM-5.3-Flash via togetherai, so the totals leave it out"
-    assert rows["Cost"] == "$0.10"
+    assert rows["Cost"] == "$0.02"
 
 
 def test_one_model_needs_no_split(tmp_path: Path) -> None:

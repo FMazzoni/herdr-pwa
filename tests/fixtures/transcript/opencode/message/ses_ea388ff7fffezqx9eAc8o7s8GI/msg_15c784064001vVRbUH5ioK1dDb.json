@@ -1,0 +1,24 @@
+{
+  "id": "msg_15c784064001vVRbUH5ioK1dDb",
+  "sessionID": "ses_ea388ff7fffezqx9eAc8o7s8GI",
+  "role": "user",
+  "time": {
+    "created": 1792552747108
+  },
+  "agent": "build",
+  "model": {
+    "providerID": "opencode",
+    "modelID": "glm-5.3-flash-free"
+  },
+  "summary": {
+    "diffs": [
+      {
+        "file": "notes/testing.md",
+        "patch": "Index: notes/testing.md\n===================================================================\n--- notes/testing.md\t\n+++ notes/testing.md\t\n@@ -1,5 +1,6 @@\n # Testing\n \n - `npm install` — install dependencies\n - `npm test` — run unit tests (`test/`, Node test runner)\n+- `node --test test/<file>.test.js` — run a single test file\n - `npm run lint` — lint before committing\n",
+        "additions": 1,
+        "deletions": 0,
+        "status": "modified"
+      }
+    ]
+  }
+}

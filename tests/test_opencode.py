@@ -1,4 +1,4 @@
-"""The opencode adapter, against two sessions from a real store (content synthetic), in both layouts."""
+"""The opencode adapter, against two throwaway sessions laid out in both of its store layouts."""
 
 import json
 import sqlite3
@@ -32,8 +32,8 @@ from tests.engine_seam import (
 )
 
 STORE = Path(__file__).parent / "fixtures" / "transcript" / "opencode"
-SESSION = "ses_3fd62ba5bffemIxWVhRda5wgS7"
-SUBAGENT = "ses_3fd74bed6ffeiF11LRsQnRVHWJ"
+SESSION = "ses_ea388ff7fffezqx9eAc8o7s8GI"
+SUBAGENT = "ses_ea38ad09effe9DIMcoOdjGJNLb"
 
 
 # A captured record as opencode wrote it, every field kept: these hold the capture's shape.
@@ -170,8 +170,8 @@ def test_a_tool_result_is_a_gist_and_says_when_it_was_cut() -> None:
 def test_the_machinery_around_the_conversation_is_not_rendered() -> None:
     """``step-start``, ``step-finish``, ``patch`` and ``reasoning`` are machinery, not lines."""
     whole = page(limit=100)
-    assert whole.size == 47
-    assert len(whole.turns) == 23
+    assert whole.size == 37
+    assert len(whole.turns) == 14
 
 
 # The frontier is a position in the part stream, not a byte offset.
@@ -222,7 +222,7 @@ def test_a_byte_budget_stops_a_page_rather_than_reading_the_store(store: Path) -
     adapter = OpencodeAdapter()
     got = adapter.page(Source(SESSION, [store]), Window(limit=100, max_bytes=4096))
     assert got.has_more
-    assert len(got.turns) < 23
+    assert len(got.turns) < 14
 
 
 @pytest.mark.parametrize("hostile", ["../../etc/passwd", "..", ".hidden", "a/b", "a\\b", "", "   "])
@@ -269,10 +269,10 @@ def test_the_tally_sums_the_messages_the_store_keeps_one_file_each() -> None:
     """A normalised store keys one file per message, so there is nothing to dedupe."""
     tally = usage(Source.of(SESSION, agent_kind="opencode", root=STORE))
     assert tally.state is HistoryState.ok
-    assert tally.messages == 10
+    assert tally.messages == 8
     assert tally.input_tokens > 0
     assert tally.output_tokens > 0
-    assert tally.models == [ModelRef("moonshotai/Kimi-K2.5", "togetherai")]
+    assert tally.models == [ModelRef("glm-5.3-flash-free", "opencode")]
 
 
 def test_the_tally_reports_the_live_window_from_the_newest_message() -> None:
@@ -302,7 +302,7 @@ def _rows() -> dict[str, list[dict[str, JsonValue]]]:
 
 
 ROWS = _rows()
-PROBE = "ses_fdea0efeaffeE9p6Qfs2Po8KCv"
+PROBE = "ses_ea37b18fdffeVry1zoM2obT54w"
 
 
 def build(path: Path, rows: dict[str, list[dict[str, JsonValue]]]) -> Path:
@@ -322,7 +322,7 @@ def build(path: Path, rows: dict[str, list[dict[str, JsonValue]]]) -> Path:
 
 
 def mirrored(rows: dict[str, list[dict[str, JsonValue]]]) -> dict[str, list[dict[str, JsonValue]]]:
-    """The 95-file capture as the rows opencode would have written for it."""
+    """The file-layout capture as the rows opencode would have written for it."""
     out: dict[str, list[dict[str, JsonValue]]] = dict(rows)
     out["session"] = [
         *out["session"],
@@ -504,11 +504,9 @@ def test_the_model_column_is_json_and_carries_the_provider_too(
     database: Path,
 ) -> None:
     """Measured on the live store: ``{"id": ..., "providerID": ...}``, not a name."""
-    assert (
-        dig(RECORD.validate_json(str(ROWS["session"][0]["model"])), "id") == "MiniMaxAI/MiniMax-M3"
-    )
+    assert dig(RECORD.validate_json(str(ROWS["session"][0]["model"])), "id") == "big-pickle"
     assert OpencodeAdapter().info(Source(PROBE, [database])).model == ModelRef(
-        "MiniMaxAI/MiniMax-M3", "togetherai"
+        "big-pickle", "opencode"
     )
 
 
@@ -546,7 +544,7 @@ def test_a_store_with_no_model_column_still_answers_its_title(tmp_path: Path) ->
 def test_the_frozen_store_answers_the_title_and_has_no_model() -> None:
     """The old layout keeps the title in its own file and never kept a model."""
     info = OpencodeAdapter().info(Source(SESSION, [STORE]))
-    assert info.title == "Rewrite the testing notes as an opencode skill"
+    assert info.title == "Rewriting testing.md with test commands"
     assert info.model == ModelRef()
 
 
@@ -566,7 +564,7 @@ def test_a_session_with_no_answer_yet_is_still_named_by_its_model(
     build(tmp_path / OPENCODE_DB, {"session": ROWS["session"]})
     tally = usage(Source.of(PROBE, agent_kind="opencode", root=tmp_path))
     assert tally.messages == 0
-    assert tally.models == [ModelRef("MiniMaxAI/MiniMax-M3", "togetherai")]
+    assert tally.models == [ModelRef("big-pickle", "opencode")]
 
 
 def test_a_model_a_message_named_is_not_overwritten_by_the_row(
@@ -574,7 +572,7 @@ def test_a_model_a_message_named_is_not_overwritten_by_the_row(
 ) -> None:
     """The row fills a gap; it never corrects the model a message says answered."""
     assert usage(Source.of(SESSION, agent_kind="opencode", root=database)).models == (
-        [ModelRef("moonshotai/Kimi-K2.5", "togetherai")]
+        [ModelRef("glm-5.3-flash-free", "opencode")]
     )
 
 
@@ -650,9 +648,9 @@ def test_info_never_raises_while_the_store_is_held(database: Path) -> None:
 
 # ---- spend per model -------------------------------------------------------------------------
 
-# Real rows from one session that switched models, paths replaced, plus rows borrowed from two
-# other sessions: a model whose provider records nothing, and a free one that records no cost.
-MIXED = "ses_0dfb24cf5ffemJcBmqyE29sVBi"
+# One throwaway session that switched models, paths replaced: opencode 1.18 answered its
+# GLM-5.3-Flash turn and recorded no usage for it, and 1.19 answered the rest.
+MIXED = "ses_ea397b0caffeA2IKEmeHbtj4hG"
 MIXED_ROWS = TypeAdapter(dict[str, list[dict[str, JsonValue]]]).validate_json(
     (STORE / "per-model-rows.json").read_text()
 )
@@ -688,17 +686,17 @@ def test_the_tally_splits_spend_by_provider_and_model_in_first_seen_order(
     tmp_path: Path,
 ) -> None:
     assert spend_of(MIXED_ROWS, tmp_path) == [
-        (ModelRef("zai-org/GLM-5.2", "togetherai"), 4, 14381, 1475, 2814, 39872, 0, 0.04937172),
-        (ModelRef("MiniMaxAI/MiniMax-M3", "togetherai"), 2, 150367, 1117, 0, 150528, 0, 0.05548218),
-        (ModelRef("zai-org/GLM-5.3-Flash", "togetherai"), 2, 0, 0, 0, 0, 0, 0.0),
-        (ModelRef("hy3-free", "opencode"), 1, 254, 3, 11, 8448, 0, 0.0),
+        (ModelRef("zai-org/GLM-5.2", "togetherai"), 2, 11577, 69, 36, 11456, 0, 0.01964836),
+        (ModelRef("MiniMaxAI/MiniMax-M3", "togetherai"), 2, 9982, 44, 0, 13824, 0, 0.00387684),
+        (ModelRef("zai-org/GLM-5.3-Flash", "togetherai"), 1, 0, 0, 0, 0, 0, 0.0),
+        (ModelRef("deepseek-v4.1-flash-free", "opencode"), 1, 10919, 2, 6, 1664, 0, 0.0),
     ]
 
 
 def test_the_per_model_rows_add_up_to_the_session_total(tmp_path: Path) -> None:
     build(tmp_path / OPENCODE_DB, MIXED_ROWS)
     tally = usage(Source.of(MIXED, agent_kind="opencode", root=tmp_path))
-    assert sum(row.messages for row in tally.by_model) == tally.messages == 9
+    assert sum(row.messages for row in tally.by_model) == tally.messages == 6
     assert sum(row.input_tokens for row in tally.by_model) == tally.input_tokens
     assert sum(row.cache_read_tokens for row in tally.by_model) == tally.cache_read_tokens
     assert sum(row.cost for row in tally.by_model) == pytest.approx(tally.cost)
@@ -712,7 +710,7 @@ def test_a_model_whose_provider_records_nothing_is_not_counted(tmp_path: Path) -
         ("zai-org/GLM-5.2", True),
         ("MiniMaxAI/MiniMax-M3", True),
         ("zai-org/GLM-5.3-Flash", False),
-        ("hy3-free", True),
+        ("deepseek-v4.1-flash-free", True),
     ]
 
 
@@ -729,7 +727,7 @@ def test_the_same_model_from_another_provider_is_another_row(tmp_path: Path) -> 
 def test_cache_written_is_kept_apart_from_cache_read(tmp_path: Path) -> None:
     """No captured row writes the cache, so one is made to: the two must not be folded."""
     glm = spend_of(edited(1, '"write":0', '"write":321'), tmp_path)[0]
-    assert glm[5:7] == (39872, 321)
+    assert glm[5:7] == (11456, 321)
 
 
 # ---- API errors and interrupts ---------------------------------------------------------------

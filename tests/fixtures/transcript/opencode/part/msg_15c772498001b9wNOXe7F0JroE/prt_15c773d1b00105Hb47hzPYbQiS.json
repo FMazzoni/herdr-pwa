@@ -1,0 +1,27 @@
+{
+  "id": "prt_15c773d1b00105Hb47hzPYbQiS",
+  "sessionID": "ses_ea388ff7fffezqx9eAc8o7s8GI",
+  "messageID": "msg_15c772498001b9wNOXe7F0JroE",
+  "type": "tool",
+  "tool": "write",
+  "callID": "37c1d8d7-57db-457d-b41b-18903231889a",
+  "state": {
+    "status": "completed",
+    "input": {
+      "content": "# Testing\n\n- `npm install` — install dependencies\n- `npm test` — run unit tests (`test/`, Node test runner)\n- `npm run lint` — lint before committing\n",
+      "filePath": "/home/user/scratch/notes-demo/notes/testing.md"
+    },
+    "output": "Wrote file successfully.",
+    "metadata": {
+      "diagnostics": {},
+      "filepath": "/home/user/scratch/notes-demo/notes/testing.md",
+      "exists": true,
+      "truncated": false
+    },
+    "title": "notes/testing.md",
+    "time": {
+      "start": 1792552680743,
+      "end": 1792552680752
+    }
+  }
+}

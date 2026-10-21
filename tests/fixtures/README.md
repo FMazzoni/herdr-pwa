@@ -31,8 +31,14 @@ not be read as a question; each one's `meta.json` says how it was built. Some of
 into a transcript, such as a slash command you ran or a compaction.
 
 Other captured files keep their real structure, but their prose was replaced with made-up
-text. These are `transcript/opencode/`, `transcript/notices/{notices,api-errors}.jsonl`,
+text. These are `transcript/opencode/error-rows.json`,
+`transcript/notices/{notices,api-errors}.jsonl`,
 and any capture whose `meta.json` says so.
+
+The rest of `transcript/opencode/` is throwaway sessions run for these tests in scratch
+folders: on free models with a store of their own, and on togetherai for the per-model rows.
+opencode now writes only its SQLite store, so its session, message and part folders are
+those sessions' rows written out as opencode 1.1 laid out its files, ids put back in each record.
 
 ## What's here
 

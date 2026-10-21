@@ -1,0 +1,11 @@
+{
+  "id": "prt_15c759dd0001r47Xa8mXhrETpz",
+  "sessionID": "ses_ea38ad09effe9DIMcoOdjGJNLb",
+  "messageID": "msg_15c758086001DsW6MhNhc47hXW",
+  "type": "text",
+  "text": "1. https://www.rfc-editor.org/rfc/rfc20.txt — Success: returned the full text of RFC 20, \"ASCII format for Network Interchange\" (Vint Cerf, October 1969), including the 7-bit ASCII code table, control/graphic character definitions, and legends.\n2. https://example.com/missing-page — Error: non-2xx status code (404 Not Found), no content returned.",
+  "time": {
+    "start": 1792552574416,
+    "end": 1792552575761
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "id": "prt_15c786415001hTUF3DTQOPqgPm",
+  "sessionID": "ses_ea388ff7fffezqx9eAc8o7s8GI",
+  "messageID": "msg_15c784f74001UBayI6zWAiEQLg",
+  "type": "tool",
+  "tool": "read",
+  "callID": "ae80844e-27d9-42ae-9dcd-4eadfddfc161",
+  "state": {
+    "status": "completed",
+    "input": {
+      "filePath": "/home/user/scratch/notes-demo/notes/testing.md"
+    },
+    "output": "<path>/home/user/scratch/notes-demo/notes/testing.md</path>\n<type>file</type>\n<content>\n1: # Testing\n2: \n3: - `npm install` — install dependencies\n4: - `npm test` — run unit tests (`test/`, Node test runner)\n5: - `npm run lint` — lint before committing\n\n(End of file - total 5 lines)\n</content>",
+    "metadata": {
+      "preview": "# Testing\n\n- `npm install` — install dependencies\n- `npm test` — run unit tests (`test/`, Node test runner)\n- `npm run lint` — lint before committing",
+      "truncated": false,
+      "loaded": [],
+      "display": {
+        "type": "file",
+        "path": "/home/user/scratch/notes-demo/notes/testing.md",
+        "text": "# Testing\n\n- `npm install` — install dependencies\n- `npm test` — run unit tests (`test/`, Node test runner)\n- `npm run lint` — lint before committing",
+        "lineStart": 1,
+        "lineEnd": 5,
+        "totalLines": 5,
+        "truncated": false
+      }
+    },
+    "title": "notes/testing.md",
+    "time": {
+      "start": 1792552756251,
+      "end": 1792552756260
+    }
+  }
+}
