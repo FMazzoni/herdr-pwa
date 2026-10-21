@@ -4,6 +4,7 @@ import base64
 import json
 import logging
 import re
+import threading
 import time
 import unicodedata
 from collections.abc import Callable, Sequence
@@ -337,6 +338,8 @@ class SubscriptionStore:
     def __init__(self, state_dir: Path, *, clock: Clock = time.time) -> None:
         self._state_dir: Path = state_dir
         self._clock: Clock = clock
+        # The routes and the notifier's pruning thread both rewrite the file from what they read.
+        self._lock: threading.Lock = threading.Lock()
 
     @property
     def path(self) -> Path:
@@ -370,24 +373,27 @@ class SubscriptionStore:
         Raises:
             SubscriptionError: the store already holds ``MAX_DEVICES`` other devices.
         """
-        current = self.list_all()
-        previous = next((one for one in current if one.endpoint == subscription.endpoint), None)
-        if previous is None and len(current) >= MAX_DEVICES:
-            raise SubscriptionError(
-                f"already {len(current)} devices, the most this server sends to; remove one first"
-            )
-        stamp = int(self._clock()) if previous is None else previous.added_at
-        stored = subscription.model_copy(update={"added_at": stamp})
-        self._save([*(one for one in current if one.endpoint != stored.endpoint), stored])
+        with self._lock:
+            current = self.list_all()
+            previous = next((one for one in current if one.endpoint == subscription.endpoint), None)
+            if previous is None and len(current) >= MAX_DEVICES:
+                raise SubscriptionError(
+                    f"already {len(current)} devices, the most this server sends to; "
+                    "remove one first"
+                )
+            stamp = int(self._clock()) if previous is None else previous.added_at
+            stored = subscription.model_copy(update={"added_at": stamp})
+            self._save([*(one for one in current if one.endpoint != stored.endpoint), stored])
         return stored
 
     def remove(self, endpoint: str) -> bool:
         """Forget one device; True when it was there."""
-        current = self.list_all()
-        kept = [one for one in current if one.endpoint != endpoint]
-        if len(kept) == len(current):
-            return False
-        self._save(kept)
+        with self._lock:
+            current = self.list_all()
+            kept = [one for one in current if one.endpoint != endpoint]
+            if len(kept) == len(current):
+                return False
+            self._save(kept)
         return True
 
     def _save(self, subscriptions: Sequence[Subscription]) -> None:

@@ -257,6 +257,37 @@ def test_a_failed_write_keeps_the_previous_store(
     assert store.path.read_text() == before
 
 
+def test_a_device_added_while_one_is_pruned_is_kept(
+    store: SubscriptionStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    gone, kept, added = (f"https://fcm.googleapis.com/fcm/send/{n}" for n in ("a", "b", "c"))
+    _ = store.add(subscribed(gone))
+    _ = store.add(subscribed(kept))
+    write = statedir.write_secret
+    pruning, release, wrote = threading.Event(), threading.Event(), threading.Event()
+
+    def held(path: Path, text: str, *, exclusive: bool = False) -> None:
+        # The pruner stops inside its write, after reading the store, until the add has had its go.
+        if threading.current_thread().name == "pruner":
+            pruning.set()
+            _ = release.wait(5)
+        write(path, text, exclusive=exclusive)
+        if threading.current_thread().name == "adder":
+            wrote.set()
+
+    monkeypatch.setattr(statedir, "write_secret", held)
+    pruner = threading.Thread(target=store.remove, args=(gone,), name="pruner")
+    adder = threading.Thread(target=store.add, args=(subscribed(added),), name="adder")
+    pruner.start()
+    assert pruning.wait(5)
+    adder.start()
+    _ = wrote.wait(0.5)
+    release.set()
+    pruner.join(5)
+    adder.join(5)
+    assert [one.endpoint for one in store.list_all()] == [kept, added]
+
+
 def _disk_full(_fd: int) -> None:
     raise OSError("disk full")
 
