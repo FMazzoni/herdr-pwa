@@ -304,7 +304,8 @@ def _prompt(session: SessionId, post: Posted) -> HTMLResponse:
             "screen": result.screen,
             # Kept through a later refusal, or the retry after it would lose the word "again".
             "again": result.asks_again or ask.again,
-            "held": result.refusal is Refusal.QUESTION_SHOWING,
+            # A refusal herdr's word alone made leaves Send on, for the deliberate second tap.
+            "held": result.refusal is Refusal.QUESTION_SHOWING and not result.overridable,
         }
         return refused(web.pages, Redraw("compose.html", context), result)
     return _composed(web, _after(web, session, prior), result)

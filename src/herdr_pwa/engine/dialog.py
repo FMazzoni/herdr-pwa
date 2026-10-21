@@ -1156,9 +1156,11 @@ def _panel_screen(lines: list[str]) -> list[str] | None:
     )
     if bottom is None:
         return None
-    inside = [_unboxed(line) for line in lines[top + 1 : bottom]]
-    if not any(OPTION_RE.fullmatch(line) for line in inside):
+    rows = lines[top + 1 : bottom]
+    # A box whose numbered rows are split into cells is a table the agent drew, not a dialog.
+    if not any(_option_row(line) for line in rows) or any(map(_table_row, rows)):
         return None
+    inside = [_unboxed(line) for line in rows]
     return _upto_last_option(inside) + _panel_footer(lines[bottom + 1 :])
 
 
@@ -1200,6 +1202,25 @@ def _reframed(lines: list[str]) -> list[str]:
     return [*lines[: box.start - 1], _BOX_RULE, *inside, *lines[box.stop :]]
 
 
+_CELL_RULE_RE: Final = re.compile(glyphs.one_of(glyphs.SIDE))
+"""A column rule: inside a numbered row's text, it makes the row a table's, not a menu's."""
+
+
+def _table_row(line: str) -> bool:
+    """Is *line* numbered like an option but split into cells by a column rule?"""
+    found = OPTION_RE.fullmatch(line)
+    if found is None:
+        return False
+    # Its closing side gone, a label that is empty or still holds a rule was a cell.
+    label = _unboxed(found["label"])
+    return not label.strip() or _CELL_RULE_RE.search(label) is not None
+
+
+def _option_row(line: str) -> re.Match[str] | None:
+    """*line* as a numbered option row, or ``None``; a table row's cells are no option."""
+    return None if _table_row(line) else OPTION_RE.fullmatch(line)
+
+
 def _upto_last_option(inside: list[str]) -> list[str]:
     """A panel's rows, cut after its last option row."""
     last = max(i for i, line in enumerate(inside) if OPTION_RE.fullmatch(line))
@@ -1212,7 +1233,7 @@ def _trailing_menu(lines: list[str]) -> list[tuple[int, int, str]] | None:
     matches = [
         (i, int(m.group("number")), m.group("label"))
         for i, line in enumerate(lines)
-        if (m := OPTION_RE.fullmatch(line))
+        if (m := _option_row(line))
     ]
     # A menu is what the agent waits on now, so only blanks, rules and hints may follow it.
     if not matches or not all(_is_inert(line) for line in lines[matches[-1][0] + 1 :]):
@@ -1335,6 +1356,7 @@ PATTERNS: Final = (
         ("[1. x", "1] x", "1.Yes", "123. x", "Step 1. Do"),
         "fullmatch",
     ),
+    Rx(_CELL_RULE_RE, ("Fruit │ Apples", "a ┃ b", "║"), ("Fruit | Apples", "─┼─")),
     Rx(_DIVIDER_RE, ("────", "  ━━━━━  ", "----", "═══════"), ("───", "── x ──", ""), "fullmatch"),
     Rx(_FOOTER_KEY, ("Enter to select", "ctrl+g", "↑/↓", "arrow keys"), ("entering", "the tablet")),
     Rx(

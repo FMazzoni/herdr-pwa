@@ -238,6 +238,15 @@ def composer_top(rows: list[str]) -> int:
     return len(rows) if split is None else len(split[0])
 
 
+def idle_composer(rows: list[str]) -> bool:
+    """Whether the screen ends in the agent's own input box with nothing typed in it."""
+    split = _split_chrome([[Run(row)] for row in rows])
+    if split is None:
+        return False
+    first, *rest = (plain_text(line) for line in split[2])
+    return _prompt_body(first) == "" and not any(line.strip(_WS) for line in rest)
+
+
 def _slice_runs(runs: list[Run], start: int, end: int) -> list[Run]:
     """The runs covering ``[start, end)`` of the line's flat text, styles kept."""
     out: list[Run] = []

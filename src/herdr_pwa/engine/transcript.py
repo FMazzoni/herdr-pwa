@@ -560,6 +560,8 @@ class Harness:
     stores_context: bool = True
     # Whether the tally's cost is the harness's own price; one recording no money reads zero.
     prices_itself: bool = True
+    # Whether its store holds a tool call from before the harness asks about it until it is answered.
+    records_calls: bool = False
 
 
 # What the harness delivers between retries: each one sets off the next refused turn.
@@ -672,6 +674,39 @@ def history(source: Source, window: Window = NEWEST) -> TranscriptPage:
         # Found and then unreadable is not "there is none"; the view must not show a quiet chat.
         return TranscriptPage(state=HistoryState.unreadable)
     return fold_page(page)
+
+
+# The newest turns: a call the harness is asking about is the last thing it wrote.
+_ASKING_WINDOW: Final = Window(limit=40)
+
+
+def awaits_answer(source: Source) -> bool | None:
+    """Whether *source*'s own store holds a tool call with no result yet; ``None`` if it cannot say."""
+    adapter = adapter_for(source.kind)
+    if adapter is None or not adapter.harness.records_calls or not source.session:
+        return None
+    try:
+        page = adapter.page(source, _ASKING_WINDOW)
+    except OSError:
+        return None
+    # An empty log says nothing yet, so the screen is left to decide.
+    if page.state is not HistoryState.ok:
+        return None
+    return bool(_unanswered(page.turns))
+
+
+def _unanswered(turns: Iterable[TranscriptTurn]) -> set[str]:
+    """The calls in *turns* that no result answered and no later prompt left behind."""
+    calls: set[str] = set()
+    for turn in turns:
+        if turn.speaker is Speaker.human:
+            calls.clear()
+        elif turn.speaker is Speaker.tool and turn.call:
+            if turn.tool == "result":
+                calls.discard(turn.call)
+            else:
+                calls.add(turn.call)
+    return calls
 
 
 def session_origin(agent: Agent, *, root: TranscriptRoots = None) -> str:

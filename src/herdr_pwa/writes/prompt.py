@@ -13,9 +13,18 @@ from herdr_pwa.engine import (
     PaneId,
     Seat,
     SessionId,
+    Source,
+    awaits_answer,
     screen_digest,
 )
-from herdr_pwa.writes.guard import asks_a_question, landed, no_echo_notice, unsendable
+from herdr_pwa.writes.guard import (
+    QuestionCall,
+    asks_a_question,
+    landed,
+    no_echo_notice,
+    question_call,
+    unsendable,
+)
 from herdr_pwa.writes.outcome import Evidence, Outcome, Pacing, audit_result
 from herdr_pwa.writes.refusal import Refusal, Refused, failed_result, refusal_for
 from herdr_pwa.writes.resolve import Unsure, Writer, agent_now, attempt, one_at_a_time, snapshot_now
@@ -43,6 +52,8 @@ class PromptSent:
     outcome: Outcome
     evidence: Evidence
     no_echo: str = ""
+    # Sent though the screen looked like a question: which signals outvoted it, in words.
+    doubt: str = ""
 
     @property
     def verified(self) -> bool:
@@ -58,8 +69,11 @@ class _Send:
     drawn_against: str
     # A working agent's screen moves, so no digest is issued for it to carry back.
     issue: bool
-    # Sent anyway after an attempt whose outcome is unknown; said in so many words.
+    # Sent anyway after an attempt whose outcome is unknown, or past herdr's lone wait; said so.
     again: bool = False
+    # What herdr said of the agent, and its harness, whose own record may settle a question.
+    status: AgentStatus = AgentStatus.UNKNOWN
+    kind: str | None = None
 
 
 def _text_refusal(text: str) -> Refused | None:
@@ -82,10 +96,27 @@ def screen_claim(screen: str) -> str:
     return "" if asks_a_question(screen) else screen_digest(screen)
 
 
-def _preflight(send: _Send, screen: str, unsure: Unsure) -> Refused | None:
+def _asked(writer: Writer, send: _Send, screen: str) -> QuestionCall:
+    source = Source.of(send.session, agent_kind=send.kind, root=writer.stores or None)
+    call = question_call(screen, send.status, lambda: awaits_answer(source), insisted=send.again)
+    if call.doubt:
+        log.warning(
+            "question signals disagree on %s: herdr=%s screen=%s record=%s refused=%s",
+            send.target,
+            call.herdr.value,
+            call.screen.value,
+            call.record,
+            call.refuse,
+        )
+    return call
+
+
+def _preflight(send: _Send, screen: str, unsure: Unsure, asked: QuestionCall) -> Refused | None:
     # A question is no screen to type against, and answering it changes it: it issues no digest.
-    if asks_a_question(screen):
-        return Refused(Refusal.QUESTION_SHOWING, _VERB)
+    if asked.refuse:
+        return Refused(
+            Refusal.QUESTION_SHOWING, _VERB, reason=asked.doubt, overridable=asked.overridable
+        )
     digest = screen_digest(screen) if send.issue else ""
     if send.drawn_against and send.drawn_against != screen_digest(screen):
         return Refused(Refusal.SCREEN_CHANGED, _VERB, screen=digest)
@@ -123,7 +154,8 @@ def _type(writer: Writer, send: _Send) -> PromptSent | Refused:
     before = _read_now(client, send.target)
     if isinstance(before, Refused):
         return before
-    stop = _preflight(send, before, writer.memory.unsure)
+    asked = _asked(writer, send, before)
+    stop = _preflight(send, before, writer.memory.unsure, asked)
     if stop is not None:
         return stop
     # Changes what is stored and said, never what is sent.
@@ -144,7 +176,7 @@ def _type(writer: Writer, send: _Send) -> PromptSent | Refused:
         )
         entry.outcome(audit_result(outcome, evidence))
     writer.memory.unsure.clear(send.session)
-    return PromptSent(send.target, outcome, evidence, no_echo)
+    return PromptSent(send.target, outcome, evidence, no_echo, asked.doubt)
 
 
 def _failed(writer: Writer, send: _Send, exc: EngineError) -> Refused:
@@ -191,6 +223,8 @@ def _send_prompt(writer: Writer, ask: PromptAsk) -> PromptSent | Refused:
         ask.drawn_against,
         issue=agent.status is not AgentStatus.WORKING,
         again=ask.again,
+        status=agent.status,
+        kind=agent.agent,
     )
     return _type(writer, send)
 
@@ -250,7 +284,10 @@ def _send_first_prompt(writer: Writer, ask: FirstPromptAsk) -> PromptSent | Refu
     refused = _text_refusal(ask.text) or _settled(writer.client, ask.pane, writer.pacing)
     if refused is not None:
         return refused
-    return _type(writer, _Send(ask.pane, NO_SESSION, ask.text, "", issue=True))
+    send = _Send(
+        ask.pane, NO_SESSION, ask.text, "", issue=True, status=agent.status, kind=agent.agent
+    )
+    return _type(writer, send)
 
 
 def send_opening_prompt(writer: Writer, pane: PaneId, text: str) -> PromptSent | Refused:
@@ -269,7 +306,10 @@ def send_opening_prompt(writer: Writer, pane: PaneId, text: str) -> PromptSent |
         if agent is None:
             return Refused(Refusal.GONE, _VERB)
         # Keyed on whatever identity it has by now; the wire checks that it still holds the pane.
-        return _type(writer, _Send(pane, agent.session, text, "", issue=True))
+        send = _Send(
+            pane, agent.session, text, "", issue=True, status=agent.status, kind=agent.agent
+        )
+        return _type(writer, send)
 
     # The pane's key, as a first prompt by address from another tab would take it.
     return one_at_a_time(writer.memory, f"pane:{pane}", _VERB, opening)

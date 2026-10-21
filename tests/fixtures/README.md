@@ -30,6 +30,10 @@ not be read as a question; each one's `meta.json` says how it was built. Some of
 `transcript/notices/` were built the same way. Those hold the notices Claude Code writes
 into a transcript, such as a slash command you ran or a compaction.
 
+`claude/idle-box-table.txt` keeps the layout of a live screen: a reply's numbered box table
+above the empty input box. Its text, cell by cell at the same widths, and its statusline are
+made up.
+
 Other captured files keep their real structure, but their prose was replaced with made-up
 text. These are `transcript/opencode/error-rows.json`,
 `transcript/notices/{notices,api-errors}.jsonl`,
@@ -48,6 +52,7 @@ those sessions' rows written out as opencode 1.1 laid out its files, ids put bac
 | `capture-<state>-<shape>/` | one pane, read every way herdr offers |
 | `ansi/`, `rig/` | screens that once showed a real bug |
 | `hermes/` | Hermes Agent screens as herdr reads them. |
+| `claude/` | Claude Code screens kept on their own, without a full capture's reads |
 | `transcript/` | Chat history from Claude Code, opencode and Hermes stores, plus the notice and error records Claude Code writes. |
 | `foreign/collie/` | Claude Code screens from another project |
 | `ledger.json` | the golden record, described below |
