@@ -18,7 +18,7 @@ from herdr_pwa.engine import (
     as_session_id,
 )
 from herdr_pwa.writes.outcome import Pacing
-from herdr_pwa.writes.resolve import Writer
+from herdr_pwa.writes.resolve import WriteMemory, Writer
 from tests._jsonpath import obj
 from tests._wire_support import as_reply
 
@@ -317,7 +317,7 @@ def rig(tmp_path: Path, herd: FakeHerd | None = None) -> Rig:
     recorder = Recorder(log, Origin(actor="tester@example.com", via="config"))
     return Rig(
         herd,
-        Writer(client, recorder, Pacing(sleep=clock.sleep, clock=clock)),
+        Writer(client, recorder, Pacing(sleep=clock.sleep, clock=clock), memory=WriteMemory()),
         clock,
         tmp_path / "state",
     )

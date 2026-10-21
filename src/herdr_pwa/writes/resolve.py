@@ -113,7 +113,8 @@ class Writer:
     stores: tuple[str, ...] = ()
     declared: Mapping[str, tuple[str, ...]] = field(default_factory=dict[str, tuple[str, ...]])
     proc: Path = PROC
-    memory: WriteMemory = field(default_factory=WriteMemory)
+    # Required: a fresh default would give a writer a memory no other request shares.
+    memory: WriteMemory = field(kw_only=True)
 
     @property
     def witness(self) -> Witness:
