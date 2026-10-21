@@ -7,19 +7,9 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
-from typing import (
-    ClassVar,
-    Final,
-    NamedTuple,
-    Protocol,
-)
+from typing import ClassVar, Final, NamedTuple, Protocol
 
-from pydantic import (
-    AliasChoices,
-    BaseModel,
-    ConfigDict,
-    Field,
-)
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from herdr_pwa.engine.generated.request import IntegrationTarget
 from herdr_pwa.engine.model import Agent, SessionId
@@ -35,8 +25,6 @@ from herdr_pwa.engine.notices import (
     ApiError,
 )
 from herdr_pwa.validation import Text
-
-CLAUDE_TRANSCRIPT_ROOT: Final = "~/.claude/projects"
 
 # Every kind herdr itself can run, whether or not a harness here reads it.
 HERDR_KINDS: Final = tuple(target.value for target in IntegrationTarget)
@@ -245,9 +233,6 @@ class TranscriptPage(BaseModel):
     log: str = ""
 
 
-# What a Claude Code record holds, as far as this reader looks
-
-
 class ToolInput(BaseModel):
     """A tool call's arguments, as far as naming the call goes, however a harness spells them."""
 
@@ -303,7 +288,7 @@ def search_roots(
     root: TranscriptRoots = None,
     *,
     kind: str = "claude",
-    default: Sequence[str] = (CLAUDE_TRANSCRIPT_ROOT,),
+    default: Sequence[str],
 ) -> list[Path]:
     """Every configured transcript root for *kind*, in search order, deduplicated."""
     if root is None:
@@ -647,6 +632,7 @@ def _registry() -> dict[str, TranscriptAdapter]:
     """The adapters, built on first use."""
     if not _adapters:
         # The adapters import this module, so importing them at the top would be a cycle.
+        from herdr_pwa.engine.claude.adapter import ClaudeAdapter  # noqa: PLC0415 - the adapters import this module, so a top import is a cycle
         from herdr_pwa.engine.hermes import HermesAdapter  # noqa: PLC0415 - the adapters import this module, so a top import is a cycle
         from herdr_pwa.engine.opencode import OpencodeAdapter  # noqa: PLC0415 - the adapters import this module, so a top import is a cycle
 
@@ -834,32 +820,3 @@ def usage(source: Source, *, max_bytes: int = MAX_USAGE_BYTES) -> SessionUsage:
         return adapter.tally(source, max_bytes=max_bytes)
     except OSError:
         return SessionUsage(state=HistoryState.unreadable)
-
-
-# The Claude Code reader moved to its own package; its old importers still find it here.
-from herdr_pwa.engine.claude import (  # noqa: E402 - it imports this module, so only a bottom import completes
-    ClaudeAdapter,
-    ClaudeRecord,
-    LiveTally,
-    claude_record,
-    grow_claude,
-    locate,
-    parse_claude_line,
-    read_page,
-    read_since,
-    tally_claude,
-)
-
-# Only the moved names, so the import above reads as a re-export.
-__all__ = [
-    "ClaudeAdapter",
-    "ClaudeRecord",
-    "LiveTally",
-    "claude_record",
-    "grow_claude",
-    "locate",
-    "parse_claude_line",
-    "read_page",
-    "read_since",
-    "tally_claude",
-]

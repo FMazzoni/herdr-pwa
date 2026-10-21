@@ -11,7 +11,6 @@ from pydantic import JsonValue
 
 from herdr_pwa.decisions import context_stalled
 from herdr_pwa.engine import Speaker, TranscriptTurn, is_slash_command
-from herdr_pwa.engine.transcript import parse_claude_line
 from tests._jsonpath import obj
 from tests.catalogue import (
     api_error_records,
@@ -20,7 +19,14 @@ from tests.catalogue import (
     slash_command_records,
     system_command_records,
 )
-from tests.engine_seam import MAX_RESULT_CHARS, Window, fold_turns, is_message, read_page
+from tests.engine_seam import (
+    MAX_RESULT_CHARS,
+    Window,
+    fold_turns,
+    is_message,
+    parse_claude_line,
+    read_page,
+)
 from tests.webfakes import WORKING_SESSION, build_rig, human_says, write_transcript
 
 ARGS = "keep the parser notes and any useful tooling"

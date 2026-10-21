@@ -8,6 +8,7 @@ from herdr_pwa.engine.cache import (
     ReadAbandoned,
     SnapshotCache,
 )
+from herdr_pwa.engine.claude import locate
 from herdr_pwa.engine.client import (
     INTERRUPT_KEY,
     NOT_READY_CODE,
@@ -80,7 +81,6 @@ from herdr_pwa.engine.transcript import (
     is_api_error,
     is_compact_summary,
     is_slash_command,
-    locate,
     session_origin,
 )
 from herdr_pwa.engine.transport import (
