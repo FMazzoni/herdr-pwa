@@ -17,7 +17,9 @@ from herdr_pwa.engine import (
     TranscriptPage,
     TranscriptTurn,
 )
-from herdr_pwa.web.chat import ChatView, Turning, chat_view, joined
+from herdr_pwa.web.chat import joined
+from herdr_pwa.web.chat_status import Turning
+from herdr_pwa.web.chat_view import ChatView, chat_view
 from herdr_pwa.web.stats import SpawnedTime, TurnTimes, spawned_times
 from tests.catalogue import FIXTURES, spawned_chat
 from tests.engine_seam import TaskNotice, Window, injected, read_page, tally_claude

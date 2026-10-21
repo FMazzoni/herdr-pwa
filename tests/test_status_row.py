@@ -14,7 +14,8 @@ from herdr_pwa.engine import (
     TranscriptPage,
     TranscriptTurn,
 )
-from herdr_pwa.web.chat import Turning, chat_view, status_row
+from herdr_pwa.web.chat_status import Turning
+from herdr_pwa.web.chat_view import chat_view, status_row
 from herdr_pwa.web.stats import SpawnedTime, TurnTimes
 from tests.catalogue import CROWDED_QUEUED, PERMISSION, capture, crowded_chat, turn_chat
 from tests.webfakes import (

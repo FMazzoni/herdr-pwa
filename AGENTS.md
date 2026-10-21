@@ -26,8 +26,11 @@ There's no design doc: the code, tests and commit log are the truth.
 
 ## Writing
 
-- Comments are one line and say why, citing the outside source when there is one.
+- Comments are one line and say why, keeping the consequence (the effect, not the
+  narration), and cite the outside source when there is one.
   Public API: one-line Google docstring.
+- Lay out a new or reorganized module in one order: its constants and the types it deals
+  in, then public functions, then private helpers in the order they are called.
 - Commit messages: a subject of 72 characters or fewer, then a body of two sentences,
   five at most (the commit-msg hook checks). When a decision had alternatives, name the
   rejected one on a `Rejected:` line.

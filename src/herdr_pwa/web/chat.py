@@ -1,63 +1,26 @@
 """Transcript turns turned into what the Chat tab renders: speaker, text, prose tree."""
 
-import zlib
 from dataclasses import dataclass
-from types import MappingProxyType
-from typing import Final, Literal
+from typing import Final
 
-from herdr_pwa.clock import duration, duration_said, elapsed
-from herdr_pwa.decisions import QUIET_AFTER, gone_quiet, needs_you, still_talking
+from herdr_pwa.clock import duration
 from herdr_pwa.engine import (
-    SPAWNED_SHELL,
-    AgentStatus,
-    HistoryState,
     Speaker,
-    TranscriptPage,
     TranscriptTurn,
     is_api_error,
     is_compact_summary,
     is_slash_command,
 )
 from herdr_pwa.render.markdown import MdNode, render_tree
-from herdr_pwa.web.stats import NO_TIMES, SpawnedTime, TurnTimes
 
-_STATE_NOTES: Final = MappingProxyType(
-    {
-        HistoryState.empty: "Nothing has been said yet.",
-        HistoryState.absent: "No transcript was found for this session yet.",
-        HistoryState.unreadable: "The transcript exists and could not be read.",
-        HistoryState.unsupported: "This harness keeps no transcript this app can read.",
-    }
-)
-# What it is doing can then be read only on its Pane, so the note offers the way there.
-_READ_ON_PANE: Final = frozenset({HistoryState.unsupported})
+# About eight lines at 390px (some forty characters each), or the text's own line breaks.
+LONG_CHARS: Final = 320
+LONG_LINES: Final = 8
 
-
-# The turn's one word while the agent thinks between tools: decoration, which VoiceOver skips.
-WORKING_VERBS: Final = (
-    "Sketching",
-    "Untangling",
-    "Whittling",
-    "Sifting",
-    "Knitting",
-    "Rummaging",
-    "Weighing",
-    "Tidying",
-    "Gathering",
-    "Folding",
-    "Charting",
-    "Polishing",
-)
-
-# The bubble's default looks: an app.css [data-working-palette] block and an app.js MOTIONS entry.
-WORKING_PALETTE: Final = "softer-ember"
-WORKING_MOTION: Final = "crest"
-
-
-def turn_verb(stretch: str) -> str:
-    """The verb the working stretch named *stretch* wears: the same on every poll, and every run."""
-    # crc32, not hash(): str hashes are salted per process, so a restart would change the verb.
-    return WORKING_VERBS[zlib.crc32(stretch.encode()) % len(WORKING_VERBS)]
+_PROSE: Final = (Speaker.agent, Speaker.peer)
+_ONE_LINE: Final = (Speaker.tool, Speaker.notice)
+# Between two reports one task sent, in the one prose tree they share.
+_BETWEEN_REPORTS: Final = "\n\n---\n\n"
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,82 +76,8 @@ class ToolRun:
         return len(self.tools) > 1
 
 
-# About eight lines at 390px (some forty characters each), or the text's own line breaks.
-LONG_CHARS: Final = 320
-LONG_LINES: Final = 8
-
-
-def is_long(text: str) -> bool:
-    """Whether a turn's text runs past what the Chat tab shows before "Show all"."""
-    return len(text) > LONG_CHARS or text.count("\n") >= LONG_LINES
-
-
-@dataclass(frozen=True, slots=True)
-class ChatView:
-    """A page of turns with tool calls gathered into runs, or the sentence that says why none."""
-
-    items: tuple[ChatTurn | ToolRun, ...]
-    note: str
-    # The frontier this view starts at, the file it is in, and whether anything is older.
-    start: int = 0
-    log: str = ""
-    more: bool = False
-    # Under the newest turn: what the agent is doing, or once the turn is over, how long it worked.
-    bubble: "Bubble | None" = None
-    receipt: "Receipt | None" = None
-    # Under the bubble: its background agents, running first as its pane lists them.
-    agents: "tuple[AgentLine, ...]" = ()
-    shells: "tuple[AgentLine, ...]" = ()
-    # Why the session the pane reports may not be the agent there; shown above everything.
-    doubt: str = ""
-    # The log could not be read under a drawing the reader already has, which then stands.
-    held: bool = False
-    # The note sends the reader to the Pane tab, the only place this agent can be read.
-    door: bool = False
-    # What the person sent that waits in the harness's queue, not yet in the log as said.
-    queued: tuple[str, ...] = ()
-
-
-def fold_tools(turns: tuple[ChatTurn, ...]) -> tuple[ChatTurn | ToolRun, ...]:
-    """Gather each row of tool calls into one run; a failed call is always a run of its own."""
-    items: list[ChatTurn | ToolRun] = []
-    run: list[ChatTurn] = []
-    for turn in turns:
-        if turn.speaker == Speaker.tool.value and not turn.failed:
-            run.append(turn)
-            continue
-        if run:
-            items.append(ToolRun(tuple(run)))
-            run = []
-        # Never folded away: what failed is shown where it happened.
-        items.append(ToolRun((turn,)) if turn.speaker == Speaker.tool.value else turn)
-    if run:
-        items.append(ToolRun(tuple(run)))
-    return tuple(items)
-
-
-_PROSE: Final = (Speaker.agent, Speaker.peer)
-_ONE_LINE: Final = (Speaker.tool, Speaker.notice)
-
-
-def _prose(turn: TranscriptTurn) -> tuple[MdNode, ...]:
-    if turn.speaker in _PROSE:
-        return render_tree(turn.text)
-    # An agent's notice opens on its report, which is prose like any other.
-    return render_tree(turn.result) if _is_agent_notice(turn) else ()
-
-
-def _is_agent_notice(turn: TranscriptTurn) -> bool:
-    return turn.speaker is Speaker.notice and turn.tool == "Agent"
-
-
-def _is_long(turn: TranscriptTurn) -> bool:
-    if _is_agent_notice(turn):
-        return is_long(turn.result)
-    return turn.speaker not in _ONE_LINE and is_long(turn.text)
-
-
-def _turn(turn: TranscriptTurn) -> ChatTurn:
+def chat_turn(turn: TranscriptTurn) -> ChatTurn:
+    """*turn* as the Chat tab draws it, its prose parsed and its length judged."""
     prose = _prose(turn)
     return ChatTurn(
         speaker=turn.speaker.value,
@@ -214,12 +103,65 @@ def _turn(turn: TranscriptTurn) -> ChatTurn:
     )
 
 
-# Between two reports one task sent, in the one prose tree they share.
-_BETWEEN_REPORTS: Final = "\n\n---\n\n"
+def joined(turns: tuple[TranscriptTurn, ...]) -> tuple[TranscriptTurn, ...]:
+    """Each hand-back moved into its task's notice; one with no notice on the page stays a card."""
+    hosts = _hosts(turns)
+    reports: dict[int, list[TranscriptTurn]] = {}
+    for at, host in hosts.items():
+        reports.setdefault(host, []).append(turns[at])
+    return tuple(
+        _carrying(turn, reports.get(i, [])) for i, turn in enumerate(turns) if i not in hosts
+    )
 
 
-def _is_report(turn: TranscriptTurn) -> bool:
-    return turn.speaker is Speaker.peer and turn.report and bool(turn.task)
+def fold_tools(turns: tuple[ChatTurn, ...]) -> tuple[ChatTurn | ToolRun, ...]:
+    """Gather each row of tool calls into one run; a failed call is always a run of its own."""
+    items: list[ChatTurn | ToolRun] = []
+    run: list[ChatTurn] = []
+    for turn in turns:
+        if turn.speaker == Speaker.tool.value and not turn.failed:
+            run.append(turn)
+            continue
+        if run:
+            items.append(ToolRun(tuple(run)))
+            run = []
+        # Never folded away: what failed is shown where it happened.
+        items.append(ToolRun((turn,)) if turn.speaker == Speaker.tool.value else turn)
+    if run:
+        items.append(ToolRun(tuple(run)))
+    return tuple(items)
+
+
+def is_long(text: str) -> bool:
+    """Whether a turn's text runs past what the Chat tab shows before "Show all"."""
+    return len(text) > LONG_CHARS or text.count("\n") >= LONG_LINES
+
+
+def _prose(turn: TranscriptTurn) -> tuple[MdNode, ...]:
+    if turn.speaker in _PROSE:
+        return render_tree(turn.text)
+    # An agent's notice opens on its report, which is prose like any other.
+    return render_tree(turn.result) if _is_agent_notice(turn) else ()
+
+
+def _is_agent_notice(turn: TranscriptTurn) -> bool:
+    return turn.speaker is Speaker.notice and turn.tool == "Agent"
+
+
+def _is_long(turn: TranscriptTurn) -> bool:
+    if _is_agent_notice(turn):
+        return is_long(turn.result)
+    return turn.speaker not in _ONE_LINE and is_long(turn.text)
+
+
+def _hosts(turns: tuple[TranscriptTurn, ...]) -> dict[int, int]:
+    """Each hand-back's place mapped to its task's nearest notice before it, else after it."""
+    notices = _notices_by_task(turns)
+    return {
+        i: _nearest(notices[turn.task], i)
+        for i, turn in enumerate(turns)
+        if _is_report(turn) and turn.task in notices
+    }
 
 
 def _notices_by_task(turns: tuple[TranscriptTurn, ...]) -> dict[str, list[int]]:
@@ -236,25 +178,8 @@ def _nearest(places: list[int], at: int) -> int:
     return before[-1] if before else places[0]
 
 
-def _hosts(turns: tuple[TranscriptTurn, ...]) -> dict[int, int]:
-    """Each hand-back's place mapped to its task's nearest notice before it, else after it."""
-    notices = _notices_by_task(turns)
-    return {
-        i: _nearest(notices[turn.task], i)
-        for i, turn in enumerate(turns)
-        if _is_report(turn) and turn.task in notices
-    }
-
-
-def joined(turns: tuple[TranscriptTurn, ...]) -> tuple[TranscriptTurn, ...]:
-    """Each hand-back moved into its task's notice; one with no notice on the page stays a card."""
-    hosts = _hosts(turns)
-    reports: dict[int, list[TranscriptTurn]] = {}
-    for at, host in hosts.items():
-        reports.setdefault(host, []).append(turns[at])
-    return tuple(
-        _carrying(turn, reports.get(i, [])) for i, turn in enumerate(turns) if i not in hosts
-    )
+def _is_report(turn: TranscriptTurn) -> bool:
+    return turn.speaker is Speaker.peer and turn.report and bool(turn.task)
 
 
 def _carrying(notice: TranscriptTurn, reports: list[TranscriptTurn]) -> TranscriptTurn:
@@ -264,299 +189,3 @@ def _carrying(notice: TranscriptTurn, reports: list[TranscriptTurn]) -> Transcri
     text = _BETWEEN_REPORTS.join(r.text for r in reports)
     cut = any(r.truncated for r in reports)
     return notice.model_copy(update={"result": text, "result_truncated": cut})
-
-
-@dataclass(frozen=True, slots=True)
-class Turning:
-    """What the router knows of the turn beside its log: status, stretch, question and clock."""
-
-    status: AgentStatus = AgentStatus.UNKNOWN
-    stretch: str = ""
-    asked: str = ""
-    times: TurnTimes = NO_TIMES
-    spawned: tuple[SpawnedTime, ...] = ()
-
-
-# An agent whose status is not known: no bubble, and no receipt without a clock.
-NOT_TURNING: Final = Turning()
-
-
-# What the bubble shows: a turn at work, one gone quiet, or one waiting on the person.
-type BubbleState = Literal["working", "quiet", "blocked"]
-# The status row's state: the bubble's, else background work, a finished turn, or nothing.
-type RowState = BubbleState | Literal["background", "done", "still"]
-# Where one background agent or shell is.
-type LineState = Literal["running", "failed", "finished"]
-
-
-@dataclass(frozen=True, slots=True)
-class Bubble:
-    """The status bubble: its state, its words, what VoiceOver hears, and its clocks."""
-
-    state: BubbleState
-    text: str
-    # Said when the state changes; the bubble's own words are for reading, not for announcing.
-    said: str
-    describe: str
-    stretch: str
-    # Whole seconds the turn has run, worded for the timer; None and "" draw no timer.
-    ran: int | None = None
-    time: str = ""
-    # Whole seconds the log has been still, and how long it may be before the bubble says so.
-    quiet: int | None = None
-    quiet_after: int = QUIET_AFTER
-    palette: str = WORKING_PALETTE
-    motion: str = WORKING_MOTION
-
-
-@dataclass(frozen=True, slots=True)
-class AgentLine:
-    """One background agent under the bubble: what it was asked, where it is, and for how long."""
-
-    description: str
-    state: LineState
-    time: str = ""
-
-
-# A shell's name (its description or first command line) is cut here; the sheet ellipsizes the rest.
-_SHELL_CHARS: Final = 120
-
-
-def _agent_line(agent: SpawnedTime) -> AgentLine:
-    state: LineState = "running" if agent.running else "failed" if agent.failed else "finished"
-    time = elapsed(agent.seconds) if agent.seconds is not None else ""
-    if agent.kind == SPAWNED_SHELL:
-        return AgentLine(agent.description[:_SHELL_CHARS] or "Shell", state, time)
-    return AgentLine(agent.description or "Agent", state, time)
-
-
-def _waiting_on(spawned: tuple[SpawnedTime, ...]) -> bool:
-    """Whether the turn waits on agents it started; a shell left running is not waited on."""
-    return any(agent.running and agent.kind != SPAWNED_SHELL for agent in spawned)
-
-
-def _lines(spawned: tuple[SpawnedTime, ...], *, shells: bool) -> "tuple[AgentLine, ...]":
-    # Running first, and of those what the last turn started; stable, so each keeps its age order.
-    ordered = sorted(spawned, key=lambda a: (not a.running, not a.fresh))
-    return tuple(_agent_line(a) for a in ordered if (a.kind == SPAWNED_SHELL) == shells)
-
-
-@dataclass(frozen=True, slots=True)
-class Receipt:
-    """The quiet line a finished turn folds into, and the same in words VoiceOver says well."""
-
-    text: str
-    said: str
-
-
-# What a tool does, by its name in any harness, case aside; a tool not listed is "Using" itself.
-_DOING: Final = MappingProxyType(
-    {
-        "bash": "Running",
-        "shell": "Running",
-        "terminal": "Running",
-        "read": "Reading",
-        "read_file": "Reading",
-        "view": "Reading",
-        "edit": "Editing",
-        "multiedit": "Editing",
-        "notebookedit": "Editing",
-        "patch": "Editing",
-        "apply_patch": "Editing",
-        "write": "Writing",
-        "write_file": "Writing",
-        "grep": "Searching",
-        "search_files": "Searching",
-        "glob": "Finding",
-        "webfetch": "Fetching",
-        "websearch": "Searching",
-        "task": "Delegating",
-        "agent": "Delegating",
-    }
-)
-_FILE_TOOLS: Final = frozenset({"Reading", "Editing", "Writing"})
-# Prefixes before the program a command runs (cd, settings, wrappers), skipped to name the program.
-_WRAPPERS: Final = frozenset(
-    {"sudo", "env", "nice", "time", "timeout", "nohup", "setsid", "exec", "uv", "run", "npx"}
-)
-
-
-def _skipped(word: str) -> bool:
-    return word in _WRAPPERS or word.startswith("-") or word.isdigit() or "=" in word
-
-
-def _program(command: str) -> str:
-    """The command line's first line from the program it runs, past cd, settings and wrappers."""
-    first = command.strip().splitlines()[0] if command.strip() else ""
-    parts = [part.strip() for part in first.split("&&")]
-    line = next((part for part in parts if not part.startswith("cd ")), first)
-    words = line.split()
-    at = next((i for i, word in enumerate(words) if not _skipped(word)), 0)
-    return " ".join(words[at:])
-
-
-def doing(turn: ChatTurn) -> str:
-    """A tool call as what it is doing to what: "Running pytest", "Editing chat.py"."""
-    verb = _DOING.get(turn.tool.casefold())
-    if verb is None:
-        return f"Using {turn.tool}"
-    if verb == "Running":
-        return f"{verb} {_program(turn.text)}".strip()
-    what = turn.text.rstrip("/").rsplit("/", 1)[-1] if verb in _FILE_TOOLS else turn.text
-    return f"{verb} {' '.join(what.split())}".strip()
-
-
-def _running(items: tuple[ChatTurn | ToolRun, ...]) -> ChatTurn | None:
-    """The newest call when it is the newest thing in the log and has no result yet."""
-    last = items[-1] if items else None
-    call = last.tools[-1] if isinstance(last, ToolRun) else None
-    return call if call is not None and not call.result and not call.failed else None
-
-
-def quiet_words(seconds: int) -> str:
-    """A quiet stretch as the row says it, to its largest unit: "Quiet 3m", "Quiet 9d"."""
-    return f"Quiet {elapsed(seconds // 60 * 60).split(' ')[0]}"
-
-
-def _whole(seconds: float | None) -> int | None:
-    return None if seconds is None else int(seconds)
-
-
-def _working(items: tuple[ChatTurn | ToolRun, ...], turning: Turning) -> Bubble:
-    times = turning.times
-    ran = _whole(times.ran)
-    time = elapsed(ran) if ran is not None else ""
-    call = _running(items)
-    # An open call is work however long it is silent (a test run writes nothing till it ends).
-    if call is not None:
-        text = doing(call)
-        return Bubble("working", text, "Working", f"Working: {text}", turning.stretch, ran, time)
-    # Its own log is still while agents it started work, which is not the turn gone quiet.
-    if _waiting_on(turning.spawned):
-        return Bubble(
-            "working", "Waiting", "Working", "Working: Waiting", turning.stretch, ran, time
-        )
-    if gone_quiet(times.quiet):
-        quiet = int(times.quiet or 0)
-        said = f"No activity for {duration_said(quiet)}"
-        # One duration: the turn's own clock beside the quiet one said the same span twice.
-        return Bubble("quiet", quiet_words(quiet), said, said, turning.stretch, ran, "", quiet)
-    text = f"{turn_verb(turning.stretch)}\u2026"
-    quiet = _whole(times.quiet)
-    return Bubble("working", text, "Working", "Working", turning.stretch, ran, time, quiet)
-
-
-def _blocked(turning: Turning) -> Bubble:
-    asked = " ".join(turning.asked.split())
-    said = f"Needs you: {asked}" if asked else "Needs you"
-    # The question is drawn in full just above, so the row does not say it again.
-    return Bubble("blocked", "Needs you", said, said, turning.stretch)
-
-
-def _calls_since_prompt(items: tuple[ChatTurn | ToolRun, ...]) -> int | None:
-    """Tool calls after the newest prompt on the page; None when no prompt is on it."""
-    asked = [i for i, item in enumerate(items) if isinstance(item, ChatTurn) and _asks(item)]
-    if not asked:
-        return None
-    return sum(len(item.tools) for item in items[asked[-1] :] if isinstance(item, ToolRun))
-
-
-def _asks(item: ChatTurn) -> bool:
-    return item.speaker == Speaker.human.value
-
-
-def _receipt(items: tuple[ChatTurn | ToolRun, ...], took: float | None) -> Receipt | None:
-    """How long the newest turn worked, once the agent has answered it."""
-    last = items[-1] if items else None
-    if took is None or last is None or (isinstance(last, ChatTurn) and _asks(last)):
-        return None
-    calls = _calls_since_prompt(items)
-    counted = f"{calls} tool call{'' if calls == 1 else 's'}" if calls else ""
-    text = " \u00b7 ".join(part for part in (f"Worked {elapsed(took)}", counted) if part)
-    said = ", ".join(part for part in (f"Worked {duration_said(took)}", counted) if part)
-    return Receipt(text, said)
-
-
-def _status(
-    items: tuple[ChatTurn | ToolRun, ...], turning: Turning
-) -> tuple[Bubble | None, Receipt | None]:
-    if still_talking(turning.status):
-        return _working(items, turning), None
-    if needs_you(turning.status):
-        return _blocked(turning), None
-    return None, _receipt(items, turning.times.took)
-
-
-def chat_view(
-    page: TranscriptPage, *, turning: Turning = NOT_TURNING, doubt: str = "", drawn: bool = False
-) -> ChatView:
-    """The Chat tab's content for one transcript page.
-
-    Args:
-        page: The transcript page read.
-        turning: What status and tally say of the turn, for the bubble the log cannot show yet.
-        doubt: Why the page may be incomplete, said above it.
-        drawn: The reader already has turns, so a locked store holds the view, not blanks it.
-    """
-    turns = tuple(_turn(t) for t in joined(tuple(page.turns)))
-    note = "" if turns else _STATE_NOTES.get(page.state, "Nothing has been said yet.")
-    held = drawn and not turns and page.state is HistoryState.unreadable
-    items = fold_tools(turns)
-    bubble, receipt = _status(items, turning)
-    # Beside a live turn, or while something it started runs; the router drops a dead process's.
-    listed = bubble is not None or any(agent.running for agent in turning.spawned)
-    spawned = turning.spawned if listed else ()
-    return ChatView(
-        items,
-        note,
-        start=page.cursor,
-        log=page.log,
-        more=page.has_more,
-        bubble=bubble,
-        receipt=receipt,
-        agents=_lines(spawned, shells=False),
-        shells=_lines(spawned, shells=True),
-        doubt=doubt,
-        held=held,
-        door=not turns and page.state in _READ_ON_PANE,
-        queued=tuple(page.queued),
-    )
-
-
-@dataclass(frozen=True, slots=True)
-class Row:
-    """The status row above the composer: its state, what still runs, and what waits."""
-
-    state: RowState
-    running: int
-    queued: int
-    lead: str
-    sentence: str
-    shells: int = 0
-
-
-def _counted(n: int, one: str, many: str, tail: str) -> str:
-    return f"{n} {one if n == 1 else many} {tail}" if n else ""
-
-
-def status_row(view: ChatView, status: str) -> Row:
-    """The row for *view*: its bubble's words, else the finished turn's, else the status word."""
-    running = sum(1 for agent in view.agents if agent.state == "running")
-    shells = sum(1 for shell in view.shells if shell.state == "running")
-    queued = len(view.queued)
-    state: RowState
-    if view.bubble is not None:
-        state, lead = view.bubble.state, view.bubble.describe
-    elif running or shells:
-        state, lead = "background", status.capitalize()
-    elif view.receipt is not None:
-        state, lead = "done", view.receipt.said
-    else:
-        state, lead = "still", status.capitalize()
-    counts = (
-        _counted(running, "agent", "agents", "running"),
-        _counted(shells, "shell", "shells", "running"),
-        _counted(queued, "message", "messages", "queued"),
-    )
-    sentence = "".join(f"{part}. " for part in (lead, *counts) if part).strip()
-    return Row(state, running, queued, lead, sentence, shells)

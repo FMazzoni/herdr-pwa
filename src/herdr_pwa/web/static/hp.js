@@ -167,10 +167,10 @@
     }
 
     /* The status bubble's motion styles, every one in this one place, picked by the bubble's
-     * data-working-motion (web/chat.py's WORKING_MOTION names the default). A style is how long
-     * one crest takes to cross the words (period, ms), how wide it is as a share of them (reach),
-     * and how high it lifts a letter (rise, em); null is a style that never moves. To add one,
-     * add an entry here and name it in WORKING_MOTION to wear it. */
+     * data-working-motion (web/chat_status.py's WORKING_MOTION names the default). A style is
+     * how long one crest takes to cross the words (period, ms), how wide it is as a share of
+     * them (reach), and how high it lifts a letter (rise, em); null is a style that never moves.
+     * To add one, add an entry here and name it in WORKING_MOTION to wear it. */
     var MOTIONS = {
       // One gentle crest of colour crossing the words, nothing lifted.
       crest: { period: 1600, reach: 0.35, rise: 0 },
@@ -203,7 +203,7 @@
       return Math.floor(whole / MINUTE) + "m" + (rest ? " " + rest + "s" : "");
     }
 
-    // A quiet stretch to its largest unit, as the server words it (web/chat.py quiet_words).
+    // A quiet stretch to its largest unit, as the server words it (web/chat_status.py quiet_words).
     function quietFor(seconds) {
       return "Quiet " + elapsed(Math.floor(seconds / MINUTE) * MINUTE).split(" ")[0];
     }

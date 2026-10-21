@@ -199,7 +199,7 @@
 }
 
 /* The status bubble's palettes, every one in this one place, picked by the bubble's
-   data-working-palette (web/chat.py's WORKING_PALETTE names the default). To add one, copy a
+   data-working-palette (web/chat_status.py's WORKING_PALETTE names the default). To add one, copy a
    block, give it a new name, and set its three stops and its peak from the palette tokens above;
    then name it in WORKING_PALETTE to wear it. */
 [data-working-palette="softer-ember"] {
