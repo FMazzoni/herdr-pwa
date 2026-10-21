@@ -1083,7 +1083,7 @@ def test_a_resolution_is_frozen() -> None:
 
 
 def test_the_session_is_usable_as_a_transcript_filename(snap: Snapshot) -> None:
-    """The transcript reader opens ~/.claude/projects/*/<session>.jsonl; keep that possible."""
+    """The transcript reader opens a file named <session>.jsonl; keep that possible."""
     for a in snap.agents:
         assert re.fullmatch(r"[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}", a.session)
         assert f"{a.session}.jsonl".count("/") == 0

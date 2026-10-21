@@ -104,7 +104,7 @@ def _row(title: str, harness: str = "claude", workspace: str = "proj") -> AgentR
         ("⠂⠐", ""),
         ("claude", ""),
         ("Proj", ""),
-        ("owner@box:~/src", ""),
+        ("owner@box:/srv/src", ""),
         ("New session - 2026-10-10", ""),
         ("hermes-probe", "hermes-probe"),
     ],

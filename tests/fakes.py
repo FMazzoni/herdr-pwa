@@ -12,7 +12,7 @@ from pathlib import Path
 
 from herdr_pwa.tailscale import SERVE_CONFIG_PATH, STATUS_PATH, LocalApi, serve_config
 
-NODE = "host.tailnet123.ts.net"
+NODE = "host.tailnet.ts.net"
 LOGIN = "operator@example.com"
 GOOD_STATUS: dict[str, object] = {
     "BackendState": "Running",

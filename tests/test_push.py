@@ -133,7 +133,7 @@ def test_repr_never_leaks_the_private_key(tmp_path: Path) -> None:
     "subject",
     [
         SUBJECT,
-        "mailto:first.last+push@mail.co.uk",
+        "mailto:first.last+push@mail.example.org",
         "https://herdr.example.org/contact",
         f"  {SUBJECT} ",
     ],

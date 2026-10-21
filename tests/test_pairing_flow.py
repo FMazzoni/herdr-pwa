@@ -100,7 +100,10 @@ def test_the_paired_url_refuses_anyone_the_ingress_did_not_vouch_for(tmp_path: P
     settings = settings_for(tmp_path).model_copy(update={"push_notifier": False})
     client = TestClient(create_app(settings, Seams()), base_url=f"https://{NODE}")
     assert client.get("/push/key").status_code == 401
-    assert client.get("/sw.js", headers={"Tailscale-User-Login": "other@x.org"}).status_code == 403
+    assert (
+        client.get("/sw.js", headers={"Tailscale-User-Login": "other@example.org"}).status_code
+        == 403
+    )
     cross = client.post(
         "/push/subscribe",
         headers={"Tailscale-User-Login": LOGIN, "Origin": "https://evil.example"},

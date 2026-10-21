@@ -106,14 +106,14 @@ def test_the_rig_strips_every_session_marker_and_keeps_the_rest() -> None:
         "CLAUDE_PID": "42",
         "CLAUDE_EFFORT": "high",
         "AI_AGENT": "claude-code",
-        "HOME": "/home/someone",
+        "HOME": "/home/user",
         "PATH": "/usr/bin",
-        "CLAUDE_CONFIG_DIR": "/home/someone/.claude",
+        "CLAUDE_CONFIG_DIR": "/home/user/.claude",
     }
     assert live_session.clean_env(ambient) == {
-        "HOME": "/home/someone",
+        "HOME": "/home/user",
         "PATH": "/usr/bin",
-        "CLAUDE_CONFIG_DIR": "/home/someone/.claude",
+        "CLAUDE_CONFIG_DIR": "/home/user/.claude",
     }
 
 

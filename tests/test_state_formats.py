@@ -303,7 +303,7 @@ def test_the_audit_log_reads_lines_the_previous_build_wrote(tmp_path: Path) -> N
         "actor": "you@example.com",
         "actor_via": "tailscale",
         "client_ip": "127.0.0.1",
-        "forwarded_for": "100.64.0.7",
+        "forwarded_for": "198.51.100.7",
         "payload": "go on",
         "payload_chars": 5,
         "payload_truncated": False,
@@ -328,7 +328,7 @@ def test_the_audit_log_reads_lines_the_previous_build_wrote(tmp_path: Path) -> N
     assert [audit.describe(one) for one in found] == [
         (
             "2026-10-15T21:51:02  prompt  w1:p3        you@example.com via tailscale from "
-            '100.64.0.7  "go on"'
+            '198.51.100.7  "go on"'
         ),
         "2026-10-15T21:51:02  prompt  w1:p3        -> sent",
         "  UNREADABLE RECORD at audit.log:3",
@@ -337,7 +337,7 @@ def test_the_audit_log_reads_lines_the_previous_build_wrote(tmp_path: Path) -> N
 
 def test_a_written_audit_line_is_byte_for_byte_the_previous_format(tmp_path: Path) -> None:
     log = audit.AuditLog(tmp_path, max_bytes=1 << 20, payload_chars=512)
-    origin = audit.Origin("you@example.com", "tailscale", "127.0.0.1", "100.64.0.7")
+    origin = audit.Origin("you@example.com", "tailscale", "127.0.0.1", "198.51.100.7")
     with log.record(origin, audit.Write(audit.PROMPT, target="w1:p3", payload="ça va")) as entry:
         entry.outcome("sent")
     for line, record in zip(

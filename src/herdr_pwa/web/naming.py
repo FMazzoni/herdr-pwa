@@ -15,7 +15,7 @@ _BULLETS: Final = frozenset("·•∙")
 _MAX_GLYPHS: Final = 4
 # A harness's placeholder for a session it has not named yet.
 _UNNAMED: Final = re.compile(r"^new session\s*-\s*\S+$", re.IGNORECASE)
-# A shell's `user@host:~/dir` prompt title names a place, not the work.
+# A shell's `user@host:path` prompt title names a place, not the work.
 _LOCATOR: Final = re.compile(r"^[^\s@:]+@[^\s@:]+(?::\S*)?$")
 # How a terminal prompt opens when it asks without a question mark.
 _PROMPT_OPENING: Final = re.compile(

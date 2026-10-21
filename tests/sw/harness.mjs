@@ -15,7 +15,7 @@ import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 
 const swPath = process.argv[2];
-const ORIGIN = "https://box.tail.ts.net";
+const ORIGIN = "https://box.tailnet.ts.net";
 
 /* 65 raw bytes, leading 0x04, base64url unpadded -- the only shape a browser
  * accepts as an applicationServerKey. */

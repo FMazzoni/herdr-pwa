@@ -181,8 +181,8 @@ def test_a_push_shows_the_servers_text_and_a_tap_opens_that_agent() -> None:
         "event": "blocked",
         "url": f"/agent/{SESSION}",
     }
-    assert seen["openedWithNoWindow"] == [f"https://box.tail.ts.net/agent/{SESSION}"]
-    assert seen["navigatedExisting"] == [f"https://box.tail.ts.net/agent/{SESSION}"]
+    assert seen["openedWithNoWindow"] == [f"https://box.tailnet.ts.net/agent/{SESSION}"]
+    assert seen["navigatedExisting"] == [f"https://box.tailnet.ts.net/agent/{SESSION}"]
     assert seen["openedAsWell"] == []
     assert seen["liveAfterThree"] == 1
     assert (seen["liveBeforeClear"], seen["liveAfterClear"], seen["shownByClear"]) == (1, 0, 0)
