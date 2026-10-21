@@ -1,0 +1,40 @@
+{
+  "id": "ses_ea38ad09effe9DIMcoOdjGJNLb",
+  "slug": "quick-planet",
+  "version": "1.19.3",
+  "projectID": "40c8c8e5bb68cd4e25343183297f68ab07b61333",
+  "directory": "/home/user/scratch/notes-demo",
+  "parentID": "ses_ea38ae375ffeHLDD5Z1fvVIAeV",
+  "title": "Fetch two URLs via webfetch (@general subagent)",
+  "permission": [
+    {
+      "permission": "question",
+      "pattern": "*",
+      "action": "deny"
+    },
+    {
+      "permission": "plan_enter",
+      "pattern": "*",
+      "action": "deny"
+    },
+    {
+      "permission": "plan_exit",
+      "pattern": "*",
+      "action": "deny"
+    },
+    {
+      "permission": "task",
+      "pattern": "*",
+      "action": "deny"
+    }
+  ],
+  "time": {
+    "created": 1792552546145,
+    "updated": 1792552575805
+  },
+  "summary": {
+    "additions": 0,
+    "deletions": 0,
+    "files": 0
+  }
+}

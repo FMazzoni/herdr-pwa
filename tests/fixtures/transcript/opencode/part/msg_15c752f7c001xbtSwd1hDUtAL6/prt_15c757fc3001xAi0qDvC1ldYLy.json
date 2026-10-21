@@ -1,0 +1,19 @@
+{
+  "id": "prt_15c757fc3001xAi0qDvC1ldYLy",
+  "sessionID": "ses_ea38ad09effe9DIMcoOdjGJNLb",
+  "messageID": "msg_15c752f7c001xbtSwd1hDUtAL6",
+  "type": "tool",
+  "tool": "webfetch",
+  "callID": "chatcmpl-tool-b0253c970356918a",
+  "state": {
+    "status": "error",
+    "input": {
+      "url": "https://example.com/missing-page"
+    },
+    "error": "StatusCode: non 2xx status code (404 GET https://example.com/missing-page)",
+    "time": {
+      "start": 1792552566769,
+      "end": 1792552566869
+    }
+  }
+}

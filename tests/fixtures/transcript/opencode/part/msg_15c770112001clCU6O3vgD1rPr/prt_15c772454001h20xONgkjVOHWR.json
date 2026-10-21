@@ -1,0 +1,34 @@
+{
+  "id": "prt_15c772454001h20xONgkjVOHWR",
+  "sessionID": "ses_ea388ff7fffezqx9eAc8o7s8GI",
+  "messageID": "msg_15c770112001clCU6O3vgD1rPr",
+  "type": "tool",
+  "tool": "read",
+  "callID": "a3d2c4e0-5c33-4b54-890d-7d614ad903ea",
+  "state": {
+    "status": "completed",
+    "input": {
+      "filePath": "/home/user/scratch/notes-demo/notes/testing.md"
+    },
+    "output": "<path>/home/user/scratch/notes-demo/notes/testing.md</path>\n<type>file</type>\n<content>\n1: # Testing\n2: \n3: Run the tests before pushing.\n\n(End of file - total 3 lines)\n</content>",
+    "metadata": {
+      "preview": "# Testing\n\nRun the tests before pushing.",
+      "truncated": false,
+      "loaded": [],
+      "display": {
+        "type": "file",
+        "path": "/home/user/scratch/notes-demo/notes/testing.md",
+        "text": "# Testing\n\nRun the tests before pushing.",
+        "lineStart": 1,
+        "lineEnd": 3,
+        "totalLines": 3,
+        "truncated": false
+      }
+    },
+    "title": "notes/testing.md",
+    "time": {
+      "start": 1792552674401,
+      "end": 1792552674409
+    }
+  }
+}

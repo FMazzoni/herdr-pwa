@@ -210,7 +210,7 @@ def test_a_tap_url_is_never_built_from_a_string_that_is_not_a_session() -> None:
 def test_a_tap_opens_an_opencode_or_hermes_agent_by_its_own_session_id() -> None:
     seen = observed()
     assert (seen["opencodeUrl"], seen["hermesUrl"]) == (
-        "/agent/ses_3fd62ba5bffemIxWVhRda5wgS7",
+        "/agent/ses_ea388ff7fffezqx9eAc8o7s8GI",
         "/agent/20260101_120000_aaaaaa",
     )
     assert (seen["opencodeOnScreenSilent"], seen["opencodeFromHerdSilent"]) == (True, False)

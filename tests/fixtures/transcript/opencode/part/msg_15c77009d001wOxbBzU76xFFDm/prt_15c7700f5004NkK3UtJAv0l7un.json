@@ -1,0 +1,18 @@
+{
+  "id": "prt_15c7700f5004NkK3UtJAv0l7un",
+  "sessionID": "ses_ea388ff7fffezqx9eAc8o7s8GI",
+  "messageID": "msg_15c77009d001wOxbBzU76xFFDm",
+  "type": "file",
+  "mime": "text/plain",
+  "filename": "README.md",
+  "url": "file:///home/user/scratch/notes-demo/README.md",
+  "source": {
+    "text": {
+      "value": "@README.md",
+      "start": 46,
+      "end": 56
+    },
+    "type": "file",
+    "path": "README.md"
+  }
+}

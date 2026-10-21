@@ -1,0 +1,24 @@
+{
+  "id": "prt_15c784f22001naRO7JDZsYRYTU",
+  "sessionID": "ses_ea388ff7fffezqx9eAc8o7s8GI",
+  "messageID": "msg_15c784076001va34vKG7yaqrH3",
+  "type": "tool",
+  "tool": "glob",
+  "callID": "c937c744-e443-4ddc-a1d7-76b6103b8082",
+  "state": {
+    "status": "completed",
+    "input": {
+      "pattern": "test/**/*"
+    },
+    "output": "/home/user/scratch/notes-demo/test/add.test.js",
+    "metadata": {
+      "count": 1,
+      "truncated": false
+    },
+    "title": "",
+    "time": {
+      "start": 1792552750889,
+      "end": 1792552750926
+    }
+  }
+}

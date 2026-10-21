@@ -164,6 +164,8 @@ def missing_paths(name: str, text: str) -> list[str]:
     names = (m.group(0).strip("`") for m in CODE.finditer(FENCE.sub("", text)))
     paths = [n for n in names if PATHLIKE.match(n) and not PLACEHOLDER.search(n)]
     paths = [p for p in paths if p not in OUTSIDE.get(name, frozenset())]
+    # Notes and screenshots under .agents/ are gitignored, so a fresh clone never has them.
+    paths = [p for p in paths if not p.startswith(".agents/") or p.startswith(".agents/skills/")]
     bases = [(REPO / name).parent, *(REPO / s for s in SEARCH)]
     return [p for p in paths if not _exists(p, bases)]
 

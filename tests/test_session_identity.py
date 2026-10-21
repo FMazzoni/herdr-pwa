@@ -34,8 +34,8 @@ HERMES_SCHEMA = (FIXTURES / "hermes" / "schema.sql").read_text()
 
 REPO = "/home/user/projects/herdr-pwa"
 THROWAWAY = "/home/user/scratch/perm-test"
-REAL = as_session_id("ses_ebd52da9ffferyXfceutz4VMZx")
-STRAY = as_session_id("ses_ebd4bb9b3ffefe2V3uubh2DqkC")
+REAL = as_session_id("ses_ea39e79e4ffeU3YlPuxya0NNFD")
+STRAY = as_session_id("ses_ea39a6649ffeUGMn3147NS4Fj9")
 
 
 def held(session: str, kind: str) -> Agent:

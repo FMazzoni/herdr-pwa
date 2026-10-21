@@ -1,0 +1,8 @@
+{
+  "id": "prt_15c7700f5003dYNz25gntUfsr2",
+  "sessionID": "ses_ea388ff7fffezqx9eAc8o7s8GI",
+  "messageID": "msg_15c77009d001wOxbBzU76xFFDm",
+  "type": "text",
+  "synthetic": true,
+  "text": "<path>/home/user/scratch/notes-demo/README.md</path>\n<type>file</type>\n<content>\n1: # notes-demo\n2: \n3: A tiny demo project for trying out an agent.\n4: \n5: ## Running the tests\n6: \n7: Install the dependencies with `npm install`, then run `npm test`.\n8: The unit tests live in `test/` and use the built-in Node test runner.\n9: Run `npm run lint` before committing.\n\n(End of file - total 9 lines)\n</content>"
+}

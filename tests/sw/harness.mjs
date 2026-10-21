@@ -408,7 +408,7 @@ const hostilePaneUrl = notifications.shown[0].data.url;
 
 /* opencode and hermes name their sessions in their own shapes; each still opens its agent,
  * and its alert is quiet while that agent is on screen. */
-const OPENCODE = "ses_3fd62ba5bffemIxWVhRda5wgS7";
+const OPENCODE = "ses_ea388ff7fffezqx9eAc8o7s8GI";
 const HERMES = "20260101_120000_aaaaaa";
 notifications.shown.length = 0;
 await dispatch("push", pushEvent(notify("blocked", { agent: OPENCODE })));
