@@ -279,7 +279,7 @@ class ToolInput(BaseModel):
 def _for_kind(entry: str, kind: str) -> str:
     """*entry* as it applies to *kind*: unqualified, qualified for it, or empty."""
     head, sep, rest = entry.partition(":")
-    if not sep or head.strip().lower() not in _registry():
+    if not sep or head.strip().lower() not in _adapters:
         return entry
     return rest.strip() if head.strip().lower() == kind else ""
 
@@ -628,26 +628,14 @@ class TranscriptAdapter(Protocol):
 _adapters: Final[dict[str, TranscriptAdapter]] = {}
 
 
-def _registry() -> dict[str, TranscriptAdapter]:
-    """The adapters, built on first use."""
-    if not _adapters:
-        # The adapters import this module, so importing them at the top would be a cycle.
-        from herdr_pwa.engine.claude.adapter import ClaudeAdapter  # noqa: PLC0415 - the adapters import this module, so a top import is a cycle
-        from herdr_pwa.engine.hermes import HermesAdapter  # noqa: PLC0415 - the adapters import this module, so a top import is a cycle
-        from herdr_pwa.engine.opencode import OpencodeAdapter  # noqa: PLC0415 - the adapters import this module, so a top import is a cycle
-
-        adapters: tuple[TranscriptAdapter, ...] = (
-            ClaudeAdapter(),
-            OpencodeAdapter(),
-            HermesAdapter(),
-        )
-        _adapters.update({adapter.harness.kind: adapter for adapter in adapters})
-    return _adapters
+def register(*adapters: TranscriptAdapter) -> None:
+    """Add *adapters* to the registry under their own kinds, in the order the form offers them."""
+    _adapters.update({adapter.harness.kind: adapter for adapter in adapters})
 
 
 def adapter_for(agent_kind: str | None) -> TranscriptAdapter | None:
     """The adapter for *agent_kind*, or ``None`` if there is not one."""
-    return _registry().get((agent_kind or "").strip().lower())
+    return _adapters.get((agent_kind or "").strip().lower())
 
 
 def harness_of(agent_kind: str | None) -> Harness | None:
@@ -658,7 +646,7 @@ def harness_of(agent_kind: str | None) -> Harness | None:
 
 def harness_kinds() -> tuple[str, ...]:
     """Every kind with an adapter here, in the order the new-agent form offers them."""
-    return tuple(_registry())
+    return tuple(_adapters)
 
 
 def has_byte_frontier(agent_kind: str | None) -> bool:
