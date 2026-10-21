@@ -198,8 +198,17 @@
    * read that lands takes both away. */
   var heardAt = new Date();
 
+  // The phone's own 12h or 24h setting decides how the time reads.
   function clock(at) {
-    return ("0" + at.getHours()).slice(-2) + ":" + ("0" + at.getMinutes()).slice(-2);
+    return at.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  }
+
+  // Said once when the bar shows and once when it goes, never on every failed read.
+  function tell(text) {
+    var spoken = document.getElementById("hp-live");
+    if (spoken) {
+      spoken.textContent = text;
+    }
   }
 
   function readRegion(detail) {
@@ -216,6 +225,9 @@
     region.classList.add("is-stale");
     region.setAttribute("data-hp-unheard", "");
     document.getElementById("hp-unreachable-at").textContent = clock(heardAt);
+    if (bar.hidden) {
+      tell("Can't reach herdr, retrying");
+    }
     bar.hidden = false;
   }
   document.addEventListener("htmx:sendError", unheard);
@@ -235,7 +247,8 @@
       marked[i].removeAttribute("data-hp-unheard");
     }
     var bar = document.getElementById("hp-unreachable");
-    if (bar) {
+    if (bar && !bar.hidden) {
+      tell("Reconnected");
       bar.hidden = true;
     }
   });

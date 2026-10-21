@@ -314,7 +314,10 @@ html { -webkit-tap-highlight-color: transparent; }
 @keyframes receipt-fold { from { opacity: 0; transform: translateY(-0.5em); } }
 
 /* Freshness: everything but live dims the claim the cards make. */
-.feed.is-stale .cards { opacity: 0.55; }
+/* Stale cards lose their colour, not their contrast: dimming the whole card took its quietest text
+   below WCAG AA, so only the borders and the status dots go grey. */
+.feed.is-stale .card { border-color: var(--rule); }
+.feed.is-stale .dot { background: var(--ink-3); }
 
 .banner {
   display: flex;
@@ -1128,7 +1131,8 @@ body:has(#composer:focus-within) .stats { display: none; }
 .topbar:has(> .unreachable:not([hidden])) { flex-wrap: wrap; row-gap: 0; }
 .unreachable { flex: 1 0 100%; min-width: 0; margin: 0 calc(-1 * var(--gutter-right)) 0 calc(-1 * var(--gutter-left)); padding: var(--space-3) var(--gutter-right) var(--space-3) var(--gutter-left); border-top: var(--line-1) solid var(--rule); font-size: var(--text-small); color: var(--ink-2); }
 .unreachable[hidden] { display: none; }
-.unreachable__what { font-weight: 600; color: var(--blocked); }
+/* Amber, not the red of "needs you": a lost link is unknown state, not an agent asking. */
+.unreachable__what { font-weight: 600; color: var(--unknown); }
 /* The server's age stopped when the box went quiet; the bar's line says when, so it goes. */
 [data-hp-unheard] .summary__age { display: none; }
 

@@ -189,3 +189,9 @@ def test_a_polled_region_carries_no_live_role(tmp_path: Path, path: str) -> None
         if "data-hp-lost hidden" not in body[m.start() : m.start() + 80]
     ]
     assert not loud, body[loud[0].start() - 200 : loud[0].end() + 200]
+
+
+def test_a_stale_feed_keeps_its_text_contrast() -> None:
+    stale = [m.group(1) for m in re.finditer(r"\.feed\.is-stale[^{]*\{([^}]*)\}", CSS)]
+    assert stale, "the stale feed has no rule of its own"
+    assert not any("opacity" in rule for rule in stale), "a dimmed card takes its text below AA"
