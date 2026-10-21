@@ -1,4 +1,4 @@
-"""Every write the runner is asked to make, logged first; reads, subscriptions, refusals are not."""
+"""Every write the runner is asked to make, and every ping, logged first; reads are not."""
 
 import json
 import logging
@@ -30,7 +30,9 @@ KEYS: Final = "keys"
 START: Final = "start"
 # Close is recorded because it is the one write with no undo.
 CLOSE: Final = "close"
-ENDPOINTS: Final = frozenset({PROMPT, KEYS, START, CLOSE})
+# A ping writes to the owner's lock screen rather than an agent, from the CLI.
+PING: Final = "ping"
+ENDPOINTS: Final = frozenset({PROMPT, KEYS, START, CLOSE, PING})
 ATTEMPT: Final = "attempt"
 OUTCOME: Final = "outcome"
 UNREADABLE: Final = "unreadable"

@@ -1,8 +1,11 @@
 """The state directory at 0700 and the files in it at 0600, each mode checked after the fact."""
 
+import fcntl
 import os
 import stat
 import tempfile
+from collections.abc import Generator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Final
 
@@ -67,6 +70,25 @@ def append_line(path: Path, line: str) -> None:
         if mode != FILE_MODE:
             raise PermissionError(f"{path} is mode {mode:04o}, expected 0600")
         _ = os.write(fd, line.encode("utf-8"))
+    finally:
+        os.close(fd)
+
+
+@contextmanager
+def locked(path: Path) -> Generator[None]:
+    """Hold an exclusive flock on a 0600 lock file, so other processes' writers wait.
+
+    Raises:
+        OSError: the lock file cannot be opened, or is not 0600 (``PermissionError``).
+    """
+    fd = os.open(path, os.O_RDWR | os.O_CREAT, FILE_MODE)
+    try:
+        mode = stat.S_IMODE(os.fstat(fd).st_mode)
+        if mode != FILE_MODE:
+            raise PermissionError(f"{path} is mode {mode:04o}, expected 0600")
+        # Released when the descriptor closes, so a crashed holder never leaves it held.
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
     finally:
         os.close(fd)
 

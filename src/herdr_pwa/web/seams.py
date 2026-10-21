@@ -1,8 +1,9 @@
 """What an entry point reaches outside itself, grouped so a test swaps it in one place."""
 
+import os
 import sys
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -16,6 +17,10 @@ from herdr_pwa.writes.lifecycle import Which, on_path
 from herdr_pwa.writes.outcome import Pacing
 
 type ClientFactory = Callable[[EngineSettings], HerdrClient]
+
+
+def _process_environ() -> Mapping[str, str]:
+    return os.environ
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,6 +42,8 @@ class Seams:
     # The bounds on Web Push: how many devices, and how long a send and a fan-out may take.
     push_limits: PushLimits = PUSH_LIMITS
     write: Callable[[str], object] = sys.stdout.write
+    # This process's environment, where a ping learns which pane is calling it.
+    environ: Mapping[str, str] = field(default_factory=_process_environ)
     local_api: Callable[[Path], LocalApi] = LocalApi
     # Where each pane's process environment is read, for whether another agent manages it.
     proc: Path = PROC

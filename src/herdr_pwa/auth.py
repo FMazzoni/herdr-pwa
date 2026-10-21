@@ -15,10 +15,11 @@ from herdr_pwa.validation import is_not_json
 
 IDENTITY_HEADER: Final = "tailscale-user-login"
 SAFE_METHODS: Final = frozenset({"GET", "HEAD", "OPTIONS"})
-# Who vouched for a login: the ingress, or the config assuming one.
-type Via = Literal["tailscale", "config"]
+# Who vouched for a login: the ingress, the config assuming one, or the uid running the CLI.
+type Via = Literal["tailscale", "config", "cli"]
 VIA_TAILSCALE: Final = "tailscale"
 VIA_CONFIG: Final = "config"
+VIA_CLI: Final = "cli"
 # Names, not addresses: what the caller typed is what DNS rebinding cannot forge.
 LOOPBACK_HOSTS: Final = frozenset({"127.0.0.1", "::1", "localhost", "localhost."})
 

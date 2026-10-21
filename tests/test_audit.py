@@ -66,8 +66,8 @@ def test_a_mode_that_drifted_is_put_back_before_anything_is_written(tmp_path: Pa
     assert stat.S_IMODE((tmp_path / audit.AUDIT_FILENAME).stat().st_mode) == 0o600
 
 
-def test_the_vocabulary_is_the_four_writes_the_runner_is_asked_to_make() -> None:
-    assert {PROMPT, KEYS, START, CLOSE} == audit.ENDPOINTS
+def test_the_vocabulary_is_the_four_runner_writes_and_the_ping() -> None:
+    assert {PROMPT, KEYS, START, CLOSE, audit.PING} == audit.ENDPOINTS
 
 
 def test_anything_outside_the_vocabulary_is_refused_and_nothing_written(tmp_path: Path) -> None:
