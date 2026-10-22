@@ -1,6 +1,5 @@
 # Security
 
-<!-- OWNER: enable private vulnerability reporting in the repo settings once it's public. -->
 If you find a security problem, report it through GitHub's
 [private vulnerability reporting](../../security/advisories/new) form rather than a public
 issue, because a public issue shows the flaw to everyone before it is fixed. This is a
