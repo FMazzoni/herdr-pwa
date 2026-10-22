@@ -31,26 +31,6 @@ def landed(sent: str, before: str, after: str) -> bool:
     return _flat(_above_the_box(after)).count(needle) > _flat(_above_the_box(before)).count(needle)
 
 
-def _squeezed(text: str) -> str:
-    return "".join(text.split())
-
-
-def _same_screen(before: str, after: str) -> bool:
-    # A full-screen helper that exits brings back an older screen, whose copies are not this send's.
-    was = {line.strip() for line in before.splitlines() if line.strip()}
-    now = {line.strip() for line in after.splitlines()}
-    return len(was & now) * 2 >= len(was)
-
-
-def shown_whole(sent: str, before: str, after: str) -> bool:
-    """True when the whole text newly shows above the input, on the screen it was sent at."""
-    needle = _squeezed(sent)
-    if len(needle) < MIN_MATCH_CHARS or not _same_screen(before, after):
-        return False
-    was = _squeezed(_above_the_box(before)).count(needle)
-    return _squeezed(_above_the_box(after)).count(needle) > was
-
-
 def unsendable(text: str) -> bool | None:
     """``None`` when the text may be typed; ``True`` when empty; ``False`` when too long."""
     if not text.strip():

@@ -351,8 +351,8 @@ def test_a_written_audit_line_is_byte_for_byte_the_previous_format(tmp_path: Pat
 
 
 def test_the_audit_log_reads_old_records_and_new_ones_side_by_side(tmp_path: Path) -> None:
-    # Older builds kept a prompt's text on its attempt; newer ones keep it on an echoed outcome.
-    old = audit.AuditLog(tmp_path, max_bytes=1 << 20, payload_chars=512)
+    # The oldest builds kept a prompt's text on its attempt, later ones on an echoed outcome.
+    log = audit.AuditLog(tmp_path, max_bytes=1 << 20, payload_chars=512)
     origin = audit.Origin("you@example.com", "tailscale", "127.0.0.1", "198.51.100.7")
     old_attempt = {
         "v": 1,
@@ -380,21 +380,34 @@ def test_the_audit_log_reads_old_records_and_new_ones_side_by_side(tmp_path: Pat
         "target": "w1:p3",
         "result": "accepted:noecho",
     }
+    echo_attempt = {
+        **old_attempt,
+        "id": "fedcba9876543210",
+        "payload": None,
+        "payload_chars": 8,
+        "payload_omitted": "pending_echo",
+    }
+    echo_outcome = {
+        **old_outcome,
+        "id": "fedcba9876543210",
+        "result": "confirmed:echo",
+        "payload": "carry on",
+        "payload_truncated": False,
+    }
     _ = (tmp_path / audit.AUDIT_FILENAME).write_text(
-        "".join(json.dumps(one) + "\n" for one in (old_attempt, old_outcome))
+        "".join(
+            json.dumps(one) + "\n" for one in (old_attempt, old_outcome, echo_attempt, echo_outcome)
+        )
     )
-    with old.record(origin, audit.Write(audit.PROMPT, "w1:p3", payload="carry on")) as entry:
-        entry.shown()
+    with log.record(origin, audit.Write(audit.PROMPT, "w1:p3", payload="hunter2")) as entry:
         entry.outcome("confirmed:echo")
-    with old.record(origin, audit.Write(audit.PROMPT, "w1:p3", payload="hunter2")) as entry:
-        entry.outcome("accepted:noecho")
     found = audit.records(tmp_path)
-    assert [one["phase"] for one in found] == ["attempt", "outcome"] * 3
+    assert found[:4] == [old_attempt, old_outcome, echo_attempt, echo_outcome]
     shown = [audit.describe(one) for one in found]
     assert shown[0].endswith('"go on"')
     assert shown[1].endswith("-> accepted:noecho")
-    assert shown[2].endswith("<8 chars, text kept only once echoed>")
+    assert shown[2].endswith("<payload withheld: pending_echo, 8 chars>")
     assert shown[3].endswith('-> confirmed:echo  "carry on"')
-    assert shown[5].endswith("-> accepted:noecho")
-    assert "hunter2" not in "\n".join(shown)
+    assert shown[4].endswith("<payload withheld: typed, 7 chars>")
+    assert shown[5].endswith("-> confirmed:echo")
     assert "hunter2" not in (tmp_path / audit.AUDIT_FILENAME).read_text()

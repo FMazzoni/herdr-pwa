@@ -4,7 +4,7 @@ import logging
 from dataclasses import dataclass
 from typing import Final
 
-from herdr_pwa.audit import PROMPT, Entry, Write
+from herdr_pwa.audit import PROMPT, Write
 from herdr_pwa.engine import (
     VISIBLE_READ,
     AgentStatus,
@@ -22,7 +22,6 @@ from herdr_pwa.writes.guard import (
     asks_a_question,
     landed,
     question_call,
-    shown_whole,
     unsendable,
 )
 from herdr_pwa.writes.outcome import Evidence, Outcome, Pacing, audit_result
@@ -148,12 +147,6 @@ def read_back(
     return None
 
 
-def keep_if_shown(entry: Entry, echo: Echo, after: str | None) -> None:
-    """Let the audit keep the text only when the whole of it newly shows on the same screen."""
-    if after is not None and shown_whole(echo.text, echo.before, after):
-        entry.shown()
-
-
 def _type(writer: Writer, send: _Send) -> PromptSent | Refused:
     client = writer.client
     before = _read_now(client, send.target)
@@ -163,7 +156,6 @@ def _type(writer: Writer, send: _Send) -> PromptSent | Refused:
     stop = _preflight(send, before, writer.memory.unsure, asked)
     if stop is not None:
         return stop
-    # The attempt keeps the length; the log keeps the text only once the read-back sees it.
     entry = attempt(writer.audit, Write(PROMPT, send.target, send.session, send.text), verb=_VERB)
     if isinstance(entry, Refused):
         return entry
@@ -173,10 +165,7 @@ def _type(writer: Writer, send: _Send) -> PromptSent | Refused:
         except EngineError as exc:
             entry.outcome(failed_result(exc))
             return _failed(writer, send, exc)
-        echo = Echo(send.target, send.text, before)
-        after = read_back(client, echo, writer.pacing)
-        keep_if_shown(entry, echo, after)
-        ok = after is not None
+        ok = read_back(client, Echo(send.target, send.text, before), writer.pacing) is not None
         outcome, evidence = (
             (Outcome.CONFIRMED, Evidence.ECHO) if ok else (Outcome.ACCEPTED, Evidence.NOECHO)
         )
