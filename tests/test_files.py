@@ -1,5 +1,6 @@
 """The file explorer: containment, the secret tap, the caps, the highlight limit, and no caching."""
 
+import logging
 import os
 import threading
 from collections.abc import Generator, Iterator
@@ -88,6 +89,26 @@ def test_a_path_that_leads_out_of_the_root_is_refused(
     response = rig.http.get(f"{_base(repo)}/{view}?path={path}", follow_redirects=False)
     assert response.status_code == 403, response.text[:300]
     assert "root:" not in response.text
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        ("src/../../demo-outside.txt", "OutsideRootError"),
+        ("src/no-such-plan.txt", "NotReadableError"),
+    ],
+)
+def test_a_refused_path_reaches_the_log_as_its_route_and_error_alone(
+    tmp_path: Path, repo: Path, caplog: pytest.LogCaptureFixture, case: tuple[str, str]
+) -> None:
+    path, error = case
+    rig = _rig(tmp_path, repo)
+    with caplog.at_level(logging.WARNING, logger="herdr_pwa.web.failures"):
+        response = rig.http.get(f"{_base(repo)}/file?path={path}", follow_redirects=False)
+    assert response.status_code in {403, 404}
+    assert f"GET /files/{{root_id}}/file: {error}" in caplog.text
+    assert path.rsplit("/", 1)[-1] not in caplog.text
+    assert _base(repo) not in caplog.text
 
 
 @pytest.mark.parametrize(

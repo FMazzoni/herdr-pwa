@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from pydantic import JsonValue
 
+from herdr_pwa.audit import AUDIT_FILENAME
 from herdr_pwa.decisions import answer_digits as decided_digits
 from herdr_pwa.decisions import decide_screen
 from herdr_pwa.engine import BlockedPrompt, EngineUnavailableError, KeyHint
@@ -83,6 +84,16 @@ def test_a_digit_the_dialog_offers_reaches_the_pane_holding_the_session(tmp_path
     assert result.prompt is None, "a question that went away leaves no live controls"
     results = [rec.get("result") for rec in r.audit_records if rec["phase"] == "outcome"]
     assert results == ["confirmed:gone"]
+
+
+def test_a_key_sent_keeps_its_length_and_never_its_name_in_the_audit_file(tmp_path: Path) -> None:
+    r = blocked_rig(tmp_path)
+    r.herd.after[SEND_KEYS] = answered
+    _ = sent(send_key(r.writer, KeyAsk(S1, "enter", drawn_from=FINGERPRINT)))
+    assert r.herd.writes(SEND_KEYS) == [{"target": "w1:p3", "keys": ["enter"]}]
+    attempt = r.audit_records[0]
+    assert (attempt.get("payload"), attempt.get("payload_chars")) == (None, len("enter"))
+    assert "enter" not in (r.state / AUDIT_FILENAME).read_text()
 
 
 def test_an_enter_that_was_acked_but_did_nothing_is_unconfirmed_and_not_resent(
