@@ -68,8 +68,7 @@ says what it protects and how to report a problem.
 `just check` runs the linter, a type checker and the tests. The tests never touch a real
 herdr; they run on screens and transcripts captured from real agents. `just live-session`
 starts a throwaway herdr session, so you can try the app without touching your own agents.
-The code was written by AI coding agents, directed by me, and issues and pull requests are
-welcome.
+The code was written by AI coding agents, directed by me, and issues are welcome.
 
 ## Licence
 

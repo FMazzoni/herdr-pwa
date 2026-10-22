@@ -16,5 +16,5 @@ The app protects your agents in four ways:
 - A notification sent with `herdr-pwa ping` always shows as "Ping from" and the sender's
   name, so it can't pass for an alert from an agent.
 
-One limit is known: any program already running as you on the machine can reach the app's
-port and drive your agents. That program could run commands as you anyway.
+One limit is known: any program on the machine, under any user account, can reach the app's
+port and claim to be you. Run the app on a machine that only you use.
