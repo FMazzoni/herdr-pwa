@@ -192,6 +192,22 @@ def test_serve_with_no_learnable_name_refuses_every_header_identity(
         assert client.get("/", headers={"Host": host}).status_code == 403, host
 
 
+def test_serve_writes_no_access_log_and_so_no_path_or_query_to_the_journal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    options: list[dict[str, object]] = []
+
+    def run(_app: object, **kwargs: object) -> None:
+        options.append(kwargs)
+
+    with tailscaled(tmp_path, canned=status_route()) as fake:
+        # The helper sets up a serve that starts; this one keeps what uvicorn was asked for.
+        _ = _served_app(monkeypatch, tmp_path, fake.socket_path)
+        monkeypatch.setattr(cli.uvicorn, "run", run)
+        cli.serve(Settings(), 0, Seams())
+    assert [one["access_log"] for one in options] == [False]
+
+
 def _never_served(*_args: object, **_kwargs: object) -> None:
     pytest.fail("uvicorn was started")
 

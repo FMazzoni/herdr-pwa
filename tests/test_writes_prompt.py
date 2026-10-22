@@ -4,8 +4,6 @@ import threading
 from pathlib import Path
 
 import pytest
-from hypothesis import HealthCheck, assume, given, settings
-from hypothesis import strategies as st
 from pydantic import JsonValue
 
 from herdr_pwa import audit, statedir
@@ -287,7 +285,6 @@ def test_landing_needs_more_copies_than_before() -> None:
 
 # What a terminal draws under the line its cursor waits on.
 _STATUS_BAR = '[hp] 0:bash*  "host" 12:00 21-Oct-26'
-_FOOTER = "  esc to interrupt \u00b7 ctrl+c to exit"
 
 
 @pytest.mark.parametrize(
@@ -313,12 +310,13 @@ def _log_text(r: Rig) -> str:
     return log.read_text() if log.exists() else ""
 
 
-def test_an_echoed_prompt_keeps_its_text_on_the_outcome_alone(tmp_path: Path) -> None:
+def test_an_echoed_prompt_keeps_only_its_length(tmp_path: Path) -> None:
     r = idle_rig(tmp_path, SETTLED, echoed("\u276f hello there"))
     assert sent(send_prompt(r.writer, PromptAsk(S1, "hello there"))).verified
     attempt, outcome = r.audit_records
     assert (attempt.get("payload"), attempt.get("payload_chars")) == (None, 11)
-    assert (outcome.get("result"), outcome.get("payload")) == ("confirmed:echo", "hello there")
+    assert (outcome.get("result"), outcome.get("payload")) == ("confirmed:echo", None)
+    assert "hello there" not in _log_text(r)
 
 
 def test_an_unechoed_prompt_keeps_only_its_length(tmp_path: Path) -> None:
@@ -341,137 +339,6 @@ def test_a_refused_prompt_records_nothing(tmp_path: Path) -> None:
     r = idle_rig(tmp_path, capture("capture-blocked-permission-prompt"))
     _ = refused(send_prompt(r.writer, PromptAsk(S1, "hunter2-secret")))
     assert "hunter2-secret" not in _log_text(r)
-
-
-_LINE = st.text(st.characters(codec="utf-8", exclude_categories=("Cs", "Cc")), max_size=40)
-_SCREEN = st.lists(
-    st.one_of(
-        _LINE,
-        st.sampled_from(
-            [
-                "[sudo] password for owner:",
-                "Password:",
-                "Enter passphrase:",
-                _STATUS_BAR,
-                _FOOTER,
-                "\u2502 \u2502",
-                "repo main*>",
-                "\u276f ",
-                "",
-            ]
-        ),
-    ),
-    max_size=10,
-).map("\n".join)
-_SECRET = st.from_regex(r"[A-Za-z0-9!@#%^&*_+=-]{8,32}", fullmatch=True)
-
-
-@settings(
-    max_examples=80, deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture]
-)
-@given(screens=st.tuples(_SCREEN, _SCREEN, st.booleans()), secret=_SECRET)
-def test_no_audit_file_holds_text_whose_send_was_not_echoed(
-    tmp_path_factory: pytest.TempPathFactory, screens: tuple[str, str, bool], secret: str
-) -> None:
-    # Whatever the screen shows, a miss by the detector can no longer leak the text.
-    before, after, echo = screens
-    later = f"{after}\n{secret}" if echo else after
-    r = idle_rig(tmp_path_factory.mktemp("audit"), before, later)
-    result = send_prompt(r.writer, PromptAsk(S1, secret))
-    if not (isinstance(result, PromptSent) and result.verified):
-        # A placeholder session id is mostly zeros, which a generated secret can spell.
-        assert secret not in _log_text(r).replace(S1, "")
-
-
-def _kept(r: Rig) -> list[object]:
-    return [rec.get("payload") for rec in r.audit_records if rec.get("payload") is not None]
-
-
-_PINENTRY = (
-    "\u250c\u2500\u2500 pinentry \u2500\u2500\u2510\n"
-    "\u2502 Please enter the passphrase to unlock the key \u2502\n"
-    "\u2502 Passphrase: ________ \u2502\n"
-    "\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2518"
-)
-
-
-@pytest.mark.parametrize(
-    ("before", "after", "secret"),
-    [
-        pytest.param(
-            "[sudo] password for owner:",
-            "[sudo] password for owner:\nSorry, try again.\n[sudo] password for owner:",
-            "password1!",
-            id="sudo-retry",
-        ),
-        pytest.param(
-            "owner@host's password:",
-            "owner@host's password:\nPermission denied, please try again.\nowner@host's password:",
-            "owner@ho-secret",
-            id="ssh-retry",
-        ),
-        pytest.param(
-            "Enter PIN:", "Enter PIN:\nbuilt 2026-10-21 in 2026 ms", "2026", id="short-pin"
-        ),
-        pytest.param(
-            SETTLED, echoed("\u276f hunter2- was here"), "hunter2-REALSECRET", id="prefix"
-        ),
-        pytest.param(
-            _PINENTRY,
-            "$ echo s3cret-passphrase-xyz\ns3cret-passphrase-xyz\nowner@host:~$",
-            "s3cret-passphrase-xyz",
-            id="pinentry-return",
-        ),
-    ],
-)
-def test_text_that_did_not_show_whole_and_new_is_never_kept(
-    tmp_path: Path, before: str, after: str, secret: str
-) -> None:
-    r = idle_rig(tmp_path, before, after)
-    _ = send_prompt(r.writer, PromptAsk(S1, secret))
-    assert _kept(r) == []
-    # A short secret can match a timestamp, so only a long one is sought in the raw file.
-    assert len(secret) < 8 or secret not in _log_text(r)
-
-
-def _flat(text: str) -> str:
-    return "".join(text.split())
-
-
-def _reprompt(asks: str, tail: str) -> tuple[str, str, str]:
-    # The secret shares the prompt's first eight characters, which the re-prompt draws again.
-    return asks, f"{asks}\nSorry, try again.\n{asks}", _flat(asks)[:8] + tail
-
-
-def _short(pin: str) -> tuple[str, str, str]:
-    return "Enter PIN:", f"Enter PIN:\nbuilt {pin} files in {pin} ms", pin
-
-
-def _prefix(head: str, tail: str) -> tuple[str, str, str]:
-    return "Password:", f"Password:\n{head} shown alone", head + tail
-
-
-_ASKS = st.sampled_from(["[sudo] password for owner:", "owner@host's password:", "Enter PIN:"])
-_LEAKY = st.one_of(
-    st.builds(_reprompt, _ASKS, _SECRET),
-    st.builds(_short, st.from_regex(r"[0-9A-Za-z]{1,7}", fullmatch=True)),
-    st.builds(_prefix, st.from_regex(r"[A-Za-z0-9]{8}", fullmatch=True), _SECRET),
-)
-
-
-@settings(
-    max_examples=80, deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture]
-)
-@given(case=_LEAKY)
-def test_no_audit_file_keeps_text_that_did_not_show_whole_and_new(
-    tmp_path_factory: pytest.TempPathFactory, case: tuple[str, str, str]
-) -> None:
-    before, after, secret = case
-    needle = _flat(secret)
-    assume(len(needle) < 8 or _flat(after).count(needle) <= _flat(before).count(needle))
-    r = idle_rig(tmp_path_factory.mktemp("audit"), before, after)
-    _ = send_prompt(r.writer, PromptAsk(S1, secret))
-    assert _kept(r) == []
 
 
 def test_a_prompt_from_a_second_tab_mid_send_is_refused_not_typed_twice(tmp_path: Path) -> None:

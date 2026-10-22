@@ -303,6 +303,8 @@ def serve(settings: Settings, port: int | None, seams: Seams) -> None:
         port=port or settings.port,
         # An event stream never ends on its own; without this a restart waits on every phone.
         timeout_graceful_shutdown=SHUTDOWN_GRACE,
+        # Each access line would put a file path or a search query in the journal; errors still log.
+        access_log=False,
     )
 
 

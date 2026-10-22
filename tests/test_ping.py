@@ -14,6 +14,7 @@ from herdr_pwa.engine import EngineError, EngineSettings, HerdrClient
 from herdr_pwa.notify_state import InterruptStore
 from herdr_pwa.push import (
     MAX_BODY_CHARS,
+    MAX_TITLE_CHARS,
     DeliveryLog,
     SubscriptionStore,
     load_or_create_vapid_keys,
@@ -116,7 +117,7 @@ def test_a_ping_reaches_every_phone_and_a_tap_opens_the_herd(tmp_path: Path) -> 
     payload = sender.sent[0][1]
     assert payload["event"] == push.EVENT_PING
     assert payload["tag"] == PING_TAG
-    assert (payload["title"], payload["body"]) == ("waves-pi", "waves complete")
+    assert (payload["title"], payload["body"]) == ("Ping from waves-pi", "waves complete")
     # No session, so the service worker opens the dashboard rather than an agent page.
     assert payload["agent"] == ""
     assert payload["quiet"] is False
@@ -137,7 +138,7 @@ def test_the_text_is_stripped_of_escapes_and_links_and_capped_as_agent_text(
     assert body.endswith("…")
     assert "\x1b" not in body
     assert "\u202e" not in body
-    assert payload["title"] == "agent"
+    assert payload["title"] == "Ping from agent"
 
 
 def test_text_that_sanitises_to_nothing_is_a_usage_error_and_nothing_is_recorded(
@@ -161,7 +162,7 @@ def test_one_audit_attempt_and_outcome_record_the_sender_and_what_the_phone_show
     assert attempt["phase"] == audit.ATTEMPT
     assert attempt["endpoint"] == audit.PING
     assert attempt["actor_via"] == "cli"
-    assert attempt["target"] == "waves-pi"
+    assert attempt["target"] == "Ping from waves-pi"
     assert attempt["payload"] == "waves complete"
     assert attempt["payload_chars"] == len("waves complete")
     assert outcome["id"] == attempt["id"]
@@ -307,7 +308,7 @@ def test_the_title_defaults_to_the_calling_panes_agent_name(tmp_path: Path) -> N
     environ = {"HERDR_PANE_ID": PANE, "HERDR_SOCKET_PATH": str(socket)}
     code, _ = _ping(tmp_path, Message("hi"), _Rig(sender=sender, runner=runner, environ=environ))
     assert code == EXIT_SENT
-    assert sender.sent[0][1]["title"] == "waves-pi"
+    assert sender.sent[0][1]["title"] == "Ping from waves-pi"
     # The pane id is an address on the runner that started the pane.
     assert runner.sockets == [socket]
 
@@ -317,7 +318,7 @@ def test_outside_a_pane_the_title_is_the_apps_name(tmp_path: Path) -> None:
     sender = Sender()
     runner = _Runner(agent_frame(name="never-asked"))
     _ = _ping(tmp_path, Message("hi"), _Rig(sender=sender, runner=runner))
-    assert sender.sent[0][1]["title"] == DEFAULT_SENDER
+    assert sender.sent[0][1]["title"] == f"Ping from {DEFAULT_SENDER}"
     assert runner.sockets == []
 
 
@@ -327,7 +328,7 @@ def test_a_silent_runner_leaves_the_apps_name(tmp_path: Path) -> None:
     runner = _Runner(EngineError("no runner"))
     environ = {"HERDR_PANE_ID": PANE}
     _ = _ping(tmp_path, Message("hi"), _Rig(sender=sender, runner=runner, environ=environ))
-    assert sender.sent[0][1]["title"] == DEFAULT_SENDER
+    assert sender.sent[0][1]["title"] == f"Ping from {DEFAULT_SENDER}"
     assert runner.sockets == [tmp_path / "no-runner.sock"]
 
 
@@ -337,8 +338,22 @@ def test_a_pane_id_that_is_not_an_address_leaves_the_apps_name(tmp_path: Path) -
     runner = _Runner(agent_frame(name="never-asked"))
     environ = {"HERDR_PANE_ID": "0b7e4f3a-1c2d-4e5f-8a9b-0c1d2e3f4a5b"}
     _ = _ping(tmp_path, Message("hi"), _Rig(sender=sender, runner=runner, environ=environ))
-    assert sender.sent[0][1]["title"] == DEFAULT_SENDER
+    assert sender.sent[0][1]["title"] == f"Ping from {DEFAULT_SENDER}"
     assert runner.wire.calls == []
+
+
+@pytest.mark.parametrize("title", ["claude needs you", "Ping from x " + "y" * 80, "\x1b[0m"])
+def test_a_title_always_reads_as_a_ping_and_never_as_an_agent_alert(
+    tmp_path: Path, title: str
+) -> None:
+    _ = _paired(tmp_path, ONE)
+    sender = Sender()
+    _ = _ping(tmp_path, Message("hi", title), _Rig(sender=sender))
+    shown = str(sender.sent[0][1]["title"])
+    assert shown.startswith("Ping from ")
+    assert len(shown) <= MAX_TITLE_CHARS
+    assert shown != "Ping from "
+    assert "\x1b" not in shown
 
 
 def test_an_explicit_title_never_asks_the_runner(tmp_path: Path) -> None:

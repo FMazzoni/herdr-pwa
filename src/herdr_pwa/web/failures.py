@@ -31,6 +31,8 @@ log = logging.getLogger(__name__)
 
 # htmx stops an element's polling on 286; the client re-arms it when the page is shown.
 STOP_POLLING: Final = 286
+# Their text names the path asked for, which a journal line must not carry.
+_PATH_ERRORS: Final = (OutsideRootError, NotReadableError)
 
 
 class AgentGoneError(Exception):
@@ -154,7 +156,7 @@ def respond(pages: Pages, request: Request, exc: Exception) -> Response:
     failure = failure_for(exc)
     if failure.status == STOP_POLLING:
         return Response(status_code=STOP_POLLING, headers={"HX-Reswap": "none"})
-    log.warning("%s %s: %s: %s", request.method, request.url.path, type(exc).__name__, exc)
+    _log(request, exc)
     status, detail = _status_and_detail(exc, failure)
     retry = failure.retry and request.method == "GET"
     context = {
@@ -167,6 +169,15 @@ def respond(pages: Pages, request: Request, exc: Exception) -> Response:
     if request.headers.get("HX-Request"):
         return pages.fragment("failure.html", context, status=status)
     return pages.page("failure_page.html", context, status=status)
+
+
+def _log(request: Request, exc: Exception) -> None:
+    # The route's template, not the URL, so no root id or path asked for reaches the journal.
+    route = getattr(request.scope.get("route"), "path", "?")
+    if isinstance(exc, _PATH_ERRORS):
+        log.warning("%s %s: %s", request.method, route, type(exc).__name__)
+        return
+    log.warning("%s %s: %s: %s", request.method, route, type(exc).__name__, exc)
 
 
 def install(app: FastAPI, pages: Pages) -> None:

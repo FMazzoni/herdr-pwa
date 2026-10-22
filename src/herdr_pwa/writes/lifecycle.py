@@ -36,7 +36,6 @@ from herdr_pwa.writes.prompt import (
     LAUNCH_READS,
     Echo,
     PromptSent,
-    keep_if_shown,
     read_back,
     send_opening_prompt,
 )
@@ -363,9 +362,7 @@ def _spawn_prompted(writer: Writer, launch: Launch, prompt: str) -> _Launched | 
             entry.outcome(failed_result(exc))
             return Refused(refusal_for(exc), "created", detail=str(exc))
         echo = Echo(pane, prompt)
-        after = read_back(writer.client, echo, writer.pacing, reads=LAUNCH_READS)
-        keep_if_shown(entry, echo, after)
-        shown = after is not None
+        shown = read_back(writer.client, echo, writer.pacing, reads=LAUNCH_READS) is not None
         outcome, evidence = (
             (Outcome.CONFIRMED, Evidence.ECHO) if shown else (Outcome.ACCEPTED, Evidence.ARGV)
         )

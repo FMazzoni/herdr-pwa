@@ -46,6 +46,8 @@ from herdr_pwa.web.seams import Seams
 # Its own tag: a herd alert or its retraction never replaces a ping, and a newer ping does.
 PING_TAG: Final = "ping"
 DEFAULT_SENDER: Final = "herdr-pwa"
+# Every ping says it is one, so a --title can never pose as an agent's alert on the lock screen.
+PING_TITLE: Final = "Ping from {}"
 # The pane a harness runs in, and the runner it belongs to, as herdr sets them in its env.
 PANE_ENV: Final = "HERDR_PANE_ID"
 SOCKET_ENV: Final = "HERDR_SOCKET_PATH"
@@ -200,7 +202,8 @@ def _check_rate(seams: Seams, state_dir: Path) -> None:
 
 
 def _payload(body: str, sender: str, *, quiet: bool, now: WallTime) -> dict[str, object]:
-    title = sanitise(sender, limit=MAX_TITLE_CHARS) or DEFAULT_SENDER
+    name = sanitise(sender, limit=MAX_TITLE_CHARS - len(PING_TITLE.format(""))) or DEFAULT_SENDER
+    title = PING_TITLE.format(name)
     notice = Notice(EVENT_PING, title=title, body=body, tag=PING_TAG, quiet=quiet)
     return build_payload(notice, now=now)
 

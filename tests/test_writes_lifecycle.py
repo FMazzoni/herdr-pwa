@@ -592,7 +592,6 @@ def test_opencode_takes_its_first_prompt_on_the_command_line(tmp_path: Path) -> 
     assert prompt_attempt.get("payload") is None
     outcomes = [rec for rec in r.audit_records if rec["phase"] == "outcome"]
     assert [rec.get("result") for rec in outcomes] == ["confirmed:echo", f"started:{NEW_PANE}"]
-    # Echoed, but under eight characters once spaces go, so only its length is kept.
     assert outcomes[0].get("payload") is None
 
 
