@@ -5,6 +5,7 @@ from collections import Counter
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
+from pathlib import PurePosixPath
 from string import hexdigits
 from types import MappingProxyType
 from typing import Final, Self, cast
@@ -85,6 +86,15 @@ def as_session_id(value: object) -> SessionId:
             "pane ids are recycled and must never be used to identify an agent"
         )
     return SessionId(text)
+
+
+def session_identity(value: object, kind: object = "") -> str:
+    """The identity a reported session's value stands for: a path's file name without its suffix."""
+    text = str(value or "").strip()
+    if not text or str(kind or "").strip().lower() != "path":
+        return text
+    # herdr reports omp's session as a file path; only the name fits a URL and a store lookup.
+    return PurePosixPath(text.replace("\\", "/")).stem
 
 
 def as_pane_id(value: object) -> PaneId:
@@ -202,7 +212,10 @@ def _coerce_session(raw: object) -> tuple[str, str]:
     if isinstance(raw, dict):
         # A JSON object, so its keys are strings.
         session = cast("_Raw", raw)
-        return str(session.get("value") or "").strip(), str(session.get("agent") or "")
+        return (
+            session_identity(session.get("value"), session.get("kind")),
+            str(session.get("agent") or ""),
+        )
     return "", ""
 
 

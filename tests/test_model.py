@@ -683,6 +683,27 @@ def test_a_flattened_agent_session_degrades_instead_of_exploding() -> None:
     assert a.agent == "claude"
 
 
+def test_a_path_session_is_named_by_its_file() -> None:
+    """herdr's ``path`` kind means the value is a file, whose name is what a URL can hold."""
+    value = (
+        "/home/user/.omp/agent/sessions/-home-user-project/2026-10-23T16-57-28-313Z_0000000a.jsonl"
+    )
+    a = Agent.from_raw(
+        {
+            "pane_id": "w9:p1",
+            "agent": "omp",
+            "agent_session": {
+                "agent": "omp",
+                "kind": "path",
+                "source": "herdr:omp",
+                "value": value,
+            },
+        }
+    )
+    assert a.session == "2026-10-23T16-57-28-313Z_0000000a"
+    assert a.agent == "omp"
+
+
 def test_a_nonsense_agent_session_leaves_the_agent_sessionless() -> None:
     for junk in (12345, ["a"], True, None):
         a = Agent.from_raw({"pane_id": "w9:p1", "agent_session": junk})

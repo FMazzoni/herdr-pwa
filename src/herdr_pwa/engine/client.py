@@ -24,6 +24,7 @@ from herdr_pwa.engine.model import (
     Workspace,
     WorkspaceId,
     as_pane_id,
+    session_identity,
 )
 from herdr_pwa.engine.transport import (
     EngineError,
@@ -539,8 +540,9 @@ class HerdrClient:
         target, session = seat.target, seat.session
         if session is None:
             return
-        holder = info.agent_session.value if info.agent_session else ""
-        if holder.strip() != str(session).strip():
+        reported = info.agent_session
+        holder = session_identity(reported.value, reported.kind) if reported else ""
+        if holder != str(session).strip():
             raise TargetNotFoundError(
                 f"pane {target} is held by session {holder or '(none)'}, not "
                 f"{session}; pane ids are recycled, so this keystroke would go "
@@ -664,10 +666,11 @@ class HerdrClient:
     @staticmethod
     def _started(info: "wire.AgentInfo") -> StartedAgent:
         """One ``AgentInfo`` as the three facts the create flow acts on."""
-        holder = info.agent_session.value if info.agent_session else ""
+        reported = info.agent_session
+        holder = session_identity(reported.value, reported.kind) if reported else ""
         return StartedAgent(
             pane=PaneId(info.pane_id),
-            session=SessionId(str(holder or "").strip()),
+            session=SessionId(holder),
             status=str(info.agent_status),
             ready=not info.launch_pending and info.interactive_ready is not False,
         )
