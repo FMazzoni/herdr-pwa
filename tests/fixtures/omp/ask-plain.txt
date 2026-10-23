@@ -1,0 +1,40 @@
+ object requires id, question, options, header, multi, recommended. Hmm, "required" includes all: ["id", "question",
+ "options", "header", "multi", "recommended"]. So I need to provide recommended. I can provide recommended: null? The
+ type is number or null. To avoid adding "(Recommended)" to a label, I could set recommended to null or omit...
+ required says must include. I'll include recommended: null? But then maybe it errors. Let me just set recommended to
+ null. Alternatively pick 0 with Apple recommended — but that adds "(Recommended)" text which changes the label. The
+ user said exactly three options: Apple, Banana, Cherry. Adding "(Recommended)" would alter the label. Best:
+ recommended: null.
+
+ multi: false. header: something like "Fruit". i: "Asking which fruit to pick".
+
+ Descriptions one line each. Preview is required in options items? "required": ["label", "description", "preview"].
+ Preview type string or null. I can pass null.
+
+ So call ask once, nothing else.
+
+╭─── Ask 1 questions ─────────────────────────────────────────────────────────────────────────────────────────────────╮
+├─── [fruit] · options:3 ─────────────────────────────────────────────────────────────────────────────────────────────┤
+│  Which fruit should I pick?                                                                                         │
+│  ○ Apple                                                                                                            │
+│    ↳ Crisp, sweet-tart everyday classic.                                                                            │
+│  ○ Banana                                                                                                           │
+│    ↳ Soft, sweet, potassium-rich and portable.                                                                      │
+│  ○ Cherry                                                                                                           │
+│    ↳ Small, juicy stone fruit with a pit.                                                                           │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+  ⎋ Asking which fruit to pick                                                         🍒 PICK: Ask which fruit to pick
+╭─ Ask ───────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Which fruit should I pick?                                                                                          │
+├─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ ❯ ○ Apple                                                                                                           │
+│       Crisp, sweet-tart everyday classic.                                                                           │
+│   ○ Banana                                                                                                          │
+│       Soft, sweet, potassium-rich and portable.                                                                     │
+│   ○ Cherry                                                                                                          │
+│       Small, juicy stone fruit with a pit.                                                                          │
+│   ○ Other (type your own)                                                                                           │
+├─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ ⏎ select · n note · ↑/↓ move · ⎋ cancel · Alt+H hide                                                                │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯

@@ -1,0 +1,40 @@
+
+
+ Now use your ask tool again: ask which deploy plan to use, with three options (Canary, Blue-green, Big bang). Give
+ each option a one-line description AND a multi-line preview of 3 lines showing its steps. Do nothing else.
+
+
+╭─── Ask 1 questions ─────────────────────────────────────────────────────────────────────────────────────────────────╮
+├─── [deploy_plan] · options:3 ───────────────────────────────────────────────────────────────────────────────────────┤
+│  Which deploy plan should I use?                                                                                    │
+│  ○ Canary                                                                                                           │
+│    ↳ Gradual rollout to a small traffic slice before full cutover.                                                  │
+│  ○ Blue-green                                                                                                       │
+│    ↳ Two parallel environments with instant traffic switch and fast rollback.                                       │
+│  ○ Big bang                                                                                                         │
+│    ↳ Replace the entire deployment in one pass; simplest, highest risk.                                             │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+  ⎋ Asking which deploy plan to use                                                    🍒 PICK: Ask which fruit to pick
+╭─ Ask ───────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Which deploy plan should I use?                                                                                     │
+├─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ ❯ ○ Canary                                                                                                          │
+│       Gradual rollout to a small traffic slice before full cutover.                                                 │
+│       │ 1. Deploy new version to one small instance                                                                 │
+│       │ 2. Route a low percentage of traffic to it                                                                  │
+│       │ 3. Watch metrics, then ramp to 100%                                                                         │
+│   ○ Blue-green                                                                                                      │
+│       Two parallel environments with instant traffic switch and fast rollback.                                      │
+│       │ 1. Stand up full green environment alongside blue                                                           │
+│       │ 2. Verify green with health checks                                                                          │
+│       │ 3. Switch traffic from blue to green at once                                                                │
+│   ○ Big bang                                                                                                        │
+│       Replace the entire deployment in one pass; simplest, highest risk.                                            │
+│       │ 1. Take a maintenance window                                                                                │
+│       │ 2. Deploy the new version everywhere                                                                        │
+│       │ 3. Verify and roll back if broken                                                                           │
+│   ○ Other (type your own)                                                                                           │
+├─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ ⏎ select · n note · ↑/↓ move · ⎋ cancel · Alt+H hide                                                                │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯

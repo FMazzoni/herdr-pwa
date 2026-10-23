@@ -33,6 +33,7 @@ from herdr_pwa.engine import (
     Launch,
     NewTab,
     PaneId,
+    PromptSource,
     ProtocolMismatchError,
     ReadOptions,
     Seat,
@@ -319,7 +320,7 @@ def test_blocked_prompt_reads_the_detection_source() -> None:
     # The footer and the cursor are input on purpose: without both the run is not believed a menu.
     menu = "Run the tests?\n\u276f 1. Yes\n  2. No\n\nEnter to select · Esc to cancel\n"
     eng, wire = build({READ: read_frame(menu)})
-    p = eng.blocked_prompt(P5, session=SESS)
+    p = eng.blocked_prompt(PromptSource(P5, SESS))
     assert wire.last.params["source"] == "detection"
     assert p.target == "w1:p5"
     assert p.session == SESS
@@ -337,7 +338,7 @@ def test_a_colour_read_is_parsed_whole_never_beside_an_older_text_read() -> None
         return read_frame(ansi if params["format"] == "ansi" else older)
 
     eng, wire = build({READ: answer})
-    p = eng.blocked_prompt(P5, session=SESS)
+    p = eng.blocked_prompt(PromptSource(P5, SESS))
     assert [c.params["format"] for c in wire.calls if c.method == READ] == ["text", "ansi"]
     assert "Working." not in p.raw
     assert p.focus == 0
@@ -873,7 +874,7 @@ def test_a_session_id_handed_to_a_write_verb_raises_at_runtime() -> None:
         lambda: eng.focus(uuid),
         lambda: eng.agent(uuid),
         lambda: eng.read(uuid),
-        lambda: eng.blocked_prompt(uuid),
+        lambda: eng.blocked_prompt(PromptSource(uuid)),
     )
     for call in calls:
         with pytest.raises(ValueError, match="session id"):
@@ -884,10 +885,12 @@ def test_a_session_id_handed_to_a_write_verb_raises_at_runtime() -> None:
 def test_a_pane_id_cannot_be_smuggled_into_a_blocked_prompt() -> None:
     """``BlockedPrompt`` is what a tap-to-answer UI builds its keystroke from."""
     with pytest.raises(ValueError, match="session id"):
-        BlockedPrompt.parse("q", target=PaneId("5e55001c-0000-0000-0000-000000000000"))
+        BlockedPrompt.parse(
+            "q", source=PromptSource(target=PaneId("5e55001c-0000-0000-0000-000000000000"))
+        )
     with pytest.raises(ValueError, match="pane id"):
-        BlockedPrompt.parse("q", session=SessionId("w1:p3"))
-    p = BlockedPrompt.parse("q", target=as_pane_id("  w1:p3 "), session=SESS)
+        BlockedPrompt.parse("q", source=PromptSource(session=SessionId("w1:p3")))
+    p = BlockedPrompt.parse("q", source=PromptSource(as_pane_id("  w1:p3 "), SESS))
     assert (p.target, p.session) == ("w1:p3", SESS)
 
 

@@ -11,7 +11,23 @@ from typing import Final, Self
 from pydantic import BaseModel, ConfigDict, field_validator
 
 from herdr_pwa import facts, glyphs
-from herdr_pwa.engine.model import PaneId, SessionId, as_pane_id, as_session_id, screen_digest
+from herdr_pwa.engine.model import (
+    Agent,
+    PaneId,
+    SessionId,
+    as_pane_id,
+    as_session_id,
+    screen_digest,
+)
+from herdr_pwa.engine.question import QuestionMatch, RecordedQuestion
+from herdr_pwa.engine.transcript import (
+    Source,
+    TranscriptRoots,
+    confirm_question,
+    numbers_menus,
+    pending_question,
+    question_stamp,
+)
 from herdr_pwa.panetext import as_text_read, composer_top, escape_at, plain
 from herdr_pwa.patterns import Rx, alternatives
 
@@ -283,6 +299,32 @@ class KeyHint(BaseModel):
     def hands_off(self) -> bool:
         """True when the key gives the terminal to another program: see ``facts.HANDOFF_VERBS``."""
         return _HANDOFF_RE.search(self.verb) is not None
+
+
+@dataclass(frozen=True, slots=True)
+class PromptSource:
+    """The pane a screen belongs to: its address, the session it must hold, and its harness."""
+
+    target: PaneId = _NO_PANE
+    session: SessionId = _NO_SESSION
+    agent_kind: str = ""
+    question: RecordedQuestion | None = None
+    """The question the harness's own record still waits on; only a harness that keeps one sets it."""
+
+
+_NO_SOURCE: Final = PromptSource()
+"""The default read: no particular pane, and no recorded question."""
+
+
+def prompt_source(agent: Agent, roots: TranscriptRoots = None) -> PromptSource:
+    """The agent's pane source, carrying the question its harness's record still waits on."""
+    source = Source.of(agent.session, agent_kind=agent.agent, root=roots)
+    return PromptSource(agent.target, agent.session, agent.agent, pending_question(source))
+
+
+def prompt_stamp(agent: Agent, roots: TranscriptRoots = None) -> str:
+    """What moves when the agent's record poses or answers a question, else ``""``."""
+    return question_stamp(Source.of(agent.session, agent_kind=agent.agent, root=roots))
 
 
 def _ctrl_letter(key: str) -> str | None:
@@ -607,6 +649,8 @@ class BlockedPrompt(BaseModel):
     """True when the rows sit beside a preview, where a digit moves the cursor and answers nothing."""
     drawn_labels: tuple[str, ...] = ()
     """The labels of the trailing row run, named as options or not, with their digits masked."""
+    question_id: str = ""
+    """The record's call that posed this question; empty unless a harness's record supplied it."""
 
     @property
     def drew_rows(self) -> bool:
@@ -674,6 +718,7 @@ class BlockedPrompt(BaseModel):
                     # Without the body every claude permission prompt is one question.
                     self.body,
                     self.question,
+                    *self._record_identity,
                     "" if step is None else f"{step.answered}/{'\x1d'.join(step.steps)}",
                     *rows,
                     *unnamed,
@@ -681,24 +726,26 @@ class BlockedPrompt(BaseModel):
             )
         )
 
+    @property
+    def _record_identity(self) -> tuple[str, ...]:
+        """The record's call and cursor row, or ``()`` when no record posed the question."""
+        if not self.question_id:
+            return ()
+        return (self.question_id, "" if self.focus is None else str(self.focus))
+
     @classmethod
-    def parse(
-        cls,
-        text: str,
-        *,
-        target: PaneId = _NO_PANE,
-        session: SessionId = _NO_SESSION,
-        ansi: str = "",
-    ) -> Self:
-        """Split detection output into a question and any numbered options.
+    def parse(cls, text: str, *, source: PromptSource = _NO_SOURCE, ansi: str = "") -> Self:
+        """Split detection output into a question and its options; *source* may hold a record's.
 
         Args:
             ansi: The read *text* was stripped from, if any; its colour on the dialog's own
                 lines may stand in for a cursor glyph. Colour from any other read is ignored.
         """
+        if (recorded := cls._from_record(source, text)) is not None:
+            return recorded
         screen = _prepared(text, ansi)
         lines, barred = screen.lines, screen.barred
-        found = _trailing_menu(lines)
+        found = _trailing_menu(lines) if numbers_menus(source.agent_kind) else None
         hints = _hints(_footer_lines(lines))
         buttons, buttons_at = _buttons(lines, barred, hints)
         run = _trusted(found, screen)
@@ -707,8 +754,8 @@ class BlockedPrompt(BaseModel):
         stop = run[0][0] if run is not None else (buttons_at if buttons else len(lines))
         box = range(_box_start(lines, stop, barred), stop)
         parsed = cls(
-            target=target,
-            session=session,
+            target=source.target,
+            session=source.session,
             question=_heading(lines, box) if shape is MenuShape.BUTTONS else _question(lines, stop),
             options=_choices(buttons) if shape is MenuShape.BUTTONS else _options(run, shape),
             stepper=_stepper(lines, stop) or _tabs_strip(lines, stop, hints),
@@ -724,24 +771,55 @@ class BlockedPrompt(BaseModel):
         return _located(parsed, screen, _option_lines(parsed, run, buttons_at))
 
     @classmethod
+    def _from_record(cls, source: PromptSource, text: str) -> Self | None:
+        """The prompt the record confirms, or ``None`` when none waits or the screen differs."""
+        if source.question is None:
+            return None
+        matched = confirm_question(source.agent_kind, text, source.question)
+        return None if matched is None else cls._from_match(source, matched, text)
+
+    @classmethod
+    def _from_match(cls, source: PromptSource, found: QuestionMatch, raw: str) -> Self:
+        """The prompt the record supplies, once the screen has confirmed every line of it."""
+        hints = tuple(hint for hint in _hints(list(found.footer)) if hint.key in found.keys)
+        return cls(
+            target=source.target,
+            session=source.session,
+            focus=found.cursor,
+            question=found.question.question,
+            options=tuple(
+                PromptOption(number=number, label=option.label.strip())
+                for number, option in enumerate(found.question.options, start=1)
+            ),
+            raw=raw,
+            shape=MenuShape.SINGLE_CHOICE,
+            corroborated=True,
+            hints=tuple(hint for hint in hints if not hint.hands_off),
+            handoffs=tuple(hint for hint in hints if hint.hands_off),
+            asked=True,
+            digits_move=found.digits_move,
+            question_id=found.question.id,
+        )
+
+    @classmethod
     def from_reads(
         cls,
         text: str,
         colour: Callable[[], str | None],
         *,
-        target: PaneId = _NO_PANE,
-        session: SessionId = _NO_SESSION,
+        source: PromptSource = _NO_SOURCE,
     ) -> Self:
         """Parse a text read, and a colour read of the same screen only when colour could change it.
 
         Args:
             colour: Takes that screen's colour read, or answers ``None`` when there is none.
+            source: The pane it belongs to, and the question its record holds, if any.
         """
-        prompt = cls.parse(text, target=target, session=session)
+        prompt = cls.parse(text, source=source)
         if not prompt.wants_colour or (ansi := colour()) is None:
             return prompt
         # Text and colour from this one read: beside an older text read, a cursor may sit on a moved row.
-        return cls.parse(as_text_read(ansi), target=target, session=session, ansi=ansi)
+        return cls.parse(as_text_read(ansi), source=source, ansi=ansi)
 
 
 def _option_lines(
@@ -1188,7 +1266,7 @@ def _closing_box(lines: list[str]) -> range | None:
 
 
 def _reframed(lines: list[str]) -> list[str]:
-    """*lines*, with omp's closing Ask box redrawn as the rule and gaps the grammar reads."""
+    """*lines*, with a closing box parted by inner rules redrawn as the rule and gaps it reads."""
     if (box := _closing_box(lines)) is None:
         return lines
     inside = [

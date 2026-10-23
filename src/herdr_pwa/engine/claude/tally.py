@@ -8,7 +8,7 @@ from typing import Final
 
 from pydantic import BaseModel, Field
 
-from herdr_pwa.engine.claude.lineage import MAX_HOPS, contained, copied_from
+from herdr_pwa.engine.claude.lineage import MAX_HOPS, copied_from
 from herdr_pwa.engine.claude.records import (
     Block,
     ClaudeRecord,
@@ -19,6 +19,7 @@ from herdr_pwa.engine.claude.records import (
 )
 from herdr_pwa.engine.claude.turns import delivered
 from herdr_pwa.engine.notices import Injected, PeerMessage, TaskNotice, injected
+from herdr_pwa.engine.pages import contained
 from herdr_pwa.engine.transcript import (
     ENQUEUE,
     MAX_USAGE_BYTES,

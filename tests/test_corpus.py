@@ -11,6 +11,7 @@ from herdr_pwa.engine import (
     AgentStatus,
     BlockedPrompt,
     MenuShape,
+    PromptSource,
     as_pane_id,
     as_session_id,
 )
@@ -210,7 +211,8 @@ def test_menu_captures_parse_to_options(name: str, source: str) -> None:
     """A real live menu yields ``is_choice`` and the right options, from any source."""
     question, options = MENUS[name]
     prompt = BlockedPrompt.parse(
-        read(name, source), target=as_pane_id("w1:pX"), session=as_session_id("s")
+        read(name, source),
+        source=PromptSource(as_pane_id("w1:pX"), as_session_id("s")),
     )
     assert prompt.is_choice is True
     assert prompt.shape is MenuShape.SINGLE_CHOICE

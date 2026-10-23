@@ -1,0 +1,12 @@
+{
+  "name": "omp-ask",
+  "captured_at": "2026-10-23T13:11:06-04:00",
+  "captured_by": "an agent, in a pane it created for the purpose",
+  "harness": "omp",
+  "harness_version": "18.12.2",
+  "herdr_version": "0.9.5",
+  "protocol": 22,
+  "agent_status": "blocked",
+  "note": "omp's rich Ask dialog, plain and with previews, as the pane drew it; the call card above each dialog is left in on purpose.",
+  "scrubbed": "Paths and ids were replaced; the screen text is otherwise as drawn."
+}

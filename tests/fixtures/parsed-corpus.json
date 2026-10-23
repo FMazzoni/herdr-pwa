@@ -2812,6 +2812,32 @@
     "identity": "49de74a6916881b0",
     "token": "49de74a6916881b0"
   },
+  "tests/fixtures/omp/ask-plain.txt": {
+    "shape": "none",
+    "question": "Which fruit should I pick?",
+    "body": "Which fruit should I pick?\n❯ ○ Apple\nCrisp, sweet-tart everyday classic.\nBanana\nSoft, sweet, potassium-rich and portable.\nCherry\nSmall, juicy stone fruit with a pit.\nOther (type your own)\n⏎ select · n note · ↑/↓ move · ⎋ cancel · Alt+H hide\n╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯",
+    "options": [],
+    "hints": [],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "0d26bd1d2cf4f55d",
+    "token": "0d26bd1d2cf4f55d"
+  },
+  "tests/fixtures/omp/ask-preview.txt": {
+    "shape": "none",
+    "question": "Which deploy plan should I use?",
+    "body": "Which deploy plan should I use?\n❯ ○ Canary\nGradual rollout to a small traffic slice before full cutover.\n│ 1. Deploy new version to one small instance\n│ 2. Route a low percentage of traffic to it\n│ 3. Watch metrics, then ramp to 100%\nBlue-green\nTwo parallel environments with instant traffic switch and fast rollback.\n│ 1. Stand up full green environment alongside blue\n│ 2. Verify green with health checks\n│ 3. Switch traffic from blue to green at once\nBig bang\nReplace the entire deployment in one pass; simplest, highest risk.\n│ 1. Take a maintenance window\n│ 2. Deploy the new version everywhere\n│ 3. Verify and roll back if broken\nOther (type your own)\n⏎ select · n note · ↑/↓ move · ⎋ cancel · Alt+H hide\n╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯",
+    "options": [],
+    "hints": [],
+    "handoffs": [],
+    "focus": null,
+    "stepper": null,
+    "corroborated": false,
+    "identity": "d38edb169b382832",
+    "token": "d38edb169b382832"
+  },
   "tests/fixtures/capture-blocked-mcp-elicitation-accept/visible.ansi#ansi": {
     "shape": "unknown",
     "question": "Deploy the staging build now?",

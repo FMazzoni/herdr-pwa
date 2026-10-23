@@ -28,8 +28,11 @@ from herdr_pwa.engine.dialog import (
     BlockedPrompt,
     KeyHint,
     MenuShape,
+    PromptSource,
     digits_masked,
     ends_a_question,
+    prompt_source,
+    prompt_stamp,
 )
 from herdr_pwa.engine.hermes import HermesAdapter
 from herdr_pwa.engine.holder import holds_session
@@ -49,6 +52,7 @@ from herdr_pwa.engine.model import (
     screen_digest,
 )
 from herdr_pwa.engine.notices import CONTEXT, CONTEXT_FULL
+from herdr_pwa.engine.omp import OmpAdapter
 from herdr_pwa.engine.opencode import OpencodeAdapter
 from herdr_pwa.engine.tail import (
     MAX_TAIL_FILES,
@@ -108,9 +112,9 @@ from herdr_pwa.engine.transport import (
 from herdr_pwa.engine.usage import UsageCache
 
 # The adapters build on transcript.py, so it cannot import them: the facade hands them over.
-register(ClaudeAdapter(), OpencodeAdapter(), HermesAdapter())
+register(ClaudeAdapter(), OpencodeAdapter(), HermesAdapter(), OmpAdapter())
 # Registered, they leave the namespace, so the facade is no wider than __all__.
-del ClaudeAdapter, OpencodeAdapter, HermesAdapter, register
+del ClaudeAdapter, OmpAdapter, OpencodeAdapter, HermesAdapter, register
 
 __all__ = [
     "CONTEXT",
@@ -154,6 +158,7 @@ __all__ = [
     "NewTab",
     "PaneId",
     "Presence",
+    "PromptSource",
     "ProtocolMismatchError",
     "ReadAbandonedError",
     "ReadOptions",
@@ -199,6 +204,8 @@ __all__ = [
     "is_slash_command",
     "locate",
     "locate_log",
+    "prompt_source",
+    "prompt_stamp",
     "rank",
     "screen_digest",
     "session_origin",

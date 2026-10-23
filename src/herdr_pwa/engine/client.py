@@ -12,7 +12,7 @@ from pydantic import BaseModel, ValidationError
 from herdr_pwa import panetext
 from herdr_pwa.clock import MonoClock, Sleep, mono_now
 from herdr_pwa.engine.config import EngineSettings
-from herdr_pwa.engine.dialog import BlockedPrompt
+from herdr_pwa.engine.dialog import BlockedPrompt, PromptSource
 from herdr_pwa.engine.generated import request as wire_request
 from herdr_pwa.engine.generated import success_response as wire
 from herdr_pwa.engine.model import (
@@ -467,25 +467,21 @@ class HerdrClient:
         return detected if panetext.is_clean_prose(detected) else None
 
     def blocked_prompt(
-        self,
-        target: PaneId,
-        *,
-        session: SessionId = NO_SESSION,
-        options: ReadOptions = PLAIN_READ,
+        self, source: PromptSource, *, options: ReadOptions = PLAIN_READ
     ) -> BlockedPrompt:
         """Read what a blocked agent is waiting on, parsed into question + options.
 
         Args:
-            target: The pane to read.
-            session: The session the parsed prompt names as its holder.
+            source: The pane to read, the session it must hold, and its harness.
             options: The lines and the timeout; the parse chooses the buffers.
         """
-        target = as_pane_id(target)
+        target = as_pane_id(source.target)
+        source = replace(source, target=target)
         text = self.read(
             target, replace(options, source=wire_request.ReadSource.detection, colour=False)
         )
         return BlockedPrompt.from_reads(
-            text, lambda: self._colour_read(target, options), target=target, session=session
+            text, lambda: self._colour_read(target, options), source=source
         )
 
     def _colour_read(self, target: PaneId, options: ReadOptions) -> str | None:

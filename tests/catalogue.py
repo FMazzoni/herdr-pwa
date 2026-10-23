@@ -46,6 +46,9 @@ type Prime = Callable[[Rig], None]
 QUIET_WORKSPACE: Final = "w2"
 LONELY_WORKSPACE: Final = "w4"
 
+# The cut omp session whose Ask is still waiting, for the answer-menu screen.
+OMP_PENDING: Final = "2026-10-23T17-10-53-588Z_5e550031-0000-4000-8000-000000000000"
+
 LONG_TITLE: Final = (
     "Reconcile the quarterly infrastructure migration plan across every regional cluster "
     "and write the rollback runbook before the freeze"
@@ -809,6 +812,15 @@ def _usage_transcript(rig: Rig) -> None:
     write_transcript(rig.settings.state_dir.parent / "transcripts", WORKING_SESSION, usage_chat())
 
 
+def _omp_pending(rig: Rig) -> None:
+    """Lay the cut omp session under the app's root, so it reads the ask its screen answers."""
+    roots = rig.settings.state_dir.parent / "transcripts"
+    project = roots / "-home-user-scratch-omp-ask"
+    project.mkdir(parents=True, exist_ok=True)
+    source = FIXTURES / "transcript" / "omp" / f"{OMP_PENDING}.jsonl"
+    (project / f"{WORKING_SESSION}.jsonl").write_bytes(source.read_bytes())
+
+
 def _long_turn_transcript(rig: Rig) -> None:
     """The usage chat with its turn running for days, as an orchestrating session's does."""
     write_transcript(
@@ -979,6 +991,28 @@ def _opencode_blocked_on(name: str) -> Replies:
     """The working pane as an opencode agent stopped on one of its captured dialogs."""
     frame = lambda: _set(herd(**BLOCKED), WORKING_PANE, agent="opencode")  # noqa: E731 - a named lambda keeps the reply builders one line each
     return lambda: {SNAPSHOT: frame(), READ: _drawn_in_colour(name)}
+
+
+def _omp_screen(name: str) -> str:
+    """One of omp's Ask dialogs, captured with the call card it draws above itself."""
+    return (FIXTURES / "omp" / f"{name}.txt").read_text()
+
+
+def _omp_blocked_on(name: str) -> Replies:
+    """The working pane as omp, stopped on its captured Ask dialog; the session is a path."""
+
+    def frame() -> dict[str, JsonValue]:
+        found = _set(herd(**BLOCKED), WORKING_PANE, agent="omp")
+        agent = next(a for a in agents_of(found) if a.get("pane_id") == WORKING_PANE)
+        agent["agent_session"] = {
+            "agent": "omp",
+            "kind": "path",
+            "source": "herdr:omp",
+            "value": (f"/home/user/.omp/agent/sessions/-home-user-project/{WORKING_SESSION}.jsonl"),
+        }
+        return found
+
+    return lambda: {SNAPSHOT: frame(), READ: read_frame(_omp_screen(name))}
 
 
 def _opencode_listing() -> Replies:
@@ -1587,6 +1621,14 @@ AGENT_PAGE: Final = (
         "#answer .answer__question",
         _opencode_blocked_on(OC_PERMISSION),
         title="Agent page: opencode's permission dialog, its buttons and the one in focus",
+    ),
+    State(
+        "agent-answer-omp-ask",
+        f"{AGENT}?tab=pane",
+        "#answer .answer__keys",
+        _omp_blocked_on("ask-plain"),
+        title="Agent page: omp's Ask dialog, radio rows and the keys that walk them",
+        prime=_omp_pending,
     ),
     State(
         "agent-answer-opencode-question",

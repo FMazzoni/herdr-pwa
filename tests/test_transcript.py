@@ -26,10 +26,13 @@ from tests.engine_seam import (
     MAX_PROSE_CHARS,
     MAX_RESULT_CHARS,
     ClaudeRecord,
+    QuestionOption,
+    RecordedQuestion,
     Window,
     adapter_for,
     claude_record,
     history,
+    pending_question,
     read_page,
 )
 
@@ -204,6 +207,25 @@ def test_a_page_never_reads_more_than_its_byte_budget(tmp_path: Path) -> None:
     page = read_page(fat, Window(limit=40, max_bytes=200_000))
     assert page.turns == []
     assert page.has_more  # stopped early rather than reading the file
+
+
+def test_one_line_over_the_budget_still_recovers_what_precedes_it(tmp_path: Path) -> None:
+    """A record past the page budget widens the read, so the turn before it is not lost."""
+    log = tmp_path / "wide.jsonl"
+    said = [
+        {
+            "type": "assistant",
+            "uuid": uuid,
+            "timestamp": "2026-08-19T00:00:00Z",
+            "message": {"role": "assistant", "content": [{"type": "text", "text": uuid}]},
+        }
+        for uuid in ("u0", "u1")
+    ]
+    pad = {"type": "attachment", "attachment": {"pad": "x" * (3 * 1024 * 1024 // 2)}}
+    log.write_text("\n".join(json.dumps(record) for record in (said[0], pad, said[1])) + "\n")
+    page = read_page(log, Window(limit=10, max_bytes=1024 * 1024))
+    assert [turn.uuid for turn in page.turns] == ["u0", "u1"]
+    assert not page.has_more
 
 
 def test_an_oversized_turn_is_clipped_and_says_so(tmp_path: Path) -> None:
@@ -440,7 +462,7 @@ def test_a_provider_with_no_adapter_simply_has_no_history(
 
 def test_the_registry_is_keyed_by_each_adapters_own_kind() -> None:
     """One registry: the kinds are the adapters' own, and every one is a kind herdr runs."""
-    assert harness_kinds() == ("claude", "opencode", "hermes")
+    assert harness_kinds() == ("claude", "opencode", "hermes", "omp")
     # The type names the same set, so a new adapter cannot land with its kind left untyped.
     named = HarnessKind.__value__  # pyright: ignore[reportAny] - typeshed types an alias's value as Any
     assert get_args(named) == harness_kinds()
@@ -457,6 +479,19 @@ def test_only_a_byte_paged_log_is_grown_by_appended_bytes() -> None:
     assert [k for k in harness_kinds() if has_byte_frontier(k)] == ["claude"]
     assert not has_byte_frontier("cursor")
     assert not has_byte_frontier(None)
+
+
+def test_an_adapter_without_the_capability_records_no_question(transcript_root: Path) -> None:
+    """A harness that keeps no question in its record gets the defaults: none, none, no stamp."""
+    asked = RecordedQuestion(id="call", question="Pick?", options=(QuestionOption(label="A"),))
+    for kind in ("claude", "opencode", "hermes"):
+        adapter = adapter_for(kind)
+        assert adapter is not None
+        source = Source.of(SESSION, agent_kind=kind, root=transcript_root)
+        assert pending_question(source) is None
+        assert adapter.confirm_question("Pick?\n\u276f ○ A", asked) is None
+        assert adapter.question_stamp(source) == ""
+    assert pending_question(Source.of(SESSION, agent_kind="cursor")) is None
 
 
 def test_a_qualified_root_is_searched_only_by_the_harness_it_names(
