@@ -274,3 +274,54 @@ def test_a_prompt_from_the_phone_to_a_doubted_pane_is_refused_in_words(tmp_path:
     )
     assert response.status_code == 409
     assert "not sure which agent" in response.text
+
+
+# An omp pane reports its session as a FILE PATH (agent_session.kind == "path")
+
+
+OMP_PATH = (
+    "/home/user/.omp/agent/sessions/-home-user-project/2026-10-23T16-57-28-313Z_0000000a.jsonl"
+)
+OMP_SESSION = "2026-10-23T16-57-28-313Z_0000000a"
+
+
+def _omp_frame() -> dict[str, JsonValue]:
+    """The working pane as an omp agent, reporting the session file herdr saw it write."""
+    frame = snapshot_frame()
+    agent = next(a for a in agents_of(frame) if a.get("pane_id") == WORKING_PANE)
+    agent["agent"] = "omp"
+    agent["agent_status"] = "idle"
+    agent["agent_session"] = {
+        "agent": "omp",
+        "kind": "path",
+        "source": "herdr:omp",
+        "value": OMP_PATH,
+    }
+    return frame
+
+
+def test_a_path_session_reaches_its_page_from_the_feed(tmp_path: Path) -> None:
+    """A path as the URL segment was decoded to slashes and 404ed, so the card led nowhere."""
+    rig_ = build_rig(tmp_path, {SNAPSHOT: _omp_frame()})
+    feed = rig_.http.get("/feed", headers={"HX-Request": "true"}).text
+    assert f'href="/agent/{OMP_SESSION}"' in feed
+    page = rig_.http.get(f"/agent/{OMP_SESSION}")
+    assert page.status_code == 200
+    assert "agent gone" not in page.text
+
+
+def test_a_prompt_reaches_a_pane_that_reports_a_path_session(tmp_path: Path) -> None:
+    """The write check must normalize a path the way the snapshot does, or every tap is refused."""
+    herd = FakeHerd()
+    herd.put(P3, agent="omp", cwd=REPO, foreground_cwd=REPO)
+    herd.agents[P3]["agent_session"] = {
+        "agent": "omp",
+        "kind": "path",
+        "source": "herdr:omp",
+        "value": OMP_PATH,
+    }
+    herd.screens[P3] = [SETTLED, echoed("\u276f hello")]
+    r = rig(tmp_path, herd)
+    got = send_prompt(r.writer, PromptAsk(as_session_id(OMP_SESSION), "hello"))
+    assert isinstance(got, PromptSent), got
+    assert len(herd.writes("agent.prompt")) == 1

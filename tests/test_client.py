@@ -1110,6 +1110,22 @@ def test_a_started_agent_with_no_session_says_so_as_the_empty_string() -> None:
     assert eng.start_agent(Launch("n", "claude", PaneId("w1:p9"))).session == ""
 
 
+def test_a_started_agent_reporting_a_session_file_is_named_by_the_file() -> None:
+    """The create flow must hold the same id the feed links to, or the new card 404s."""
+    frame = started_frame("unused")
+    agent = obj(frame, "result", "agent")
+    assert isinstance(agent, dict)
+    agent["agent_session"] = {
+        "kind": "path",
+        "agent": "omp",
+        "source": "herdr:omp",
+        "value": "/home/user/.omp/agent/sessions/-projects-x/2026-10-23T16-57-28-313Z_s1.jsonl",
+    }
+    eng, _ = build({PROCESS_INFO: process_info_frame(), START: frame})
+    started = eng.start_agent(Launch("n", "omp", PaneId("w1:p9")))
+    assert started.session == "2026-10-23T16-57-28-313Z_s1"
+
+
 def test_the_model_argument_reaches_the_runner_after_a_bare_dash_dash() -> None:
     eng, wire = build({PROCESS_INFO: process_info_frame(), START: started_frame("s")})
     eng.start_agent(Launch("n", "claude", PaneId("w1:p9"), ("--model", "haiku")))
