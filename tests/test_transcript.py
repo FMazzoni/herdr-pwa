@@ -21,6 +21,7 @@ from herdr_pwa.engine import (
     has_byte_frontier,
     locate,
 )
+from herdr_pwa.process_start import Process
 from tests.engine_seam import (
     MAX_NOTE_CHARS,
     MAX_PROSE_CHARS,
@@ -492,6 +493,17 @@ def test_an_adapter_without_the_capability_records_no_question(transcript_root: 
         assert adapter.confirm_question("Pick?\n\u276f ○ A", asked) is None
         assert adapter.question_stamp(source) == ""
     assert pending_question(Source.of(SESSION, agent_kind="cursor")) is None
+
+
+def test_an_adapter_without_a_process_record_holds_nothing(tmp_path: Path) -> None:
+    """Every harness but Claude Code keeps the default, so no pid proves its session."""
+    others = [kind for kind in harness_kinds() if kind != "claude"]
+    assert others
+    for kind in others:
+        adapter = adapter_for(kind)
+        assert adapter is not None
+        source = Source.of(SESSION, agent_kind=kind, root=tmp_path)
+        assert not adapter.holds(source, Process(1, tmp_path / "proc")), kind
 
 
 def test_a_qualified_root_is_searched_only_by_the_harness_it_names(

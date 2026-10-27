@@ -40,9 +40,9 @@ extend-select = ["BLE001", "FBT003", "TC006", "RUF039", "RUF055", "FURB167"]
 
 # Validation happens where data enters: the wire, the state files, tailscaled and the routes.
 "src/herdr_pwa/{audit,auth,devreport,notify_state,pairing,push,tailscale,validation}.py" = ["TID251"]
-"src/herdr_pwa/engine/{client,hermes,holder,opencode,transport}.py" = ["TID251"]
+"src/herdr_pwa/engine/{client,hermes,opencode,transport}.py" = ["TID251"]
 "src/herdr_pwa/engine/omp/records.py" = ["TID251"]
-"src/herdr_pwa/engine/claude/records.py" = ["TID251"]
+"src/herdr_pwa/engine/claude/{holder,records}.py" = ["TID251"]
 "src/herdr_pwa/web/started.py" = ["TID251"]
 "src/herdr_pwa/web/routers/*.py" = ["TID251"]
 "{tests,scripts,.claude}/**" = [

@@ -16,6 +16,7 @@ from herdr_pwa.engine import Agent, EngineError, as_pane_id, as_session_id, hold
 from herdr_pwa.writes.prompt import PromptAsk, PromptSent, send_prompt
 from herdr_pwa.writes.refusal import Refusal, Refused
 from tests._fake_herd import P3, SETTLED, FakeHerd, Rig, echoed, rig
+from tests.engine_seam import ClaudeAdapter
 
 OLD = "/home/user/projects/before"
 NEW = "/home/user/projects/after"
@@ -183,3 +184,14 @@ def test_only_claude_code_records_a_holder(tmp_path: Path) -> None:
     for kind, held in (("claude", True), ("opencode", False), ("hermes", False)):
         agent = Agent(session=as_session_id(SESSION), target=as_pane_id(P3), agent=kind)
         assert holds_session(agent, LEADER, root=root, proc=tmp_path / "proc") is held, kind
+
+
+def test_a_harness_keeping_the_default_never_holds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The check asks the harness's adapter, not its kind's name."""
+    _claims(tmp_path, LEADER, json.dumps(_record(SESSION, LEADER)))
+    _process(tmp_path / "proc", LEADER)
+    monkeypatch.delattr(ClaudeAdapter, "holds")
+    agent = Agent(session=as_session_id(SESSION), target=as_pane_id(P3), agent="claude")
+    assert not holds_session(agent, LEADER, root=tmp_path / "projects", proc=tmp_path / "proc")
