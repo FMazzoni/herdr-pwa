@@ -17,6 +17,7 @@ from herdr_pwa.engine import (
     MenuShape,
     PaneId,
     Presence,
+    PromptSource,
     SessionId,
     Snapshot,
     as_pane_id,
@@ -352,7 +353,8 @@ Enter to select \u00b7 Tab/Arrow keys to navigate \u00b7 Esc to cancel
 
 def test_blocked_prompt_parses_a_real_capture() -> None:
     p = BlockedPrompt.parse(
-        LIVE_BLOCKED, target=as_pane_id("w1:p3"), session=as_session_id("sess-1")
+        LIVE_BLOCKED,
+        source=PromptSource(as_pane_id("w1:p3"), as_session_id("sess-1")),
     )
     assert p.target == "w1:p3"
     assert p.session == "sess-1"
@@ -374,7 +376,7 @@ def test_blocked_prompt_parses_a_real_capture() -> None:
 def test_an_uncorroborated_numbered_run_is_not_a_menu() -> None:
     """The synthetic fixture that used to drive the safety trade, inverted."""
     menu = "Run `rm -rf build/`?\n\n1. Yes\n2. No\n"
-    p = BlockedPrompt.parse(menu, target=as_pane_id("w1:p5"), session=as_session_id("abc"))
+    p = BlockedPrompt.parse(menu, source=PromptSource(as_pane_id("w1:p5"), as_session_id("abc")))
     assert p.question == "Run `rm -rf build/`?"
     assert p.corroborated is False
     assert p.shape is MenuShape.NONE
@@ -573,7 +575,8 @@ TRANSCRIPT_THEN_QUESTION = (
 
 def test_prior_transcript_never_becomes_tap_targets() -> None:
     p = BlockedPrompt.parse(
-        TRANSCRIPT_THEN_QUESTION, target=as_pane_id("w1:p3"), session=as_session_id("s")
+        TRANSCRIPT_THEN_QUESTION,
+        source=PromptSource(as_pane_id("w1:p3"), as_session_id("s")),
     )
     assert p.options == ()
     assert p.is_choice is False  # generic keypad, not two wrong buttons
@@ -1302,10 +1305,10 @@ def test_the_fallback_still_rescues_the_screens_it_was_written_for() -> None:
 def test_a_blocked_prompt_refuses_a_mixed_up_address_and_identity() -> None:
     """The tap-to-answer surface: a keystroke is one step from these two fields."""
     with pytest.raises(ValueError, match="session id"):
-        BlockedPrompt.parse("q?", target=SESSION_A)  # pyright: ignore[reportArgumentType] - the wrong id kind on purpose, to see it refused
+        BlockedPrompt.parse("q?", source=PromptSource(target=SESSION_A))  # pyright: ignore[reportArgumentType] - the wrong id kind on purpose, to see it refused
     with pytest.raises(ValueError, match="pane id"):
-        BlockedPrompt.parse("q?", session="w1:p1")  # pyright: ignore[reportArgumentType] - the wrong id kind on purpose, to see it refused
-    p = BlockedPrompt.parse("q?", target=as_pane_id(" w1:p1 "), session=SESSION_A)
+        BlockedPrompt.parse("q?", source=PromptSource(session="w1:p1"))  # pyright: ignore[reportArgumentType] - the wrong id kind on purpose, to see it refused
+    p = BlockedPrompt.parse("q?", source=PromptSource(as_pane_id(" w1:p1 "), SESSION_A))
     assert (p.target, p.session) == ("w1:p1", SESSION_A)
 
 

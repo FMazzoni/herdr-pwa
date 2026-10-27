@@ -14,7 +14,9 @@ from herdr_pwa.engine import (
     EngineError,
     HerdrClient,
     PaneId,
+    PromptSource,
     SessionId,
+    prompt_source,
 )
 from herdr_pwa.writes.keys import (
     PAD_KEYS,
@@ -70,11 +72,13 @@ class KeyAsk:
     confirmed: bool = False
 
 
-def _question_now(client: HerdrClient, agent: Agent) -> BlockedPrompt | Refused | None:
+def _question_now(
+    client: HerdrClient, agent: Agent, roots: tuple[str, ...]
+) -> BlockedPrompt | Refused | None:
     if not reads_dialog(agent.status):
         return None
     try:
-        prompt = client.blocked_prompt(agent.target, session=agent.session)
+        prompt = client.blocked_prompt(prompt_source(agent, roots or None))
     except EngineError as exc:
         if agent.status is not AgentStatus.BLOCKED:
             # Read only for a dialog herdr may have missed; failing that, it is the stop it said.
@@ -106,14 +110,14 @@ def _check(
     return None
 
 
-def _reader(client: HerdrClient, target: PaneId, session: SessionId) -> Poll:
+def _reader(client: HerdrClient, source: PromptSource) -> Poll:
     try:
-        now = client.agent(target)
-        if now.session != session or not reads_dialog(now.status):
+        now = client.agent(source.target)
+        if now.session != source.session or not reads_dialog(now.status):
             return None
-        prompt = client.blocked_prompt(target, session=session)
+        prompt = client.blocked_prompt(source)
     except EngineError as exc:
-        log.warning("could not watch the key land at %s: %s", target, exc)
+        log.warning("could not watch the key land at %s: %s", source.target, exc)
         return UNREADABLE
     if not asks_now(now.status, prompt):
         return None
@@ -125,7 +129,7 @@ def _watched(writer: Writer, agent: Agent, prompt: BlockedPrompt | None, *, ende
     if prompt is None or not prompt.identity:
         return Watched(Outcome.ACCEPTED, Evidence.DELIVERED)
     return watch(
-        lambda: _reader(writer.client, agent.target, agent.session),
+        lambda: _reader(writer.client, prompt_source(agent, writer.stores or None)),
         aimed=prompt.identity,
         ends=ended,
         pacing=writer.pacing,
@@ -165,7 +169,7 @@ def _send_key(writer: Writer, ask: KeyAsk) -> KeySent | Refused:
     if isinstance(agent, Refused):
         return agent
     key = normalise_key(ask.key)
-    prompt = _question_now(writer.client, agent)
+    prompt = _question_now(writer.client, agent, writer.stores)
     if isinstance(prompt, Refused):
         if key != INTERRUPT_KEY:
             return prompt

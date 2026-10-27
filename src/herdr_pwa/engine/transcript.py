@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
@@ -24,20 +24,19 @@ from herdr_pwa.engine.notices import (
     SUMMARY,
     ApiError,
 )
+from herdr_pwa.engine.question import QuestionMatch, RecordedQuestion
 from herdr_pwa.validation import Text
 
 # Every kind herdr itself can run, whether or not a harness here reads it.
 HERDR_KINDS: Final = tuple(target.value for target in IntegrationTarget)
 # The kinds a harness here reads; herdr runs more, and reports any kind as a plain string.
-type HarnessKind = Literal["claude", "opencode", "hermes"]
+type HarnessKind = Literal["claude", "opencode", "hermes", "omp"]
 
 # A path, or the string an env var carries.
 type OneRoot = str | os.PathLike[str]
 
 # One root, several searched in order, or the provider's default.
 type TranscriptRoots = OneRoot | Sequence[OneRoot] | None
-
-type TurnParser = Callable[[bytes], TranscriptTurn | None]
 
 MAX_PAGE_BYTES: Final = 4 * 1024 * 1024
 
@@ -564,6 +563,8 @@ class Harness:
     prices_itself: bool = True
     # Whether its store holds a tool call from before the harness asks about it until it is answered.
     records_calls: bool = False
+    # Whether its menus end on numbered rows; one that marks rows without numbers draws none to parse.
+    numbers_menus: bool = True
 
 
 # What the harness delivers between retries: each one sets off the next refused turn.
@@ -628,6 +629,22 @@ class TranscriptAdapter(Protocol):
         """The directory the session was started in, or ``""`` when its store does not say."""
         ...
 
+    # The three below are a capability: a harness whose record holds no question keeps these.
+    def pending_question(self, source: Source) -> RecordedQuestion | None:
+        """The question the session's record still waits on, or ``None`` when it keeps none."""
+        del source
+        return None
+
+    def confirm_question(self, screen: str, question: RecordedQuestion) -> QuestionMatch | None:
+        """*question* as *screen* draws it, or ``None`` when any line differs from the record."""
+        del screen, question
+        return None
+
+    def question_stamp(self, source: Source) -> str:
+        """What moves when the record poses or answers a question, else ``""``."""
+        del source
+        return ""
+
 
 _adapters: Final[dict[str, TranscriptAdapter]] = {}
 
@@ -657,6 +674,32 @@ def has_byte_frontier(agent_kind: str | None) -> bool:
     """Whether *agent_kind*'s store is a log grown by appended bytes; ``False`` with no adapter."""
     harness = harness_of(agent_kind)
     return harness is not None and harness.byte_frontier
+
+
+def numbers_menus(agent_kind: str | None) -> bool:
+    """Whether *agent_kind*'s menus end on numbered rows; ``True`` with no adapter."""
+    harness = harness_of(agent_kind)
+    return harness is None or harness.numbers_menus
+
+
+def pending_question(source: Source) -> RecordedQuestion | None:
+    """The question *source*'s record still waits on; ``None`` with no adapter or capability."""
+    adapter = adapter_for(source.kind)
+    return None if adapter is None else adapter.pending_question(source)
+
+
+def confirm_question(
+    agent_kind: str | None, screen: str, question: RecordedQuestion
+) -> QuestionMatch | None:
+    """*question* as *agent_kind*'s *screen* draws it; ``None`` with no adapter or capability."""
+    adapter = adapter_for(agent_kind)
+    return None if adapter is None else adapter.confirm_question(screen, question)
+
+
+def question_stamp(source: Source) -> str:
+    """What moves when *source*'s record poses or answers a question; ``""`` with no adapter."""
+    adapter = adapter_for(source.kind)
+    return "" if adapter is None else adapter.question_stamp(source)
 
 
 def history(source: Source, window: Window = NEWEST) -> TranscriptPage:

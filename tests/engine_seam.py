@@ -27,6 +27,7 @@ from herdr_pwa.engine.generated import success_response as wire_response
 from herdr_pwa.engine.generated.event import EventKind
 from herdr_pwa.engine.hermes import HERMES_DB, HermesAdapter
 from herdr_pwa.engine.notices import HIDDEN, PeerMessage, RecordOrigin, TaskNotice, injected
+from herdr_pwa.engine.omp import OmpAsk, pending_ask
 from herdr_pwa.engine.opencode import (
     OPENCODE_ASK,
     OPENCODE_DB,
@@ -34,9 +35,11 @@ from herdr_pwa.engine.opencode import (
     OpencodeAdapter,
     SessionInfo,
 )
+from herdr_pwa.engine.question import QuestionOption, RecordedQuestion
 from herdr_pwa.engine.store import readonly_uri
 from herdr_pwa.engine.transcript import (
     MAX_NOTE_CHARS,
+    MAX_PAGE_BYTES,
     MAX_PROSE_CHARS,
     MAX_RESULT_CHARS,
     Window,
@@ -45,6 +48,7 @@ from herdr_pwa.engine.transcript import (
     fold_turns,
     history,
     is_message,
+    pending_question,
     usage,
 )
 from herdr_pwa.engine.transport import (
@@ -68,6 +72,7 @@ __all__ = [
     "HERMES_DB",
     "HIDDEN",
     "MAX_NOTE_CHARS",
+    "MAX_PAGE_BYTES",
     "MAX_PROSE_CHARS",
     "MAX_REQUEST_BYTES",
     "MAX_RESULT_CHARS",
@@ -80,9 +85,12 @@ __all__ = [
     "ClaudeRecord",
     "EventKind",
     "HermesAdapter",
+    "OmpAsk",
     "OpencodeAdapter",
     "PeerMessage",
+    "QuestionOption",
     "RecordOrigin",
+    "RecordedQuestion",
     "SessionInfo",
     "SocketTransport",
     "TaskNotice",
@@ -107,6 +115,8 @@ __all__ = [
     "method_of",
     "parse_claude_line",
     "payload_field",
+    "pending_ask",
+    "pending_question",
     "raise_for_error_frame",
     "read_page",
     "readonly_uri",

@@ -16,8 +16,8 @@ from herdr_pwa.engine import (
     BlockedPrompt,
     EngineError,
     PaneId,
+    PromptSource,
     ReadOptions,
-    SessionId,
     Snapshot,
     SnapshotCache,
     as_pane_id,
@@ -64,13 +64,7 @@ class HerdReader(Protocol):
         """Read the whole herd once."""
         ...
 
-    def blocked_prompt(
-        self,
-        target: PaneId,
-        *,
-        session: SessionId = ...,
-        options: ReadOptions = ...,
-    ) -> BlockedPrompt:
+    def blocked_prompt(self, source: PromptSource, *, options: ReadOptions = ...) -> BlockedPrompt:
         """Read the prompt a blocked agent is showing."""
         ...
 
@@ -291,7 +285,7 @@ class Notifier:
 
     def _screen(self, agent: Agent) -> BlockedPrompt | None:
         try:
-            return self._reader.blocked_prompt(agent.target, session=agent.session)
+            return self._reader.blocked_prompt(PromptSource(agent.target, agent.session))
         except EngineError as exc:
             log.info("no screen read for %s: %s", agent.session, type(exc).__name__)
             return None
@@ -301,7 +295,7 @@ class Notifier:
             return CONTEXT_FULL
         try:
             prompt = self._reader.blocked_prompt(
-                as_pane_id(agent.target), session=as_session_id(agent.session)
+                PromptSource(as_pane_id(agent.target), as_session_id(agent.session))
             )
         except Exception as exc:  # noqa: BLE001 - a missing question costs wording, never the buzz
             log.info("no question for %s: %s", agent.session, type(exc).__name__)

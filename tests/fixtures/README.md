@@ -1,7 +1,7 @@
 # Fixtures
 
 These files are real output from herdr and from the harnesses, the agent programs that run
-inside herdr's panes: Claude Code, opencode and Hermes Agent. Each was captured once, so the
+inside herdr's panes: Claude Code, opencode, Hermes Agent and omp. Each was captured once, so the
 tests can run without a live herdr.
 
 ## What was changed before committing
@@ -19,6 +19,7 @@ slipped through. Captured files are as captured, apart from these changes:
   parsers read some screens by column, so a shorter line would change what they see.
 - Anthropic request ids read `req_SYNTHETIC…`. The signatures on the model's reasoning
   blocks (thinking blocks) are placeholders.
+- omp's provider response ids read `0000NNNN-0000-…`, and its system-prompt digest is zeroed.
 - In transcripts and captures, session ids read `5e55NNNN-0000-…` and other record ids
   `0000NNNN-0000-…`; agent, tool-use and message ids are synthetic too. One mapping covers
   every file and test, so records that point at each other still line up.
@@ -52,8 +53,9 @@ those sessions' rows written out as opencode 1.1 laid out its files, ids put bac
 | `capture-<state>-<shape>/` | one pane, read every way herdr offers |
 | `ansi/`, `rig/` | screens that once showed a real bug |
 | `hermes/` | Hermes Agent screens as herdr reads them. |
+| `omp/` | omp's Ask dialog screens, plain and with previews, as its pane drew them. |
 | `claude/` | Claude Code screens kept on their own, without a full capture's reads |
-| `transcript/` | Chat history from Claude Code, opencode and Hermes stores, plus the notice and error records Claude Code writes. |
+| `transcript/` | Chat history from every harness here, plus the notice and error records Claude Code writes. |
 | `foreign/collie/` | Claude Code screens from another project |
 | `ledger.json` | the golden record, described below |
 | `parsed-corpus.json` | what every screen parses to |

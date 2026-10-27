@@ -22,6 +22,8 @@ from herdr_pwa.engine import (
     SessionId,
     Snapshot,
     as_session_id,
+    prompt_source,
+    prompt_stamp,
 )
 from herdr_pwa.web.background import pending_by_session
 from herdr_pwa.web.deps import WebState
@@ -41,11 +43,12 @@ class Herd:
 
 def prompt_of(web: WebState, agent: Agent) -> BlockedPrompt | None:
     """What *agent*'s screen asks, from the read its feed card and its page share per screen."""
-    # Keyed by revision, so concurrent polls share one detection read per screen.
-    key = f"prompt:{agent.session}:{agent.revision}"
+    roots = web.settings.transcript_roots or None
+    # Keyed by revision and the record's stamp: polls share a read until either changes.
+    key = f"prompt:{agent.session}:{agent.revision}:{prompt_stamp(agent, roots)}"
     try:
         return web.cache.read(
-            key, lambda: web.client.blocked_prompt(agent.target, session=agent.session)
+            key, lambda: web.client.blocked_prompt(prompt_source(agent, roots))
         ).value
     except EngineError as exc:
         log.info("no prompt read for %s: %s", agent.target, exc)

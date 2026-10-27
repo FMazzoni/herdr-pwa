@@ -13,6 +13,7 @@ from herdr_pwa.engine import (
     EngineSettings,
     HerdrClient,
     PaneId,
+    PromptSource,
     SessionId,
 )
 from herdr_pwa.writes.answer import KeyAsk, KeySent, StartingKeyAsk, send_key, send_starting_key
@@ -138,7 +139,7 @@ def _answer_permission(writer: Writer, session: SessionId, pane: PaneId, probe: 
     ask = PromptAsk(session, f"Use the Bash tool to run exactly: touch {probe}")
     say("send_prompt (bash request)", repr(send_prompt(writer, ask)))
     _ = _wait_status(client, pane, AgentStatus.BLOCKED)
-    question = client.blocked_prompt(pane, session=session)
+    question = client.blocked_prompt(PromptSource(pane, session))
     show(client, pane, "the permission dialog came up")
     stale = send_key(writer, KeyAsk(session, "1", drawn_from="not-this-screen"))
     say("send_key with a stale fingerprint", repr(stale))

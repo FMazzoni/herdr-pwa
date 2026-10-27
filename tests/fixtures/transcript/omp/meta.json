@@ -1,0 +1,9 @@
+{
+  "name": "omp-session",
+  "captured_at": "2026-10-23T13:11:37-04:00",
+  "captured_by": "an agent, in a pane it created for the purpose",
+  "harness": "omp",
+  "harness_version": "18.12.2",
+  "note": "Two ask calls: the first answered with Apple, the second cancelled. Scrubbed and trimmed to the first session's records. Two files named 5e550031 and 5e550032 cut the same capture at each ask call, before its result, so that ask is still pending; the session record inside keeps the captured id.",
+  "scrubbed": "Session, record and provider response ids replaced; the prompt digest zeroed; home and scratch paths read /home/user; model and provider are stand-ins."
+}

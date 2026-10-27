@@ -93,7 +93,7 @@ def session_identity(value: object, kind: object = "") -> str:
     text = str(value or "").strip()
     if not text or str(kind or "").strip().lower() != "path":
         return text
-    # herdr reports omp's session as a file path; only the name fits a URL and a store lookup.
+    # Some harnesses report a session as a file path; only its name fits a URL and a store lookup.
     return PurePosixPath(text.replace("\\", "/")).stem
 
 

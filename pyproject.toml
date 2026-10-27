@@ -147,9 +147,21 @@ type = "acyclic_siblings"
 ancestors = ["herdr_pwa.engine.claude"]
 depth = 0
 
-# The adapters build on transcript.py and the facade registers them, so it never imports one.
+# The omp reader's modules form one chain: ask, records, pending, adapter.
+[[tool.importlinter.contracts]]
+name = "No import cycles between the omp reader's modules"
+type = "acyclic_siblings"
+ancestors = ["herdr_pwa.engine.omp"]
+depth = 0
+
+# The adapters build on the shared engine and the facade registers them, so it never imports one.
 [[tool.importlinter.contracts]]
 name = "transcript.py imports no adapter"
 type = "forbidden"
-source_modules = ["herdr_pwa.engine.transcript"]
-forbidden_modules = ["herdr_pwa.engine.claude", "herdr_pwa.engine.opencode", "herdr_pwa.engine.hermes"]
+source_modules = ["herdr_pwa.engine.transcript", "herdr_pwa.engine.dialog", "herdr_pwa.engine.question"]
+forbidden_modules = [
+    "herdr_pwa.engine.claude",
+    "herdr_pwa.engine.opencode",
+    "herdr_pwa.engine.hermes",
+    "herdr_pwa.engine.omp",
+]

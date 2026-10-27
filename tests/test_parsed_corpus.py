@@ -14,7 +14,7 @@ from pathlib import Path
 
 from pydantic import JsonValue, TypeAdapter
 
-from herdr_pwa.engine import BlockedPrompt
+from herdr_pwa.engine import BlockedPrompt, PromptSource
 from herdr_pwa.panetext import as_text_read
 from herdr_pwa.writes.keys import control_token
 
@@ -26,7 +26,7 @@ COLOUR_SUFFIX = "#ansi"
 ESCAPE = "\x1b"
 
 # The screens this repo captured, as text reads; the four sources of a capture each count.
-_TEXT_GLOBS = ("capture-*/*.txt", "hermes/*.txt")
+_TEXT_GLOBS = ("capture-*/*.txt", "hermes/*.txt", "omp/*.txt")
 # collie's claude screens, vendored under MIT and filed by the id the ledger gives them.
 _VENDORED_GLOB = "foreign/collie/*.txt"
 # Colour reads, parsed as the app parses them: the text read of the same bytes, colour beside it.
@@ -60,11 +60,15 @@ def screens() -> dict[str, Path]:
 def parse(key: str, path: Path) -> BlockedPrompt:
     """The prompt *path* parses to, read the way the app reads a blocked pane."""
     raw = path.read_text(encoding="utf-8", errors="replace")
+    # omp's screens are read as omp's: without a record they draw no numbered run.
+    kind = "omp" if key.startswith("tests/fixtures/omp/") else ""
     # A text capture with escapes still in it is a colour read under another name.
     if not key.endswith(COLOUR_SUFFIX) and ESCAPE not in raw:
-        return BlockedPrompt.parse(raw)
+        return BlockedPrompt.parse(raw, source=PromptSource(agent_kind=kind))
     # herdr strips a text read before the app sees it; the colour read is the capture itself.
-    return BlockedPrompt.from_reads(as_text_read(raw), lambda: raw)
+    return BlockedPrompt.from_reads(
+        as_text_read(raw), lambda: raw, source=PromptSource(agent_kind=kind)
+    )
 
 
 def described(prompt: BlockedPrompt) -> dict[str, JsonValue]:

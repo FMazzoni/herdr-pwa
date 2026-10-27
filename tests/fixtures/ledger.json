@@ -2176,7 +2176,7 @@
     },
     "now": 1790000000.0,
     "pruned": "Rows whose input is not in this repo (an AGPL corpus never shipped, collie screens never vendored, and seven collie screens removed because they carried their author's email or home path) were removed; every remaining verdict is as recorded.",
-    "rehashed": "Input hashes were re-pinned after a privacy scrub replaced or rewrote captures, and the ledger's own hash after the herd fixtures' session ids became placeholders; no verdict changed.",
+    "rehashed": "Input hashes were re-pinned after a privacy scrub replaced or rewrote captures, and the ledger's own hash after the herd fixtures' session ids became placeholders; no verdict changed. The ledger's own hash was re-pinned again when rows for omp's Ask screens were added, which changed no existing verdict.",
     "verdict_fields": [
       "shape",
       "options",
@@ -5479,6 +5479,60 @@
         "shape": "single-choice",
         "steps": null,
         "ticked": []
+      }
+    },
+    "tests/fixtures/omp/ask-plain.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "2f3209414f33ea32f8f85f5e74c2bb9f73654eed51fefdd20d4a7d19ae0b0227",
+        "agent_kind": "omp"
+      },
+      "render": {
+        "answer_hints": [],
+        "rows_toggle": false,
+        "corroborated": false,
+        "drew_rows": false,
+        "asked": true,
+        "is_choice": false,
+        "numbers": []
+      },
+      "verdict": {
+        "shape": "none",
+        "options": 0,
+        "digits": [],
+        "rows_answer": false,
+        "hints": [],
+        "ticked": [],
+        "checkable": 0,
+        "steps": null
+      }
+    },
+    "tests/fixtures/omp/ask-preview.txt": {
+      "input": {
+        "call": "BlockedPrompt.parse(text)",
+        "decode": "plain_text",
+        "sha256": "9a55fc228ef09504fd40b16bb8a6871cd9288871668186081df86073bef1f20d",
+        "agent_kind": "omp"
+      },
+      "render": {
+        "answer_hints": [],
+        "rows_toggle": false,
+        "corroborated": false,
+        "drew_rows": false,
+        "asked": true,
+        "is_choice": false,
+        "numbers": []
+      },
+      "verdict": {
+        "shape": "none",
+        "options": 0,
+        "digits": [],
+        "rows_answer": false,
+        "hints": [],
+        "ticked": [],
+        "checkable": 0,
+        "steps": null
       }
     }
   }

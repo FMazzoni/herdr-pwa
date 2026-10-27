@@ -29,14 +29,14 @@ from herdr_pwa.decisions import (
     decide_screen,
     rows_answer,
 )
-from herdr_pwa.engine import BlockedPrompt, MenuShape, Snapshot, rank
+from herdr_pwa.engine import BlockedPrompt, MenuShape, PromptSource, Snapshot, rank
 
 REPO = Path(__file__).resolve().parents[1]
 FIXTURES = REPO / "tests" / "fixtures"
 LEDGER_PATH = FIXTURES / "ledger.json"
 # Pinned so the golden file can only change by a reviewed edit to this line. Verdicts never
 # change; input hashes are re-pinned when a capture is scrubbed or replaced (see meta.rehashed).
-LEDGER_SHA256 = "2f2190c53db0f51004f5e39ba5854722fcaf922b9ed7edc3ff2ed4340476e92f"
+LEDGER_SHA256 = "fa9cc7577d484820082b951adc9244d0a2e4779d9b808aad60a23737a0932705"
 FOREIGN_PREFIX = "foreign/"
 # collie's claude screens, vendored under tests/fixtures/foreign with collie's MIT notice.
 VENDORED_PREFIX = "foreign/collie/claude--"
@@ -194,6 +194,11 @@ def _str(value: object) -> str:
     return value
 
 
+def _kind(capture_id: str) -> str:
+    """The harness that drew a screen, when the ledger names one."""
+    return _str(_obj(_obj(SCREENS[capture_id])["input"]).get("agent_kind") or "")
+
+
 def _decoded(capture_id: str) -> str:
     entry = _obj(SCREENS[capture_id])
     found = _obj(entry["input"])
@@ -316,8 +321,7 @@ def _prompts(snapshot: Snapshot, prompt_ids: dict[str, JsonValue]) -> dict[str, 
     return {
         agent.session: BlockedPrompt.parse(
             _decoded(_str(prompt_ids[agent.session])),
-            target=agent.target,
-            session=agent.session,
+            source=PromptSource(agent.target, agent.session),
         )
         for agent in snapshot.agents
         if agent.session in prompt_ids
@@ -365,7 +369,9 @@ def test_the_vendored_screens_are_exactly_the_ledger_rows_that_read_them() -> No
 
 @pytest.mark.parametrize("capture_id", _cases(SCREENS))
 def test_screen_matches_the_ledger(capture_id: str) -> None:
-    prompt = BlockedPrompt.parse(_decoded(capture_id))
+    prompt = BlockedPrompt.parse(
+        _decoded(capture_id), source=PromptSource(agent_kind=_kind(capture_id))
+    )
     expected = {k: v for k, v in _obj(SCREENS[capture_id]).items() if k != "input"}
     assert _screen_json(decide_screen(prompt), prompt) == expected
 

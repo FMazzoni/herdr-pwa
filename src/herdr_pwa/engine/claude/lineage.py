@@ -9,6 +9,7 @@ from typing import BinaryIO, Final
 
 from herdr_pwa.engine.claude.records import ClaudeRecord, record_of
 from herdr_pwa.engine.model import SessionId
+from herdr_pwa.engine.pages import contained
 from herdr_pwa.engine.transcript import TranscriptRoots, search_roots, session_name
 
 CLAUDE_TRANSCRIPT_ROOT: Final = "~/.claude/projects"
@@ -23,18 +24,6 @@ _FINISH_STEP: Final = 16 * 1024
 _TAIL_BYTES: Final = 64 * 1024
 
 MAX_HOPS: Final = 8
-
-
-def contained(path: Path, base: Path) -> Path | None:
-    """*path* resolved, then re-checked to still be a file inside *base*."""
-    # A symlink satisfies any comparison of the strings we were handed, so resolve first.
-    try:
-        resolved = path.resolve(strict=True)
-    except OSError:
-        return None
-    if not resolved.is_relative_to(base) or not resolved.is_file():
-        return None
-    return resolved
 
 
 def head_window(path: Path) -> bytes:
