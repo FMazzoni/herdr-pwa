@@ -6,6 +6,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import ClassVar, Final, override
 
+from herdr_pwa.engine.claude.holder import claude_holds
 from herdr_pwa.engine.claude.lineage import (
     CLAUDE_TRANSCRIPT_ROOT,
     head_records,
@@ -26,6 +27,7 @@ from herdr_pwa.engine.transcript import (
     TranscriptPage,
     Window,
 )
+from herdr_pwa.process_start import Process
 
 _ANOTHER_FILE: Final = 1 << 62
 
@@ -90,6 +92,11 @@ class ClaudeAdapter(TranscriptAdapter):
             if cwd:
                 return cwd
         return ""
+
+    @override
+    def holds(self, source: Source, process: Process) -> bool:
+        """Whether *process* is the one its sessions/<pid>.json says holds the session."""
+        return claude_holds(source, process)
 
     @classmethod
     def log(cls, source: Source) -> Path | None:

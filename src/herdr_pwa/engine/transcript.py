@@ -25,6 +25,7 @@ from herdr_pwa.engine.notices import (
     ApiError,
 )
 from herdr_pwa.engine.question import QuestionMatch, RecordedQuestion
+from herdr_pwa.process_start import Process
 from herdr_pwa.validation import Text
 
 # Every kind herdr itself can run, whether or not a harness here reads it.
@@ -645,6 +646,12 @@ class TranscriptAdapter(Protocol):
         del source
         return ""
 
+    # A capability: a harness that keeps no record per live process cannot prove a holder.
+    def holds(self, source: Source, process: Process) -> bool:
+        """Whether *process* holds the session, by the harness's own record; ``False`` when unsure."""
+        del source, process
+        return False
+
 
 _adapters: Final[dict[str, TranscriptAdapter]] = {}
 
@@ -700,6 +707,12 @@ def question_stamp(source: Source) -> str:
     """What moves when *source*'s record poses or answers a question; ``""`` with no adapter."""
     adapter = adapter_for(source.kind)
     return "" if adapter is None else adapter.question_stamp(source)
+
+
+def process_holds(source: Source, process: Process) -> bool:
+    """Whether *process* holds *source*'s session; ``False`` with no adapter or capability."""
+    adapter = adapter_for(source.kind)
+    return adapter is not None and adapter.holds(source, process)
 
 
 def history(source: Source, window: Window = NEWEST) -> TranscriptPage:

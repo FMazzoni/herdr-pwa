@@ -2,6 +2,7 @@
 
 import os
 import shutil
+from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Final
@@ -103,6 +104,34 @@ def test_a_shell_a_subagent_stops_is_read_though_the_main_log_is_still(tmp_path:
     with (log.parent / NESTED).open("a") as handle:
         handle.write(stopped)
     assert _tasks(cache.read(found))["bnested04"].done
+
+
+def test_the_subagent_folder_is_listed_again_only_once_it_changes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every poll tallies the session; an unchanged folder is not scanned on each one."""
+    log = _copy(tmp_path)
+    folder = (log.parent / NESTED).parent
+    scans: list[Path] = []
+    glob = Path.glob
+
+    def counted(self: Path, pattern: str) -> Iterator[Path]:
+        if self == folder:
+            scans.append(self)
+        return glob(self, pattern)
+
+    monkeypatch.setattr(Path, "glob", counted)
+    cache = UsageCache()
+    found = Located(Source.of(WORKING_SESSION, agent_kind="claude"), log)
+    cache.read(found)
+    cache.read(found)
+    assert len(scans) == 1
+    started = (log.parent / NESTED).read_text().replace("bnested04", "bnested05")
+    (folder / "agent-alater0001.jsonl").write_text(started)
+    later = folder.stat().st_mtime_ns + 1_000_000_000
+    os.utime(folder, ns=(later, later))
+    assert "bnested05" in _tasks(cache.read(found))
+    assert len(scans) == 2
 
 
 SHELL_ENDS: Final = FIXTURES / "transcript" / "notices" / "shell-ends.jsonl"

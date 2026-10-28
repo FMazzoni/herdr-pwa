@@ -16,6 +16,13 @@ _TTL: Final = 15.0
 _STARTTIME: Final = 19
 
 
+class Process(NamedTuple):
+    """One process: its pid, and the proc(5) tree that pid is counted in."""
+
+    pid: int
+    proc: Path
+
+
 class PanePids(NamedTuple):
     """A pane's processes, with the shell named apart so no reader guesses which it is."""
 

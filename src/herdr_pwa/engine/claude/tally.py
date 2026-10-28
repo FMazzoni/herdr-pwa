@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from functools import lru_cache
 from pathlib import Path
 from types import MappingProxyType
 from typing import Final
@@ -35,6 +36,8 @@ from herdr_pwa.engine.transcript import (
 )
 
 _SYNTHETIC_MODEL: Final = "<synthetic>"
+# Subagent folders whose listing is kept: one per session a poll tallies, with room to spare.
+_LISTED_FOLDERS: Final = 256
 
 
 def _usage_of(record: ClaudeRecord) -> tuple[str, Usage, str] | None:
@@ -256,9 +259,15 @@ def _nested_logs(path: Path) -> list[Path]:
     """The logs of the agents *path*'s session started, which Claude Code keeps beside it."""
     directory = path.with_suffix("") / "subagents"
     try:
-        return sorted(directory.glob("agent-*.jsonl"))
+        # A new log changes the folder's mtime, so an unchanged folder is never scanned again.
+        return list(_agent_logs(directory, directory.stat().st_mtime_ns))
     except OSError:
         return []
+
+
+@lru_cache(maxsize=_LISTED_FOLDERS)
+def _agent_logs(directory: Path, mtime_ns: int) -> tuple[Path, ...]:  # noqa: ARG001 - the cache key
+    return tuple(sorted(directory.glob("agent-*.jsonl")))
 
 
 def _tally_nested_log(path: Path, live: LiveTally) -> None:
