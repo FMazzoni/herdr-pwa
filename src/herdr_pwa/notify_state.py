@@ -49,7 +49,8 @@ def _read[F: _StateFile](path: Path, model: type[F]) -> F | None:
     try:
         text = statedir.read_text(path)
     except OSError as exc:
-        log.warning("cannot use %s (%s); starting from nothing", path, exc)
+        # The file's name, never its path: a path names the account it lives under.
+        log.warning("cannot read %s (%s); starting from nothing", path.name, type(exc).__name__)
         return None
     return _parsed(path, text, model)
 
@@ -58,7 +59,7 @@ def _parsed[F: _StateFile](path: Path, text: str | None, model: type[F]) -> F | 
     try:
         return None if text is None else model.model_validate_json(text)
     except ValidationError as exc:
-        log.warning("cannot use %s (%s); starting from nothing", path, exc)
+        log.warning("cannot use %s (%s); starting from nothing", path.name, type(exc).__name__)
         return None
 
 
@@ -97,7 +98,9 @@ class StatusLedger:
         try:
             _write(self.path, document)
         except OSError as exc:
-            log.warning("cannot write %s: %s; a restart will prime", self.path, exc)
+            log.warning(
+                "cannot write %s (%s); a restart will prime", self.path.name, type(exc).__name__
+            )
 
 
 class SeenAgent(Protocol):
@@ -210,7 +213,9 @@ class SeenLedger:
         try:
             _write(self.path, document)
         except OSError as exc:
-            log.warning("cannot write %s: %s; 'seen' is in memory only", self.path, exc)
+            log.warning(
+                "cannot write %s (%s); 'seen' is in memory only", self.path.name, type(exc).__name__
+            )
 
     def _maybe_flush(self) -> None:
         if self._clock() - self._flushed_at >= SEEN_FLUSH_INTERVAL:

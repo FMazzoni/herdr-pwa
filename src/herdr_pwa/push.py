@@ -8,6 +8,7 @@ import string
 import unicodedata
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from enum import StrEnum
 from http import HTTPStatus
 from pathlib import Path
 from typing import Annotated, Final, Literal, Protocol, Self, TypedDict, Unpack, cast
@@ -94,6 +95,24 @@ class PushLimits:
 PUSH_LIMITS: Final = PushLimits()
 
 
+class SubjectFault(StrEnum):
+    """What makes a VAPID contact one a push service refuses, as a fixed phrase."""
+
+    # Fixed words, never the contact: it is the operator's address, and the alerts page shows this.
+    UNSET = "is not set; Apple rejects a JWT whose contact nobody could be reached at"
+    SCHEME = "is neither mailto: nor https:// (RFC 8292)"
+    NO_HOST = "names no host anybody could be reached at"
+    RESERVED = "is under a reserved name that never resolves (RFC 2606)"
+
+    @property
+    def advice(self) -> str:
+        """The whole sentence the operator acts on."""
+        return (
+            f"push is on, but its contact {self.value}. Set HP_PUSH_SUBJECT to a mailto: you "
+            "read, or HP_PUSH_ENABLED=0."
+        )
+
+
 class PushError(Exception):
     """Base for every failure this module raises."""
 
@@ -103,7 +122,11 @@ class VapidKeyError(PushError):
 
 
 class SubjectError(PushError):
-    """The VAPID contact is one a push service will refuse."""
+    """The VAPID contact is one a push service will refuse; ``fault`` says why."""
+
+    def __init__(self, fault: SubjectFault) -> None:
+        super().__init__(fault.advice)
+        self.fault: SubjectFault = fault
 
 
 class SubscriptionError(PushError):
@@ -113,8 +136,8 @@ class SubscriptionError(PushError):
 class DeliveryError(PushError):
     """One device, or its push service, refused; carries the HTTP status when known."""
 
-    # A status and a class, never text: a library's words can carry the endpoint, a device capability.
-    def __init__(self, status: int | None = None, *, cause: type[Exception] | None = None) -> None:
+    # A status and a class name, never text: a library's words can carry the endpoint, a device capability.
+    def __init__(self, status: int | None = None, *, cause: str | None = None) -> None:
         super().__init__(_delivery_words(status, cause))
         self.status: int | None = status
 
@@ -148,30 +171,27 @@ def _subject_host(subject: str) -> str:
     return host.rpartition("@")[2].partition(":")[0]
 
 
-def subject_problem(subject: str) -> str:
-    """Why a push service would refuse this VAPID ``sub`` claim, or ``""``."""
+def subject_problem(subject: str) -> SubjectFault | None:
+    """Why a push service would refuse this VAPID ``sub`` claim, or None."""
     value = subject.strip()
     if not value:
-        return "is not set; Apple rejects a JWT whose contact nobody could be reached at"
+        return SubjectFault.UNSET
     if not value.startswith(("mailto:", "https://")):
-        return f"is {value!r}, which is neither mailto: nor https:// (RFC 8292)"
+        return SubjectFault.SCHEME
     host = _subject_host(value)
     if not host:
-        return f"is {value!r}, which names no host anybody could be reached at"
+        return SubjectFault.NO_HOST
     label = host.rstrip(".").rpartition(".")[2] or host.rstrip(".")
     if label.lower() in RESERVED_TLDS:
-        return f"is {value!r}, whose .{label} is a reserved name that never resolves (RFC 2606)"
-    return ""
+        return SubjectFault.RESERVED
+    return None
 
 
 def check_subject(subject: str) -> str:
     """The contact to sign as, or SubjectError naming what is wrong with it."""
-    problem = subject_problem(subject)
-    if problem:
-        raise SubjectError(
-            f"push is on, but its contact {problem}. Set HP_PUSH_SUBJECT to a mailto: you "
-            "read, or HP_PUSH_ENABLED=0."
-        )
+    fault = subject_problem(subject)
+    if fault is not None:
+        raise SubjectError(fault)
     return subject.strip()
 
 
@@ -468,7 +488,10 @@ def _stored(path: Path, text: str | None) -> list[Subscription]:
         try:
             out.append(Subscription.model_validate(entry))
         except ValidationError as exc:
-            log.warning("%s: dropping malformed entry %d: %s", path, index, summary(exc))
+            # Pydantic's words can quote what failed; the entry's place and the class say enough.
+            log.warning(
+                "%s: dropping malformed entry %d (%s)", path.name, index, type(exc).__name__
+            )
     return out
 
 
@@ -608,7 +631,7 @@ class _NoRedirects(requests.Session):
 
 def _refusal(exc: Exception) -> DeliveryError:
     if not isinstance(exc, WebPushException):
-        return DeliveryError(cause=type(exc))
+        return DeliveryError(cause=type(exc).__name__)
     # Pywebpush leaves response untyped, and it posts with requests.
     response = cast("requests.Response | None", exc.response)
     if response is None:
@@ -617,11 +640,11 @@ def _refusal(exc: Exception) -> DeliveryError:
     return DeliveryError(response.status_code)
 
 
-def _delivery_words(status: int | None, cause: type[Exception] | None) -> str:
+def _delivery_words(status: int | None, cause: str | None) -> str:
     if status is not None:
         return f"push service answered {_phrase(status)}"
     if cause is not None:
-        return f"push service not reached ({cause.__name__})"
+        return f"push service not reached ({cause})"
     return "push not sent: pywebpush refused it before posting"
 
 
@@ -739,11 +762,12 @@ class DeliveryLog:
         """One device accepted a push."""
         self._bump(lambda r, now: {"sent": r.sent + 1, "last_send_at": now})
 
-    def failed(self, error: Exception) -> None:
-        """One push failed for a reason other than the device being gone."""
+    def failed(self, error: Exception) -> str:
+        """Record one push failed for a reason other than the device being gone; the words kept."""
         # A delivery error's words are built from a status and a class; any other keeps its class.
         said = str(error) if isinstance(error, DeliveryError) else type(error).__name__
         self._failed(said)
+        return said
 
     def overran(self, budget: float, skipped: int) -> None:
         """The fan-out spent its budget with ``skipped`` devices still untried."""
@@ -775,7 +799,9 @@ class DeliveryLog:
             self._current = statedir.update(self.path, counted)
         except OSError as exc:
             # Health is for the reader; failing to write it must never stop a push.
-            log.warning("cannot write %s: %s; doctor will see nothing", self.path, exc)
+            log.warning(
+                "cannot write %s (%s); doctor will see nothing", self.path.name, type(exc).__name__
+            )
 
 
 def _delivery(text: str | None) -> DeliveryRecord | None:
@@ -826,8 +852,9 @@ def _one(data: str, subscription: Subscription, outlet: Outlet, *, now: WallTime
             _prune(outlet.store, subscription)
             outlet.health.pruned()
             return "pruned"
-        log.warning("push failed: %s", exc)
-        outlet.health.failed(exc)
+        # The words the record kept, built from a status and a class, never the library's.
+        said = outlet.health.failed(exc)
+        log.warning("push failed: %s", said)
         return "failed"
     outlet.health.sent()
     return "sent"
