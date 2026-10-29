@@ -107,7 +107,7 @@ layers = [
     "writes | notify | files",
     "decisions | render",
     "engine",
-    "audit : pairing : devreport : facts : glyphs : patterns : notify_state : push : auth : tailscale : settings : statedir : clock : managed : panetext : process_start : protocol : validation : ids",
+    "audit : pairing : devreport : facts : glyphs : patterns : notify_state : push : auth : tailscale : settings : statedir : logs : clock : managed : panetext : process_start : protocol : validation : ids",
 ]
 
 # The view composes the status, which reads the turns; an import the other way is a cycle.
