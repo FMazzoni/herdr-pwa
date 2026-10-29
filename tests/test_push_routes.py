@@ -113,6 +113,22 @@ def test_a_malformed_body_is_a_400_with_a_reason(tmp_path: Path, route: str, bod
     assert not SubscriptionStore(rig.settings.state_dir).list_all()
 
 
+@pytest.mark.parametrize(("route", "body"), POSTS)
+def test_a_broken_store_is_a_400_that_names_no_path_and_quotes_nothing(
+    tmp_path: Path, route: str, body: dict[str, object]
+) -> None:
+    rig = build_rig(tmp_path)
+    state = rig.settings.state_dir
+    statedir.write_secret(statedir.ensure_dir(state) / "subscriptions.json", '{"subscriptions": 7}')
+    # A directory where a file belongs: the OSError's text carries the full path.
+    (state / "interrupts.json").mkdir()
+    answer = rig.http.post(route, headers=SAME_ORIGIN, json=body)
+    assert answer.status_code == 400
+    assert answer.json()["error"]
+    for leak in (str(tmp_path), "subscriptions.json", "valid array", "Errno"):
+        assert leak not in answer.text
+
+
 @pytest.mark.parametrize(("route", "body"), WRITES)
 def test_a_write_keeps_its_disk_work_off_the_event_loop(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, route: str, body: dict[str, object]

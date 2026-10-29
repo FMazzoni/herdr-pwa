@@ -143,9 +143,9 @@ def _stand_in(request: Request) -> str:
 
 
 def _status_and_detail(exc: Exception, failure: Failure) -> tuple[int, str]:
-    # The auth library words its refusals for the caller; runner text stays in the log.
+    # Our auth module words its refusals for the caller; runner text stays in the log.
     if isinstance(exc, AuthError):
-        return exc.status_code, str(exc)
+        return exc.status_code, exc.detail
     return failure.status, failure.detail
 
 

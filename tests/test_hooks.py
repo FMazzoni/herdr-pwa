@@ -237,6 +237,19 @@ def test_a_re_pin_needs_a_note(rig: Rig, pin: str, note: str, *, refused: bool) 
     assert ("meta.rehashed" in done.stderr) is refused
 
 
+@pytest.mark.parametrize("ledger", ["{not json", "[1, 2]"], ids=["not-json", "not-an-object"])
+def test_a_re_pin_with_a_broken_ledger_is_refused_not_a_traceback(rig: Rig, ledger: str) -> None:
+    _ledger_files(rig, "a" * 64, "Re-pinned once.")
+    rig.git("commit", "-q", "-m", "Add the ledger")
+    _ledger_files(rig, "b" * 64, "Re-pinned once. Re-pinned again.")
+    (rig.work / "tests" / "fixtures" / "ledger.json").write_text(ledger, encoding="utf-8")
+    rig.git("add", "tests")
+    done = _ledger_repin(rig)
+    assert done.returncode == 1
+    assert "meta.rehashed" in done.stderr
+    assert "Traceback" not in done.stderr
+
+
 def test_a_first_commit_of_the_ledger_passes(rig: Rig) -> None:
     _ledger_files(rig, "a" * 64, "")
     done = _ledger_repin(rig)

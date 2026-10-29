@@ -15,7 +15,7 @@ from pydantic import (
 )
 
 from herdr_pwa.notify_state import MAX_DND_SECONDS, InterruptStore
-from herdr_pwa.push import Subscription, SubscriptionError, SubscriptionStore
+from herdr_pwa.push import DeviceLimitError, Subscription, SubscriptionError, SubscriptionStore
 from herdr_pwa.validation import or_default, summary
 from herdr_pwa.web.deps import WebState, viewer_guard
 from herdr_pwa.web.herd import mark_read
@@ -25,10 +25,16 @@ from herdr_pwa.web.writing import identity_of
 # A PushSubscription is well under 1 KiB; anything far bigger is not one.
 MAX_BODY_BYTES: Final = 8192
 PUSH_OFF: Final = "push is switched off on this server (HP_PUSH_ENABLED=0)"
+DEVICES_UNUSABLE: Final = "this server cannot use its list of devices"
+SETTINGS_UNUSABLE: Final = "this server cannot read or write its alert settings"
 
 
 class BadBodyError(Exception):
     """The request body is too big to be what the route needs."""
+
+    def __init__(self, detail: str) -> None:
+        super().__init__(detail)
+        self.detail: str = detail
 
 
 class _Endpoint(BaseModel):
@@ -61,6 +67,13 @@ def _off() -> JSONResponse:
 
 def _bad(detail: str) -> JSONResponse:
     return _json({"error": detail}, 400)
+
+
+def _refused(exc: BadBodyError | SubscriptionError | OSError, unusable: str) -> JSONResponse:
+    # Our own fixed words pass; any other error's text can carry the state dir's full path.
+    if isinstance(exc, BadBodyError | DeviceLimitError):
+        return _bad(exc.detail)
+    return _bad(f"{unusable} ({type(exc).__name__})")
 
 
 async def _body[M: BaseModel](request: Request, model: type[M]) -> M:
@@ -155,7 +168,7 @@ async def _subscribe(push: PushState, request: Request) -> JSONResponse:
     except ValidationError as exc:
         return _bad(summary(exc))
     except (BadBodyError, SubscriptionError, OSError) as exc:
-        return _bad(str(exc))
+        return _refused(exc, DEVICES_UNUSABLE)
     devices = await asyncio.to_thread(_devices, push.stores.devices)
     # The echoed endpoint is the server's confirmation; only then does the page say "on".
     armed = push.notifier is not None
@@ -169,7 +182,7 @@ async def _unsubscribe(push: PushState, request: Request) -> JSONResponse:
     except ValidationError as exc:
         return _bad(summary(exc))
     except (BadBodyError, SubscriptionError, OSError) as exc:
-        return _bad(str(exc))
+        return _refused(exc, DEVICES_UNUSABLE)
     devices = await asyncio.to_thread(_devices, push.stores.devices)
     return _json({"removed": removed, "devices": devices})
 
@@ -181,7 +194,7 @@ async def _device(push: PushState, request: Request) -> JSONResponse:
     except ValidationError as exc:
         return _bad(summary(exc))
     except (BadBodyError, SubscriptionError, OSError) as exc:
-        return _bad(str(exc))
+        return _refused(exc, DEVICES_UNUSABLE)
     devices = await asyncio.to_thread(_devices, push.stores.devices)
     notifier = push.notifier
     # No clear is ever pushed, so the page closes the herd alert itself once nothing is owed.
@@ -199,7 +212,7 @@ async def _set_prefs(push: PushState, request: Request) -> JSONResponse:
     except ValidationError as exc:
         return _bad(summary(exc))
     except (BadBodyError, OSError) as exc:
-        return _bad(str(exc))
+        return _refused(exc, SETTINGS_UNUSABLE)
     return _json(await asyncio.to_thread(_policy, push.stores.interrupts))
 
 
@@ -210,7 +223,7 @@ async def _snooze(push: PushState, request: Request) -> JSONResponse:
     except ValidationError as exc:
         return _bad(summary(exc))
     except (BadBodyError, OSError) as exc:
-        return _bad(str(exc))
+        return _refused(exc, SETTINGS_UNUSABLE)
     if policy.dnd_until and push.notifier is not None:
         # It waits on the notifier's lock, which a tick holds while it sends, so off the loop.
         await asyncio.to_thread(push.notifier.retract)
