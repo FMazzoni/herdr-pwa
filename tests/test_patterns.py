@@ -3,7 +3,6 @@
 import importlib
 import pkgutil
 import re
-import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from functools import partial
@@ -18,27 +17,13 @@ import herdr_pwa
 from herdr_pwa.panetext import plain, without_escapes
 from herdr_pwa.patterns import Rx
 from herdr_pwa.validation import MODEL_ID
+from tests.costs import assert_linear
 from tests.engine_seam import dialog_chunks, injected
 
 # The wire models are generated from herdr's schema and compile nothing of this app's.
 _GENERATED = "herdr_pwa.engine.generated"
-# A linear pattern reads this in well under a millisecond; a quadratic one took seconds.
-_LONG = 5_000
-# CPU time, so a loaded machine cannot inflate it: generous, and still far under a backtrack.
-_CPU_SECONDS = 0.5
-# Linear costs ~4x at four times the length and quadratic ~16x; 8x sits between, whatever the machine.
-_SCALE = 4
-_MAX_RATIO = 8.0
-# Best of several runs, since noise only ever adds time; two runs within 10% already settle it.
-_REPEATS = 5
-_AGREEING = 2
-_AGREEMENT = 1.1
-# Below this the clock's grain and call overhead swamp the ratio, so the input grows first.
-_FLOOR_SECONDS = 0.0005
-# Past this a shape still under the floor costs nothing per character, so no ratio is read.
-_MAX_LONG = 80_000
-# A flood of 100k escapes took tens of seconds when quadratic; 5 s still catches that under a busy gate.
-_FLOOD_CPU_SECONDS = 5.0
+# From a length no screen line reaches, which a linear pattern reads in well under a millisecond.
+_SPAN = (5_000, 80_000)
 
 # Derandomized and kept off disk, so CI runs the same examples every time and leaves no database.
 QUICK = settings(
@@ -113,33 +98,11 @@ def test_a_validator_refuses_a_trailing_newline(rx: Rx) -> None:
     assert [text for text in rx.matches if rx.found(text + "\n") is not None] == []
 
 
-def _runs(examples: tuple[str, ...], length: int) -> Iterator[str]:
-    for example in examples:
-        if example:
-            yield (example * (length // len(example) + 1))[:length]
-    for char in sorted(set("".join(examples))):
-        yield char * length
-
-
-def _long_inputs(
-    examples: tuple[str, ...], length: int = _LONG, ends: tuple[str, ...] = ("",)
-) -> Iterator[str]:
-    """The examples and their characters, repeated to a length no screen line reaches, then each end."""
-    return (run + end for run in _runs(examples, length) for end in ends)
-
-
 def _read(rx: Rx, text: str) -> int:
     # A search pattern is read as sub, split and finditer read it: every match, not the first.
     if rx.method == "search":
         return sum(1 for _ in rx.pattern.finditer(text))
     return int(rx.found(text) is not None)
-
-
-@pytest.mark.parametrize("rx", RECORDS, ids=_name)
-def test_no_pattern_backtracks_on_long_input(rx: Rx) -> None:
-    started = time.process_time()
-    _ = sum(_read(rx, text) for text in _long_inputs((*rx.matches, *rx.rejects)))
-    assert time.process_time() - started < _CPU_SECONDS
 
 
 @dataclass(frozen=True, slots=True)
@@ -185,55 +148,11 @@ def _built(shape: tuple[str, str], length: int) -> str:
     return (unit * (length // len(unit) + 1))[:length] + end
 
 
-def _cpu(reader: _Reader, text: str) -> float:
-    started = time.process_time()
-    _ = reader.read(text)
-    return time.process_time() - started
-
-
-def _agree(runs: list[float]) -> bool:
-    return len(runs) >= _AGREEING and max(runs[-_AGREEING:]) <= min(runs) * _AGREEMENT
-
-
-def _best_times(reader: _Reader, shape: tuple[str, str], length: int) -> tuple[float, float]:
-    """The least CPU time over the repeats to read *shape* at *length* and at the scaled length."""
-    sizes = [_built(shape, size) for size in (length, length * _SCALE)]
-    runs: tuple[list[float], list[float]] = ([], [])
-    # Interleaved, so a slow spell on the machine lands on both sizes rather than one.
-    while len(runs[0]) < _REPEATS and not all(_agree(each) for each in runs):
-        for text, each in zip(sizes, runs, strict=True):
-            each.append(_cpu(reader, text))
-    return min(runs[0]), min(runs[1])
-
-
-def _shape_ratio(reader: _Reader, shape: tuple[str, str]) -> tuple[float, int] | None:
-    length = _LONG
-    # One run picks the length; only the length measured is repeated.
-    while length < _MAX_LONG and _cpu(reader, _built(shape, length)) < _FLOOR_SECONDS:
-        length *= _SCALE
-    short, long = _best_times(reader, shape, length)
-    # Still under the floor: it bails out before reading the input, so no per-character cost scales.
-    if short < _FLOOR_SECONDS:
-        return None
-    if long / short < _MAX_RATIO:
-        return long / short, length
-    # Quadratic is steep at every size; a cache filling up, or a slow spell, is one step.
-    again, longer = _best_times(reader, shape, length * _SCALE)
-    return min(long / short, longer / again), length
-
-
-def _ratio(reader: _Reader) -> tuple[float, int] | None:
-    """The steepest growth over its shapes, each timed alone so a cheap quadratic one is not diluted."""
-    found = (ratio for shape in _shapes(reader) if (ratio := _shape_ratio(reader, shape)))
-    return max(found, default=None)
-
-
 @pytest.mark.parametrize("reader", [*map(_pattern_reader, RECORDS), _TAG_READER])
 def test_no_pattern_costs_more_than_linear_time(reader: _Reader) -> None:
-    measured = _ratio(reader)
-    if measured is not None:
-        ratio, length = measured
-        assert ratio < _MAX_RATIO, f"{ratio:.1f}x at {length * _SCALE:,} characters"
+    # Each shape alone, so a cheap quadratic one is not diluted by the rest.
+    for shape in _shapes(reader):
+        assert_linear(partial(_built, shape), reader.read, span=_SPAN, what=repr(shape))
 
 
 @pytest.mark.parametrize("rx", VALIDATORS, ids=_name)
@@ -255,13 +174,15 @@ def test_a_model_id_holds_no_whitespace(model: str) -> None:
 
 
 # Escape floods: a string sequence's opener over and over, which a colour read could carry.
-_FLOODS = ("\x1b]" * 20_000, "\x1bPx" * 15_000, "\x1b_" * 20_000)
+_FLOOD_OPENERS = ("\x1b]", "\x1bPx", "\x1b_")
 
 
-@pytest.mark.parametrize("flood", _FLOODS, ids=["osc", "dcs", "apc"])
-def test_an_escape_flood_is_read_in_linear_time(flood: str) -> None:
-    started = time.process_time()
+def _flood_read(flood: str) -> None:
     _ = dialog_chunks(flood)
     _ = without_escapes(flood)
     _ = plain(flood)
-    assert time.process_time() - started < _FLOOD_CPU_SECONDS
+
+
+@pytest.mark.parametrize("opener", _FLOOD_OPENERS, ids=["osc", "dcs", "apc"])
+def test_an_escape_flood_is_read_in_linear_time(opener: str) -> None:
+    assert_linear(lambda n: opener * n, _flood_read, span=(2_500, 40_000))

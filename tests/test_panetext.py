@@ -1,7 +1,7 @@
 """The pane transform: legibility, colour, and the safety rule."""
 
 import re
-import time
+from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
 
@@ -23,6 +23,7 @@ from herdr_pwa.panetext import (
     printed_whole,
 )
 from tests._wire_support import as_reply
+from tests.costs import assert_linear
 
 ANSI_DIR = Path(__file__).parent / "fixtures" / "ansi"
 SNAPSHOT_FIXTURE = Path(__file__).parent / "fixtures" / "snapshot.example.json"
@@ -398,17 +399,18 @@ def test_the_module_stays_a_leaf() -> None:
 # --------------------------------------------------------------------------
 
 
-def test_a_progress_bar_does_not_hang_the_pane() -> None:
+# The rows that hung it, grown: a backtracking frame costs minutes at 30 characters.
+_FRAMED_ROWS: dict[str, Callable[[int], str]] = {
+    "bar": lambda n: "Building [" + "█" * n + "░" * n + "] 60%",
+    "sparkline": lambda n: "cpu ▁▂▃▄▅▆▇█" * n + " 74%",
+    "blocks": lambda n: "x" + "█" * n + "y",
+}
+
+
+@pytest.mark.parametrize("row", _FRAMED_ROWS.values(), ids=_FRAMED_ROWS.keys())
+def test_a_progress_bar_does_not_hang_the_pane(row: Callable[[int], str]) -> None:
     """``_TAIL_FRAME`` was ``(?:[WS]*[BOX]+)*[WS]*$`` -- catastrophic backtracking."""
-    bar = "Building [" + "█" * 18 + "░" * 10 + "] 60%"
-    # CPU time of this thread, which other processes' load does not inflate: backtracking costs
-    # minutes of it here, a linear scan about a millisecond.
-    start = time.thread_time()
-    pane_lines(bar)
-    pane_lines("cpu ▁▂▃▄▅▆▇█" * 8 + " 74%")
-    pane_lines("x" + "█" * 400 + "y")
-    spent = time.thread_time() - start
-    assert spent < 1.0, f"pane text took {spent:.1f}s of CPU; the regex is backtracking"
+    assert_linear(row, pane_lines, span=(500, 64_000))
 
 
 def test_the_indentation_of_a_diff_survives_a_gutter() -> None:
@@ -594,15 +596,19 @@ def test_a_draft_in_the_input_box_is_never_drawn() -> None:
 # --------------------------------------------------------------------------
 
 
-def test_the_new_rule_predicates_are_linear_on_a_pathological_row() -> None:
+_PATHOLOGICAL_ROWS: dict[str, Callable[[int], str]] = {
+    "blocks": lambda n: "█" * n + "x",
+    "dashes": lambda n: "-" * n + " tail",
+    "rules": lambda n: ("─" * n) + "\n\u276f d\n" + ("─" * n) + "\ns",
+}
+
+
+@pytest.mark.parametrize("row", _PATHOLOGICAL_ROWS.values(), ids=_PATHOLOGICAL_ROWS.keys())
+def test_the_new_rule_predicates_are_linear_on_a_pathological_row(
+    row: Callable[[int], str],
+) -> None:
     """Every regex added since must be checked for the ``(a+)*`` shape."""
-    start = time.thread_time()
-    for size in (200, 2000, 20000):
-        pane_view("█" * size + "x")
-        pane_view("-" * size + " tail")
-        pane_view(("─" * size) + "\n\u276f d\n" + ("─" * size) + "\ns")
-    # CPU time, as above, so a loaded machine cannot fail a linear scan.
-    assert time.thread_time() - start < 2.0
+    assert_linear(row, pane_view, span=(200, 64_000))
 
 
 # --------------------------------------------------------------------------

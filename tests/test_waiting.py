@@ -1,11 +1,12 @@
 """The one wait helper: it returns what it waited for, and it gives up at its ceiling, not before."""
 
 import asyncio
+import threading
 import time
 
 import pytest
 
-from tests.waiting import GaveUpError, eventually, holds, until, until_async, watch
+from tests.waiting import GaveUpError, eventually, holds, until, until_async, watch, within
 
 # Long enough that a probe answering on its third look is well inside it, on a loaded box too.
 CEILING = 5.0
@@ -91,3 +92,22 @@ def test_until_async_gives_up_at_the_ceiling() -> None:
 
     with pytest.raises(GaveUpError):
         asyncio.run(until_async(never, SHORT))
+
+
+def test_within_hands_back_what_the_call_returned() -> None:
+    assert within(lambda: "done", CEILING) == "done"
+
+
+def test_within_raises_what_the_call_raised() -> None:
+    def refuse() -> str:
+        raise LookupError("refused")
+
+    with pytest.raises(LookupError, match="refused"):
+        within(refuse, CEILING)
+
+
+def test_within_gives_up_on_a_call_still_going_at_the_ceiling() -> None:
+    release = threading.Event()
+    with pytest.raises(GaveUpError):
+        within(lambda: release.wait(CEILING), SHORT)
+    release.set()

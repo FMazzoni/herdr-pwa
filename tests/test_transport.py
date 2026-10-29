@@ -39,7 +39,7 @@ from tests.engine_seam import (
     WIRE_LIMITS,
     SocketTransport,
 )
-from tests.waiting import eventually, until
+from tests.waiting import eventually, until, within
 
 SRC = Path(__file__).resolve().parent.parent / "src" / "herdr_pwa"
 
@@ -452,10 +452,8 @@ def test_a_runner_that_never_answers_times_out(
 ) -> None:
     serve(sock_path, lambda _r, _c: None, request)
     wire = transport(sock_path, timeout=0.2)
-    started = time.monotonic()
     with pytest.raises(EngineTimeoutError):
-        wire.call("session.snapshot", {})
-    assert time.monotonic() - started < 2.0
+        within(lambda: wire.call("session.snapshot", {}), 2.0)
 
 
 def test_a_dribbling_peer_cannot_outlast_the_deadline(
@@ -474,10 +472,8 @@ def test_a_dribbling_peer_cannot_outlast_the_deadline(
 
     serve(sock_path, handler, request)
     wire = transport(sock_path, timeout=0.3)
-    started = time.monotonic()
     with pytest.raises(EngineTimeoutError):
-        wire.call("session.snapshot", {})
-    assert time.monotonic() - started < 2.0
+        within(lambda: wire.call("session.snapshot", {}), 2.0)
 
 
 def test_a_timeout_destroys_the_connection(sock_path: Path, request: pytest.FixtureRequest) -> None:
@@ -1298,11 +1294,9 @@ def test_close_from_another_thread_ends_the_iteration(
     serve(sock_path, streaming(), request)
     live = stream(sock_path)
     threading.Timer(0.2, live.close).start()
-    started = time.monotonic()
     with pytest.raises(EngineUnavailableError, match="was closed"):
-        list(live)
+        within(lambda: list(live), FAST * 10)
     assert live.closed, "a caller-requested stop has to be distinguishable"
-    assert time.monotonic() - started < FAST * 10
 
 
 def test_a_subscription_with_nothing_in_it_is_refused_before_any_connection(

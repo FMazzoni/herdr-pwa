@@ -5,10 +5,10 @@ import re
 import socket
 import stat
 import threading
-import time
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from dataclasses import replace
+from functools import partial
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import cast
@@ -56,7 +56,9 @@ from herdr_pwa.push import (
     subject_problem,
 )
 from herdr_pwa.settings import Settings
+from tests.costs import assert_linear
 from tests.fakes import Clock
+from tests.waiting import within
 
 ENDPOINT = "https://fcm.googleapis.com/fcm/send/one"
 SUBJECT = "mailto:someone@herdr.example.org"
@@ -463,31 +465,26 @@ def test_no_host_like_token_survives_sanitising(text: str) -> None:
 
 
 # One unbroken word made the old pattern rescan the rest of it from every letter: 18 s at 20k.
-ADVERSARIAL = (
-    "a" * 100_000,
-    "a." * 50_000,
-    "a-" * 50_000,
-    "1a" * 50_000,
-    "a.." * 33_333,
-    "ww." * 33_333,
-)
+ADVERSARIAL = ("a", "a.", "a-", "1a", "a..", "ww.")
+
+
+def _repeated(unit: str, length: int) -> str:
+    return (unit * (length // len(unit) + 1))[:length]
 
 
 @pytest.mark.parametrize(
-    "text", ADVERSARIAL, ids=["word", "dots", "dashes", "digits", "breaks", "near-www"]
+    "unit", ADVERSARIAL, ids=["word", "dots", "dashes", "digits", "breaks", "near-www"]
 )
-def test_scanning_for_links_is_linear_in_the_text(text: str) -> None:
-    # CPU time, so a loaded gate cannot inflate it; the old pattern took minutes, far past 1 s.
-    started = time.process_time()
-    _ = push._URL_RE.sub(LINK_PLACEHOLDER, text)  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
-    assert time.process_time() - started < 1.0
+def test_scanning_for_links_is_linear_in_the_text(unit: str) -> None:
+    def scan(text: str) -> str:
+        return push._URL_RE.sub(LINK_PLACEHOLDER, text)  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
+
+    assert_linear(partial(_repeated, unit), scan, span=(5_000, 320_000))
 
 
 def test_a_long_notice_is_cut_before_it_is_scanned() -> None:
-    started = time.process_time()
-    cleaned = sanitise("a" * 100_000, limit=MAX_BODY_CHARS)
-    assert time.process_time() - started < 1.0
-    assert cleaned == "a" * (MAX_BODY_CHARS - 1) + "…"
+    assert_linear(lambda n: "a" * n, partial(sanitise, limit=MAX_BODY_CHARS), span=(5_000, 320_000))
+    assert sanitise("a" * 100_000, limit=MAX_BODY_CHARS) == "a" * (MAX_BODY_CHARS - 1) + "…"
 
 
 @pytest.mark.parametrize("padding", range(4075, 4095))
@@ -744,10 +741,9 @@ def test_a_push_service_that_never_answers_fails_within_the_timeout(tmp_path: Pa
     with socket.create_server(("127.0.0.1", 0)) as silent:
         # An IPv4 socket's name is (host, port).
         port = cast("tuple[str, int]", silent.getsockname())[1]
-        started = time.monotonic()
+        send = a_sender(tmp_path, limits)
         with pytest.raises(DeliveryError) as refused:
-            a_sender(tmp_path, limits)(unchecked(f"https://127.0.0.1:{port}/push"), "{}")
-    assert time.monotonic() - started < 5
+            within(lambda: send(unchecked(f"https://127.0.0.1:{port}/push"), "{}"), 5)
     assert refused.value.status is None
     # The library's text names the endpoint; the record keeps only fixed words.
     assert str(refused.value) == "push service not reached (ReadTimeout)"
