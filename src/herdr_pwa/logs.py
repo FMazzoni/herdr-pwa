@@ -5,19 +5,18 @@ import logging
 import sys
 import threading
 import traceback
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from pathlib import PurePath
 from types import TracebackType
-from typing import Final, TextIO, cast, override
+from typing import Final, TextIO, override
 
-from uvicorn.logging import AccessFormatter, DefaultFormatter
+from uvicorn.logging import DefaultFormatter
 
 type ExcInfo = (
     tuple[type[BaseException], BaseException, TracebackType | None] | tuple[None, None, None]
 )
 
 _DEFAULT_FMT: Final = "%(levelprefix)s %(message)s"
-_ACCESS_FMT: Final = '%(levelprefix)s %(client_addr)s - "%(request_line)s" %(status_code)s'
 # The installed tree and this package both sit under a home directory; what follows is enough.
 _ANCHORS: Final = ("site-packages/", "herdr_pwa/")
 # How traceback.format_stack starts and splits each frame's line.
@@ -27,8 +26,6 @@ _STACK_HEAD: Final = "Stack (most recent call last):"
 _TRACEBACK_HEAD: Final = "Traceback (most recent call last):"
 _CAUSE: Final = "The above exception was the direct cause of the following exception:"
 _CONTEXT: Final = "During handling of the above exception, another exception occurred:"
-# How deep into list, tuple, set and dict arguments an exception or path is still found.
-_NESTING: Final = 2
 # Asyncio joins the task's repr, with its absolute path and the exception's text, into the message.
 _ASYNCIO: Final = "asyncio"
 # Each repr asyncio writes starts with one of these; the part before it is its fixed words.
@@ -40,16 +37,14 @@ _UNCAUGHT: Final = logging.getLogger("herdr_pwa.uncaught")
 
 
 class ScrubFilter(logging.Filter):
-    """Names exceptions and paths in arguments, two containers deep; not inside other objects."""
+    """Names an exception or path passed as message or argument; nested values are not searched."""
 
     @override
     def filter(self, record: logging.LogRecord) -> bool:
         if isinstance(record.msg, BaseException | PurePath):
             record.msg = _scrubbed(record.msg)
         if isinstance(record.args, Mapping):
-            # A lone dict argument is the args, keys of any type, and "%s" prints it keys and all.
-            scrubbed = _scrubbed_mapping(cast("Mapping[object, object]", record.args), _NESTING)
-            record.args = (scrubbed,) if isinstance(scrubbed, str) else _named_args(scrubbed)
+            record.args = {key: _scrubbed(value) for key, value in record.args.items()}
         elif record.args:
             record.args = tuple(_scrubbed(value) for value in record.args)
         if record.name == _ASYNCIO:
@@ -76,18 +71,6 @@ class ScrubHandler(logging.StreamHandler[TextIO]):
 
 class ScrubFormatter(DefaultFormatter):
     """Uvicorn's default formatter, with tracebacks reduced to frames and class names."""
-
-    @override
-    def formatException(self, ei: ExcInfo) -> str:
-        return scrubbed_traceback(ei)
-
-    @override
-    def formatStack(self, stack_info: str) -> str:
-        return scrubbed_stack(stack_info)
-
-
-class ScrubAccessFormatter(AccessFormatter):
-    """Uvicorn's access formatter, with tracebacks reduced to frames and class names."""
 
     @override
     def formatException(self, ei: ExcInfo) -> str:
@@ -140,7 +123,6 @@ def logging_config() -> dict[str, object]:
         "filters": {"scrub": {"()": ScrubFilter}},
         "formatters": {
             "default": {"()": ScrubFormatter, "fmt": _DEFAULT_FMT, "use_colors": None},
-            "access": {"()": ScrubAccessFormatter, "fmt": _ACCESS_FMT},
         },
         "handlers": {
             "default": {
@@ -149,61 +131,24 @@ def logging_config() -> dict[str, object]:
                 "stream": "ext://sys.stderr",
                 "filters": ["scrub"],
             },
-            "access": {
-                "formatter": "access",
-                "class": ScrubHandler,
-                "stream": "ext://sys.stdout",
-                "filters": ["scrub"],
-            },
         },
+        # No uvicorn.access: serve turns access logs off, which empties that logger anyway.
         "loggers": {
             "uvicorn": {"handlers": ["default"], "level": "INFO", "propagate": False},
             "uvicorn.error": {"level": "INFO"},
-            "uvicorn.access": {"handlers": ["access"], "level": "INFO", "propagate": False},
         },
         # WARNING is the level the unconfigured root gave the app's own loggers before.
         "root": {"handlers": ["default"], "level": "WARNING"},
     }
 
 
-# Logging takes any value as an argument (typeshed's _ArgsType), so these take object.
-def _scrubbed(value: object, depth: int = _NESTING) -> object:
+# Logging takes any value as an argument (typeshed's _ArgsType), so this takes object.
+def _scrubbed(value: object) -> object:
     if isinstance(value, BaseException):
         return exception_name(value)
     if isinstance(value, PurePath):
         return value.name
-    if depth <= 0:
-        return value
-    return _scrubbed_items(value, depth - 1)
-
-
-def _scrubbed_items(value: object, depth: int) -> object:
-    if isinstance(value, Mapping):
-        # Isinstance cannot say a mapping's types; logging lets them be anything.
-        return _scrubbed_mapping(cast("Mapping[object, object]", value), depth)
-    if isinstance(value, list | tuple | set | frozenset):
-        # A list, since a scrubbed member, a list itself, could not go back into a set.
-        return [_scrubbed(item, depth) for item in cast("Iterable[object]", value)]
     return value
-
-
-def _scrubbed_mapping(value: Mapping[object, object], depth: int) -> dict[object, object] | str:
-    try:
-        scrubbed = {_scrubbed(key, depth): _scrubbed(item, depth) for key, item in value.items()}
-    except TypeError:
-        # A scrubbed key can be a list, which no dict takes.
-        return _mapping_words(value)
-    # Two keys scrubbed to one name would drop an entry without saying so.
-    return scrubbed if len(scrubbed) == len(value) else _mapping_words(value)
-
-
-def _mapping_words(value: Mapping[object, object]) -> str:
-    return f"<a mapping of {len(value)}>"
-
-
-def _named_args(scrubbed: dict[object, object]) -> dict[str, object]:
-    # Its str keys stay str through scrubbing, so a "%(name)s" still finds them.
-    return cast("dict[str, object]", scrubbed)
 
 
 def _asyncio_words(record: logging.LogRecord) -> str:
@@ -245,7 +190,7 @@ def _chain_lines(exc: BaseException, seen: set[int]) -> list[str]:
         for frame, line in traceback.walk_tb(exc.__traceback__)
     ]
     tail = [_TRACEBACK_HEAD, *frames] if frames else []
-    return [*head, *tail, _qualified(exc), *_member_lines(exc, seen)]
+    return [*head, *tail, _qualified(exc)]
 
 
 def _short_file(filename: str) -> str:
@@ -261,18 +206,6 @@ def _qualified(exc: BaseException) -> str:
     module = type(exc).__module__
     name = exception_name(exc)
     return name if module in {"builtins", "__main__"} else f"{module}.{name}"
-
-
-def _member_lines(exc: BaseException, seen: set[int]) -> list[str]:
-    if not isinstance(exc, BaseExceptionGroup):
-        return []
-    # Isinstance leaves the group's member type unknown; every member is a BaseException.
-    members = cast("BaseExceptionGroup[BaseException]", exc).exceptions
-    lines: list[str] = []
-    for number, member in enumerate(members, start=1):
-        lines.append(f"  +-- {number} of {len(members)}:")
-        lines.extend(f"    {line}" for line in _chain_lines(member, seen))
-    return lines
 
 
 def _log_uncaught(kind: type[BaseException], exc: BaseException, tb: TracebackType | None) -> None:

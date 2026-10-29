@@ -171,17 +171,6 @@ def test_an_unretrieved_task_exception_keeps_asyncios_first_line_only(
     assert str(Path(__file__).parent) not in shown
 
 
-def test_exceptions_and_paths_nested_in_containers_are_scrubbed() -> None:
-    record = logging.LogRecord("t", logging.ERROR, __file__, 1, "%s %s %s", None, None)
-    record.args = (
-        [ValueError(PRIVATE_PATH)],
-        {"where": Path(PRIVATE_PATH)},
-        {(KeyError(PRIVATE_PATH),)},
-    )
-    shown = _rendered(record)
-    assert shown.endswith("['ValueError'] {'where': 'secret.json'} [['KeyError']]")
-
-
 def test_a_stack_drops_its_source_lines() -> None:
     stack = (
         "Stack (most recent call last):\n"
@@ -247,23 +236,6 @@ def test_a_serve_refusal_naming_a_file_is_said_in_fixed_words(
     assert "secret" not in said
 
 
-def _raise_group() -> None:
-    try:
-        _raise_oserror()
-    except OSError as exc:
-        raise ExceptionGroup(PRIVATE_PATH, [exc, KeyError(PRIVATE_PATH)]) from None
-
-
-def test_an_exception_group_shows_each_members_class_and_frames() -> None:
-    shown = _rendered(_record("x", _caught(_raise_group)))
-    assert "\nExceptionGroup\n" in shown
-    assert "  +-- 1 of 2:" in shown
-    assert '    File "test_logs.py", line' in shown
-    assert "    FileNotFoundError(ENOENT)" in shown
-    assert "    KeyError" in shown
-    assert "secret" not in shown
-
-
 async def _pending_forever() -> None:
     await asyncio.Event().wait()
 
@@ -293,25 +265,6 @@ def test_asyncios_own_lines_lose_their_reprs_and_paths(monkeypatch: pytest.Monke
     assert "ERROR:    Task was destroyed but it is pending!\n" in shown
     assert str(Path(__file__).parent) not in shown
     assert "secret" not in shown
-
-
-@pytest.mark.parametrize(
-    ("argument", "expected"),
-    [
-        ({ValueError(PRIVATE_PATH): 1}, "{'ValueError': 1}"),
-        ([{ValueError(PRIVATE_PATH): 1}], "[{'ValueError': 1}]"),
-        ({ValueError("a"): 1, ValueError("b"): 2}, "<a mapping of 2>"),
-        ({(Path(PRIVATE_PATH),): 1}, "<a mapping of 1>"),
-    ],
-)
-def test_dict_keys_are_scrubbed_or_said_in_fixed_words(
-    argument: dict[ValueError, int] | list[dict[ValueError, int]] | dict[tuple[Path], int],
-    expected: str,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    stream = _configured(monkeypatch)
-    logging.getLogger("herdr_pwa.test").warning("%s", argument)
-    assert stream.getvalue() == f"WARNING:  {expected}\n"
 
 
 def test_a_path_as_the_message_is_logged_as_its_name(monkeypatch: pytest.MonkeyPatch) -> None:
