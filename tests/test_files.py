@@ -29,6 +29,7 @@ from herdr_pwa.render.highlight import highlight
 from herdr_pwa.render.mdnode import MdNode
 from herdr_pwa.web.routers import files as files_router
 from tests.filefakes import booby_trap, git, make_repo, stand_in, trapped_submodule
+from tests.journal import journal_text
 from tests.waiting import until
 from tests.webfakes import (
     SNAPSHOT,
@@ -106,9 +107,10 @@ def test_a_refused_path_reaches_the_log_as_its_route_and_error_alone(
     with caplog.at_level(logging.WARNING, logger="herdr_pwa.web.failures"):
         response = rig.http.get(f"{_base(repo)}/file?path={path}", follow_redirects=False)
     assert response.status_code in {403, 404}
-    assert f"GET /files/{{root_id}}/file: {error}" in caplog.text
-    assert path.rsplit("/", 1)[-1] not in caplog.text
-    assert _base(repo) not in caplog.text
+    shown = journal_text(caplog)
+    assert f"GET /files/{{root_id}}/file: {error}" in shown
+    assert path.rsplit("/", 1)[-1] not in shown
+    assert _base(repo) not in shown
 
 
 @pytest.mark.parametrize(

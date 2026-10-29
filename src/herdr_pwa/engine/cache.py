@@ -121,7 +121,7 @@ class SnapshotCache:
                 raise
             log.warning(
                 "refresh failed (%s); still serving a value that is %.1fs old",
-                type(exc).__name__,
+                exc,
                 survivor.age,
             )
             return survivor

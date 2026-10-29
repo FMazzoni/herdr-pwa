@@ -170,9 +170,9 @@ def respond(pages: Pages, request: Request, exc: Exception) -> Response:
 
 
 def _log(request: Request, exc: Exception) -> None:
-    # Route template and class alone: a URL or an error's text can name a path, session or secret.
+    # The route template, not the URL: a URL can name a path, session or secret.
     route = getattr(request.scope.get("route"), "path", "?")
-    log.warning("%s %s: %s", request.method, route, type(exc).__name__)
+    log.warning("%s %s: %s", request.method, route, exc)
 
 
 def install(app: FastAPI, pages: Pages) -> None:

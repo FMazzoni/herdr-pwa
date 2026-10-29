@@ -12,6 +12,7 @@ from herdr_pwa.files import diffs
 from herdr_pwa.files import git as git_module
 from herdr_pwa.files.git import Git
 from tests.filefakes import git, make_repo, trapped_submodule
+from tests.journal import journal_text
 
 # git's own reading of a work tree, the oracle every answer here is compared with.
 STATUS: Final = (
@@ -215,9 +216,10 @@ def test_a_failed_read_logs_its_operation_and_error_class_alone(
     monkeypatch.setattr(git_module, "_status", refuse)
     with caplog.at_level(logging.INFO, logger="herdr_pwa.files.git"):
         assert Git().status(repo).branch == ""
-    assert "git status failed: GitError" in caplog.text
-    assert "private-plans" not in caplog.text
-    assert "hunter2" not in caplog.text
+    shown = journal_text(caplog)
+    assert "git status failed: GitError" in shown
+    assert "private-plans" not in shown
+    assert "hunter2" not in shown
 
 
 def _snapshot(dotgit: Path) -> dict[str, tuple[int, int]]:

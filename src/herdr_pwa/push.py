@@ -497,10 +497,8 @@ def _stored(path: Path, text: str | None) -> list[Subscription]:
         try:
             out.append(Subscription.model_validate(entry))
         except ValidationError as exc:
-            # Pydantic's words can quote what failed; the entry's place and the class say enough.
-            log.warning(
-                "%s: dropping malformed entry %d (%s)", path.name, index, type(exc).__name__
-            )
+            # Dropped, not fatal: one bad entry must not cost every other phone its pushes.
+            log.warning("%s: dropping malformed entry %d (%s)", path, index, exc)
     return out
 
 
@@ -808,9 +806,7 @@ class DeliveryLog:
             self._current = statedir.update(self.path, counted)
         except OSError as exc:
             # Health is for the reader; failing to write it must never stop a push.
-            log.warning(
-                "cannot write %s (%s); doctor will see nothing", self.path.name, type(exc).__name__
-            )
+            log.warning("cannot write %s (%s); doctor will see nothing", self.path, exc)
 
 
 def _delivery(text: str | None) -> DeliveryRecord | None:
@@ -824,7 +820,7 @@ def _prune(store: SubscriptionStore, subscription: Subscription) -> None:
     try:
         _ = store.remove(subscription.endpoint)
     except (SubscriptionError, OSError) as exc:
-        log.warning("could not prune a retired subscription: %s", type(exc).__name__)
+        log.warning("could not prune a retired subscription: %s", exc)
 
 
 @dataclass(frozen=True, slots=True)

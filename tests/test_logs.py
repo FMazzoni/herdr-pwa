@@ -16,6 +16,7 @@ from herdr_pwa import cli, logs
 from herdr_pwa.push import VapidKeyError
 from herdr_pwa.settings import Settings
 from herdr_pwa.web.seams import Seams
+from tests.journal import journal_text
 
 PRIVATE_PATH = "/home/user/secret.json"
 
@@ -133,7 +134,7 @@ def test_an_unlearned_host_logs_the_class_not_the_socket_path(
         push_enabled=False,
     )
     cli.serve(settings, 0, Seams())
-    shown = caplog.text
+    shown = journal_text(caplog)
     assert "LocalApiError" in shown
     assert str(tmp_path) not in shown
 

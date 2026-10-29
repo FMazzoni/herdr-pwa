@@ -129,7 +129,7 @@ def snapshot_now(client: HerdrClient, *, verb: str) -> Snapshot | Refused:
     try:
         return client.snapshot()
     except EngineError as exc:
-        log.warning("write refused: the herd could not be read: %s", type(exc).__name__)
+        log.warning("write refused: the herd could not be read: %s", exc)
         return Refused(Refusal.UNREACHABLE, verb, error=type(exc))
 
 
@@ -198,12 +198,12 @@ def attempt(audit: AuditTrail, write: Write, *, verb: str) -> Entry | Refused:
     try:
         return audit.record(write)
     except AuditUnavailableError as exc:
-        # Expected, and its text names the audit log's path: the class and the write say enough.
+        # Expected: a warning, not a traceback, since the class and the write say enough.
         log.warning(
             "%s refused at %s: it could not be recorded (%s)",
             write.endpoint,
             write.target,
-            type(exc).__name__,
+            exc,
         )
         return Refused(Refusal.UNRECORDABLE, verb, error=type(exc))
 

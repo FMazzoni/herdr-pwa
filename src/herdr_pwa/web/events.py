@@ -289,7 +289,7 @@ class Hub:
             # Woken by herdr, the cached copy is the one thing known to be old.
             return self._web.cache.get(self._web.client.snapshot, max_age=0 if fresh else None)
         except EngineError as exc:
-            log.debug("the event watcher could not read the herd: %s", type(exc).__name__)
+            log.debug("the event watcher could not read the herd: %s", exc)
             return None
 
     def _chats(self, viewed: frozenset[str], kinds: Mapping[str, tuple[str, str]]) -> Marks:
@@ -380,7 +380,7 @@ class _Upstream:
                     delay = UPSTREAM_BACKOFF[0]
                     poke()
             except EngineError as exc:
-                log.debug("the herdr subscription ended: %s", type(exc).__name__)
+                log.debug("the herdr subscription ended: %s", exc)
             if stream.closed:
                 # Closed on purpose: the pane set moved, so subscribe again at once.
                 continue

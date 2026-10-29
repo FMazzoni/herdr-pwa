@@ -215,7 +215,7 @@ def record_service_path(state_dir: Path) -> None:
             state_dir / SERVICE_PATH_FILENAME, os.environ.get("PATH", os.defpath) + "\n"
         )
     except OSError as exc:
-        log.warning("could not record the service's PATH for doctor: %s", type(exc).__name__)
+        log.warning("could not record the service's PATH for doctor: %s", exc)
 
 
 def service_path(state_dir: Path) -> str | None:
@@ -235,9 +235,7 @@ def record_service_models(state_dir: Path, declared: Declared) -> None:
         _ = statedir.ensure_dir(state_dir)
         statedir.write_secret(state_dir / SERVICE_MODELS_FILENAME, text)
     except OSError as exc:
-        log.warning(
-            "could not record the service's declared models for doctor: %s", type(exc).__name__
-        )
+        log.warning("could not record the service's declared models for doctor: %s", exc)
 
 
 def service_models(state_dir: Path) -> Declared | None:
@@ -296,10 +294,10 @@ def _abandon(client: HerdrClient, pane: PaneId) -> None:
     try:
         _ = client.close_pane(Seat(as_pane_id(pane)))
     except (EngineError, ValueError) as exc:
-        failed = type(exc).__name__
+        failed = exc
     else:
         return
-    # Loud, but the class alone: herdr's own words stay out of the journal.
+    # Loud, but one line: the leaked pane is the news, not where the close failed.
     log.error("the pane %s could not be closed and has leaked: %s", pane, failed)
 
 
@@ -310,9 +308,7 @@ def _await_session(client: HerdrClient, started: StartedAgent, pacing: Pacing) -
         try:
             started = client.started_agent(started.pane)
         except EngineError as exc:
-            log.warning(
-                "could not re-read the new agent at %s: %s", started.pane, type(exc).__name__
-            )
+            log.warning("could not re-read the new agent at %s: %s", started.pane, exc)
             break
     return started
 
