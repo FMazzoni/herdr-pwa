@@ -243,6 +243,20 @@ SERVE_REFUSALS: Final = (
     VapidKeyError,
     AuditUnavailableError,
 )
+# A refusal whose text names a file in the state dir is said in these words, which name none.
+_REFUSAL_WORDS: Final = (
+    (
+        VapidKeyError,
+        (
+            "the push key file in the state dir is unreadable or malformed. Restore it, "
+            "or delete it deliberately: a new key orphans every subscribed device"
+        ),
+    ),
+    (
+        AuditUnavailableError,
+        "the audit log in the state dir cannot be opened, and no write runs unrecorded",
+    ),
+)
 # Under the unit's TimeoutStopSec, so open streams are cut rather than the process killed.
 SHUTDOWN_GRACE: Final = 3
 
@@ -335,6 +349,7 @@ def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv, namespace=_Args())
     # Before any command logs, so a caught exception's message never reaches the journal.
     logging.config.dictConfig(logs.logging_config())
+    logs.install_excepthooks()
     settings = Settings()
     seams = Seams()
     if args.command == "doctor":
@@ -348,9 +363,16 @@ def main(argv: list[str] | None = None) -> int:
     try:
         serve(settings, args.port, seams)
     except SERVE_REFUSALS as exc:
-        sys.stderr.write(f"serve: {exc}\n")
+        sys.stderr.write(f"serve: {_refusal_text(exc)}\n")
         return 1
     return 0
+
+
+def _refusal_text(exc: Exception) -> str:
+    for kind, words in _REFUSAL_WORDS:
+        if isinstance(exc, kind):
+            return f"{words} ({logs.exception_name(exc.__cause__ or exc)})"
+    return str(exc)
 
 
 def _parser() -> argparse.ArgumentParser:

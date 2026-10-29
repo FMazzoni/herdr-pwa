@@ -2,10 +2,11 @@ import logging
 import os
 import shutil
 import sys
+import threading
 from collections.abc import Generator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import cast
+from typing import Self, cast
 
 import pytest
 
@@ -14,7 +15,7 @@ from tests.browser.reused import pytest_report_teststatus
 __all__ = ["pytest_report_teststatus"]
 
 REPO = Path(__file__).resolve().parents[1]
-# The loggers cli.main configures; each test gets them back as it found them.
+# The loggers and excepthooks cli.main sets; each test gets them back as it found them.
 _CONFIGURED_LOGGERS = ("", "uvicorn", "uvicorn.error", "uvicorn.access")
 # Read at import, before the autouse fixture clears every HP_* variable.
 _LIVE = os.environ.get("HP_LIVE") == "1"
@@ -48,7 +49,7 @@ class _LoggerState:
     disabled: bool
 
     @classmethod
-    def of(cls, logger: logging.Logger) -> "_LoggerState":
+    def of(cls, logger: logging.Logger) -> Self:
         return cls(
             logger,
             logger.handlers[:],
@@ -91,12 +92,14 @@ def pytest_runtest_protocol(item: pytest.Item) -> Generator[None, object, object
         _SWEEPING.add(item.nodeid)
     # Saved around every phase, so pytest's per-phase capture handlers are neither kept nor lost.
     saved = [_LoggerState.of(logging.getLogger(name)) for name in _CONFIGURED_LOGGERS]
+    hooks = (sys.excepthook, threading.excepthook)
     try:
         return (yield)
     finally:
         _SWEEPING.discard(item.nodeid)
         for state in saved:
             state.restore()
+        sys.excepthook, threading.excepthook = hooks
 
 
 def pytest_runtest_setup(item: pytest.Item) -> None:
