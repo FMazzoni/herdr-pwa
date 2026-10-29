@@ -23,6 +23,8 @@ slipped through. Captured files are as captured, apart from these changes:
 - In transcripts and captures, session ids read `5e55NNNN-0000-…` and other record ids
   `0000NNNN-0000-…`; agent, tool-use and message ids are synthetic too. One mapping covers
   every file and test, so records that point at each other still line up.
+- The hand-built logs in `transcript/notices/` number their records `5a5cNNNN-0000-…` or
+  `6d1eNNNN-0000-…` instead.
 
 A few files were built by hand rather than captured. They follow the field names and record
 order that the harness was seen to write, with synthetic ids, times and text. Two are the
@@ -127,4 +129,4 @@ other is a screen your change broke.
    hold passwords and real names.
 3. Add what it must parse to in `tests/test_corpus.py`, and regenerate `parsed-corpus.json`.
 4. Run `uv run pytest tests/test_fixture_hygiene.py`. It fails on any email address, home directory,
-   request id or commit id of this repo that isn't a placeholder.
+   request id, commit id of this repo, or session or record id that isn't a placeholder.
