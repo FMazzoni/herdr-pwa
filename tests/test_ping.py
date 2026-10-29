@@ -261,7 +261,7 @@ def test_some_devices_failing_is_partial(
     def flaky(subscription: push.Subscription, data: str) -> None:
         del data
         if subscription.endpoint == TWO:
-            raise push.DeliveryError("push service answered 500", status=500)
+            raise push.DeliveryError(500)
 
     seams = Seams(wall=Clock(), deliver=flaky, write=lambda _text: None)
     code = ping(_settings(tmp_path), seams, Message("hi", "me"))

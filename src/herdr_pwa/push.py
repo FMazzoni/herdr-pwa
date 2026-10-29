@@ -117,8 +117,9 @@ class SubscriptionError(PushError):
 class DeliveryError(PushError):
     """One device, or its push service, refused; carries the HTTP status when known."""
 
-    def __init__(self, message: str, *, status: int | None = None) -> None:
-        super().__init__(message)
+    # A status and a class, never text: a library's words can carry the endpoint, a device capability.
+    def __init__(self, status: int | None = None, *, cause: type[Exception] | None = None) -> None:
+        super().__init__(_delivery_words(status, cause))
         self.status: int | None = status
 
     @property
@@ -604,17 +605,22 @@ class _NoRedirects(requests.Session):
 
 
 def _refusal(exc: Exception) -> DeliveryError:
-    # An HTTP library's text can carry the endpoint URL, a device capability, so only fixed words go on.
     if not isinstance(exc, WebPushException):
-        return DeliveryError(f"push service not reached ({type(exc).__name__})")
+        return DeliveryError(cause=type(exc))
     # Pywebpush leaves response untyped, and it posts with requests.
     response = cast("requests.Response | None", exc.response)
     if response is None:
-        return DeliveryError("push not sent: pywebpush refused it before posting")
+        return DeliveryError()
     # The body is the service's (or a redirect target's) text, so it never reaches the record.
-    return DeliveryError(
-        f"push service answered {_phrase(response.status_code)}", status=response.status_code
-    )
+    return DeliveryError(response.status_code)
+
+
+def _delivery_words(status: int | None, cause: type[Exception] | None) -> str:
+    if status is not None:
+        return f"push service answered {_phrase(status)}"
+    if cause is not None:
+        return f"push service not reached ({cause.__name__})"
+    return "push not sent: pywebpush refused it before posting"
 
 
 def _phrase(status: int) -> str:
@@ -732,11 +738,15 @@ class DeliveryLog:
         """One device accepted a push."""
         self._bump(lambda r, now: {"sent": r.sent + 1, "last_send_at": now})
 
-    def failed(self, detail: str) -> None:
+    def failed(self, error: Exception) -> None:
         """One push failed for a reason other than the device being gone."""
-        self._bump(
-            lambda r, now: {"failed": r.failed + 1, "last_error": detail, "last_error_at": now}
-        )
+        # A delivery error's words are built from a status and a class; any other keeps its class.
+        said = str(error) if isinstance(error, DeliveryError) else type(error).__name__
+        self._failed(said)
+
+    def overran(self, budget: float, skipped: int) -> None:
+        """The fan-out spent its budget with ``skipped`` devices still untried."""
+        self._failed(f"fan-out over {budget:g}s: skipped {skipped} devices")
 
     def pruned(self) -> None:
         """A device the push service retired was forgotten."""
@@ -745,6 +755,11 @@ class DeliveryLog:
     def quieted(self, count: int) -> None:
         """Changes a preference or the managed mark held back."""
         self._bump(lambda r, now: {"quieted": r.quieted + count, "last_quiet_at": now})
+
+    def _failed(self, said: str) -> None:
+        self._bump(
+            lambda r, now: {"failed": r.failed + 1, "last_error": said, "last_error_at": now}
+        )
 
     def _bump(self, change: Callable[[DeliveryRecord, float], dict[str, object]]) -> None:
         now = self._clock()
@@ -764,7 +779,7 @@ def _prune(store: SubscriptionStore, subscription: Subscription) -> None:
     try:
         _ = store.remove(subscription.endpoint)
     except (SubscriptionError, OSError) as exc:
-        log.warning("could not prune a retired subscription: %s", exc)
+        log.warning("could not prune a retired subscription: %s", type(exc).__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -802,7 +817,7 @@ def _one(data: str, subscription: Subscription, outlet: Outlet, *, now: WallTime
             outlet.health.pruned()
             return "pruned"
         log.warning("push failed: %s", exc)
-        outlet.health.failed(str(exc))
+        outlet.health.failed(exc)
         return "failed"
     outlet.health.sent()
     return "sent"
@@ -825,7 +840,7 @@ def fan_out(
     for index, subscription in enumerate(subscriptions):
         if outlet.clock() - started > budget:
             skipped = len(subscriptions) - index
-            outlet.health.failed(f"fan-out over {budget:g}s: skipped {skipped} devices")
+            outlet.health.overran(budget, skipped)
             outcomes += ["failed"] * skipped
             break
         outcomes.append(_one(data, subscription, outlet, now=now))

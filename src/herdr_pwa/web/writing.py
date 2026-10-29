@@ -117,7 +117,7 @@ def agent_url(session: str) -> str:
 def raise_if_gone(result: Refused) -> None:
     """A write refused because its agent is gone is answered by the read table's 404."""
     if result.refusal is Refusal.GONE:
-        raise AgentGoneError(result.detail)
+        raise AgentGoneError
 
 
 def opened(request: Request, where: str) -> Response:

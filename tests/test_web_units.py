@@ -24,7 +24,7 @@ from herdr_pwa.engine import (
     as_pane_id,
 )
 from herdr_pwa.protocol import EXPECTED_PROTOCOL
-from herdr_pwa.push import DeliveryLog
+from herdr_pwa.push import DeliveryError, DeliveryLog
 from herdr_pwa.render.markdown import TAGS, MdNode, render_tree
 from herdr_pwa.settings import Settings
 from herdr_pwa.web.assets import STATIC_DIR, Assets
@@ -389,11 +389,14 @@ def test_doctor_says_when_push_last_sent_failed_and_held_back(tmp_path: Path) ->
     frame = FakeWire({SNAPSHOT: _frame(EXPECTED_PROTOCOL)})
     assert "push: nothing delivered or attempted yet" in _doctor(tmp_path, frame)[1]
     now = 1_800_000_000.0
-    DeliveryLog(tmp_path, clock=lambda: WallTime(now - 3 * 3600)).failed("BadJwtToken")
+    DeliveryLog(tmp_path, clock=lambda: WallTime(now - 3 * 3600)).failed(DeliveryError(403))
     DeliveryLog(tmp_path, clock=lambda: WallTime(now - 200)).sent()
     code, out = _doctor(tmp_path, frame, now)
     assert code == 0
-    assert "push: last sent 3m ago · last error 3h ago (BadJwtToken) · last quieted never" in out
+    assert (
+        "push: last sent 3m ago · last error 3h ago (push service answered 403 Forbidden) · last quieted never"
+        in out
+    )
 
 
 def test_doctor_judges_each_harness_on_the_services_path_not_its_own(

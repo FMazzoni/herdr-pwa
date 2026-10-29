@@ -219,8 +219,8 @@ class Refused:
 
     refusal: Refusal
     verb: str = "sent"
-    # Why, for the operator log; never shown to the caller.
-    detail: str = ""
+    # The class of what raised, for the operator log: a class carries no path, text or secret.
+    error: type[Exception] | None = None
     # Shown after the sentence: a confirm's own reason (the workspace's cost), or which signal disagreed.
     reason: str = ""
     # The screen digest a retry or a confirm must carry back.
@@ -229,6 +229,11 @@ class Refused:
     prompt: BlockedPrompt | None = None
     # Only herdr's word refused it, so the next send may say, in so many words, that it insists.
     overridable: bool = False
+
+    @property
+    def cause(self) -> str:
+        """The class name of what raised, or ``""`` when nothing did."""
+        return "" if self.error is None else self.error.__name__
 
     @property
     def status(self) -> int:

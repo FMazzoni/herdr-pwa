@@ -445,7 +445,7 @@ class HerdrClient:
         try:
             return Mirror(detected, self.screen(target))
         except EngineError as exc:
-            log.debug("visible read failed for %s: %s", target, exc)
+            log.debug("visible read failed for %s: %s", target, type(exc).__name__)
             return Mirror(detected, None)
 
     def screen(self, target: PaneId) -> str:
@@ -462,7 +462,7 @@ class HerdrClient:
                 target, replace(options, source=wire_request.ReadSource.detection, colour=True)
             )
         except EngineError as exc:
-            log.debug("detection read failed for %s: %s", target, exc)
+            log.debug("detection read failed for %s: %s", target, type(exc).__name__)
             return None
         return detected if panetext.is_clean_prose(detected) else None
 

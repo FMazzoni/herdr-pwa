@@ -81,12 +81,6 @@ def _kind(code: str) -> str:
     return "modified"
 
 
-def _open(cwd: Path) -> pygit2.Repository | None:
-    """The repository holding ``cwd``, searched upward as git does; None outside any."""
-    found = pygit2.discover_repository(str(cwd))
-    return None if found is None else pygit2.Repository(found, RepositoryOpenFlag.NO_SEARCH)
-
-
 def _common(gitdir: Path) -> Path:
     """The repository a git directory belongs to: its commondir file's, else its own."""
     shared = _small(gitdir / "commondir")
@@ -182,7 +176,8 @@ def _listed(repo: pygit2.Repository) -> tuple[Path, ...]:
         try:
             linked.append(Path(repo.lookup_worktree(name).path).resolve())
         except _FAILED as exc:
-            log.info("worktree %s of %s unreadable: %s", name, repo.path, exc)
+            # The class alone: the error's text and the repository's path name the operator's files.
+            log.info("a linked worktree was unreadable: %s", type(exc).__name__)
     return (*main, *linked)
 
 
@@ -196,10 +191,14 @@ class Git:
     def _read[T](self, what: str, cwd: Path, read: Callable[[pygit2.Repository], T]) -> T | None:
         """``read`` on the repository holding ``cwd``; None outside one or when it fails."""
         try:
-            repo = _open(cwd)
-            return None if repo is None else read(repo)
+            # Searched upward as git does, then opened with no second search.
+            found = pygit2.discover_repository(str(cwd))
+            if found is None:
+                return None
+            return read(pygit2.Repository(found, RepositoryOpenFlag.NO_SEARCH))
         except _FAILED as exc:
-            log.info("git %s in %s failed: %s", what, cwd, exc)
+            # The operation and class alone: the error's text and cwd name the operator's files.
+            log.info("git %s failed: %s", what, type(exc).__name__)
             return None
 
     def _cached[T](self, key: tuple[str, ...], ttl: float, read: Callable[[], T]) -> T:

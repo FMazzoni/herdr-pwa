@@ -15,6 +15,7 @@ from typing import cast
 
 import pytest
 import pywebpush
+import requests
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from hypothesis import HealthCheck, given, settings
@@ -602,9 +603,9 @@ def test_one_failing_device_does_not_stop_the_others_and_the_gone_are_pruned(
         _ = store.add(subscribed(endpoint))
     devices = Devices(
         {
-            endpoints[0]: DeliveryError("gone", status=410),
-            endpoints[1]: DeliveryError("boom", status=500),
-            endpoints[3]: DeliveryError("nf", status=404),
+            endpoints[0]: DeliveryError(410),
+            endpoints[1]: DeliveryError(500),
+            endpoints[3]: DeliveryError(404),
         }
     )
     health = DeliveryLog(tmp_path, clock=clock)
@@ -614,14 +615,19 @@ def test_one_failing_device_does_not_stop_the_others_and_the_gone_are_pruned(
     assert [one.endpoint for one in store.list_all()] == [endpoints[1], endpoints[2]]
     record = DeliveryLog(tmp_path).load()
     assert record is not None
-    assert (record.sent, record.failed, record.pruned, record.last_error) == (1, 1, 2, "boom")
+    assert (record.sent, record.failed, record.pruned, record.last_error) == (
+        1,
+        1,
+        2,
+        "push service answered 500 Internal Server Error",
+    )
     assert mode(health.path) == 0o600
 
 
 def test_nothing_ever_delivered_is_the_story_doctor_tells(tmp_path: Path) -> None:
     health = DeliveryLog(tmp_path, clock=Clock())
     assert health.load() is None
-    health.failed("403 BadJwtToken")
+    health.failed(DeliveryError(403))
     record = DeliveryLog(tmp_path).load()
     assert record is not None
     assert record.never_delivered
@@ -629,6 +635,18 @@ def test_nothing_ever_delivered_is_the_story_doctor_tells(tmp_path: Path) -> Non
     later = DeliveryLog(tmp_path).load()
     assert later is not None
     assert not later.never_delivered
+
+
+def test_the_health_record_keeps_an_errors_class_or_built_words_alone(tmp_path: Path) -> None:
+    health = DeliveryLog(tmp_path, clock=Clock())
+    health.failed(SubscriptionError(f"{tmp_path}/subscriptions.json: token=hunter2"))
+    record = DeliveryLog(tmp_path).load()
+    assert record is not None
+    assert record.last_error == "SubscriptionError"
+    health.failed(DeliveryError(cause=requests.ConnectionError))
+    record = DeliveryLog(tmp_path).load()
+    assert record is not None
+    assert record.last_error == "push service not reached (ConnectionError)"
 
 
 def test_an_unwritable_health_file_never_stops_a_push(tmp_path: Path) -> None:
@@ -645,7 +663,7 @@ def test_a_sender_failure_carries_the_push_services_status() -> None:
         text: str = "gone"
 
     error = WebPushException("x", response=Response())
-    wrapped = DeliveryError(str(error), status=error.status_code)
+    wrapped = DeliveryError(error.status_code)
     assert wrapped.gone
     assert WebPushSender.__call__.__doc__
 
