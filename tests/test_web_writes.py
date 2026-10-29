@@ -1,5 +1,6 @@
 """Every write route over a fake herd: what it sends, what it refuses, and at which status."""
 
+import logging
 import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -118,6 +119,20 @@ def test_a_prompt_is_sent_audited_and_read_back(tmp_path: Path) -> None:
     attempt = w.audit[0]
     assert attempt["phase"] == "attempt"
     assert (attempt["endpoint"], attempt["actor"]) == ("prompt", "operator@example.com")
+
+
+@pytest.mark.parametrize("method", ["session.snapshot", "agent.read"])
+def test_a_refused_write_logs_its_reason_and_error_class_alone(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, method: str
+) -> None:
+    w = idle(tmp_path)
+    w.herd.fail[method] = EngineUnavailableError("could not reach /home/user/.ssh token=hunter2")
+    with caplog.at_level(logging.DEBUG, logger="herdr_pwa"):
+        response = w.http.post(f"/agent/{S1}/prompt", data={"text": "hi"}, headers=ORIGIN)
+    assert response.status_code == 503
+    assert ": EngineUnavailableError" in caplog.text
+    assert "hunter2" not in caplog.text
+    assert ".ssh" not in caplog.text
 
 
 def test_a_prompt_at_a_question_is_409_and_keeps_the_text(tmp_path: Path) -> None:

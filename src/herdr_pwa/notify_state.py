@@ -2,7 +2,7 @@
 
 import logging
 import threading
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
 from typing import Annotated, Final, Literal, Protocol
 
@@ -48,9 +48,18 @@ def _write(path: Path, document: _StateFile) -> None:
 def _read[F: _StateFile](path: Path, model: type[F]) -> F | None:
     try:
         text = statedir.read_text(path)
+    except OSError as exc:
+        # The file's name, never its path: a path names the account it lives under.
+        log.warning("cannot read %s (%s); starting from nothing", path.name, type(exc).__name__)
+        return None
+    return _parsed(path, text, model)
+
+
+def _parsed[F: _StateFile](path: Path, text: str | None, model: type[F]) -> F | None:
+    try:
         return None if text is None else model.model_validate_json(text)
-    except (OSError, ValidationError) as exc:
-        log.warning("cannot use %s (%s); starting from nothing", path, exc)
+    except ValidationError as exc:
+        log.warning("cannot use %s (%s); starting from nothing", path.name, type(exc).__name__)
         return None
 
 
@@ -89,7 +98,9 @@ class StatusLedger:
         try:
             _write(self.path, document)
         except OSError as exc:
-            log.warning("cannot write %s: %s; a restart will prime", self.path, exc)
+            log.warning(
+                "cannot write %s (%s); a restart will prime", self.path.name, type(exc).__name__
+            )
 
 
 class SeenAgent(Protocol):
@@ -202,7 +213,9 @@ class SeenLedger:
         try:
             _write(self.path, document)
         except OSError as exc:
-            log.warning("cannot write %s: %s; 'seen' is in memory only", self.path, exc)
+            log.warning(
+                "cannot write %s (%s); 'seen' is in memory only", self.path.name, type(exc).__name__
+            )
 
     def _maybe_flush(self) -> None:
         if self._clock() - self._flushed_at >= SEEN_FLUSH_INTERVAL:
@@ -264,39 +277,39 @@ class InterruptStore:
     def __init__(self, state_dir: Path, *, clock: WallClock = wall_now) -> None:
         self.path: Path = state_dir / INTERRUPTS_FILENAME
         self._clock: WallClock = clock
-        # The preference routes rewrite it from worker threads, each from what it read.
-        self._lock: threading.Lock = threading.Lock()
 
     def load(self) -> Interrupts:
         """What is on disk, or the defaults; an unreadable store is not fatal."""
         document = _read(self.path, _InterruptsFile)
         return Interrupts() if document is None else document.interrupts
 
-    def save(self, interrupts: Interrupts) -> Interrupts:
-        """Persist the preferences; raises OSError when they cannot be kept."""
-        _write(self.path, _InterruptsFile(version=1, interrupts=interrupts))
-        return interrupts
-
     def set_kinds(self, *, blocked: bool | None = None, done: bool | None = None) -> Interrupts:
-        """Change which kinds may ever fire, leaving the snooze alone."""
-        with self._lock:
-            current = self.load()
-            return self.save(
-                current.model_copy(
-                    update={
-                        "blocked": current.blocked if blocked is None else blocked,
-                        "done": current.done if done is None else done,
-                    }
-                )
+        """Change which kinds may ever fire, leaving the snooze alone; raises OSError if unkept."""
+        return self._change(
+            lambda current: current.model_copy(
+                update={
+                    "blocked": current.blocked if blocked is None else blocked,
+                    "done": current.done if done is None else done,
+                }
             )
+        )
 
     def snooze(self, seconds: float) -> Interrupts:
         """Start, or end at 0, a do-not-disturb window clamped to twelve hours."""
         span = min(max(0.0, seconds), float(MAX_DND_SECONDS))
         until = self._clock() + span if span else 0.0
-        with self._lock:
-            return self.save(self.load().model_copy(update={"dnd_until": until}))
+        return self._change(lambda current: current.model_copy(update={"dnd_until": until}))
 
     def current(self) -> tuple[Interrupts, WallTime]:
         """The policy and the clock reading it is judged against, taken together."""
         return self.load(), self._clock()
+
+    def _change(self, change: Callable[[Interrupts], Interrupts]) -> Interrupts:
+        # Read under the flock: the preference routes change it from worker threads at once.
+        def changed(text: str | None) -> tuple[str, Interrupts]:
+            document = _parsed(self.path, text, _InterruptsFile)
+            kept = change(Interrupts() if document is None else document.interrupts)
+            text = _InterruptsFile(version=1, interrupts=kept).model_dump_json(indent=2)
+            return text + "\n", kept
+
+        return statedir.update(self.path, changed)

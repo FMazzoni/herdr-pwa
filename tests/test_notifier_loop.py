@@ -17,7 +17,13 @@ from herdr_pwa.engine import (
 )
 from herdr_pwa.notify import NotifyConfig
 from herdr_pwa.protocol import WRITE_METHODS
-from herdr_pwa.push import PUSH_LIMITS, DeliveryError, Subscription, SubscriptionError
+from herdr_pwa.push import (
+    PUSH_LIMITS,
+    DeliveryError,
+    SubjectFault,
+    Subscription,
+    SubscriptionError,
+)
 from herdr_pwa.settings import Settings
 from herdr_pwa.web.app import create_app
 from herdr_pwa.web.notifier import HerdSource, LoopConfig, Notifier, PushStores, open_push
@@ -57,7 +63,7 @@ class Sender:
 
     def __call__(self, subscription: Subscription, data: str) -> None:
         if self.refuse is not None:
-            raise DeliveryError("refused", status=self.refuse)
+            raise DeliveryError(self.refuse)
         self.sent.append((subscription.endpoint, OBJECT.validate_json(data)))
         if self.spends is not None:
             self.spends[0].now += self.spends[1]
@@ -214,6 +220,8 @@ def test_a_runner_that_will_not_answer_skips_the_tick_and_says_why(tmp_path: Pat
     assert tick.step is None
     assert "EngineUnavailableError" in tick.error
     assert "EngineUnavailableError" in loop.notifier.state.read_error
+    # The status page shows the class alone; a runner's words can name its socket.
+    assert "no socket" not in tick.error
 
 
 def test_a_device_the_push_service_retired_is_pruned(tmp_path: Path) -> None:
@@ -304,6 +312,25 @@ def test_push_is_not_armed_without_a_contact_and_says_so(tmp_path: Path) -> None
     assert state is not None
     assert state.notifier is None
     assert "HP_PUSH_SUBJECT" in state.reason
+
+
+def test_a_refused_contact_is_named_by_its_fault_never_quoted(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    address = "push@herdr-pwa.invalid"
+    settings = Settings(
+        state_dir=tmp_path / "state",
+        socket_path=tmp_path / "no.sock",
+        push_subject=f"mailto:{address}",
+    )
+    reader = HerdrClient(engine_settings(settings), transport=FakeWire())
+    state = open_push(
+        settings, HerdSource(reader, SnapshotCache(ttl=1.0), Stalls(tmp_path)), Seams()
+    )
+    assert state is not None
+    assert state.notifier is None
+    assert state.reason == SubjectFault.RESERVED.advice
+    assert address not in caplog.text
 
 
 def test_the_device_cap_comes_from_the_seams_push_limits(tmp_path: Path) -> None:

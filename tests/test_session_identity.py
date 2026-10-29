@@ -6,6 +6,7 @@ real agent and its store were untouched; only herdr's record of who holds the pa
 """
 
 import json
+import logging
 import sqlite3
 from pathlib import Path
 
@@ -187,7 +188,9 @@ def test_a_prompt_goes_to_the_pane_while_it_reports_its_own_session(tmp_path: Pa
     assert len(herd.writes("agent.prompt")) == 1
 
 
-def test_a_prompt_is_refused_once_a_stray_session_claims_the_pane(tmp_path: Path) -> None:
+def test_a_prompt_is_refused_once_a_stray_session_claims_the_pane(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     the_hijack(Path.home() / ".local" / "share" / "opencode")
     herd = FakeHerd()
     _opencode_pane(herd, REAL)
@@ -196,11 +199,13 @@ def test_a_prompt_is_refused_once_a_stray_session_claims_the_pane(tmp_path: Path
     # The second report on the same pane: the nested process's own session, last writer wins.
     _opencode_pane(herd, STRAY)
 
-    got = send_prompt(r.writer, PromptAsk(STRAY, "hello"))
+    with caplog.at_level(logging.WARNING, logger="herdr_pwa.writes.resolve"):
+        got = send_prompt(r.writer, PromptAsk(STRAY, "hello"))
 
     assert isinstance(got, Refused), got
     assert got.refusal is Refusal.DOUBTED_IDENTITY
-    assert THROWAWAY in got.detail
+    assert "opencode session started outside the pane's folder" in caplog.text
+    assert THROWAWAY not in caplog.text, "the journal names what was doubted, never the folders"
     assert herd.writes("agent.prompt") == [], "the keystrokes would have reached the REAL agent"
     assert r.audit_records == [], "refused before the attempt, so nothing was recorded as tried"
 

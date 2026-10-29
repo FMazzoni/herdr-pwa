@@ -36,7 +36,10 @@ class Finding:
     declaration: str
 
     def __str__(self) -> str:
-        return f"app.css:{self.line}: {self.literal!r} in `{self.declaration}`; use a :root token"
+        return (
+            f"app.css:{self.line}: {self.literal!r} in `{self.declaration}`; replace it with a"
+            f" var(--token) from :root, or allow it in scripts/{ALLOW.name} with a reason"
+        )
 
 
 def _blank(match: re.Match[str]) -> str:

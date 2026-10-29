@@ -6,8 +6,10 @@ only place in tests/ and scripts/ that sleeps to wait; everything else here is b
 """
 
 import asyncio
+import threading
 import time
 from collections.abc import Callable
+from concurrent.futures import Future
 from typing import Literal
 
 STEP = 0.05
@@ -53,6 +55,22 @@ def watch(look: Callable[[], object], window: float, *, step: float = STEP) -> N
         return False
 
     _ = eventually(never, window, step=step)
+
+
+def within[T](call: Callable[[], T], ceiling: float) -> T:
+    """Return what ``call`` returns, or raise what it raises, failing if it is still going at ``ceiling``."""
+    outcome: Future[T] = Future()
+
+    def run() -> None:
+        try:
+            outcome.set_result(call())
+        except BaseException as exc:  # noqa: BLE001 - handed to the caller, whatever it was
+            outcome.set_exception(exc)
+
+    # A daemon, so a call that never ends fails its test without holding up the run's exit.
+    threading.Thread(target=run, daemon=True).start()
+    _ = until(outcome.done, ceiling)
+    return outcome.result()
 
 
 async def until_async[T](

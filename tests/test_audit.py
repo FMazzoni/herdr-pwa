@@ -125,6 +125,8 @@ def test_an_outcome_that_cannot_be_written_logs_loudly_and_never_raises(
         entry.outcome("sent")
     assert "HAPPENED" in caplog.text
     assert "this may have run" in caplog.text
+    assert "IsADirectoryError" in caplog.text
+    assert str(tmp_path) not in caplog.text, "the error's class, never its path"
 
 
 def test_a_long_payload_is_truncated_visibly_in_band(tmp_path: Path) -> None:

@@ -5,10 +5,10 @@ import json
 import logging
 import re
 import string
-import threading
 import unicodedata
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from enum import StrEnum
 from http import HTTPStatus
 from pathlib import Path
 from typing import Annotated, Final, Literal, Protocol, Self, TypedDict, Unpack, cast
@@ -46,9 +46,6 @@ log = logging.getLogger(__name__)
 VAPID_FILENAME: Final = "vapid.json"
 SUBSCRIPTIONS_FILENAME: Final = "subscriptions.json"
 HEALTH_FILENAME: Final = "push-health.json"
-# Beside the store, so every process that rewrites it takes the same flock.
-SUBSCRIPTIONS_LOCK: Final = "subscriptions.lock"
-HEALTH_LOCK: Final = "push-health.lock"
 # The two that notify, a message someone sent, and the retraction, which shows nothing so is never sent.
 type PushEvent = Literal["blocked", "done", "ping", "clear"]
 EVENT_BLOCKED: Final = "blocked"
@@ -98,6 +95,24 @@ class PushLimits:
 PUSH_LIMITS: Final = PushLimits()
 
 
+class SubjectFault(StrEnum):
+    """What makes a VAPID contact one a push service refuses, as a fixed phrase."""
+
+    # Fixed words, never the contact: it is the operator's address, and the alerts page shows this.
+    UNSET = "is not set; Apple rejects a JWT whose contact nobody could be reached at"
+    SCHEME = "is neither mailto: nor https:// (RFC 8292)"
+    NO_HOST = "names no host anybody could be reached at"
+    RESERVED = "is under a reserved name that never resolves (RFC 2606)"
+
+    @property
+    def advice(self) -> str:
+        """The whole sentence the operator acts on."""
+        return (
+            f"push is on, but its contact {self.value}. Set HP_PUSH_SUBJECT to a mailto: you "
+            "read, or HP_PUSH_ENABLED=0."
+        )
+
+
 class PushError(Exception):
     """Base for every failure this module raises."""
 
@@ -107,18 +122,33 @@ class VapidKeyError(PushError):
 
 
 class SubjectError(PushError):
-    """The VAPID contact is one a push service will refuse."""
+    """The VAPID contact is one a push service will refuse; ``fault`` says why."""
+
+    def __init__(self, fault: SubjectFault) -> None:
+        super().__init__(fault.advice)
+        self.fault: SubjectFault = fault
 
 
 class SubscriptionError(PushError):
     """The subscription store file is not the shape it must be."""
 
 
+class DeviceLimitError(SubscriptionError):
+    """The store already holds as many devices as this server sends to."""
+
+    def __init__(self, count: int) -> None:
+        self.detail: str = (
+            f"already {count} devices, the most this server sends to; remove one first"
+        )
+        super().__init__(self.detail)
+
+
 class DeliveryError(PushError):
     """One device, or its push service, refused; carries the HTTP status when known."""
 
-    def __init__(self, message: str, *, status: int | None = None) -> None:
-        super().__init__(message)
+    # A status and a class name, never text: a library's words can carry the endpoint, a device capability.
+    def __init__(self, status: int | None = None, *, cause: str | None = None) -> None:
+        super().__init__(_delivery_words(status, cause))
         self.status: int | None = status
 
     @property
@@ -151,30 +181,27 @@ def _subject_host(subject: str) -> str:
     return host.rpartition("@")[2].partition(":")[0]
 
 
-def subject_problem(subject: str) -> str:
-    """Why a push service would refuse this VAPID ``sub`` claim, or ``""``."""
+def subject_problem(subject: str) -> SubjectFault | None:
+    """Why a push service would refuse this VAPID ``sub`` claim, or None."""
     value = subject.strip()
     if not value:
-        return "is not set; Apple rejects a JWT whose contact nobody could be reached at"
+        return SubjectFault.UNSET
     if not value.startswith(("mailto:", "https://")):
-        return f"is {value!r}, which is neither mailto: nor https:// (RFC 8292)"
+        return SubjectFault.SCHEME
     host = _subject_host(value)
     if not host:
-        return f"is {value!r}, which names no host anybody could be reached at"
+        return SubjectFault.NO_HOST
     label = host.rstrip(".").rpartition(".")[2] or host.rstrip(".")
     if label.lower() in RESERVED_TLDS:
-        return f"is {value!r}, whose .{label} is a reserved name that never resolves (RFC 2606)"
-    return ""
+        return SubjectFault.RESERVED
+    return None
 
 
 def check_subject(subject: str) -> str:
     """The contact to sign as, or SubjectError naming what is wrong with it."""
-    problem = subject_problem(subject)
-    if problem:
-        raise SubjectError(
-            f"push is on, but its contact {problem}. Set HP_PUSH_SUBJECT to a mailto: you "
-            "read, or HP_PUSH_ENABLED=0."
-        )
+    fault = subject_problem(subject)
+    if fault is not None:
+        raise SubjectError(fault)
     return subject.strip()
 
 
@@ -400,13 +427,6 @@ class SubscriptionStore:
         self._state_dir: Path = state_dir
         self._clock: WallClock = clock
         self._max_devices: int = limits.max_devices
-        # The routes and the notifier's pruning thread both rewrite the file from what they read.
-        self._lock: threading.Lock = threading.Lock()
-
-    @property
-    def _lock_path(self) -> Path:
-        # A ping from the CLI prunes too, so the thread lock alone does not cover every writer.
-        return statedir.ensure_dir(self._state_dir) / SUBSCRIPTIONS_LOCK
 
     @property
     def path(self) -> Path:
@@ -421,39 +441,18 @@ class SubscriptionStore:
             OSError: the file cannot be read.
         """
         path = self.path
-        text = statedir.read_text(path) or ""
-        try:
-            entries = _StoreFile.model_validate_json(text).subscriptions if text.strip() else []
-        except ValidationError as exc:
-            raise SubscriptionError(f"{path}: {summary(exc)}") from exc
-        out: list[Subscription] = []
-        for index, entry in enumerate(entries):
-            try:
-                out.append(Subscription.model_validate(entry))
-            except ValidationError as exc:
-                log.warning("%s: dropping malformed entry %d: %s", path, index, summary(exc))
-        return out
+        return _stored(path, statedir.read_text(path))
 
     def add(self, subscription: Subscription, *, replaces: str | None = None) -> Subscription:
         """Store a device, forgetting ``replaces`` if held; the same endpoint keeps its stamp.
 
         Raises:
-            SubscriptionError: the store already holds ``limits.max_devices`` other devices.
+            DeviceLimitError: the store already holds ``limits.max_devices`` other devices.
         """
-        with self._lock, statedir.locked(self._lock_path):
-            # Dropped before the limit is counted, so a full store can still swap a device.
-            gone = None if replaces == subscription.endpoint else replaces
-            current = [one for one in self.list_all() if one.endpoint != gone]
-            previous = next((one for one in current if one.endpoint == subscription.endpoint), None)
-            if previous is None and len(current) >= self._max_devices:
-                raise SubscriptionError(
-                    f"already {len(current)} devices, the most this server sends to; "
-                    "remove one first"
-                )
-            stamp = int(self._clock()) if previous is None else previous.added_at
-            stored = subscription.model_copy(update={"added_at": stamp})
-            self._save([*(one for one in current if one.endpoint != stored.endpoint), stored])
-        return stored
+        path = self.path
+        # Dropped before the limit is counted, so a full store can still swap a device.
+        gone = None if replaces == subscription.endpoint else replaces
+        return statedir.update(path, lambda text: self._added(path, text, subscription, gone))
 
     def holds(self, endpoint: str) -> bool:
         """True when this endpoint is stored."""
@@ -461,17 +460,53 @@ class SubscriptionStore:
 
     def remove(self, endpoint: str) -> bool:
         """Forget one device; True when it was there."""
-        with self._lock, statedir.locked(self._lock_path):
-            current = self.list_all()
+        path = self.path
+
+        def change(text: str | None) -> tuple[str | None, bool]:
+            current = _stored(path, text)
             kept = [one for one in current if one.endpoint != endpoint]
             if len(kept) == len(current):
-                return False
-            self._save(kept)
-        return True
+                return None, False
+            return _store_text(kept), True
 
-    def _save(self, subscriptions: Sequence[Subscription]) -> None:
-        document = _StoreDocument(subscriptions=subscriptions)
-        statedir.write_secret(self.path, document.model_dump_json(indent=2, by_alias=True) + "\n")
+        return statedir.update(path, change)
+
+    def _added(
+        self, path: Path, text: str | None, subscription: Subscription, gone: str | None
+    ) -> tuple[str, Subscription]:
+        current = [one for one in _stored(path, text) if one.endpoint != gone]
+        previous = next((one for one in current if one.endpoint == subscription.endpoint), None)
+        if previous is None and len(current) >= self._max_devices:
+            raise DeviceLimitError(len(current))
+        stamp = int(self._clock()) if previous is None else previous.added_at
+        stored = subscription.model_copy(update={"added_at": stamp})
+        kept = [*(one for one in current if one.endpoint != stored.endpoint), stored]
+        return _store_text(kept), stored
+
+
+def _stored(path: Path, text: str | None) -> list[Subscription]:
+    try:
+        entries = (
+            _StoreFile.model_validate_json(text).subscriptions if text and text.strip() else []
+        )
+    except ValidationError as exc:
+        # The name alone: the full path names the home folder, and pydantic's words can quote it.
+        raise SubscriptionError(f"{path.name} is not a subscription store") from exc
+    out: list[Subscription] = []
+    for index, entry in enumerate(entries):
+        try:
+            out.append(Subscription.model_validate(entry))
+        except ValidationError as exc:
+            # Pydantic's words can quote what failed; the entry's place and the class say enough.
+            log.warning(
+                "%s: dropping malformed entry %d (%s)", path.name, index, type(exc).__name__
+            )
+    return out
+
+
+def _store_text(subscriptions: Sequence[Subscription]) -> str:
+    document = _StoreDocument(subscriptions=subscriptions)
+    return document.model_dump_json(indent=2, by_alias=True) + "\n"
 
 
 _LINKY_TLDS: Final = "com|net|org|io|dev|ai|co|me|app|sh|xyz|gg|to|ly"
@@ -604,17 +639,22 @@ class _NoRedirects(requests.Session):
 
 
 def _refusal(exc: Exception) -> DeliveryError:
-    # An HTTP library's text can carry the endpoint URL, a device capability, so only fixed words go on.
     if not isinstance(exc, WebPushException):
-        return DeliveryError(f"push service not reached ({type(exc).__name__})")
+        return DeliveryError(cause=type(exc).__name__)
     # Pywebpush leaves response untyped, and it posts with requests.
     response = cast("requests.Response | None", exc.response)
     if response is None:
-        return DeliveryError("push not sent: pywebpush refused it before posting")
+        return DeliveryError()
     # The body is the service's (or a redirect target's) text, so it never reaches the record.
-    return DeliveryError(
-        f"push service answered {_phrase(response.status_code)}", status=response.status_code
-    )
+    return DeliveryError(response.status_code)
+
+
+def _delivery_words(status: int | None, cause: str | None) -> str:
+    if status is not None:
+        return f"push service answered {_phrase(status)}"
+    if cause is not None:
+        return f"push service not reached ({cause})"
+    return "push not sent: pywebpush refused it before posting"
 
 
 def _phrase(status: int) -> str:
@@ -723,20 +763,24 @@ class DeliveryLog:
     def load(self) -> DeliveryRecord | None:
         """The last outcomes on disk, or None when there are none this build reads."""
         try:
-            text = statedir.read_text(self.path)
-            return None if text is None else DeliveryRecord.model_validate_json(text)
-        except (OSError, ValidationError):
+            return _delivery(statedir.read_text(self.path))
+        except OSError:
             return None
 
     def sent(self) -> None:
         """One device accepted a push."""
         self._bump(lambda r, now: {"sent": r.sent + 1, "last_send_at": now})
 
-    def failed(self, detail: str) -> None:
-        """One push failed for a reason other than the device being gone."""
-        self._bump(
-            lambda r, now: {"failed": r.failed + 1, "last_error": detail, "last_error_at": now}
-        )
+    def failed(self, error: Exception) -> str:
+        """Record one push failed for a reason other than the device being gone; the words kept."""
+        # A delivery error's words are built from a status and a class; any other keeps its class.
+        said = str(error) if isinstance(error, DeliveryError) else type(error).__name__
+        self._failed(said)
+        return said
+
+    def overran(self, budget: float, skipped: int) -> None:
+        """The fan-out spent its budget with ``skipped`` devices still untried."""
+        self._failed(f"fan-out over {budget:g}s: skipped {skipped} devices")
 
     def pruned(self) -> None:
         """A device the push service retired was forgotten."""
@@ -746,25 +790,41 @@ class DeliveryLog:
         """Changes a preference or the managed mark held back."""
         self._bump(lambda r, now: {"quieted": r.quieted + count, "last_quiet_at": now})
 
+    def _failed(self, said: str) -> None:
+        self._bump(
+            lambda r, now: {"failed": r.failed + 1, "last_error": said, "last_error_at": now}
+        )
+
     def _bump(self, change: Callable[[DeliveryRecord, float], dict[str, object]]) -> None:
         now = self._clock()
+
+        def counted(text: str | None) -> tuple[str, DeliveryRecord]:
+            # Built on the disk record: the service and a ping both count here.
+            base = _delivery(text) or self._current or DeliveryRecord(version=1)
+            record = base.model_copy(update={**change(base, now), "updated_at": now})
+            return record.model_dump_json(indent=2) + "\n", record
+
         try:
-            _ = statedir.ensure_dir(self.path.parent)
-            # Built on the disk record under the lock: the service and a ping both count here.
-            with statedir.locked(self.path.with_name(HEALTH_LOCK)):
-                base = self.load() or self._current or DeliveryRecord(version=1)
-                self._current = base.model_copy(update={**change(base, now), "updated_at": now})
-                statedir.write_secret(self.path, self._current.model_dump_json(indent=2) + "\n")
+            self._current = statedir.update(self.path, counted)
         except OSError as exc:
             # Health is for the reader; failing to write it must never stop a push.
-            log.warning("cannot write %s: %s; doctor will see nothing", self.path, exc)
+            log.warning(
+                "cannot write %s (%s); doctor will see nothing", self.path.name, type(exc).__name__
+            )
+
+
+def _delivery(text: str | None) -> DeliveryRecord | None:
+    try:
+        return None if text is None else DeliveryRecord.model_validate_json(text)
+    except ValidationError:
+        return None
 
 
 def _prune(store: SubscriptionStore, subscription: Subscription) -> None:
     try:
         _ = store.remove(subscription.endpoint)
     except (SubscriptionError, OSError) as exc:
-        log.warning("could not prune a retired subscription: %s", exc)
+        log.warning("could not prune a retired subscription: %s", type(exc).__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -801,8 +861,9 @@ def _one(data: str, subscription: Subscription, outlet: Outlet, *, now: WallTime
             _prune(outlet.store, subscription)
             outlet.health.pruned()
             return "pruned"
-        log.warning("push failed: %s", exc)
-        outlet.health.failed(str(exc))
+        # The words the record kept, built from a status and a class, never the library's.
+        said = outlet.health.failed(exc)
+        log.warning("push failed: %s", said)
         return "failed"
     outlet.health.sent()
     return "sent"
@@ -825,7 +886,7 @@ def fan_out(
     for index, subscription in enumerate(subscriptions):
         if outlet.clock() - started > budget:
             skipped = len(subscriptions) - index
-            outlet.health.failed(f"fan-out over {budget:g}s: skipped {skipped} devices")
+            outlet.health.overran(budget, skipped)
             outcomes += ["failed"] * skipped
             break
         outcomes.append(_one(data, subscription, outlet, now=now))

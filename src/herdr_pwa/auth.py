@@ -25,13 +25,14 @@ LOOPBACK_HOSTS: Final = frozenset({"127.0.0.1", "::1", "localhost", "localhost."
 
 
 class AuthError(Exception):
-    """Every refusal; ``str(exc)`` goes to the caller, ``log_detail`` only to the operator."""
+    """Every refusal; ``detail`` goes to the caller, ``log_detail`` only to the operator."""
 
     status_code: ClassVar[int] = 403
     reason: ClassVar[str] = "forbidden"
 
     def __init__(self, message: str, *, log_detail: str = "") -> None:
         super().__init__(message)
+        self.detail: str = message
         self.log_detail: str = log_detail
 
 
@@ -326,7 +327,8 @@ def _serve_config_body(api: tailscale.LocalApi) -> str:
         raise
     except (OSError, HTTPException) as exc:
         raise AssumedLoginUnsafeError(
-            f"Refusing an assumed login: could not ask tailscaled whether serve is active ({exc})."
+            "Refusing an assumed login: could not ask tailscaled whether serve is active "
+            f"({type(exc).__name__})."
         ) from exc
     if reply.status != HTTPStatus.OK:
         raise AssumedLoginUnsafeError(

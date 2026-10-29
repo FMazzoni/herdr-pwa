@@ -5,16 +5,17 @@ import re
 import socket
 import stat
 import threading
-import time
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from dataclasses import replace
+from functools import partial
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import cast
 
 import pytest
 import pywebpush
+import requests
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from hypothesis import HealthCheck, given, settings
@@ -39,6 +40,7 @@ from herdr_pwa.push import (
     PushError,
     PushLimits,
     SubjectError,
+    SubjectFault,
     Subscription,
     SubscriptionError,
     SubscriptionKeys,
@@ -55,7 +57,9 @@ from herdr_pwa.push import (
     subject_problem,
 )
 from herdr_pwa.settings import Settings
+from tests.costs import assert_linear
 from tests.fakes import Clock
+from tests.waiting import within
 
 ENDPOINT = "https://fcm.googleapis.com/fcm/send/one"
 SUBJECT = "mailto:someone@herdr.example.org"
@@ -145,7 +149,7 @@ def test_repr_never_leaks_the_private_key(tmp_path: Path) -> None:
     ],
 )
 def test_a_contact_somebody_could_answer_is_accepted(subject: str) -> None:
-    assert subject_problem(subject) == ""
+    assert subject_problem(subject) is None
     assert check_subject(subject) == subject.strip()
 
 
@@ -162,16 +166,24 @@ def test_a_contact_somebody_could_answer_is_accepted(subject: str) -> None:
     ],
 )
 def test_a_reserved_name_is_refused_because_apple_rejects_it(subject: str) -> None:
-    assert "reserved" in subject_problem(subject)
+    assert subject_problem(subject) is SubjectFault.RESERVED
 
 
 @pytest.mark.parametrize(
     "subject", ["", "  ", "push@herdr.example.org", "tel:+1555", "mailto:", "mailto:x"]
 )
 def test_no_contact_or_no_host_is_refused(subject: str) -> None:
-    assert subject_problem(subject)
+    assert subject_problem(subject) is not None
     with pytest.raises(SubjectError):
         _ = check_subject(subject)
+
+
+@pytest.mark.parametrize("subject", ["mailto:me@box.local", "tel:+1555", "mailto:x"])
+def test_a_refused_contact_is_never_quoted_back(subject: str) -> None:
+    with pytest.raises(SubjectError) as refused:
+        _ = check_subject(subject)
+    assert subject not in str(refused.value)
+    assert str(refused.value) == refused.value.fault.advice
 
 
 def test_push_will_not_arm_without_a_real_contact(tmp_path: Path) -> None:
@@ -462,31 +474,26 @@ def test_no_host_like_token_survives_sanitising(text: str) -> None:
 
 
 # One unbroken word made the old pattern rescan the rest of it from every letter: 18 s at 20k.
-ADVERSARIAL = (
-    "a" * 100_000,
-    "a." * 50_000,
-    "a-" * 50_000,
-    "1a" * 50_000,
-    "a.." * 33_333,
-    "ww." * 33_333,
-)
+ADVERSARIAL = ("a", "a.", "a-", "1a", "a..", "ww.")
+
+
+def _repeated(unit: str, length: int) -> str:
+    return (unit * (length // len(unit) + 1))[:length]
 
 
 @pytest.mark.parametrize(
-    "text", ADVERSARIAL, ids=["word", "dots", "dashes", "digits", "breaks", "near-www"]
+    "unit", ADVERSARIAL, ids=["word", "dots", "dashes", "digits", "breaks", "near-www"]
 )
-def test_scanning_for_links_is_linear_in_the_text(text: str) -> None:
-    # CPU time, so a loaded gate cannot inflate it; the old pattern took minutes, far past 1 s.
-    started = time.process_time()
-    _ = push._URL_RE.sub(LINK_PLACEHOLDER, text)  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
-    assert time.process_time() - started < 1.0
+def test_scanning_for_links_is_linear_in_the_text(unit: str) -> None:
+    def scan(text: str) -> str:
+        return push._URL_RE.sub(LINK_PLACEHOLDER, text)  # pyright: ignore[reportPrivateUsage] - the internal is what this test pins
+
+    assert_linear(partial(_repeated, unit), scan, span=(5_000, 320_000))
 
 
 def test_a_long_notice_is_cut_before_it_is_scanned() -> None:
-    started = time.process_time()
-    cleaned = sanitise("a" * 100_000, limit=MAX_BODY_CHARS)
-    assert time.process_time() - started < 1.0
-    assert cleaned == "a" * (MAX_BODY_CHARS - 1) + "…"
+    assert_linear(lambda n: "a" * n, partial(sanitise, limit=MAX_BODY_CHARS), span=(5_000, 320_000))
+    assert sanitise("a" * 100_000, limit=MAX_BODY_CHARS) == "a" * (MAX_BODY_CHARS - 1) + "…"
 
 
 @pytest.mark.parametrize("padding", range(4075, 4095))
@@ -602,9 +609,9 @@ def test_one_failing_device_does_not_stop_the_others_and_the_gone_are_pruned(
         _ = store.add(subscribed(endpoint))
     devices = Devices(
         {
-            endpoints[0]: DeliveryError("gone", status=410),
-            endpoints[1]: DeliveryError("boom", status=500),
-            endpoints[3]: DeliveryError("nf", status=404),
+            endpoints[0]: DeliveryError(410),
+            endpoints[1]: DeliveryError(500),
+            endpoints[3]: DeliveryError(404),
         }
     )
     health = DeliveryLog(tmp_path, clock=clock)
@@ -614,14 +621,19 @@ def test_one_failing_device_does_not_stop_the_others_and_the_gone_are_pruned(
     assert [one.endpoint for one in store.list_all()] == [endpoints[1], endpoints[2]]
     record = DeliveryLog(tmp_path).load()
     assert record is not None
-    assert (record.sent, record.failed, record.pruned, record.last_error) == (1, 1, 2, "boom")
+    assert (record.sent, record.failed, record.pruned, record.last_error) == (
+        1,
+        1,
+        2,
+        "push service answered 500 Internal Server Error",
+    )
     assert mode(health.path) == 0o600
 
 
 def test_nothing_ever_delivered_is_the_story_doctor_tells(tmp_path: Path) -> None:
     health = DeliveryLog(tmp_path, clock=Clock())
     assert health.load() is None
-    health.failed("403 BadJwtToken")
+    health.failed(DeliveryError(403))
     record = DeliveryLog(tmp_path).load()
     assert record is not None
     assert record.never_delivered
@@ -629,6 +641,18 @@ def test_nothing_ever_delivered_is_the_story_doctor_tells(tmp_path: Path) -> Non
     later = DeliveryLog(tmp_path).load()
     assert later is not None
     assert not later.never_delivered
+
+
+def test_the_health_record_keeps_an_errors_class_or_built_words_alone(tmp_path: Path) -> None:
+    health = DeliveryLog(tmp_path, clock=Clock())
+    health.failed(SubscriptionError(f"{tmp_path}/subscriptions.json: token=hunter2"))
+    record = DeliveryLog(tmp_path).load()
+    assert record is not None
+    assert record.last_error == "SubscriptionError"
+    health.failed(DeliveryError(cause=requests.ConnectionError.__name__))
+    record = DeliveryLog(tmp_path).load()
+    assert record is not None
+    assert record.last_error == "push service not reached (ConnectionError)"
 
 
 def test_an_unwritable_health_file_never_stops_a_push(tmp_path: Path) -> None:
@@ -645,7 +669,7 @@ def test_a_sender_failure_carries_the_push_services_status() -> None:
         text: str = "gone"
 
     error = WebPushException("x", response=Response())
-    wrapped = DeliveryError(str(error), status=error.status_code)
+    wrapped = DeliveryError(error.status_code)
     assert wrapped.gone
     assert WebPushSender.__call__.__doc__
 
@@ -726,10 +750,9 @@ def test_a_push_service_that_never_answers_fails_within_the_timeout(tmp_path: Pa
     with socket.create_server(("127.0.0.1", 0)) as silent:
         # An IPv4 socket's name is (host, port).
         port = cast("tuple[str, int]", silent.getsockname())[1]
-        started = time.monotonic()
+        send = a_sender(tmp_path, limits)
         with pytest.raises(DeliveryError) as refused:
-            a_sender(tmp_path, limits)(unchecked(f"https://127.0.0.1:{port}/push"), "{}")
-    assert time.monotonic() - started < 5
+            within(lambda: send(unchecked(f"https://127.0.0.1:{port}/push"), "{}"), 5)
     assert refused.value.status is None
     # The library's text names the endpoint; the record keeps only fixed words.
     assert str(refused.value) == "push service not reached (ReadTimeout)"

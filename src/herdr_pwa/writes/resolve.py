@@ -129,8 +129,8 @@ def snapshot_now(client: HerdrClient, *, verb: str) -> Snapshot | Refused:
     try:
         return client.snapshot()
     except EngineError as exc:
-        log.warning("write refused: the herd could not be read: %s", exc)
-        return Refused(Refusal.UNREACHABLE, verb, detail=str(exc))
+        log.warning("write refused: the herd could not be read: %s", type(exc).__name__)
+        return Refused(Refusal.UNREACHABLE, verb, error=type(exc))
 
 
 def doubt(agent: Agent, witness: Witness) -> str:
@@ -166,12 +166,17 @@ def agent_now(
     # A swapped id raises here (as_session_id / as_pane_id); it is never "not found".
     resolution = snap.resolve_session(session, expected_target=expected_target)
     if resolution.presence is Presence.GONE or resolution.agent is None:
-        return Refused(Refusal.GONE, verb, detail=resolution.message)
+        return Refused(Refusal.GONE, verb)
     # herdr checks a record a nested harness can overwrite; then keys would reach another agent.
     said = doubt(resolution.agent, writer.witness)
     if said:
-        log.warning("write refused at %s: %s", resolution.agent.target, said)
-        return Refused(Refusal.DOUBTED_IDENTITY, verb, detail=said)
+        # The doubt names two folders; the journal gets what was doubted, not where.
+        log.warning(
+            "write refused at %s: the %s session started outside the pane's folder",
+            resolution.agent.target,
+            resolution.agent.agent or "unknown",
+        )
+        return Refused(Refusal.DOUBTED_IDENTITY, verb)
     return resolution.agent
 
 
@@ -193,8 +198,14 @@ def attempt(audit: AuditTrail, write: Write, *, verb: str) -> Entry | Refused:
     try:
         return audit.record(write)
     except AuditUnavailableError as exc:
-        log.exception("%s refused at %s: it could not be recorded", write.endpoint, write.target)
-        return Refused(Refusal.UNRECORDABLE, verb, detail=str(exc))
+        # Expected, and its text names the audit log's path: the class and the write say enough.
+        log.warning(
+            "%s refused at %s: it could not be recorded (%s)",
+            write.endpoint,
+            write.target,
+            type(exc).__name__,
+        )
+        return Refused(Refusal.UNRECORDABLE, verb, error=type(exc))
 
 
 def workspace_key(workspace_id: str) -> str:

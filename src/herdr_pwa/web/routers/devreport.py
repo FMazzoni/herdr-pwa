@@ -17,6 +17,7 @@ class _RefusalError(Exception):
     def __init__(self, status: int, detail: str) -> None:
         super().__init__(detail)
         self.status: int = status
+        self.detail: str = detail
 
 
 async def _batch(request: Request) -> Batch:
@@ -38,11 +39,13 @@ def build(web: WebState) -> APIRouter:
         try:
             store.append(await _batch(request))
         except _RefusalError as exc:
-            return JSONResponse({"error": str(exc)}, status_code=exc.status)
+            return JSONResponse({"error": exc.detail}, status_code=exc.status)
         except ValidationError as exc:
             return JSONResponse({"error": f"not a report: {summary(exc)}"}, status_code=400)
         except OSError as exc:
-            return JSONResponse({"error": f"cannot record: {exc}"}, status_code=500)
+            # The class alone: an OSError's text names the state dir's full path.
+            failed = f"cannot record ({type(exc).__name__})"
+            return JSONResponse({"error": failed}, status_code=500)
         return Response(status_code=204)
 
     return router

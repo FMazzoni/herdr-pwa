@@ -126,6 +126,7 @@ class LoopState:
 
     running: bool = False
     ticks: int = 0
+    # The failed read's class alone: the status page shows it, and a runner error names its socket.
     read_error: str = ""
 
 
@@ -266,8 +267,8 @@ class Notifier:
         try:
             return self._stores.devices.list_all()
         except (SubscriptionError, OSError) as exc:
-            log.warning("cannot read the subscription store: %s", exc)
-            self._stores.health.failed(f"subscription store: {exc}")
+            log.warning("cannot read the subscription store: %s", type(exc).__name__)
+            self._stores.health.failed(exc)
             return []
 
     def _read(self) -> Snapshot | None:
@@ -275,10 +276,10 @@ class Notifier:
         try:
             entry = self._cache.get(self._reader.snapshot, max_age=self._config.interval)
         except EngineError as exc:
-            self.state.read_error = f"{type(exc).__name__}: {exc}"
+            self.state.read_error = type(exc).__name__
             return None
         if entry.error is not None:
-            self.state.read_error = f"{type(entry.error).__name__}: {entry.error}"
+            self.state.read_error = type(entry.error).__name__
             return None
         self.state.read_error = ""
         return entry.value
@@ -309,7 +310,7 @@ class Notifier:
         try:
             data = encode_payload(payload)
         except PushError as exc:
-            self._stores.health.failed(f"payload: {exc}")
+            self._stores.health.failed(exc)
             return FanOut()
         outlet = Outlet(
             self._deliver, self._stores.devices, self._stores.health, self._limits, self._elapsed
@@ -339,7 +340,8 @@ def open_push(settings: Settings, herd: HerdSource, seams: Seams) -> PushState |
             herd=herd, stores=stores, config=LoopConfig.from_settings(settings), seams=seams
         )
     except SubjectError as exc:
+        fault = exc.fault
         # Loud but not fatal: the phone can still subscribe, and the alerts page says why.
-        log.error("push is not armed: %s", exc)  # noqa: TRY400 - the reason is the message
-        return PushState(stores, None, str(exc))
+        log.error("push is not armed: %s", fault.advice)  # noqa: TRY400 - the reason is the message
+        return PushState(stores, None, fault.advice)
     return PushState(stores, notifier)

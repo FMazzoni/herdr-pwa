@@ -21,3 +21,9 @@ repos:
         entry: python3 scripts/hooks/commit_msg.py
         language: system
         stages: [commit-msg]
+      - id: ledger-repin
+        name: ledger re-pin noted
+        entry: python3 scripts/hooks/ledger_repin.py
+        language: system
+        files: ^tests/(test_ledger\.py|fixtures/ledger\.json)$
+        pass_filenames: false

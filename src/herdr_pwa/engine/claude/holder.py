@@ -40,7 +40,7 @@ def _holds(sessions: Path, session: str, process: Process) -> bool:
         record = _ClaudeProcess.model_validate_json((sessions / f"{pid}.json").read_bytes())
         namespace = str((proc / str(pid) / "ns" / "pid").readlink())
     except (OSError, ValidationError) as exc:
-        log.debug("no holder record for pid %s: %s", pid, exc)
+        log.debug("no holder record for pid %s: %s", pid, type(exc).__name__)
         return False
     # A reused pid has another start, and one in another namespace merely shares the number.
     started = ticks_since_boot(pid, proc=proc)

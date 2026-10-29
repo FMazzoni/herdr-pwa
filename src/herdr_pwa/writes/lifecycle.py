@@ -215,7 +215,7 @@ def record_service_path(state_dir: Path) -> None:
             state_dir / SERVICE_PATH_FILENAME, os.environ.get("PATH", os.defpath) + "\n"
         )
     except OSError as exc:
-        log.warning("could not record the service's PATH for doctor: %s", exc)
+        log.warning("could not record the service's PATH for doctor: %s", type(exc).__name__)
 
 
 def service_path(state_dir: Path) -> str | None:
@@ -235,7 +235,9 @@ def record_service_models(state_dir: Path, declared: Declared) -> None:
         _ = statedir.ensure_dir(state_dir)
         statedir.write_secret(state_dir / SERVICE_MODELS_FILENAME, text)
     except OSError as exc:
-        log.warning("could not record the service's declared models for doctor: %s", exc)
+        log.warning(
+            "could not record the service's declared models for doctor: %s", type(exc).__name__
+        )
 
 
 def service_models(state_dir: Path) -> Declared | None:
@@ -293,8 +295,12 @@ def _abandon(client: HerdrClient, pane: PaneId) -> None:
     # The one close by bare pane id: a pane this same request created a moment ago.
     try:
         _ = client.close_pane(Seat(as_pane_id(pane)))
-    except (EngineError, ValueError):
-        log.exception("the pane %s could not be closed and has leaked", pane)
+    except (EngineError, ValueError) as exc:
+        failed = type(exc).__name__
+    else:
+        return
+    # Loud, but the class alone: herdr's own words stay out of the journal.
+    log.error("the pane %s could not be closed and has leaked: %s", pane, failed)
 
 
 def _await_session(client: HerdrClient, started: StartedAgent, pacing: Pacing) -> StartedAgent:
@@ -304,7 +310,9 @@ def _await_session(client: HerdrClient, started: StartedAgent, pacing: Pacing) -
         try:
             started = client.started_agent(started.pane)
         except EngineError as exc:
-            log.warning("could not re-read the new agent at %s: %s", started.pane, exc)
+            log.warning(
+                "could not re-read the new agent at %s: %s", started.pane, type(exc).__name__
+            )
             break
     return started
 
@@ -328,7 +336,7 @@ def _launch(writer: Writer, request: StartRequest, name: str) -> _Launched | Ref
             NewTab(WorkspaceId(request.workspace_id), request.cwd.strip(), name, env=env)
         )
     except EngineError as exc:
-        return Refused(refusal_for(exc), "created", detail=str(exc))
+        return Refused(refusal_for(exc), "created", error=type(exc))
     launch = Launch(name, request.kind, pane, harness.args(request.model, prompt))
     launched = _spawn(writer, launch, prompt)
     if isinstance(launched, Refused):
@@ -341,7 +349,7 @@ def _spawn(writer: Writer, launch: Launch, prompt: str) -> _Launched | Refused:
         try:
             return _Launched(writer.client.start_agent(launch))
         except EngineError as exc:
-            return Refused(refusal_for(exc), "created", detail=str(exc))
+            return Refused(refusal_for(exc), "created", error=type(exc))
     # The pane's key, as a first prompt typed by the form or the starting page would take it.
     key = f"pane:{launch.pane_id}"
     return one_at_a_time(
@@ -360,7 +368,7 @@ def _spawn_prompted(writer: Writer, launch: Launch, prompt: str) -> _Launched | 
             started = writer.client.start_agent(launch)
         except EngineError as exc:
             entry.outcome(failed_result(exc))
-            return Refused(refusal_for(exc), "created", detail=str(exc))
+            return Refused(refusal_for(exc), "created", error=type(exc))
         echo = Echo(pane, prompt)
         shown = read_back(writer.client, echo, writer.pacing, reads=LAUNCH_READS) is not None
         outcome, evidence = (
@@ -468,7 +476,7 @@ def _end_agent(writer: Writer, ask: EndAsk) -> AgentEnded | Refused:
             _ = writer.client.close_pane(Seat(agent.target, ask.session))
         except EngineError as exc:
             entry.outcome(failed_result(exc))
-            return Refused(refusal_for(exc), "closed", detail=str(exc))
+            return Refused(refusal_for(exc), "closed", error=type(exc))
         entry.outcome("closed")
     return AgentEnded(agent.target, verified=not _still_there(writer.client, ask.session))
 
