@@ -2,7 +2,6 @@
 
 import errno
 import logging
-import re
 import sys
 import threading
 import traceback
@@ -21,8 +20,9 @@ _DEFAULT_FMT: Final = "%(levelprefix)s %(message)s"
 _ACCESS_FMT: Final = '%(levelprefix)s %(client_addr)s - "%(request_line)s" %(status_code)s'
 # The installed tree and this package both sit under a home directory; what follows is enough.
 _ANCHORS: Final = ("site-packages/", "herdr_pwa/")
-# The `File "..."` line traceback.format_stack writes for each frame.
-_STACK_FILE: Final = re.compile(r'File "([^"]+)"')
+# How traceback.format_stack starts and splits each frame's line.
+_FRAME_START: Final = '  File "'
+_FRAME_REST: Final = '", line '
 _STACK_HEAD: Final = "Stack (most recent call last):"
 _TRACEBACK_HEAD: Final = "Traceback (most recent call last):"
 _CAUSE: Final = "The above exception was the direct cause of the following exception:"
@@ -94,11 +94,11 @@ def scrubbed_traceback(ei: ExcInfo) -> str:
 
 def scrubbed_stack(stack_info: str) -> str:
     """*stack_info*'s frame lines alone, each file cut to its short name; source lines can quote."""
-    kept = [
-        _STACK_FILE.sub(lambda match: f'File "{_short_file(match.group(1))}"', line)
-        for line in stack_info.splitlines()
-        if line == _STACK_HEAD or _STACK_FILE.search(line)
-    ]
+    kept = [_STACK_HEAD] if stack_info.startswith(_STACK_HEAD) else []
+    for line in stack_info.splitlines():
+        filename, found, rest = line.removeprefix(_FRAME_START).rpartition(_FRAME_REST)
+        if line.startswith(_FRAME_START) and found:
+            kept.append(f"{_FRAME_START}{_short_file(filename)}{_FRAME_REST}{rest}")
     return "\n".join(kept)
 
 
