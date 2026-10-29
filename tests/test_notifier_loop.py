@@ -57,7 +57,7 @@ class Sender:
 
     def __call__(self, subscription: Subscription, data: str) -> None:
         if self.refuse is not None:
-            raise DeliveryError("refused", status=self.refuse)
+            raise DeliveryError(self.refuse)
         self.sent.append((subscription.endpoint, OBJECT.validate_json(data)))
         if self.spends is not None:
             self.spends[0].now += self.spends[1]
@@ -214,6 +214,8 @@ def test_a_runner_that_will_not_answer_skips_the_tick_and_says_why(tmp_path: Pat
     assert tick.step is None
     assert "EngineUnavailableError" in tick.error
     assert "EngineUnavailableError" in loop.notifier.state.read_error
+    # The status page shows the class alone; a runner's words can name its socket.
+    assert "no socket" not in tick.error
 
 
 def test_a_device_the_push_service_retired_is_pruned(tmp_path: Path) -> None:

@@ -85,8 +85,8 @@ def _read_now(client: HerdrClient, target: PaneId) -> str | Refused:
     try:
         return client.screen(target)
     except EngineError as exc:
-        log.warning("prompt refused: %s could not be read first: %s", target, exc)
-        return Refused(Refusal.UNREADABLE, _VERB, detail=str(exc))
+        log.warning("prompt refused: %s could not be read first: %s", target, type(exc).__name__)
+        return Refused(Refusal.UNREADABLE, _VERB, error=type(exc))
 
 
 def screen_claim(screen: str) -> str:
@@ -175,14 +175,14 @@ def _type(writer: Writer, send: _Send) -> PromptSent | Refused:
 
 
 def _failed(writer: Writer, send: _Send, exc: EngineError) -> Refused:
-    refused = Refused(refusal_for(exc), _VERB, detail=str(exc))
+    refused = Refused(refusal_for(exc), _VERB, error=type(exc))
     if not refused.unsure:
         return refused
     writer.memory.unsure.note(send.session, send.text)
     # The text comes back with a digest of the screen now, so the next tap is checked against it.
     after = _read_now(writer.client, send.target)
     fresh = screen_digest(after) if send.issue and isinstance(after, str) else ""
-    return Refused(refused.refusal, _VERB, detail=refused.detail, screen=fresh)
+    return Refused(refused.refusal, _VERB, error=refused.error, screen=fresh)
 
 
 @dataclass(frozen=True, slots=True)
@@ -230,7 +230,7 @@ def _look(client: HerdrClient, pane: PaneId, *, by_address: bool) -> str | Refus
         started = client.started_agent(pane)
         screen = client.read(pane, VISIBLE_READ) if started.ready else ""
     except EngineError as exc:
-        return Refused(refusal_for(exc), _VERB, detail=str(exc))
+        return Refused(refusal_for(exc), _VERB, error=type(exc))
     return Refused(Refusal.HAS_IDENTITY, _VERB) if by_address and started.session else screen
 
 

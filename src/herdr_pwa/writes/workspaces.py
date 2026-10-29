@@ -118,7 +118,7 @@ def _create(client: HerdrClient, label: str) -> WorkspaceDone | Refused:
     try:
         made = client.create_workspace(label=label)
     except EngineError as exc:
-        return Refused(refusal_for(exc), "created", detail=str(exc))
+        return Refused(refusal_for(exc), "created", error=type(exc))
     read, found = _after(client, made.workspace_id)
     return WorkspaceDone(made.workspace_id, read and found is not None)
 
@@ -142,7 +142,7 @@ def _rename(client: HerdrClient, workspace_id: str, label: str) -> WorkspaceDone
     try:
         _ = client.rename_workspace(found[0].workspace_id, label)
     except EngineError as exc:
-        return Refused(refusal_for(exc), "renamed", detail=str(exc))
+        return Refused(refusal_for(exc), "renamed", error=type(exc))
     read, now = _after(client, found[0].workspace_id)
     return WorkspaceDone(found[0].workspace_id, read and now is not None and now.label == label)
 
@@ -197,7 +197,7 @@ def _close(writer: Writer, ask: WorkspaceCloseAsk) -> WorkspaceDone | Refused:
             _ = writer.client.close_workspace(wid)
         except EngineError as exc:
             entry.outcome(failed_result(exc))
-            return Refused(refusal_for(exc), "closed", detail=str(exc))
+            return Refused(refusal_for(exc), "closed", error=type(exc))
         entry.outcome(f"closed:{cost.total}")
     read, now = _after(writer.client, wid)
     return WorkspaceDone(wid, read and now is None)

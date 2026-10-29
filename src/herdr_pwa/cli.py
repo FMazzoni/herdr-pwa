@@ -265,7 +265,9 @@ def _assert_no_raw_forward(api: tailscale.LocalApi, port: int) -> None:
         found = tailscale.raw_forwards(api, port=port)
     except tailscale.LocalApiError as exc:
         # Unreadable is not a forward; doctor reports it, and refusing would break a box without tailscaled.
-        log.warning("Could not check 'tailscale serve' for a raw TCP forward: %s", exc)
+        log.warning(
+            "Could not check 'tailscale serve' for a raw TCP forward: %s", type(exc).__name__
+        )
         return
     if found:
         raise RawForwardError(f"Refusing to start: {_raw_forward_problem(found, port)}")

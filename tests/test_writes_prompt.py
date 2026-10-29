@@ -122,16 +122,24 @@ def test_settled_and_working_panes_are_not_questions(fixture: str) -> None:
 
 def test_a_pane_that_cannot_be_read_refuses_rather_than_sending_blind(tmp_path: Path) -> None:
     r = idle_rig(tmp_path)
-    r.herd.fail["agent.read"] = EngineUnavailableError("down")
+    r.herd.fail["agent.read"] = EngineUnavailableError("down at /home/user/.ssh token=hunter2")
     result = refused(send_prompt(r.writer, PromptAsk(S1, "hello")))
+    # The refusal keeps the error's class; the type has no field its text could ride in.
+    assert result.cause == "EngineUnavailableError"
+    assert "hunter2" not in repr(result)
     assert (result.refusal, result.status) == (Refusal.UNREADABLE, 503)
     assert r.herd.writes(PROMPT) == []
 
 
 def test_a_herd_that_cannot_be_read_refuses_with_503(tmp_path: Path) -> None:
     r = idle_rig(tmp_path)
-    r.herd.fail["session.snapshot"] = EngineUnavailableError("down")
+    r.herd.fail["session.snapshot"] = EngineUnavailableError(
+        "down at /home/user/.ssh token=hunter2"
+    )
     result = refused(send_prompt(r.writer, PromptAsk(S1, "hello")))
+    # The refusal keeps the error's class; the type has no field its text could ride in.
+    assert result.cause == "EngineUnavailableError"
+    assert "hunter2" not in repr(result)
     assert (result.refusal, result.status) == (Refusal.UNREACHABLE, 503)
     assert r.herd.writes(PROMPT) == []
 

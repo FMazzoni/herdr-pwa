@@ -1,12 +1,15 @@
 """The explorer's git reads give git's own answers: status, the file list, diffs and the layout."""
 
+import logging
 import os
 from pathlib import Path
 from typing import Final
 
+import pygit2
 import pytest
 
 from herdr_pwa.files import diffs
+from herdr_pwa.files import git as git_module
 from herdr_pwa.files.git import Git
 from tests.filefakes import git, make_repo, trapped_submodule
 
@@ -199,6 +202,22 @@ def test_a_worktree_whose_directory_is_gone_is_left_out(tmp_path: Path) -> None:
         path.rmdir() if path.is_dir() and not path.is_symlink() else path.unlink()
     tree.rmdir()
     assert Git().worktrees(repo) == (repo,)
+
+
+def test_a_failed_read_logs_its_operation_and_error_class_alone(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    repo = make_repo(tmp_path / "private-plans")
+
+    def refuse(_repo: pygit2.Repository) -> None:
+        raise pygit2.GitError(f"failed to read {repo}/.git/index: token=hunter2")
+
+    monkeypatch.setattr(git_module, "_status", refuse)
+    with caplog.at_level(logging.INFO, logger="herdr_pwa.files.git"):
+        assert Git().status(repo).branch == ""
+    assert "git status failed: GitError" in caplog.text
+    assert "private-plans" not in caplog.text
+    assert "hunter2" not in caplog.text
 
 
 def _snapshot(dotgit: Path) -> dict[str, tuple[int, int]]:

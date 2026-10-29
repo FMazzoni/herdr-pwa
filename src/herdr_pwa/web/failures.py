@@ -31,8 +31,6 @@ log = logging.getLogger(__name__)
 
 # htmx stops an element's polling on 286; the client re-arms it when the page is shown.
 STOP_POLLING: Final = 286
-# Their text names the path asked for, which a journal line must not carry.
-_PATH_ERRORS: Final = (OutsideRootError, NotReadableError)
 
 
 class AgentGoneError(Exception):
@@ -172,12 +170,9 @@ def respond(pages: Pages, request: Request, exc: Exception) -> Response:
 
 
 def _log(request: Request, exc: Exception) -> None:
-    # The route's template, not the URL, so no root id or path asked for reaches the journal.
+    # Route template and class alone: a URL or an error's text can name a path, session or secret.
     route = getattr(request.scope.get("route"), "path", "?")
-    if isinstance(exc, _PATH_ERRORS):
-        log.warning("%s %s: %s", request.method, route, type(exc).__name__)
-        return
-    log.warning("%s %s: %s: %s", request.method, route, type(exc).__name__, exc)
+    log.warning("%s %s: %s", request.method, route, type(exc).__name__)
 
 
 def install(app: FastAPI, pages: Pages) -> None:
@@ -201,7 +196,7 @@ class Redraw:
 
 def refused(pages: Pages, redraw: Redraw, result: Refused) -> HTMLResponse:
     """A write the library declined, at the status the write library's one table assigns."""
-    log.info("write refused: %s %s", result.refusal.value, result.detail)
+    log.info("write refused: %s %s", result.refusal.value, result.cause)
     shown = {**redraw.context, "refused": result, "says": result.says}
     render = pages.page if redraw.as_page else pages.fragment
     return render(redraw.name, shown, status=result.status)
