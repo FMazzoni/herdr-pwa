@@ -24,7 +24,8 @@ def main() -> int:
     before, after = _show(f"HEAD:{TEST}"), _show(f":{TEST}")
     if before is None or _pin(before) == _pin(after):
         return 0
-    if len(_note(_show(f":{LEDGER}"))) > len(_note(_show(f"HEAD:{LEDGER}"))):
+    staged, before = _note(_show(f":{LEDGER}")), _note(_show(f"HEAD:{LEDGER}")) or ""
+    if staged is not None and len(staged) > len(before):
         return 0
     print(
         f'ledger-repin refused: add a sentence to meta.rehashed in {LEDGER}, as AGENTS.md says: "{RULE}"',
@@ -44,8 +45,16 @@ def _pin(text: str | None) -> str | None:
     return found["pin"] if found else None
 
 
-def _note(text: str | None) -> str:
-    note: object = json.loads(text).get("meta", {}).get("rehashed", "") if text else ""
+def _note(text: str | None) -> str | None:
+    # None for a ledger that is not a JSON object, so a broken one is refused, not a traceback.
+    try:
+        document: object = json.loads(text) if text else {}
+    except ValueError:
+        return None
+    if not isinstance(document, dict):
+        return None
+    meta: object = document.get("meta", {})
+    note: object = meta.get("rehashed", "") if isinstance(meta, dict) else ""
     return note if isinstance(note, str) else ""
 
 

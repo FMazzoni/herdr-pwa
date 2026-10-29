@@ -133,6 +133,16 @@ class SubscriptionError(PushError):
     """The subscription store file is not the shape it must be."""
 
 
+class DeviceLimitError(SubscriptionError):
+    """The store already holds as many devices as this server sends to."""
+
+    def __init__(self, count: int) -> None:
+        self.detail: str = (
+            f"already {count} devices, the most this server sends to; remove one first"
+        )
+        super().__init__(self.detail)
+
+
 class DeliveryError(PushError):
     """One device, or its push service, refused; carries the HTTP status when known."""
 
@@ -437,7 +447,7 @@ class SubscriptionStore:
         """Store a device, forgetting ``replaces`` if held; the same endpoint keeps its stamp.
 
         Raises:
-            SubscriptionError: the store already holds ``limits.max_devices`` other devices.
+            DeviceLimitError: the store already holds ``limits.max_devices`` other devices.
         """
         path = self.path
         # Dropped before the limit is counted, so a full store can still swap a device.
@@ -467,9 +477,7 @@ class SubscriptionStore:
         current = [one for one in _stored(path, text) if one.endpoint != gone]
         previous = next((one for one in current if one.endpoint == subscription.endpoint), None)
         if previous is None and len(current) >= self._max_devices:
-            raise SubscriptionError(
-                f"already {len(current)} devices, the most this server sends to; remove one first"
-            )
+            raise DeviceLimitError(len(current))
         stamp = int(self._clock()) if previous is None else previous.added_at
         stored = subscription.model_copy(update={"added_at": stamp})
         kept = [*(one for one in current if one.endpoint != stored.endpoint), stored]
@@ -482,7 +490,8 @@ def _stored(path: Path, text: str | None) -> list[Subscription]:
             _StoreFile.model_validate_json(text).subscriptions if text and text.strip() else []
         )
     except ValidationError as exc:
-        raise SubscriptionError(f"{path}: {summary(exc)}") from exc
+        # The name alone: the full path names the home folder, and pydantic's words can quote it.
+        raise SubscriptionError(f"{path.name} is not a subscription store") from exc
     out: list[Subscription] = []
     for index, entry in enumerate(entries):
         try:

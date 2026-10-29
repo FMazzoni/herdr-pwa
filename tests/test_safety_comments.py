@@ -9,7 +9,7 @@ import pytest
 import herdr_pwa
 
 SRC = Path(herdr_pwa.__file__).parent
-RULE = "comments keep the consequence (AGENTS.md:30)"
+RULE = "comments keep the consequence (AGENTS.md, Writing)"
 
 
 @dataclass(frozen=True, slots=True)
