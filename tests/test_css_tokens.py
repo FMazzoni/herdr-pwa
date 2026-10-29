@@ -41,6 +41,7 @@ def test_a_planted_px_fails_with_its_line(run: Run) -> None:
     assert result.returncode == 1
     line = len(css.splitlines())
     assert f"app.css:{line}: '7px' in `padding: 7px`" in result.stdout
+    assert "replace it with a var(--token) from :root, or allow it in" in result.stdout
 
 
 def test_a_planted_colour_fails(run: Run) -> None:
@@ -54,6 +55,7 @@ def test_tokens_comments_and_selectors_are_not_literals(run: Run) -> None:
     css = (
         TOKENS
         + "/* 44px is the tap */\n#add .x:hover { margin: var(--space-1) 0; opacity: 0.5; }\n"
+        + ".y { color: color-mix(in oklab, var(--ink) 45%, transparent); }\n"
     )
     assert run(css).returncode == 0
 
