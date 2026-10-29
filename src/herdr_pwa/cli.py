@@ -349,7 +349,7 @@ def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv, namespace=_Args())
     # Before any command logs, so a caught exception's message never reaches the journal.
     logging.config.dictConfig(logs.logging_config())
-    logs.install_excepthooks()
+    logs.install_hooks()
     settings = Settings()
     seams = Seams()
     if args.command == "doctor":

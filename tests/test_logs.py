@@ -6,6 +6,7 @@ import logging
 import logging.config
 import sys
 import threading
+import warnings
 from collections.abc import Callable
 from pathlib import Path
 
@@ -214,7 +215,7 @@ def _raise_in_thread() -> None:
 
 def test_uncaught_exceptions_go_through_logging(monkeypatch: pytest.MonkeyPatch) -> None:
     stream = _configured(monkeypatch)
-    logs.install_excepthooks()
+    logs.install_hooks()
     exc_info = _caught(_raise_chained)
     assert exc_info[0] is not None
     sys.excepthook(*exc_info)
@@ -260,4 +261,91 @@ def test_an_exception_group_shows_each_members_class_and_frames() -> None:
     assert '    File "test_logs.py", line' in shown
     assert "    FileNotFoundError(ENOENT)" in shown
     assert "    KeyError" in shown
+    assert "secret" not in shown
+
+
+async def _pending_forever() -> None:
+    await asyncio.Event().wait()
+
+
+async def _nothing() -> None:
+    return None
+
+
+def _raise_in_callback() -> None:
+    raise ValueError(PRIVATE_PATH)
+
+
+def test_asyncios_own_lines_lose_their_reprs_and_paths(monkeypatch: pytest.MonkeyPatch) -> None:
+    stream = _configured(monkeypatch)
+    loop = asyncio.new_event_loop()
+    try:
+        _ = loop.call_soon(_raise_in_callback)
+        task = loop.create_task(_pending_forever())
+        loop.run_until_complete(_nothing())
+    finally:
+        loop.close()
+    # A pending task's last reference going is what makes asyncio say it was destroyed.
+    del task
+    _ = gc.collect()
+    shown = stream.getvalue()
+    assert "ERROR:    Exception in callback _raise_in_callback()\n" in shown
+    assert "ERROR:    Task was destroyed but it is pending!\n" in shown
+    assert str(Path(__file__).parent) not in shown
+    assert "secret" not in shown
+
+
+@pytest.mark.parametrize(
+    ("argument", "expected"),
+    [
+        ({ValueError(PRIVATE_PATH): 1}, "{'ValueError': 1}"),
+        ([{ValueError(PRIVATE_PATH): 1}], "[{'ValueError': 1}]"),
+        ({ValueError("a"): 1, ValueError("b"): 2}, "<a mapping of 2>"),
+        ({(Path(PRIVATE_PATH),): 1}, "<a mapping of 1>"),
+    ],
+)
+def test_dict_keys_are_scrubbed_or_said_in_fixed_words(
+    argument: dict[ValueError, int] | list[dict[ValueError, int]] | dict[tuple[Path], int],
+    expected: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stream = _configured(monkeypatch)
+    logging.getLogger("herdr_pwa.test").warning("%s", argument)
+    assert stream.getvalue() == f"WARNING:  {expected}\n"
+
+
+def test_a_path_as_the_message_is_logged_as_its_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    stream = _configured(monkeypatch)
+    logging.getLogger("herdr_pwa.test").warning(Path(PRIVATE_PATH))
+    assert stream.getvalue() == "WARNING:  secret.json\n"
+
+
+def test_a_logging_error_is_said_in_one_fixed_line(monkeypatch: pytest.MonkeyPatch) -> None:
+    stream = _configured(monkeypatch)
+    logging.getLogger("herdr_pwa.test").warning("%s %s", PRIVATE_PATH)  # noqa: PLE1206 - the error is the point
+    assert stream.getvalue() == "--- Logging error in herdr_pwa.test: TypeError ---\n"
+
+
+def test_an_oserror_whose_errno_is_no_number_is_named_and_never_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stream = _configured(monkeypatch)
+    logging.getLogger("herdr_pwa.test").warning("%s", OSError([1], PRIVATE_PATH))
+    assert stream.getvalue() == "WARNING:  OSError\n"
+
+
+def _warn() -> None:
+    warnings.warn(f"cannot read {PRIVATE_PATH}", RuntimeWarning, stacklevel=1)
+
+
+def test_a_warning_is_logged_as_its_category_and_short_place(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stream = _configured(monkeypatch)
+    with warnings.catch_warnings():
+        warnings.simplefilter("always")
+        logs.install_hooks()
+        _warn()
+    shown = stream.getvalue()
+    assert shown.startswith("WARNING:  RuntimeWarning at test_logs.py:")
     assert "secret" not in shown

@@ -8,7 +8,7 @@ import traceback
 from collections.abc import Iterable, Mapping
 from pathlib import PurePath
 from types import TracebackType
-from typing import Final, cast, override
+from typing import Final, TextIO, cast, override
 
 from uvicorn.logging import AccessFormatter, DefaultFormatter
 
@@ -31,6 +31,11 @@ _CONTEXT: Final = "During handling of the above exception, another exception occ
 _NESTING: Final = 2
 # Asyncio joins the task's repr, with its absolute path and the exception's text, into the message.
 _ASYNCIO: Final = "asyncio"
+# Each repr asyncio writes starts with one of these; the part before it is its fixed words.
+_ASYNCIO_CUTS: Final = (" at ", "<")
+_UNFORMATTED: Final = "an unformattable record"
+# Captured warnings arrive formatted as warnings.formatwarning writes them, absolute path first.
+_WARNINGS: Final = "py.warnings"
 _UNCAUGHT: Final = logging.getLogger("herdr_pwa.uncaught")
 
 
@@ -39,17 +44,34 @@ class ScrubFilter(logging.Filter):
 
     @override
     def filter(self, record: logging.LogRecord) -> bool:
-        if record.name == _ASYNCIO and record.exc_info:
-            record.msg, record.args = record.getMessage().split("\n", 1)[0], ()
-        if isinstance(record.msg, BaseException):
-            record.msg = exception_name(record.msg)
+        if isinstance(record.msg, BaseException | PurePath):
+            record.msg = _scrubbed(record.msg)
         if isinstance(record.args, Mapping):
-            record.args = {key: _scrubbed(value) for key, value in record.args.items()}
+            # A lone dict argument is the args, keys of any type, and "%s" prints it keys and all.
+            scrubbed = _scrubbed_mapping(cast("Mapping[object, object]", record.args), _NESTING)
+            record.args = (scrubbed,) if isinstance(scrubbed, str) else _named_args(scrubbed)
         elif record.args:
             record.args = tuple(_scrubbed(value) for value in record.args)
+        if record.name == _ASYNCIO:
+            record.msg, record.args = _asyncio_words(record), ()
+        elif record.name == _WARNINGS:
+            record.msg, record.args = _warning_words(record), ()
         # Another handler may have cached a traceback with messages; this one renders its own.
         record.exc_text = None
         return True
+
+
+class ScrubHandler(logging.StreamHandler[TextIO]):
+    """A stream handler whose own errors are said in one line, not a traceback with the args."""
+
+    @override
+    def handleError(self, record: logging.LogRecord) -> None:
+        # As the stdlib's does: silent unless raiseExceptions, and stderr may be gone at exit.
+        if not logging.raiseExceptions or sys.stderr is None:
+            return
+        kind = sys.exc_info()[0]
+        name = kind.__name__ if kind else "an error"
+        _ = sys.stderr.write(f"--- Logging error in {record.name}: {name} ---\n")
 
 
 class ScrubFormatter(DefaultFormatter):
@@ -80,7 +102,8 @@ def exception_name(exc: BaseException) -> str:
     """The class name, plus the errno's symbol for an OSError, since both are fixed words."""
     name = type(exc).__name__
     code = exc.errno if isinstance(exc, OSError) else None
-    symbol = errno.errorcode.get(code) if code is not None else None
+    # An OSError takes any first argument as its errno, a list say, which no table holds.
+    symbol = errno.errorcode.get(code) if isinstance(code, int) else None
     return f"{name}({symbol})" if symbol else name
 
 
@@ -102,8 +125,9 @@ def scrubbed_stack(stack_info: str) -> str:
     return "\n".join(kept)
 
 
-def install_excepthooks() -> None:
-    """Send uncaught exceptions, main thread or not, through logging, so they are scrubbed too."""
+def install_hooks() -> None:
+    """Send warnings and uncaught exceptions, any thread's, through logging to be scrubbed too."""
+    logging.captureWarnings(True)  # noqa: FBT003 - the stdlib's switch takes no keyword
     sys.excepthook = _log_uncaught
     threading.excepthook = _log_uncaught_in_thread
 
@@ -121,13 +145,13 @@ def logging_config() -> dict[str, object]:
         "handlers": {
             "default": {
                 "formatter": "default",
-                "class": "logging.StreamHandler",
+                "class": ScrubHandler,
                 "stream": "ext://sys.stderr",
                 "filters": ["scrub"],
             },
             "access": {
                 "formatter": "access",
-                "class": "logging.StreamHandler",
+                "class": ScrubHandler,
                 "stream": "ext://sys.stdout",
                 "filters": ["scrub"],
             },
@@ -156,12 +180,54 @@ def _scrubbed(value: object, depth: int = _NESTING) -> object:
 def _scrubbed_items(value: object, depth: int) -> object:
     if isinstance(value, Mapping):
         # Isinstance cannot say a mapping's types; logging lets them be anything.
-        pairs = cast("Mapping[object, object]", value).items()
-        return {key: _scrubbed(item, depth) for key, item in pairs}
+        return _scrubbed_mapping(cast("Mapping[object, object]", value), depth)
     if isinstance(value, list | tuple | set | frozenset):
         # A list, since a scrubbed member, a list itself, could not go back into a set.
         return [_scrubbed(item, depth) for item in cast("Iterable[object]", value)]
     return value
+
+
+def _scrubbed_mapping(value: Mapping[object, object], depth: int) -> dict[object, object] | str:
+    try:
+        scrubbed = {_scrubbed(key, depth): _scrubbed(item, depth) for key, item in value.items()}
+    except TypeError:
+        # A scrubbed key can be a list, which no dict takes.
+        return _mapping_words(value)
+    # Two keys scrubbed to one name would drop an entry without saying so.
+    return scrubbed if len(scrubbed) == len(value) else _mapping_words(value)
+
+
+def _mapping_words(value: Mapping[object, object]) -> str:
+    return f"<a mapping of {len(value)}>"
+
+
+def _named_args(scrubbed: dict[object, object]) -> dict[str, object]:
+    # Its str keys stay str through scrubbing, so a "%(name)s" still finds them.
+    return cast("dict[str, object]", scrubbed)
+
+
+def _asyncio_words(record: logging.LogRecord) -> str:
+    line = _first_line(record)
+    for cut in _ASYNCIO_CUTS:
+        line = line.partition(cut)[0]
+    return line.rstrip() or _UNFORMATTED
+
+
+def _first_line(record: logging.LogRecord) -> str:
+    # Formatting runs the args' own __str__, which may fail; handleError would print them all.
+    try:
+        return record.getMessage().split("\n", 1)[0]
+    except (TypeError, ValueError):
+        return _UNFORMATTED
+
+
+def _warning_words(record: logging.LogRecord) -> str:
+    # The first line reads "<file>:<line>: <Category>: <message>"; the message can quote.
+    where, found, rest = _first_line(record).partition(": ")
+    filename, _, line = where.rpartition(":")
+    if not (found and filename and line.isdigit()):
+        return "a warning"
+    return f"{rest.partition(':')[0]} at {_short_file(filename)}:{line}"
 
 
 def _chain_lines(exc: BaseException, seen: set[int]) -> list[str]:
