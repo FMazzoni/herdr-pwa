@@ -1,5 +1,6 @@
-"""The push guard and the commit-message hook, driven by git itself in throwaway repos."""
+"""The push guard, the commit-message hook and the ledger re-pin hook, driven by git itself in throwaway repos."""
 
+import json
 import os
 import subprocess
 import sys
@@ -10,6 +11,7 @@ import pytest
 
 HOOKS = Path(__file__).resolve().parents[1] / "scripts" / "hooks"
 PRE_PUSH, COMMIT_MSG = HOOKS / "pre_push.py", HOOKS / "commit_msg.py"
+LEDGER_REPIN = HOOKS / "ledger_repin.py"
 # Synthetic stand-in for an owner's identifier; the real list lives outside the repo.
 MARKER = "planted-marker"
 SUBJECT_72 = "S" * 72
@@ -199,3 +201,43 @@ def test_git_runs_the_commit_msg_hook(rig: Rig) -> None:
     assert refused.returncode != 0
     assert "73 characters" in refused.stderr
     assert rig.git("commit", "-q", "-m", SUBJECT_72, check=False).returncode == 0
+
+
+def _ledger_files(rig: Rig, pin: str, note: str) -> None:
+    (rig.work / "tests" / "fixtures").mkdir(parents=True, exist_ok=True)
+    (rig.work / "tests" / "test_ledger.py").write_text(
+        f'LEDGER_SHA256 = "{pin}"\n', encoding="utf-8"
+    )
+    ledger = json.dumps({"meta": {"rehashed": note}, "rows": []})
+    (rig.work / "tests" / "fixtures" / "ledger.json").write_text(ledger, encoding="utf-8")
+    rig.git("add", "tests")
+
+
+def _ledger_repin(rig: Rig) -> subprocess.CompletedProcess[str]:
+    command = [sys.executable, str(LEDGER_REPIN)]
+    return subprocess.run(  # noqa: S603 - a fixed python command line, never shell input
+        command, cwd=rig.work, env=rig.env, capture_output=True, text=True, check=False
+    )
+
+
+@pytest.mark.parametrize(
+    ("pin", "note", "refused"),
+    [
+        pytest.param("b" * 64, "Re-pinned once. Re-pinned again.", False, id="pin-and-note"),
+        pytest.param("b" * 64, "Re-pinned once.", True, id="pin-without-note"),
+        pytest.param("a" * 64, "Re-pinned once.", False, id="no-pin"),
+    ],
+)
+def test_a_re_pin_needs_a_note(rig: Rig, pin: str, note: str, *, refused: bool) -> None:
+    _ledger_files(rig, "a" * 64, "Re-pinned once.")
+    rig.git("commit", "-q", "-m", "Add the ledger")
+    _ledger_files(rig, pin, note)
+    done = _ledger_repin(rig)
+    assert (done.returncode != 0) is refused, done.stderr
+    assert ("meta.rehashed" in done.stderr) is refused
+
+
+def test_a_first_commit_of_the_ledger_passes(rig: Rig) -> None:
+    _ledger_files(rig, "a" * 64, "")
+    done = _ledger_repin(rig)
+    assert done.returncode == 0, done.stderr
