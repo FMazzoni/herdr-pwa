@@ -51,7 +51,7 @@ def prompt_of(web: WebState, agent: Agent) -> BlockedPrompt | None:
             key, lambda: web.client.blocked_prompt(prompt_source(agent, roots))
         ).value
     except EngineError as exc:
-        log.info("no prompt read for %s: %s", agent.target, type(exc).__name__)
+        log.info("no prompt read for %s: %s", agent.target, exc)
         return None
 
 
@@ -100,7 +100,7 @@ def mark_read(web: WebState, session: SessionId) -> None:
     try:
         agents = web.snapshot().value.agents
     except EngineError as exc:
-        log.info("marking %s read without the herd: %s", session, type(exc).__name__)
+        log.info("marking %s read without the herd: %s", session, exc)
         agents = ()
     # A session the ledger never saw would be seeded at seq 0 and turn unread at its next look.
     seen.observe(agents)

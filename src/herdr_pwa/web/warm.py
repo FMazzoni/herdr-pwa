@@ -19,7 +19,7 @@ def warm(web: WebState) -> int:
     try:
         agents = web.snapshot().value.agents
     except EngineError as exc:
-        log.info("nothing warmed, the herd could not be read: %s", type(exc).__name__)
+        log.info("nothing warmed, the herd could not be read: %s", exc)
         return 0
     # Most urgent first; past the tail cache's room a warmed file would only push out another.
     held = [a for a in agents if a.session and has_byte_frontier(a.agent)]

@@ -83,7 +83,7 @@ def _question_now(
         if agent.status is not AgentStatus.BLOCKED:
             # Read only for a dialog herdr may have missed; failing that, it is the stop it said.
             return None
-        log.warning("key refused: %s could not be read first: %s", agent.target, type(exc).__name__)
+        log.warning("key refused: %s could not be read first: %s", agent.target, exc)
         return Refused(Refusal.UNREADABLE, _VERB, error=type(exc))
     return prompt if asks_now(agent.status, prompt) else None
 
@@ -117,7 +117,7 @@ def _reader(client: HerdrClient, source: PromptSource) -> Poll:
             return None
         prompt = client.blocked_prompt(source)
     except EngineError as exc:
-        log.warning("could not watch the key land at %s: %s", source.target, type(exc).__name__)
+        log.warning("could not watch the key land at %s: %s", source.target, exc)
         return UNREADABLE
     if not asks_now(now.status, prompt):
         return None

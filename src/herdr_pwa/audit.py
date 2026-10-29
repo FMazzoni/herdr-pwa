@@ -276,10 +276,10 @@ class AuditLog:
             with self._held():
                 self._append(outcome)
         except OSError as exc:
-            lost = type(exc).__name__
+            lost = exc
         else:
             return
-        # Loud, but the class alone: the error's text names the log's path.
+        # Loud, but one line: the attempt it leaves behind is the record that matters.
         log.error(
             "audit %s: the write HAPPENED and its outcome %r was not recorded (%s); "
             "the attempt stands alone and reads as 'this may have run'",

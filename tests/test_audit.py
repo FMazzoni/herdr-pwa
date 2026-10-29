@@ -26,6 +26,7 @@ from herdr_pwa.audit import (
 )
 from herdr_pwa.auth import Identity
 from herdr_pwa.clock import WallTime
+from tests.journal import journal_text
 
 ME = Origin(
     actor="you@example.com", via="tailscale", client_ip="127.0.0.1", forwarded_for="198.51.100.7"
@@ -123,10 +124,11 @@ def test_an_outcome_that_cannot_be_written_logs_loudly_and_never_raises(
     (tmp_path / audit.AUDIT_FILENAME).mkdir()
     with caplog.at_level(logging.ERROR), entry:
         entry.outcome("sent")
-    assert "HAPPENED" in caplog.text
-    assert "this may have run" in caplog.text
-    assert "IsADirectoryError" in caplog.text
-    assert str(tmp_path) not in caplog.text, "the error's class, never its path"
+    shown = journal_text(caplog)
+    assert "HAPPENED" in shown
+    assert "this may have run" in shown
+    assert "IsADirectoryError" in shown
+    assert str(tmp_path) not in shown, "the error's class, never its path"
 
 
 def test_a_long_payload_is_truncated_visibly_in_band(tmp_path: Path) -> None:

@@ -28,6 +28,7 @@ from herdr_pwa.writes.lifecycle import on_path
 from herdr_pwa.writes.outcome import Pacing
 from tests._fake_herd import P3, P5, S1, S2, SETTLED, FakeClock, FakeHerd, capture, echoed
 from tests._jsonpath import obj
+from tests.journal import journal_text
 from tests.webfakes import IDENTITY, LOGIN
 
 ORIGIN = {"Origin": "http://testserver"}
@@ -130,9 +131,10 @@ def test_a_refused_write_logs_its_reason_and_error_class_alone(
     with caplog.at_level(logging.DEBUG, logger="herdr_pwa"):
         response = w.http.post(f"/agent/{S1}/prompt", data={"text": "hi"}, headers=ORIGIN)
     assert response.status_code == 503
-    assert ": EngineUnavailableError" in caplog.text
-    assert "hunter2" not in caplog.text
-    assert ".ssh" not in caplog.text
+    shown = journal_text(caplog)
+    assert ": EngineUnavailableError" in shown
+    assert "hunter2" not in shown
+    assert ".ssh" not in shown
 
 
 def test_a_prompt_at_a_question_is_409_and_keeps_the_text(tmp_path: Path) -> None:

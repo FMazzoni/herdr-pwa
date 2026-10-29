@@ -85,7 +85,7 @@ def _read_now(client: HerdrClient, target: PaneId) -> str | Refused:
     try:
         return client.screen(target)
     except EngineError as exc:
-        log.warning("prompt refused: %s could not be read first: %s", target, type(exc).__name__)
+        log.warning("prompt refused: %s could not be read first: %s", target, exc)
         return Refused(Refusal.UNREADABLE, _VERB, error=type(exc))
 
 

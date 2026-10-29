@@ -176,8 +176,7 @@ def _listed(repo: pygit2.Repository) -> tuple[Path, ...]:
         try:
             linked.append(Path(repo.lookup_worktree(name).path).resolve())
         except _FAILED as exc:
-            # The class alone: the error's text and the repository's path name the operator's files.
-            log.info("a linked worktree was unreadable: %s", type(exc).__name__)
+            log.info("a linked worktree was unreadable: %s", exc)
     return (*main, *linked)
 
 
@@ -197,8 +196,7 @@ class Git:
                 return None
             return read(pygit2.Repository(found, RepositoryOpenFlag.NO_SEARCH))
         except _FAILED as exc:
-            # The operation and class alone: the error's text and cwd name the operator's files.
-            log.info("git %s failed: %s", what, type(exc).__name__)
+            log.info("git %s failed: %s", what, exc)
             return None
 
     def _cached[T](self, key: tuple[str, ...], ttl: float, read: Callable[[], T]) -> T:

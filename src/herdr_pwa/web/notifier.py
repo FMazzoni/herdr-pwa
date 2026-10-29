@@ -267,7 +267,7 @@ class Notifier:
         try:
             return self._stores.devices.list_all()
         except (SubscriptionError, OSError) as exc:
-            log.warning("cannot read the subscription store: %s", type(exc).__name__)
+            log.warning("cannot read the subscription store: %s", exc)
             self._stores.health.failed(exc)
             return []
 
@@ -288,7 +288,7 @@ class Notifier:
         try:
             return self._reader.blocked_prompt(PromptSource(agent.target, agent.session))
         except EngineError as exc:
-            log.info("no screen read for %s: %s", agent.session, type(exc).__name__)
+            log.info("no screen read for %s: %s", agent.session, exc)
             return None
 
     def _question(self, agent: AgentView) -> str:
@@ -299,7 +299,7 @@ class Notifier:
                 PromptSource(as_pane_id(agent.target), as_session_id(agent.session))
             )
         except Exception as exc:  # noqa: BLE001 - a missing question costs wording, never the buzz
-            log.info("no question for %s: %s", agent.session, type(exc).__name__)
+            log.info("no question for %s: %s", agent.session, exc)
             return ""
         return prompt.question
 
