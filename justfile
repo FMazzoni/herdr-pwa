@@ -3,16 +3,17 @@
 default: check
 
 # ESLint comes from package-lock.json: run `npm ci --ignore-scripts` once, then this runs offline.
+# Cheapest first, so a sub-second guard fails before minutes of pytest and the browser, not after.
 check: && skips
     uv run ruff format --check .
     uv run ruff check .
+    uv run python scripts/css_tokens.py
+    npx --no-install eslint src/herdr_pwa/web/static
+    node --test tests/js/*.test.mjs
     uv run basedpyright
     uv run complexipy --quiet src
     uv run lint-imports --no-cache --no-logo
-    npx --no-install eslint src/herdr_pwa/web/static
     HP_FIXTURE_USE=1 uv run pytest -q -n auto --cov=herdr_pwa --cov-branch --cov-report= --cov-fail-under=94.7 --junitxml=.pytest_cache/junit.xml
-    node --test tests/js/*.test.mjs
-    uv run python scripts/css_tokens.py
     uv run python scripts/geometry_gate.py
 
 # Fail on a skip whose reason is not "needs <resource>:" for a resource registered as a pytest marker
