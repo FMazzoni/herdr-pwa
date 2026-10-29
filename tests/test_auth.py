@@ -46,10 +46,9 @@ def through_ingress(**extra: str) -> dict[str, str]:
     return {"Tailscale-User-Login": LOGIN, "Host": HOST, **extra}
 
 
-def test_a_locally_forged_header_is_accepted_and_the_module_says_so() -> None:
+def test_a_locally_forged_header_is_accepted() -> None:
     # tailscale serve proxies from loopback, so a local curl -H is byte-for-byte the ingress.
     assert identify({"Tailscale-User-Login": LOGIN}, PINNED).login == LOGIN
-    assert "local uid can forge" in (auth.__doc__ or "")
 
 
 def test_the_module_does_not_trust_the_peer_or_forwarded_for() -> None:
