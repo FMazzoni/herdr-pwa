@@ -1,11 +1,11 @@
-"""The state directory at 0700 and the files in it at 0600, each mode checked after the fact."""
+"""The state directory at 0700 and its files at 0600, each mode checked; rewrites go through update."""
 
 import fcntl
 import os
 import stat
 import tempfile
 import time
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Final
@@ -31,6 +31,14 @@ def ensure_dir(path: Path) -> Path:
     if mode != DIR_MODE:
         raise PermissionError(f"state directory {target} is mode {mode:04o}, expected 0700")
     return target
+
+
+def read_text(path: Path) -> str | None:
+    """File contents, or None when it does not exist; any other ``OSError`` is raised."""
+    try:
+        return path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None
 
 
 def write_secret(path: Path, text: str, *, exclusive: bool = False) -> None:
@@ -61,6 +69,31 @@ def write_secret(path: Path, text: str, *, exclusive: bool = False) -> None:
         if not exclusive:
             target.unlink(missing_ok=True)
         raise
+
+
+def update[T](path: Path, change: Callable[[str | None], tuple[str | None, T]]) -> T:
+    """Rewrite a 0600 file from what it holds now, under its flock; the one way to change one.
+
+    Args:
+        path: the state file.
+        change: takes the current text (None when absent) and returns the new text, or None to
+            leave the file as it is, with the result ``update`` hands back.
+
+    Raises:
+        OSError: the lock, the read or the write failed (``TimeoutError`` past ``LOCK_TIMEOUT``).
+    """
+    _ = ensure_dir(path.parent)
+    # Read inside the lock: a writer that read first and wrote later drops what landed between.
+    with locked(lock_path(path)):
+        text, result = change(read_text(path))
+        if text is not None:
+            write_secret(path, text)
+    return result
+
+
+def lock_path(path: Path) -> Path:
+    """The lock file beside a state file, which every process that rewrites it takes."""
+    return path.with_suffix(".lock")
 
 
 def append_line(path: Path, line: str) -> None:
@@ -102,6 +135,12 @@ def locked(path: Path) -> Generator[None]:
         os.close(fd)
 
 
+def _check_mode(path: Path) -> None:
+    mode = stat.S_IMODE(path.stat().st_mode)
+    if mode != FILE_MODE:
+        raise PermissionError(f"{path} is mode {mode:04o}, expected 0600")
+
+
 def _acquire(fd: int, path: Path) -> None:
     # A holder stopped mid-write (Ctrl-Z on a ping) must not hang the service's writers too.
     deadline = time.monotonic() + LOCK_TIMEOUT
@@ -113,17 +152,3 @@ def _acquire(fd: int, path: Path) -> None:
         else:
             return
     raise TimeoutError(f"{path} stayed locked for {LOCK_TIMEOUT:g}s")
-
-
-def _check_mode(path: Path) -> None:
-    mode = stat.S_IMODE(path.stat().st_mode)
-    if mode != FILE_MODE:
-        raise PermissionError(f"{path} is mode {mode:04o}, expected 0600")
-
-
-def read_text(path: Path) -> str | None:
-    """File contents, or None when it does not exist; any other ``OSError`` is raised."""
-    try:
-        return path.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        return None
