@@ -204,7 +204,8 @@ def test_a_prompt_is_refused_once_a_stray_session_claims_the_pane(
 
     assert isinstance(got, Refused), got
     assert got.refusal is Refusal.DOUBTED_IDENTITY
-    assert THROWAWAY in caplog.text
+    assert "opencode session started outside the pane's folder" in caplog.text
+    assert THROWAWAY not in caplog.text, "the journal names what was doubted, never the folders"
     assert herd.writes("agent.prompt") == [], "the keystrokes would have reached the REAL agent"
     assert r.audit_records == [], "refused before the attempt, so nothing was recorded as tried"
 

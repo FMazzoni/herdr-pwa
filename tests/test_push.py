@@ -40,6 +40,7 @@ from herdr_pwa.push import (
     PushError,
     PushLimits,
     SubjectError,
+    SubjectFault,
     Subscription,
     SubscriptionError,
     SubscriptionKeys,
@@ -146,7 +147,7 @@ def test_repr_never_leaks_the_private_key(tmp_path: Path) -> None:
     ],
 )
 def test_a_contact_somebody_could_answer_is_accepted(subject: str) -> None:
-    assert subject_problem(subject) == ""
+    assert subject_problem(subject) is None
     assert check_subject(subject) == subject.strip()
 
 
@@ -163,16 +164,24 @@ def test_a_contact_somebody_could_answer_is_accepted(subject: str) -> None:
     ],
 )
 def test_a_reserved_name_is_refused_because_apple_rejects_it(subject: str) -> None:
-    assert "reserved" in subject_problem(subject)
+    assert subject_problem(subject) is SubjectFault.RESERVED
 
 
 @pytest.mark.parametrize(
     "subject", ["", "  ", "push@herdr.example.org", "tel:+1555", "mailto:", "mailto:x"]
 )
 def test_no_contact_or_no_host_is_refused(subject: str) -> None:
-    assert subject_problem(subject)
+    assert subject_problem(subject) is not None
     with pytest.raises(SubjectError):
         _ = check_subject(subject)
+
+
+@pytest.mark.parametrize("subject", ["mailto:me@box.local", "tel:+1555", "mailto:x"])
+def test_a_refused_contact_is_never_quoted_back(subject: str) -> None:
+    with pytest.raises(SubjectError) as refused:
+        _ = check_subject(subject)
+    assert subject not in str(refused.value)
+    assert str(refused.value) == refused.value.fault.advice
 
 
 def test_push_will_not_arm_without_a_real_contact(tmp_path: Path) -> None:
@@ -643,7 +652,7 @@ def test_the_health_record_keeps_an_errors_class_or_built_words_alone(tmp_path: 
     record = DeliveryLog(tmp_path).load()
     assert record is not None
     assert record.last_error == "SubscriptionError"
-    health.failed(DeliveryError(cause=requests.ConnectionError))
+    health.failed(DeliveryError(cause=requests.ConnectionError.__name__))
     record = DeliveryLog(tmp_path).load()
     assert record is not None
     assert record.last_error == "push service not reached (ConnectionError)"

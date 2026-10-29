@@ -62,7 +62,7 @@ def record_started(state_dir: Path, at: float) -> None:
         _ = statedir.ensure_dir(state_dir)
         statedir.write_secret(state_dir / STARTED_FILENAME, started.model_dump_json() + "\n")
     except OSError as exc:
-        log.warning("could not record the service's tree for doctor: %s", exc)
+        log.warning("could not record the service's tree for doctor: %s", type(exc).__name__)
 
 
 def started_tree(state_dir: Path) -> StartedTree | None:

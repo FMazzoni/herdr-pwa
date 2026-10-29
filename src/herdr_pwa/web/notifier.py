@@ -340,7 +340,8 @@ def open_push(settings: Settings, herd: HerdSource, seams: Seams) -> PushState |
             herd=herd, stores=stores, config=LoopConfig.from_settings(settings), seams=seams
         )
     except SubjectError as exc:
+        fault = exc.fault
         # Loud but not fatal: the phone can still subscribe, and the alerts page says why.
-        log.error("push is not armed: %s", exc)  # noqa: TRY400 - the reason is the message
-        return PushState(stores, None, str(exc))
+        log.error("push is not armed: %s", fault.advice)  # noqa: TRY400 - the reason is the message
+        return PushState(stores, None, fault.advice)
     return PushState(stores, notifier)

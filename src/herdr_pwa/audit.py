@@ -275,13 +275,18 @@ class AuditLog:
         try:
             with self._held():
                 self._append(outcome)
-        except OSError:
-            log.exception(
-                "audit %s: the write HAPPENED and its outcome %r was not recorded; "
-                "the attempt stands alone and reads as 'this may have run'",
-                attempt["id"],
-                result,
-            )
+        except OSError as exc:
+            lost = type(exc).__name__
+        else:
+            return
+        # Loud, but the class alone: the error's text names the log's path.
+        log.error(
+            "audit %s: the write HAPPENED and its outcome %r was not recorded (%s); "
+            "the attempt stands alone and reads as 'this may have run'",
+            attempt["id"],
+            result,
+            lost,
+        )
 
     @contextmanager
     def _held(self) -> Generator[None]:

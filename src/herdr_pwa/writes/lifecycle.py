@@ -215,7 +215,7 @@ def record_service_path(state_dir: Path) -> None:
             state_dir / SERVICE_PATH_FILENAME, os.environ.get("PATH", os.defpath) + "\n"
         )
     except OSError as exc:
-        log.warning("could not record the service's PATH for doctor: %s", exc)
+        log.warning("could not record the service's PATH for doctor: %s", type(exc).__name__)
 
 
 def service_path(state_dir: Path) -> str | None:
@@ -235,7 +235,9 @@ def record_service_models(state_dir: Path, declared: Declared) -> None:
         _ = statedir.ensure_dir(state_dir)
         statedir.write_secret(state_dir / SERVICE_MODELS_FILENAME, text)
     except OSError as exc:
-        log.warning("could not record the service's declared models for doctor: %s", exc)
+        log.warning(
+            "could not record the service's declared models for doctor: %s", type(exc).__name__
+        )
 
 
 def service_models(state_dir: Path) -> Declared | None:
@@ -293,8 +295,12 @@ def _abandon(client: HerdrClient, pane: PaneId) -> None:
     # The one close by bare pane id: a pane this same request created a moment ago.
     try:
         _ = client.close_pane(Seat(as_pane_id(pane)))
-    except (EngineError, ValueError):
-        log.exception("the pane %s could not be closed and has leaked", pane)
+    except (EngineError, ValueError) as exc:
+        failed = type(exc).__name__
+    else:
+        return
+    # Loud, but the class alone: herdr's own words stay out of the journal.
+    log.error("the pane %s could not be closed and has leaked: %s", pane, failed)
 
 
 def _await_session(client: HerdrClient, started: StartedAgent, pacing: Pacing) -> StartedAgent:
