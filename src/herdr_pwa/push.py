@@ -5,7 +5,6 @@ import json
 import logging
 import re
 import string
-import threading
 import unicodedata
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -46,9 +45,6 @@ log = logging.getLogger(__name__)
 VAPID_FILENAME: Final = "vapid.json"
 SUBSCRIPTIONS_FILENAME: Final = "subscriptions.json"
 HEALTH_FILENAME: Final = "push-health.json"
-# Beside the store, so every process that rewrites it takes the same flock.
-SUBSCRIPTIONS_LOCK: Final = "subscriptions.lock"
-HEALTH_LOCK: Final = "push-health.lock"
 # The two that notify, a message someone sent, and the retraction, which shows nothing so is never sent.
 type PushEvent = Literal["blocked", "done", "ping", "clear"]
 EVENT_BLOCKED: Final = "blocked"
@@ -400,13 +396,6 @@ class SubscriptionStore:
         self._state_dir: Path = state_dir
         self._clock: WallClock = clock
         self._max_devices: int = limits.max_devices
-        # The routes and the notifier's pruning thread both rewrite the file from what they read.
-        self._lock: threading.Lock = threading.Lock()
-
-    @property
-    def _lock_path(self) -> Path:
-        # A ping from the CLI prunes too, so the thread lock alone does not cover every writer.
-        return statedir.ensure_dir(self._state_dir) / SUBSCRIPTIONS_LOCK
 
     @property
     def path(self) -> Path:
@@ -421,18 +410,7 @@ class SubscriptionStore:
             OSError: the file cannot be read.
         """
         path = self.path
-        text = statedir.read_text(path) or ""
-        try:
-            entries = _StoreFile.model_validate_json(text).subscriptions if text.strip() else []
-        except ValidationError as exc:
-            raise SubscriptionError(f"{path}: {summary(exc)}") from exc
-        out: list[Subscription] = []
-        for index, entry in enumerate(entries):
-            try:
-                out.append(Subscription.model_validate(entry))
-            except ValidationError as exc:
-                log.warning("%s: dropping malformed entry %d: %s", path, index, summary(exc))
-        return out
+        return _stored(path, statedir.read_text(path))
 
     def add(self, subscription: Subscription, *, replaces: str | None = None) -> Subscription:
         """Store a device, forgetting ``replaces`` if held; the same endpoint keeps its stamp.
@@ -440,20 +418,10 @@ class SubscriptionStore:
         Raises:
             SubscriptionError: the store already holds ``limits.max_devices`` other devices.
         """
-        with self._lock, statedir.locked(self._lock_path):
-            # Dropped before the limit is counted, so a full store can still swap a device.
-            gone = None if replaces == subscription.endpoint else replaces
-            current = [one for one in self.list_all() if one.endpoint != gone]
-            previous = next((one for one in current if one.endpoint == subscription.endpoint), None)
-            if previous is None and len(current) >= self._max_devices:
-                raise SubscriptionError(
-                    f"already {len(current)} devices, the most this server sends to; "
-                    "remove one first"
-                )
-            stamp = int(self._clock()) if previous is None else previous.added_at
-            stored = subscription.model_copy(update={"added_at": stamp})
-            self._save([*(one for one in current if one.endpoint != stored.endpoint), stored])
-        return stored
+        path = self.path
+        # Dropped before the limit is counted, so a full store can still swap a device.
+        gone = None if replaces == subscription.endpoint else replaces
+        return statedir.update(path, lambda text: self._added(path, text, subscription, gone))
 
     def holds(self, endpoint: str) -> bool:
         """True when this endpoint is stored."""
@@ -461,17 +429,51 @@ class SubscriptionStore:
 
     def remove(self, endpoint: str) -> bool:
         """Forget one device; True when it was there."""
-        with self._lock, statedir.locked(self._lock_path):
-            current = self.list_all()
+        path = self.path
+
+        def change(text: str | None) -> tuple[str | None, bool]:
+            current = _stored(path, text)
             kept = [one for one in current if one.endpoint != endpoint]
             if len(kept) == len(current):
-                return False
-            self._save(kept)
-        return True
+                return None, False
+            return _store_text(kept), True
 
-    def _save(self, subscriptions: Sequence[Subscription]) -> None:
-        document = _StoreDocument(subscriptions=subscriptions)
-        statedir.write_secret(self.path, document.model_dump_json(indent=2, by_alias=True) + "\n")
+        return statedir.update(path, change)
+
+    def _added(
+        self, path: Path, text: str | None, subscription: Subscription, gone: str | None
+    ) -> tuple[str, Subscription]:
+        current = [one for one in _stored(path, text) if one.endpoint != gone]
+        previous = next((one for one in current if one.endpoint == subscription.endpoint), None)
+        if previous is None and len(current) >= self._max_devices:
+            raise SubscriptionError(
+                f"already {len(current)} devices, the most this server sends to; remove one first"
+            )
+        stamp = int(self._clock()) if previous is None else previous.added_at
+        stored = subscription.model_copy(update={"added_at": stamp})
+        kept = [*(one for one in current if one.endpoint != stored.endpoint), stored]
+        return _store_text(kept), stored
+
+
+def _stored(path: Path, text: str | None) -> list[Subscription]:
+    try:
+        entries = (
+            _StoreFile.model_validate_json(text).subscriptions if text and text.strip() else []
+        )
+    except ValidationError as exc:
+        raise SubscriptionError(f"{path}: {summary(exc)}") from exc
+    out: list[Subscription] = []
+    for index, entry in enumerate(entries):
+        try:
+            out.append(Subscription.model_validate(entry))
+        except ValidationError as exc:
+            log.warning("%s: dropping malformed entry %d: %s", path, index, summary(exc))
+    return out
+
+
+def _store_text(subscriptions: Sequence[Subscription]) -> str:
+    document = _StoreDocument(subscriptions=subscriptions)
+    return document.model_dump_json(indent=2, by_alias=True) + "\n"
 
 
 _LINKY_TLDS: Final = "com|net|org|io|dev|ai|co|me|app|sh|xyz|gg|to|ly"
@@ -723,9 +725,8 @@ class DeliveryLog:
     def load(self) -> DeliveryRecord | None:
         """The last outcomes on disk, or None when there are none this build reads."""
         try:
-            text = statedir.read_text(self.path)
-            return None if text is None else DeliveryRecord.model_validate_json(text)
-        except (OSError, ValidationError):
+            return _delivery(statedir.read_text(self.path))
+        except OSError:
             return None
 
     def sent(self) -> None:
@@ -748,16 +749,25 @@ class DeliveryLog:
 
     def _bump(self, change: Callable[[DeliveryRecord, float], dict[str, object]]) -> None:
         now = self._clock()
+
+        def counted(text: str | None) -> tuple[str, DeliveryRecord]:
+            # Built on the disk record: the service and a ping both count here.
+            base = _delivery(text) or self._current or DeliveryRecord(version=1)
+            record = base.model_copy(update={**change(base, now), "updated_at": now})
+            return record.model_dump_json(indent=2) + "\n", record
+
         try:
-            _ = statedir.ensure_dir(self.path.parent)
-            # Built on the disk record under the lock: the service and a ping both count here.
-            with statedir.locked(self.path.with_name(HEALTH_LOCK)):
-                base = self.load() or self._current or DeliveryRecord(version=1)
-                self._current = base.model_copy(update={**change(base, now), "updated_at": now})
-                statedir.write_secret(self.path, self._current.model_dump_json(indent=2) + "\n")
+            self._current = statedir.update(self.path, counted)
         except OSError as exc:
             # Health is for the reader; failing to write it must never stop a push.
             log.warning("cannot write %s: %s; doctor will see nothing", self.path, exc)
+
+
+def _delivery(text: str | None) -> DeliveryRecord | None:
+    try:
+        return None if text is None else DeliveryRecord.model_validate_json(text)
+    except ValidationError:
+        return None
 
 
 def _prune(store: SubscriptionStore, subscription: Subscription) -> None:

@@ -2,6 +2,9 @@
 
 import os
 import stat
+import threading
+from collections.abc import Callable, Generator
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
@@ -72,3 +75,39 @@ def test_a_lock_held_past_the_limit_raises_rather_than_waiting_forever(
         pass
     with statedir.locked(path):
         pass
+
+
+def test_two_updates_at_once_both_land(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    path = tmp_path / "store.txt"
+    lock = statedir.locked
+    first_read, second_ready = threading.Event(), threading.Event()
+
+    @contextmanager
+    def waiting(at: Path) -> Generator[None]:
+        # The second update has reached the lock: it may now read only what the first wrote.
+        if threading.current_thread().name == "second":
+            second_ready.set()
+        with lock(at):
+            yield
+
+    def adding(name: str) -> Callable[[str | None], tuple[str, None]]:
+        def change(text: str | None) -> tuple[str, None]:
+            if name == "first":
+                first_read.set()
+                _ = second_ready.wait(5)
+            else:
+                second_ready.set()
+            return (text or "") + f"{name}\n", None
+
+        return change
+
+    monkeypatch.setattr(statedir, "locked", waiting)
+    first = threading.Thread(target=statedir.update, args=(path, adding("first")), name="first")
+    second = threading.Thread(target=statedir.update, args=(path, adding("second")), name="second")
+    first.start()
+    assert first_read.wait(5)
+    second.start()
+    first.join(5)
+    second.join(5)
+    assert sorted(path.read_text().splitlines()) == ["first", "second"]
+    assert stat.S_IMODE(path.stat().st_mode) == statedir.FILE_MODE

@@ -433,7 +433,7 @@ def test_a_store_lock_held_too_long_is_an_error_the_callers_already_handle(
     store = _paired(tmp_path, ONE)
     # TimeoutError is an OSError, which every caller of add and remove already handles.
     with (
-        statedir.locked(tmp_path / push.SUBSCRIPTIONS_LOCK),
+        statedir.locked(statedir.lock_path(store.path)),
         pytest.raises(OSError, match="stayed locked"),
     ):
         _ = store.remove(ONE)
