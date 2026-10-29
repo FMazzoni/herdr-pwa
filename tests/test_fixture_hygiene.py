@@ -1,4 +1,4 @@
-"""No fixture carries a real person's address, home path, API request id or commit of this repo."""
+"""No fixture carries a real address, home path, request id, session id or commit of this repo."""
 
 import re
 import shutil
@@ -41,6 +41,32 @@ PLACEHOLDER_HOMES = frozenset({"user"})
 REQUEST_ID = re.compile(r"req_011C[A-Za-z0-9]+")
 # A short or full commit id, standing alone rather than inside a longer hash or name.
 HEX = re.compile(r"(?<![0-9A-Za-z])[0-9a-f]{7,40}(?![0-9A-Za-z])")
+# Any 8-4-4-4-12 hex id, the shape of a session, record or tool-call id.
+UUID = re.compile(
+    r"""
+    (?<![0-9A-Za-z])  # not the tail of a longer token
+    [0-9a-fA-F]{8} (?:-[0-9a-fA-F]{4}){3} -[0-9a-fA-F]{12}  # 8-4-4-4-12 hex
+    (?![0-9A-Za-z])  # nor its head
+    """,
+    re.VERBOSE,
+)
+# The README's schemes: session ids 5e55NNNN-0000-…, other record ids 0000NNNN-0000-….
+PLACEHOLDER_UUID = re.compile(
+    r"""
+    (?:5e55|0000) [0-9a-f]{4}  # the scheme's prefix, then the record's number
+    -0000 (?:-[0-9a-f]{4}){2} -[0-9a-f]{12}  # a zero second group
+    """,
+    re.VERBOSE,
+)
+# The README's hand-built notice logs number their records under these two prefixes instead.
+HAND_BUILT = "transcript/notices/"
+HAND_BUILT_UUID = re.compile(
+    r"""
+    (?:5a5c|6d1e) [0-9a-f]{4}  # the notice logs' prefix, then the record's number
+    -0000 (?:-[0-9a-f]{4}){2} -[0-9a-f]{12}  # a zero second group
+    """,
+    re.VERBOSE,
+)
 
 
 def _texts() -> Iterator[tuple[str, str]]:
@@ -79,6 +105,25 @@ def test_no_request_id_is_real() -> None:
     found = [
         (name, hit.group(0)[:12]) for name, text in _texts() for hit in REQUEST_ID.finditer(text)
     ]
+    assert found == []
+
+
+def _placeholder_uuid(name: str, uuid: str) -> bool:
+    if PLACEHOLDER_UUID.fullmatch(uuid):
+        return True
+    return name.startswith(HAND_BUILT) and HAND_BUILT_UUID.fullmatch(uuid) is not None
+
+
+def test_every_uuid_is_a_placeholder() -> None:
+    # File names count too: omp and Claude Code name a transcript after its session id.
+    found = sorted(
+        {
+            (name, hit[0])
+            for name, text in _texts()
+            for hit in UUID.finditer(f"{name}\n{text}")
+            if not _placeholder_uuid(name, hit[0])
+        }
+    )
     assert found == []
 
 
