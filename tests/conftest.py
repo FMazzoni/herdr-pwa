@@ -1,7 +1,9 @@
+import logging
 import os
 import shutil
 import sys
 from collections.abc import Generator
+from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
@@ -12,6 +14,8 @@ from tests.browser.reused import pytest_report_teststatus
 __all__ = ["pytest_report_teststatus"]
 
 REPO = Path(__file__).resolve().parents[1]
+# The loggers cli.main configures; each test gets them back as it found them.
+_CONFIGURED_LOGGERS = ("", "uvicorn", "uvicorn.error", "uvicorn.access")
 # Read at import, before the autouse fixture clears every HP_* variable.
 _LIVE = os.environ.get("HP_LIVE") == "1"
 _CORPUS = bool(os.environ.get("HP_CORPUS"))
@@ -32,6 +36,32 @@ _SWEEPERS = frozenset({"test_fixture_hygiene.py"})
 _SWEEPING: set[str] = set()
 _PREFIX = f"{FIXTURES}{os.sep}"
 _UNUSED = pytest.StashKey[list[str]]()
+
+
+@dataclass(frozen=True, slots=True)
+class _LoggerState:
+    # cli.main installs handlers on stderr; one left behind writes to a later test's closed capture.
+    logger: logging.Logger
+    handlers: list[logging.Handler]
+    level: int
+    propagate: bool
+    disabled: bool
+
+    @classmethod
+    def of(cls, logger: logging.Logger) -> "_LoggerState":
+        return cls(
+            logger,
+            logger.handlers[:],
+            logger.level,
+            logger.propagate,
+            logger.disabled,
+        )
+
+    def restore(self) -> None:
+        self.logger.handlers[:] = self.handlers
+        self.logger.setLevel(self.level)
+        self.logger.propagate = self.propagate
+        self.logger.disabled = self.disabled
 
 
 def _record_open(event: str, args: tuple[object, ...]) -> None:
@@ -59,10 +89,14 @@ def _never_opened(opened: set[str]) -> list[str]:
 def pytest_runtest_protocol(item: pytest.Item) -> Generator[None, object, object]:
     if item.path.name in _SWEEPERS:
         _SWEEPING.add(item.nodeid)
+    # Saved around every phase, so pytest's per-phase capture handlers are neither kept nor lost.
+    saved = [_LoggerState.of(logging.getLogger(name)) for name in _CONFIGURED_LOGGERS]
     try:
         return (yield)
     finally:
         _SWEEPING.discard(item.nodeid)
+        for state in saved:
+            state.restore()
 
 
 def pytest_runtest_setup(item: pytest.Item) -> None:

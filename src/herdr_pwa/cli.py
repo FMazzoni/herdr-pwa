@@ -3,6 +3,7 @@
 import argparse
 import ipaddress
 import logging
+import logging.config
 import os
 import sys
 from dataclasses import dataclass, field
@@ -11,7 +12,7 @@ from typing import Final
 
 import uvicorn
 
-from herdr_pwa import auth, devreport, pairing, tailscale
+from herdr_pwa import auth, devreport, logs, pairing, tailscale
 from herdr_pwa.audit import AuditUnavailableError
 from herdr_pwa.engine import HERDR_KINDS, EngineError, engine_settings, harness_kinds
 from herdr_pwa.protocol import EXPECTED_PROTOCOL
@@ -250,11 +251,12 @@ def _learned_host(settings: Settings, api: tailscale.LocalApi) -> str:
     try:
         return auth.served_host(settings.public_host, api)
     except tailscale.LocalApiError as exc:
-        reason = str(exc)
+        # Its text names the socket path; doctor prints it to the person who asks.
+        reason = type(exc).__name__
     # Fail closed: an unknown name would otherwise mean accepting any Host, rebinding included.
     log.error(
         "Refusing every Tailscale identity: HP_PUBLIC_HOST is not set and this node's "
-        "MagicDNS name could not be learned (%s)",
+        "MagicDNS name could not be learned (%s; 'herdr-pwa doctor' says why)",
         reason,
     )
     return ""
@@ -307,6 +309,8 @@ def serve(settings: Settings, port: int | None, seams: Seams) -> None:
         timeout_graceful_shutdown=SHUTDOWN_GRACE,
         # Each access line would put a file path or a search query in the journal; errors still log.
         access_log=False,
+        # Uvicorn's default config would replace this one, and print exception messages again.
+        log_config=logs.logging_config(),
     )
 
 
@@ -328,6 +332,28 @@ class _Args(argparse.Namespace):
 
 def main(argv: list[str] | None = None) -> int:
     """Parse arguments and run the chosen command."""
+    args = _parser().parse_args(argv, namespace=_Args())
+    # Before any command logs, so a caught exception's message never reaches the journal.
+    logging.config.dictConfig(logs.logging_config())
+    settings = Settings()
+    seams = Seams()
+    if args.command == "doctor":
+        return doctor(settings, seams)
+    if args.command == "device-report":
+        return device_report(settings, seams, args.session)
+    if args.command == "pair":
+        return pair(settings, seams, publish=not args.check)
+    if args.command == "ping":
+        return ping.ping(settings, seams, ping.Message(args.text, args.title))
+    try:
+        serve(settings, args.port, seams)
+    except SERVE_REFUSALS as exc:
+        sys.stderr.write(f"serve: {exc}\n")
+        return 1
+    return 0
+
+
+def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="herdr-pwa")
     parser.add_argument("--version", action="version", version=f"%(prog)s {version('herdr-pwa')}")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -345,20 +371,4 @@ def main(argv: list[str] | None = None) -> int:
     )
     ping_cmd.add_argument("text", help="plain text, capped as an agent's is")
     ping_cmd.add_argument("--title", help="who it is from (default: this pane's agent name)")
-    args = parser.parse_args(argv, namespace=_Args())
-    settings = Settings()
-    seams = Seams()
-    if args.command == "doctor":
-        return doctor(settings, seams)
-    if args.command == "device-report":
-        return device_report(settings, seams, args.session)
-    if args.command == "pair":
-        return pair(settings, seams, publish=not args.check)
-    if args.command == "ping":
-        return ping.ping(settings, seams, ping.Message(args.text, args.title))
-    try:
-        serve(settings, args.port, seams)
-    except SERVE_REFUSALS as exc:
-        sys.stderr.write(f"serve: {exc}\n")
-        return 1
-    return 0
+    return parser
